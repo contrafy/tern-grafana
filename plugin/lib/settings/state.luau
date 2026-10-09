@@ -761,10 +761,66 @@ local function onKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	return listKey(s, key, env, effects)
 end
 
+-- View node keys of selectable rows; view.luau builds them with these, and
+-- `reveal` addresses them by view id (region, then each ancestor's key).
+function M.rowNodeKey(rowKey: string): string
+	return "r:" .. rowKey
+end
+
+function M.fieldNodeKey(id: string): string
+	return "f:" .. id
+end
+
+function M.templateNodeKey(id: string): string
+	return "tp:" .. id
+end
+
+M.LIST_KEY = "list"
+M.FIELDS_KEY = "fields"
+M.TEMPLATES_KEY = "templates"
+
+-- The view id of the keyboard selection on the current page, if any.
+function M.selectionViewId(s: State): string?
+	if s.page == "form" and s.form then
+		local f = M.formFields(s)[s.form_sel]
+		return if f then "main." .. M.FIELDS_KEY .. "." .. M.fieldNodeKey(f.id) else nil
+	elseif s.page == "templates" then
+		local t = Model.TEMPLATES[s.template_sel]
+		return if t then "main." .. M.TEMPLATES_KEY .. "." .. M.templateNodeKey(t.id) else nil
+	elseif s.page == "list" and s.raw then
+		local row = M.selectedRow(s)
+		return if row then "main." .. M.LIST_KEY .. "." .. M.rowNodeKey(row.key) else nil
+	end
+	return nil
+end
+
+-- The main region scrolls only with the wheel. Starting an edit reveals the
+-- input at the top of the form (the field may be far below it); finishing
+-- one, or a key that moved the selection or switched page, reveals the
+-- selection. Clicks leave the selection where the user can see it.
+local function addReveal(prev: State, s: State, moved: boolean, effects: { Effect })
+	if s.editing and not prev.editing then
+		table.insert(effects, { kind = "reveal", id = M.EDIT_INPUT, at = "nearest" })
+		return
+	end
+	local id = M.selectionViewId(s)
+	if id and ((prev.editing and not s.editing) or (moved and id ~= M.selectionViewId(prev))) then
+		table.insert(effects, { kind = "reveal", id = id, at = "nearest" })
+	end
+end
+
+local function keyWithReveal(prev: State, s: State, key: Key, env: Env, effects: { Effect }): boolean
+	local changed = onKey(s, key, env, effects)
+	if changed then
+		addReveal(prev, s, true, effects)
+	end
+	return changed
+end
+
 function M.key(prev: State, key: Key, env: Env): (State, { Effect }, boolean)
 	local s = table.clone(prev)
 	local effects: { Effect } = {}
-	local changed = onKey(s, key, env, effects)
+	local changed = keyWithReveal(prev, s, key, env, effects)
 	if not changed and #effects == 0 then
 		return prev, effects, false
 	end
@@ -913,11 +969,14 @@ function M.update(prev: State, msg: Msg, env: Env): (State, { Effect })
 	elseif m.kind == "http_done" then
 		changed = onHttp(s, m.tag, m.response, env)
 	elseif m.kind == "key" then
-		changed = onKey(s, m.key, env, effects)
+		changed = keyWithReveal(prev, s, m.key, env, effects)
 	elseif m.kind == "event" then
 		local ev = m.ev
 		if type(ev) == "table" and ev.ev == "action" and type(ev.act) == "string" then
 			changed = onAction(s, ev.act, if type(ev.value) == "string" then ev.value else "", env, effects)
+			if changed then
+				addReveal(prev, s, false, effects)
+			end
 		end
 	end
 	if not changed and #effects == 0 then

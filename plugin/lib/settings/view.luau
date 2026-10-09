@@ -233,7 +233,7 @@ local function rowNode(s: State, i: number, row: State.Row): Node
 	local class = "tg-set-r"
 		.. (if row.kind == "context" then " tg-set-ctx" elseif row.kind == "endpoint" then " tg-set-ep" else "")
 	return ui.el("div", {
-		key = "r:" .. row.key,
+		key = State.rowNodeKey(row.key),
 		class = if selected then class .. " tg-set-sel" else class,
 		actions = { click = "sel=" .. row.key },
 	}, cells)
@@ -248,7 +248,9 @@ local function listPage(s: State): { Node }
 	for i, row in rows do
 		table.insert(children, rowNode(s, i, row))
 	end
-	return { ui.el("div", { key = "list", class = "tg-set-grid", role = "tern-grafana.settings-list" }, children) }
+	return {
+		ui.el("div", { key = State.LIST_KEY, class = "tg-set-grid", role = "tern-grafana.settings-list" }, children),
+	}
 end
 
 -- Form page -----------------------------------------------------------------------------
@@ -316,7 +318,7 @@ local function formPage(s: State): { Node }
 		end
 		table.insert(
 			rows,
-			ui.el("div", { key = "f:" .. f.id, class = class, actions = { click = "field=" .. f.id } }, {
+			ui.el("div", { key = State.fieldNodeKey(f.id), class = class, actions = { click = "field=" .. f.id } }, {
 				cell("tg-set-name", { ui.text({ ui.span(f.label, "mono") }) }),
 				cell("tg-set-detail", { ui.col(valueNodes, { key = "v", gap = "none" }) }),
 				cell("tg-set-ctl", { ui.row(controls, { key = "ctl" }) }),
@@ -325,7 +327,11 @@ local function formPage(s: State): { Node }
 	end
 	table.insert(
 		out,
-		ui.el("div", { key = "fields", class = "tg-set-grid tg-set-form", role = "tern-grafana.settings-form" }, rows)
+		ui.el(
+			"div",
+			{ key = State.FIELDS_KEY, class = "tg-set-grid tg-set-form", role = "tern-grafana.settings-form" },
+			rows
+		)
 	)
 	for i, p in rest do
 		table.insert(out, ui.text({ ui.span(Validate.format(p), "error") }, { key = "rest" .. i }))
@@ -360,14 +366,14 @@ local function templatesPage(s: State, env: Env.Env): { Node }
 		local class = "tg-set-r" .. (if i == s.template_sel then " tg-set-sel" else "")
 		table.insert(
 			rows,
-			ui.el("div", { key = "tp:" .. t.id, class = class, actions = { click = "template=" .. i } }, {
+			ui.el("div", { key = State.templateNodeKey(t.id), class = class, actions = { click = "template=" .. i } }, {
 				cell("tg-set-name", { ui.text({ ui.span(t.title, "strong") }) }),
 				cell("tg-set-detail", { ui.muted(t.description) }),
 				cell("tg-set-ctl", {}),
 			})
 		)
 	end
-	table.insert(out, ui.el("div", { key = "templates", class = "tg-set-grid" }, rows))
+	table.insert(out, ui.el("div", { key = State.TEMPLATES_KEY, class = "tg-set-grid" }, rows))
 	local t = Model.TEMPLATES[s.template_sel]
 	if t then
 		table.insert(out, ui.code(Json.encode(t.raw, env.encode), "json", nil, { key = "preview" }))
