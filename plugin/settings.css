@@ -1,0 +1,108 @@
+/* Settings block (lib/settings/view.luau). Each row is a wrapping flex line:
+   name and action chips first, details on their own full-width line below,
+   so a narrow pane wraps chips instead of clipping them. Form rows keep the
+   value beside its label while there is room. */
+
+[data-role="tern-grafana.settings-header"] {
+	padding-bottom: 4px;
+	border-bottom: 2px solid var(--accent);
+}
+
+[data-role="tern-grafana.settings-bar"] {
+	align-items: center;
+}
+
+[data-role="tern-grafana.settings"] [data-role="tern-grafana.chip"] {
+	cursor: pointer;
+}
+
+[data-role="tern-grafana.settings-message"] .sf-text,
+[data-role="tern-grafana.settings-problems"] .sf-text {
+	white-space: pre-wrap;
+}
+
+.tg-set-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+	min-width: 0;
+}
+
+.tg-set-r {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 12px;
+	min-width: 0;
+	padding: 3px 6px;
+	border-left: 3px solid transparent;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.tg-set-c {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+
+.tg-set-name {
+	flex: 0 1 auto;
+}
+
+.tg-set-ctl {
+	flex: 0 1 auto;
+	margin-left: auto;
+}
+
+.tg-set-detail {
+	flex: 1 1 100%;
+	padding-left: 8px;
+	overflow-wrap: anywhere;
+}
+
+.tg-set-form .tg-set-name {
+	flex: 0 0 15em;
+}
+
+.tg-set-form .tg-set-detail {
+	flex: 1 1 14em;
+	padding-left: 0;
+}
+
+.tg-set-ctx {
+	margin-top: 8px;
+	border-top: 1px solid var(--l2);
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+
+.tg-set-ep {
+	margin-left: 14px;
+}
+
+.tg-set-r:hover {
+	background: var(--l1);
+}
+
+.tg-set-sel {
+	border-left-color: var(--accent);
+	background: var(--l1);
+}
+
+.tg-set-bad {
+	border-left-color: var(--bad);
+}
+
+[data-role="tern-grafana.settings"] .tg-set-editing {
+	box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+[data-role="tern-grafana.settings-layer"] {
+	max-width: 760px;
+	padding: 12px 16px;
+	background: var(--card);
+	border: 1px solid var(--l2);
+	border-radius: 8px;
+}

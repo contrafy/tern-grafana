@@ -1,0 +1,1 @@
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"env":"dev","instance":"node-exporter:9100","job":"node"},"value":[1791577898,"0.2723429493589699"]}]},"infos":["PromQL info: metric might not be a counter, name does not end in _total/_sum/_count/_bucket: \"node_load1\" (1:6)"]}

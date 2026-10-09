@@ -7,18 +7,37 @@
 #   tests/fixtures/MANIFEST.tsv                           one row per response / CLI run
 #
 # <version> is what the server (or CLI) reports about itself, so captures from different pinned
-# versions sit side by side. A run replaces each <backend>/<version> directory it captured as a
-# whole and rewrites their MANIFEST rows; directories of other versions are kept.
+# versions sit side by side.
+#
+# Existing fixtures are never overwritten by default: specs are written against their exact
+# contents, and every capture yields new timestamps and values. A plain run only installs fixtures
+# whose file does not exist yet (with their .request.* / .stderr companions) and adds their
+# MANIFEST rows; every other file and MANIFEST row stays byte-for-byte as it was.
+# `--refresh [PATTERN]` also overwrites existing fixtures whose path relative to tests/fixtures
+# matches the shell glob PATTERN (default: all), e.g. --refresh 'prometheus/3.15.0/*'.
+# Refreshing changes values that specs may assert on: re-run `make fixtures test` afterwards.
 #
 # Secrets: credentials reach curl on stdin only; bodies are scrubbed of Grafana tokens and the
 # run aborts (writing nothing) if any token, Authorization or Bearer string survives.
 #
-#   sh scripts/fixtures/capture.sh          (also: sh scripts/stack.sh capture)
+#   sh scripts/fixtures/capture.sh [--refresh [PATTERN]]   (also: sh scripts/stack.sh capture ...)
 #
 # Env: CAPTURE_WAIT_SECS (default 240) bounds each readiness wait; CAPTURE_MIN_AGE (default 300)
 # is how many seconds of Prometheus history to wait for (on top of CAPTURE_WAIT_SECS) so range
 # queries are not mostly empty.
 set -eu
+
+REFRESH=
+case ${1:-} in
+"") ;;
+--refresh)
+	REFRESH=${2:-*}
+	;;
+*)
+	printf 'usage: %s [--refresh [PATTERN]]\n' "$0" >&2
+	exit 2
+	;;
+esac
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 OUT=$ROOT/tests/fixtures
@@ -54,9 +73,7 @@ command -v curl >/dev/null 2>&1 || die "curl not found"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/tern-grafana-capture.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT INT TERM
 ROWS=$TMP/rows.tsv
-DIRS=$TMP/dirs
 : >"$ROWS"
-: >"$DIRS"
 
 enc() {
 	jq -rn --arg s "$1" '$s | @uri'
@@ -83,7 +100,6 @@ use() {
 	TOKEN_FILE=${4:-}
 	DIR=$TMP/out/$B/$V
 	mkdir -p "$DIR"
-	grep -qx "$B/$V" "$DIRS" || printf '%s/%s\n' "$B" "$V" >>"$DIRS"
 }
 
 auth_conf() {
@@ -265,6 +281,9 @@ capture_prometheus() {
 	get query_empty "/api/v1/query?query=tern_nonexistent_metric&time=$END"
 	get query_error_parse "/api/v1/query?query=$(enc 'sum(rate(up[5m])')&time=$END"
 	get query_error_exec "/api/v1/query?query=$(enc 'up * on () up')&time=$END"
+	# PromQL annotations: Prometheus 3 returns `infos` and `warnings`, 2.53 only `warnings`.
+	get query_info "/api/v1/query?query=$(enc 'rate(node_load1[5m])')&time=$END"
+	get query_warning "/api/v1/query?query=$(enc 'histogram_quantile(0.9, rate(node_cpu_seconds_total[5m]))')&time=$END"
 	# Form-encoded POST is what Grafana sends (datasource httpMethod: POST).
 	req query_post POST /api/v1/query "query=$(enc 'sum by (job) (up)')&time=$END" application/json \
 		application/x-www-form-urlencoded
@@ -281,6 +300,7 @@ capture_prometheus() {
 	get series "/api/v1/series?match%5B%5D=up&start=$START&end=$END"
 	get metadata "/api/v1/metadata?limit=40"
 	get metadata_metric "/api/v1/metadata?metric=prometheus_http_requests_total"
+	get metadata_limit_per_metric "/api/v1/metadata?limit=5&limit_per_metric=1"
 	get targets /api/v1/targets
 	get targets_active "/api/v1/targets?state=active"
 	get rules /api/v1/rules
@@ -334,6 +354,8 @@ capture_grafana() {
 	ds_query ds_query_prom_exemplars '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"histogram_quantile(0.95, sum by (le, service) (rate(traces_spanmetrics_latency_bucket[1m])))","legendFormat":"{{service}}","range":true,"instant":false,"exemplar":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_heatmap '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (le) (increase(traces_spanmetrics_latency_bucket[1m]))","format":"heatmap","legendFormat":"{{le}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_error '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum(rate(up[1m])","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
+	# JSON has no NaN/Inf: Grafana sends null and lists the indices in data.entities.
+	ds_query ds_query_prom_nan_inf '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"label_replace(vector(0/0), \"kind\", \"nan\", \"\", \"\") or label_replace(vector(1/0), \"kind\", \"inf\", \"\", \"\") or label_replace(vector(-1/0), \"kind\", \"neginf\", \"\", \"\")","range":true,"instant":false,"intervalMs":60000,"maxDataPoints":20}]' now-5m
 	ds_query ds_query_prom2_range '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom2"},"expr":"sum by (job) (up)","legendFormat":"{{job}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_loki_logs '[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"{job=\"loggen\"}","queryType":"range","maxLines":50,"direction":"backward"}]' now-5m
 	ds_query ds_query_loki_metric '[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"sum by (level) (count_over_time({job=\"loggen\"}[1m]))","legendFormat":"{{level}}","queryType":"range","intervalMs":60000,"maxDataPoints":200}]'
@@ -346,6 +368,10 @@ capture_grafana() {
 	get ds_proxy_prom_query "/api/datasources/proxy/uid/prom3/api/v1/query?query=up"
 	get ds_resource_prom_labels "/api/datasources/uid/prom3/resources/api/v1/labels?start=$START&end=$END"
 	get ds_resource_prom_label_values "/api/datasources/uid/prom3/resources/api/v1/label/job/values?start=$START&end=$END"
+	get ds_proxy_prom_labels "/api/datasources/proxy/uid/prom3/api/v1/labels?start=$START&end=$END"
+	get ds_proxy_prom_label_values "/api/datasources/proxy/uid/prom3/api/v1/label/job/values?start=$START&end=$END"
+	get ds_proxy_prom_metadata "/api/datasources/proxy/uid/prom3/api/v1/metadata?limit=5&limit_per_metric=1"
+	get ds_proxy_prom_query_error "/api/datasources/proxy/uid/prom3/api/v1/query?query=$(enc 'sum(rate(up[5m])')"
 	get ds_proxy_tempo_search "/api/datasources/proxy/uid/tempo/api/search?q=$(enc '{resource.service.name="payments"}')&limit=10&start=$START&end=$END"
 	get ds_proxy_tempo_trace "/api/datasources/proxy/uid/tempo/api/traces/$TRACE_ID"
 
@@ -433,6 +459,13 @@ capture_promtool() {
 	cli query_range "$svc" promtool query range --start="$((END - 300))" --end="$END" --step=60s "$url" 'sum by (job) (up)'
 	cli query_range_json "$svc" promtool query range -o json --start="$((END - 300))" --end="$END" --step=60s "$url" 'sum by (job) (up)'
 	cli query_error "$svc" promtool query instant "$url" 'sum(up'
+	cli query_refused "$svc" promtool query instant http://127.0.0.1:1 up
+	cli query_instant_vector_metric "$svc" promtool query instant "$url" up
+	cli query_scalar "$svc" promtool query instant "$url" 'scalar(sum(up))'
+	cli query_series "$svc" promtool query series --match=up "$url"
+	cli query_series_json "$svc" promtool query series -o json --match=up "$url"
+	cli query_labels "$svc" promtool query labels "$url" job
+	cli query_labels_json "$svc" promtool query labels -o json "$url" job
 	cli check_rules_good "$svc" promtool check rules /etc/prometheus/rules/recording.yml /etc/prometheus/rules/alerts.yml
 	cli check_rules_bad "$svc" promtool check rules /etc/prometheus/promtool/rules-bad.yml
 	cli check_config "$svc" promtool check config /etc/prometheus/prometheus.yml
@@ -510,29 +543,59 @@ done
 leaks=$(printf '%s' "$leaks" | tr -s ' \n' '  ' | sed 's/^ *//; s/ *$//')
 [ -z "$leaks" ] || die "refusing to install: credential-like content in: $leaks"
 
+# Install. A row's primary file (response body or CLI stdout) decides for its companions
+# (<name>.request.json|txt and <name>.stderr), so a request never pairs with another run's response.
 mkdir -p "$OUT"
-while IFS= read -r d; do
-	rm -rf "${OUT:?}/$d"
-	mkdir -p "$(dirname "$OUT/$d")"
-	cp -R "$TMP/out/$d" "$OUT/$d"
-done <"$DIRS"
+WRITTEN=$TMP/written
+: >"$WRITTEN"
+while IFS="$(printf '\t')" read -r path _ _ _ _ _ request; do
+	write=0
+	if [ ! -e "$OUT/$path" ]; then
+		write=1
+	elif [ -n "$REFRESH" ]; then
+		# shellcheck disable=SC2254 # PATTERN is a glob on purpose
+		case $path in
+		$REFRESH) write=1 ;;
+		esac
+	fi
+	[ "$write" = 1 ] || continue
+	mkdir -p "$(dirname "$OUT/$path")"
+	cp "$TMP/out/$path" "$OUT/$path"
+	if [ "$request" != - ]; then
+		cp "$TMP/out/$request" "$OUT/$request"
+	fi
+	stderr=${path%.*}.stderr
+	if [ -f "$TMP/out/$stderr" ]; then
+		cp "$TMP/out/$stderr" "$OUT/$stderr"
+	else
+		rm -f "$OUT/$stderr"
+	fi
+	printf '%s\n' "$path" >>"$WRITTEN"
+done <"$ROWS"
 
-{
-	printf 'path\tmethod\turl\tstatus\tcaptured_at\tserver_version\trequest\n'
+if [ -s "$WRITTEN" ]; then
 	{
-		if [ -f "$MANIFEST" ]; then
-			# Keep rows of directories this run did not capture.
-			awk -F '\t' -v dirs="$DIRS" '
-				BEGIN { while ((getline d < dirs) > 0) keep[d] = 1 }
-				NR == 1 { next }
-				{ split($1, p, "/"); if (!((p[1] "/" p[2]) in keep)) print }
-			' "$MANIFEST"
-		fi
-		cat "$ROWS"
-	} | LC_ALL=C sort -t "$(printf '\t')" -k1,1
-} >"$MANIFEST.tmp"
-mv "$MANIFEST.tmp" "$MANIFEST"
+		printf 'path\tmethod\turl\tstatus\tcaptured_at\tserver_version\trequest\n'
+		{
+			if [ -f "$MANIFEST" ]; then
+				# Keep every row whose file this run did not write.
+				awk -F '\t' -v written="$WRITTEN" '
+					BEGIN { while ((getline p < written) > 0) w[p] = 1 }
+					NR == 1 { next }
+					!($1 in w) { print }
+				' "$MANIFEST"
+			fi
+			awk -F '\t' -v written="$WRITTEN" '
+				BEGIN { while ((getline p < written) > 0) w[p] = 1 }
+				$1 in w { print }
+			' "$ROWS"
+		} | LC_ALL=C sort -t "$(printf '\t')" -k1,1
+	} >"$MANIFEST.tmp"
+	mv "$MANIFEST.tmp" "$MANIFEST"
+fi
 
-log "captured $(wc -l <"$ROWS" | tr -d ' ') fixtures:"
-cut -f1 "$ROWS" | awk -F / '{ print $1 "/" $2 }' | sort | uniq -c | sed 's/^/    /' >&2
+log "captured $(wc -l <"$ROWS" | tr -d ' ') responses; installed $(wc -l <"$WRITTEN" | tr -d ' ') (new or --refresh matches):"
+if [ -s "$WRITTEN" ]; then
+	awk -F / '{ print $1 "/" $2 }' "$WRITTEN" | sort | uniq -c | sed 's/^/    /' >&2
+fi
 awk -F '\t' '$4 == "000" { print "    no response: " $1 }' "$ROWS" >&2

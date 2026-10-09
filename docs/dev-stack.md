@@ -28,13 +28,13 @@ All published ports bind to `127.0.0.1`.
 | grafana12 | `grafana/grafana:12.4.12` | 3000 | Uses the image renderer. |
 | grafana11 | `grafana/grafana:11.6.16` | 3011 | Deliberately without a renderer, so the "no renderer" path is real. |
 | renderer | `grafana/grafana-image-renderer:v5.12.6` | internal 8081 | Grafana 12 only. |
-| prometheus3 | `prom/prometheus:v3.15.0` | 9090 | Exemplar storage, remote-write receiver. |
-| prometheus2 | `prom/prometheus:v2.53.5` | 9091 | 2.53 LTS, same config and rules as prometheus3. |
-| alertmanager | `prom/alertmanager:v0.34.1` | 9093 | Receives from both Prometheus servers and both Grafanas. |
+| prometheus3 | `quay.io/prometheus/prometheus:v3.15.0` | 9090 | Exemplar storage, remote-write receiver. |
+| prometheus2 | `quay.io/prometheus/prometheus:v2.53.5` | 9091 | 2.53 LTS, same config and rules as prometheus3. |
+| alertmanager | `quay.io/prometheus/alertmanager:v0.34.1` | 9093 | Receives from both Prometheus servers and both Grafanas. |
 | loki | `grafana/loki:3.7.8` | 3100 | Volume API enabled. |
 | tempo | `grafana/tempo:2.10.8` | 3200 | OTLP gRPC/HTTP internal (4317/4318); metrics generator on. |
-| node-exporter | `prom/node-exporter:v1.12.1` | internal | Scrape target. |
-| loggen | `curlimages/curl:8.22.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s. |
+| node-exporter | `quay.io/prometheus/node-exporter:v1.12.1` | internal | Scrape target. |
+| loggen | `quay.io/curl/curl:8.22.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s. |
 | tracegen-frontend, tracegen-payments | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.162.0` | none | OTLP traces; payments spans carry error status. |
 | logcli | `grafana/logcli:3.7.8` | none | Profile `tools`; only used by `capture` via `docker compose run`. |
 
@@ -138,11 +138,18 @@ Specs read fixtures through `tests/lib/fixtures.luau` (`Fixtures.read(path)`, `F
    provisioning under `dev/` and `sh scripts/stack.sh reset`.
 3. `sh scripts/stack.sh capture`, then `make fixtures`, and commit the new files and `MANIFEST.tsv`.
 
-Never hand-write a fixture that the stack can produce. A capture replaces each
-`<backend>/<version>` directory it records as a whole; other versions stay.
+Never hand-write a fixture that the stack can produce.
+
+A plain `capture` never overwrites anything: it installs only fixtures whose file does not exist
+yet (with their `.request.*` and `.stderr` companions) and adds their MANIFEST rows. Existing files
+and rows stay byte-for-byte, because specs assert on their exact values. To re-record on purpose,
+run `sh scripts/stack.sh capture --refresh 'PATTERN'`, where PATTERN is a shell glob over paths
+relative to `tests/fixtures` (for example `'prometheus/3.15.0/query_range_*'`; with no pattern,
+everything is refreshed). Then run `make fixtures test` and fix any spec that depended on the old
+values.
 
 ### Upgrading a pinned version
 
 Change the tag in `dev/compose.yml`, `sh scripts/stack.sh reset`, `capture`. The new version lands in
-its own directory next to the old one; move specs over, then delete the old directory and its
-MANIFEST rows when nothing references them.
+its own directory next to the old one (all new files, so a plain `capture` writes it); move specs
+over, then delete the old directory and its MANIFEST rows when nothing references them.

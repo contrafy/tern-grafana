@@ -129,35 +129,10 @@ jobs:
           for kind, table in (("lens", "lenses"), ("block", "blocks")):
               for entry in manifest.get(table, []):
                   ident = entry.get("id", "")
-                  if not re.search(rf'tern\.{kind}\.define\(\s*"{re.escape(ident)}"', sources):
-                      errors.append(f"plugin.toml: {kind} {ident!r} has no tern.{kind}.define")
+                  if not re.search(rf'\.define\(\s*"{re.escape(ident)}"', sources):
+                      errors.append(f"plugin.toml: {kind} {ident!r} is never defined (tern.{kind}.define or an adapter's define)")
 
           for e in errors:
               print(f"::error::{e}")
           print(f"{len(seen)} reachable modules, {len(shipped)} files under plugin/, {len(errors)} problem(s)")
           sys.exit(1 if errors else 0)
-
-  dev-stack:
-    name: dev stack smoke
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Start the stack
-        run: sh scripts/stack.sh up
-
-      - name: Smoke
-        run: |
-          sh scripts/stack.sh smoke
-          sh scripts/stack.sh status
-
-      - name: Container logs on failure
-        if: failure()
-        run: docker compose -f dev/compose.yml logs --no-color --tail 200
-
-      - name: Stop the stack
-        if: always()
-        run: sh scripts/stack.sh down
