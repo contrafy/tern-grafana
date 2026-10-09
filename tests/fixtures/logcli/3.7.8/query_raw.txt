@@ -1,0 +1,20 @@
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1464}
+level=error msg="charge failed" error="card declined" order_id=475 trace_id=79bec98219eb861620b1c60ac98a34b1
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1458}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1455}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1452}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1449}
+level=error msg="charge failed" error="card declined" order_id=470 trace_id=8cbd6965f413cdbd05c1867b338adad2
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1443}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1440}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1437}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1434}
+level=error msg="charge failed" error="card declined" order_id=465 trace_id=cbd031ac1a3c9ce5f303619738965961
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1428}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1425}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1422}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1419}
+level=error msg="charge failed" error="card declined" order_id=460 trace_id=4677eda8ae59d42bded0c94715966c84
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1413}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1410}
+{"level":"warn","msg":"slow upstream","upstream":"bank","latency_ms":1407}

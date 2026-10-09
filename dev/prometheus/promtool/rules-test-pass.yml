@@ -1,0 +1,32 @@
+# `promtool test rules` input that passes.
+rule_files:
+  - ../rules/recording.yml
+  - ../rules/alerts.yml
+evaluation_interval: 10s
+tests:
+  - interval: 10s
+    input_series:
+      - series: 'up{job="node", instance="node-exporter:9100"}'
+        values: '1x30'
+      - series: 'up{job="down", instance="node-exporter:9999"}'
+        values: '0x30'
+    promql_expr_test:
+      - expr: job:up:sum
+        eval_time: 1m
+        exp_samples:
+          - labels: 'job:up:sum{job="node"}'
+            value: 1
+          - labels: 'job:up:sum{job="down"}'
+            value: 0
+    alert_rule_test:
+      - alertname: TernTargetDown
+        eval_time: 1m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              job: down
+              instance: node-exporter:9999
+            exp_annotations:
+              summary: Target node-exporter:9999 of job down is down
+              runbook_url: https://example.com/runbooks/target-down

@@ -1,0 +1,244 @@
+path	method	url	status	captured_at	server_version	request
+alertmanager/0.34.1/alert_groups.json	GET	/api/v2/alerts/groups	200	2026-10-09T20:31:50Z	0.34.1	-
+alertmanager/0.34.1/alerts.json	GET	/api/v2/alerts	200	2026-10-09T20:31:50Z	0.34.1	-
+alertmanager/0.34.1/alerts_filtered.json	GET	/api/v2/alerts?filter=severity%3D%22critical%22&active=true	200	2026-10-09T20:31:50Z	0.34.1	-
+alertmanager/0.34.1/alerts_with_silenced.json	GET	/api/v2/alerts?silenced=true	200	2026-10-09T20:31:52Z	0.34.1	-
+alertmanager/0.34.1/receivers.json	GET	/api/v2/receivers	200	2026-10-09T20:31:50Z	0.34.1	-
+alertmanager/0.34.1/silence.json	GET	/api/v2/silence/892a1c9d-e05b-4e32-8dad-b5b3860bc8c3	200	2026-10-09T20:31:52Z	0.34.1	-
+alertmanager/0.34.1/silence_create.json	POST	/api/v2/silences	200	2026-10-09T20:31:50Z	0.34.1	alertmanager/0.34.1/silence_create.request.json
+alertmanager/0.34.1/silence_expire.txt	DELETE	/api/v2/silence/892a1c9d-e05b-4e32-8dad-b5b3860bc8c3	200	2026-10-09T20:31:55Z	0.34.1	-
+alertmanager/0.34.1/silence_invalid_id.json	GET	/api/v2/silence/not-a-uuid	422	2026-10-09T20:31:52Z	0.34.1	-
+alertmanager/0.34.1/silences.json	GET	/api/v2/silences	200	2026-10-09T20:31:50Z	0.34.1	-
+alertmanager/0.34.1/silences_active.json	GET	/api/v2/silences	200	2026-10-09T20:31:52Z	0.34.1	-
+alertmanager/0.34.1/silences_after_expire.json	GET	/api/v2/silences	200	2026-10-09T20:31:55Z	0.34.1	-
+alertmanager/0.34.1/status.json	GET	/api/v2/status	200	2026-10-09T20:31:50Z	0.34.1	-
+amtool/0.34.1/alert_query.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 alert query	0	2026-10-09T20:31:53Z	0.34.1	-
+amtool/0.34.1/alert_query_extended.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o extended alert query	0	2026-10-09T20:31:54Z	0.34.1	-
+amtool/0.34.1/alert_query_json.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o json alert query	0	2026-10-09T20:31:54Z	0.34.1	-
+amtool/0.34.1/alert_query_silenced.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 alert query --silenced	0	2026-10-09T20:31:53Z	0.34.1	-
+amtool/0.34.1/check_config.txt	CLI	amtool check-config /etc/alertmanager/alertmanager.yml	0	2026-10-09T20:31:55Z	0.34.1	-
+amtool/0.34.1/silence_query.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 silence query	0	2026-10-09T20:31:54Z	0.34.1	-
+amtool/0.34.1/silence_query_json.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o json silence query	0	2026-10-09T20:31:54Z	0.34.1	-
+grafana/11.6.16/alerting_am_alert_groups.json	GET	/api/alertmanager/grafana/api/v2/alerts/groups	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_am_alerts.json	GET	/api/alertmanager/grafana/api/v2/alerts	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_am_alerts_silenced.json	GET	/api/alertmanager/grafana/api/v2/alerts?silenced=true	200	2026-10-09T20:31:50Z	11.6.16	-
+grafana/11.6.16/alerting_am_silence_create.json	POST	/api/alertmanager/grafana/api/v2/silences	202	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/alerting_am_silence_create.request.json
+grafana/11.6.16/alerting_am_silence_expire.json	DELETE	/api/alertmanager/grafana/api/v2/silence/055ee28b-5294-4101-957d-8d742de35e7c	200	2026-10-09T20:31:50Z	11.6.16	-
+grafana/11.6.16/alerting_am_silences.json	GET	/api/alertmanager/grafana/api/v2/silences	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_am_silences_active.json	GET	/api/alertmanager/grafana/api/v2/silences	200	2026-10-09T20:31:50Z	11.6.16	-
+grafana/11.6.16/alerting_ds_prom_rules.json	GET	/api/prometheus/prom3/api/v1/rules	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_ext_am_alerts.json	GET	/api/alertmanager/alertmanager/api/v2/alerts	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_prom_alerts.json	GET	/api/prometheus/grafana/api/v1/alerts	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_prom_rules.json	GET	/api/prometheus/grafana/api/v1/rules	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_provisioning_rules.json	GET	/api/v1/provisioning/alert-rules	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/alerting_ruler_rules.json	GET	/api/ruler/grafana/api/v1/rules	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/annotation_create.json	POST	/api/annotations	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/annotation_create.request.json
+grafana/11.6.16/annotation_delete.json	DELETE	/api/annotations/9	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/annotations.json	GET	/api/annotations?limit=50	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/annotations_dashboard.json	GET	/api/annotations?dashboardUID=tern-panels&limit=50	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/dashboard_missing.json	GET	/api/dashboards/uid/tern-no-such-dashboard	404	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/dashboard_tern_observability.json	GET	/api/dashboards/uid/tern-observability	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/dashboard_tern_panels.json	GET	/api/dashboards/uid/tern-panels	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/dashboard_tern_variables.json	GET	/api/dashboards/uid/tern-variables	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/datasource_prom3.json	GET	/api/datasources/uid/prom3	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/datasources.json	GET	/api/datasources	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_query.json	GET	/api/datasources/proxy/uid/prom3/api/v1/query?query=up	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_targets.json	GET	/api/datasources/proxy/uid/prom3/api/v1/targets	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/ds_proxy_tempo_search.json	GET	/api/datasources/proxy/uid/tempo/api/search?q=%7Bresource.service.name%3D%22payments%22%7D&limit=10&start=1791576998&end=1791577898	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/ds_proxy_tempo_trace.json	GET	/api/datasources/proxy/uid/tempo/api/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/ds_query_loki_logs.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_loki_logs.request.json
+grafana/11.6.16/ds_query_loki_metric.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_loki_metric.request.json
+grafana/11.6.16/ds_query_prom2_range.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom2_range.request.json
+grafana/11.6.16/ds_query_prom_error.json	POST	/api/ds/query	400	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom_error.request.json
+grafana/11.6.16/ds_query_prom_exemplars.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom_exemplars.request.json
+grafana/11.6.16/ds_query_prom_heatmap.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom_heatmap.request.json
+grafana/11.6.16/ds_query_prom_instant.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom_instant.request.json
+grafana/11.6.16/ds_query_prom_range.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom_range.request.json
+grafana/11.6.16/ds_query_prom_table.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_prom_table.request.json
+grafana/11.6.16/ds_query_tempo_search.json	POST	/api/ds/query	500	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_tempo_search.request.json
+grafana/11.6.16/ds_query_tempo_trace.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_tempo_trace.request.json
+grafana/11.6.16/ds_resource_prom_label_values.json	GET	/api/datasources/uid/prom3/resources/api/v1/label/job/values?start=1791576998&end=1791577898	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/ds_resource_prom_labels.json	GET	/api/datasources/uid/prom3/resources/api/v1/labels?start=1791576998&end=1791577898	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/folders.json	GET	/api/folders	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/frontend_settings.json	GET	/api/frontend/settings	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/health.json	GET	/api/health	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/library_element.json	GET	/api/library-elements/tern-lib-up	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/org.json	GET	/api/org	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/render_d_solo.png	GET	/render/d-solo/tern-panels/tern-panels?orgId=1&panelId=2&width=1000&height=500&from=now-1h&to=now&tz=UTC	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/search.json	GET	/api/search?type=dash-db	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/search_folders.json	GET	/api/search?type=dash-folder	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/search_query.json	GET	/api/search?query=Tern%20Pan&type=dash-db	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/user.json	GET	/api/user	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/12.4.12/alerting_am_alert_groups.json	GET	/api/alertmanager/grafana/api/v2/alerts/groups	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_am_alerts.json	GET	/api/alertmanager/grafana/api/v2/alerts	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_am_alerts_silenced.json	GET	/api/alertmanager/grafana/api/v2/alerts?silenced=true	200	2026-10-09T20:31:47Z	12.4.12	-
+grafana/12.4.12/alerting_am_silence_create.json	POST	/api/alertmanager/grafana/api/v2/silences	202	2026-10-09T20:31:45Z	12.4.12	grafana/12.4.12/alerting_am_silence_create.request.json
+grafana/12.4.12/alerting_am_silence_expire.json	DELETE	/api/alertmanager/grafana/api/v2/silence/8f0c1a3e-04ac-4019-8be3-c80a6fba7640	200	2026-10-09T20:31:47Z	12.4.12	-
+grafana/12.4.12/alerting_am_silences.json	GET	/api/alertmanager/grafana/api/v2/silences	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_am_silences_active.json	GET	/api/alertmanager/grafana/api/v2/silences	200	2026-10-09T20:31:47Z	12.4.12	-
+grafana/12.4.12/alerting_ds_prom_rules.json	GET	/api/prometheus/prom3/api/v1/rules	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_ext_am_alerts.json	GET	/api/alertmanager/alertmanager/api/v2/alerts	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_prom_alerts.json	GET	/api/prometheus/grafana/api/v1/alerts	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_prom_rules.json	GET	/api/prometheus/grafana/api/v1/rules	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_provisioning_rules.json	GET	/api/v1/provisioning/alert-rules	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/alerting_ruler_rules.json	GET	/api/ruler/grafana/api/v1/rules	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/annotation_create.json	POST	/api/annotations	200	2026-10-09T20:31:45Z	12.4.12	grafana/12.4.12/annotation_create.request.json
+grafana/12.4.12/annotation_delete.json	DELETE	/api/annotations/9	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/annotations.json	GET	/api/annotations?limit=50	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/annotations_dashboard.json	GET	/api/annotations?dashboardUID=tern-panels&limit=50	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/dashboard_missing.json	GET	/api/dashboards/uid/tern-no-such-dashboard	404	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/dashboard_tern_observability.json	GET	/api/dashboards/uid/tern-observability	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/dashboard_tern_panels.json	GET	/api/dashboards/uid/tern-panels	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/dashboard_tern_variables.json	GET	/api/dashboards/uid/tern-variables	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/datasource_prom3.json	GET	/api/datasources/uid/prom3	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/datasources.json	GET	/api/datasources	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_query.json	GET	/api/datasources/proxy/uid/prom3/api/v1/query?query=up	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_targets.json	GET	/api/datasources/proxy/uid/prom3/api/v1/targets	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/ds_proxy_tempo_search.json	GET	/api/datasources/proxy/uid/tempo/api/search?q=%7Bresource.service.name%3D%22payments%22%7D&limit=10&start=1791576998&end=1791577898	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/ds_proxy_tempo_trace.json	GET	/api/datasources/proxy/uid/tempo/api/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/ds_query_loki_logs.json	POST	/api/ds/query	200	2026-10-09T20:31:40Z	12.4.12	grafana/12.4.12/ds_query_loki_logs.request.json
+grafana/12.4.12/ds_query_loki_metric.json	POST	/api/ds/query	200	2026-10-09T20:31:40Z	12.4.12	grafana/12.4.12/ds_query_loki_metric.request.json
+grafana/12.4.12/ds_query_prom2_range.json	POST	/api/ds/query	200	2026-10-09T20:31:40Z	12.4.12	grafana/12.4.12/ds_query_prom2_range.request.json
+grafana/12.4.12/ds_query_prom_error.json	POST	/api/ds/query	400	2026-10-09T20:31:39Z	12.4.12	grafana/12.4.12/ds_query_prom_error.request.json
+grafana/12.4.12/ds_query_prom_exemplars.json	POST	/api/ds/query	200	2026-10-09T20:31:39Z	12.4.12	grafana/12.4.12/ds_query_prom_exemplars.request.json
+grafana/12.4.12/ds_query_prom_heatmap.json	POST	/api/ds/query	200	2026-10-09T20:31:39Z	12.4.12	grafana/12.4.12/ds_query_prom_heatmap.request.json
+grafana/12.4.12/ds_query_prom_instant.json	POST	/api/ds/query	200	2026-10-09T20:31:39Z	12.4.12	grafana/12.4.12/ds_query_prom_instant.request.json
+grafana/12.4.12/ds_query_prom_range.json	POST	/api/ds/query	200	2026-10-09T20:31:39Z	12.4.12	grafana/12.4.12/ds_query_prom_range.request.json
+grafana/12.4.12/ds_query_prom_table.json	POST	/api/ds/query	200	2026-10-09T20:31:39Z	12.4.12	grafana/12.4.12/ds_query_prom_table.request.json
+grafana/12.4.12/ds_query_tempo_search.json	POST	/api/ds/query	200	2026-10-09T20:31:40Z	12.4.12	grafana/12.4.12/ds_query_tempo_search.request.json
+grafana/12.4.12/ds_query_tempo_trace.json	POST	/api/ds/query	200	2026-10-09T20:31:40Z	12.4.12	grafana/12.4.12/ds_query_tempo_trace.request.json
+grafana/12.4.12/ds_resource_prom_label_values.json	GET	/api/datasources/uid/prom3/resources/api/v1/label/job/values?start=1791576998&end=1791577898	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/ds_resource_prom_labels.json	GET	/api/datasources/uid/prom3/resources/api/v1/labels?start=1791576998&end=1791577898	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/folders.json	GET	/api/folders	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/frontend_settings.json	GET	/api/frontend/settings	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/health.json	GET	/api/health	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/library_element.json	GET	/api/library-elements/tern-lib-up	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/org.json	GET	/api/org	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/render_d_solo.png	GET	/render/d-solo/tern-panels/tern-panels?orgId=1&panelId=2&width=1000&height=500&from=now-1h&to=now&tz=UTC	200	2026-10-09T20:31:45Z	12.4.12	-
+grafana/12.4.12/search.json	GET	/api/search?type=dash-db	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/search_folders.json	GET	/api/search?type=dash-folder	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/search_query.json	GET	/api/search?query=Tern%20Pan&type=dash-db	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/user.json	GET	/api/user	200	2026-10-09T20:31:39Z	12.4.12	-
+logcli/3.7.8/labels.txt	CLI	logcli labels --quiet --since=10m	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/query.txt	CLI	logcli query --quiet --limit=20 --since=10m {job="loggen"}	0	2026-10-09T20:32:01Z	3.7.8	-
+logcli/3.7.8/query_jsonl.txt	CLI	logcli query --quiet --limit=20 --since=10m --output=jsonl {job="loggen"}	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/query_metric.txt	CLI	logcli query --quiet --since=10m sum by (level) (count_over_time({job="loggen"}[5m]))	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/query_raw.txt	CLI	logcli query --quiet --limit=20 --since=10m --output=raw {app="payments"}	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/series.txt	CLI	logcli series --quiet --since=10m {job="loggen"}	0	2026-10-09T20:32:03Z	3.7.8	-
+loki/3.7.8/buildinfo.json	GET	/loki/api/v1/status/buildinfo	200	2026-10-09T20:32:00Z	3.7.8	-
+loki/3.7.8/index_stats.json	GET	/loki/api/v1/index/stats?query=%7Bjob%3D%22loggen%22%7D&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/index_volume.json	GET	/loki/api/v1/index/volume?query=%7Bjob%3D%22loggen%22%7D&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/index_volume_range.json	GET	/loki/api/v1/index/volume_range?query=%7Bjob%3D%22loggen%22%7D&step=60&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/label_values_app.json	GET	/loki/api/v1/label/app/values?start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/label_values_level.json	GET	/loki/api/v1/label/level/values?start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/labels.json	GET	/loki/api/v1/labels?start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:00Z	3.7.8	-
+loki/3.7.8/query_error.txt	GET	/loki/api/v1/query_range?query=%7Bjob%3D%22loggen%22&start=1791576998000000000&end=1791577898000000000	400	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/query_range_matrix.json	GET	/loki/api/v1/query_range?query=sum%20by%20%28level%29%20%28count_over_time%28%7Bjob%3D%22loggen%22%7D%5B1m%5D%29%29&step=60&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/query_range_streams.json	GET	/loki/api/v1/query_range?query=%7Bjob%3D%22loggen%22%7D&limit=50&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/query_range_streams_forward.json	GET	/loki/api/v1/query_range?query=%7Bapp%3D%22payments%22%7D&limit=20&direction=forward&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/query_range_streams_json.json	GET	/loki/api/v1/query_range?query=%7Bapp%3D%22payments%22%2C%20level%3D%22warn%22%7D%20%7C%20json&limit=20&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/query_range_streams_logfmt.json	GET	/loki/api/v1/query_range?query=%7Bapp%3D%22checkout%22%7D%20%7C%20logfmt%20%7C%20duration_ms%20%3E%20400&limit=20&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/query_vector.json	GET	/loki/api/v1/query?query=sum%20by%20%28app%29%20%28count_over_time%28%7Bjob%3D%22loggen%22%7D%5B5m%5D%29%29&time=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/series.json	GET	/loki/api/v1/series?match%5B%5D=%7Bjob%3D%22loggen%22%7D&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+prometheus/2.53.5/alertmanagers.json	GET	/api/v1/alertmanagers	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/alerts.json	GET	/api/v1/alerts	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/buildinfo.json	GET	/api/v1/status/buildinfo	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/config.json	GET	/api/v1/status/config	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/flags.json	GET	/api/v1/status/flags	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/format_query.json	GET	/api/v1/format_query?query=sum%28rate%28prometheus_http_requests_total%7Bhandler%3D%22%2Fapi%2Fv1%2Fquery%22%7D%5B5m%5D%29%29by%28job%29	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/label_values_job.json	GET	/api/v1/label/job/values?start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/label_values_name.json	GET	/api/v1/label/__name__/values?start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/labels.json	GET	/api/v1/labels?start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/metadata.json	GET	/api/v1/metadata?limit=40	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/metadata_metric.json	GET	/api/v1/metadata?metric=prometheus_http_requests_total	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/parse_query.txt	GET	/api/v1/parse_query?query=sum%20by%20%28job%29%20%28rate%28up%5B5m%5D%29%29	404	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_empty.json	GET	/api/v1/query?query=tern_nonexistent_metric&time=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_error_exec.json	GET	/api/v1/query?query=up%20%2A%20on%20%28%29%20up&time=1791577898	422	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_error_parse.json	GET	/api/v1/query?query=sum%28rate%28up%5B5m%5D%29&time=1791577898	400	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_exemplars.json	GET	/api/v1/query_exemplars?query=traces_spanmetrics_latency_bucket&start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_matrix.json	GET	/api/v1/query?query=up%7Bjob%3D%22node%22%7D%5B1m%5D&time=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_post.json	POST	/api/v1/query	200	2026-10-09T20:31:39Z	2.53.5	prometheus/2.53.5/query_post.request.txt
+prometheus/2.53.5/query_range_down_target.json	GET	/api/v1/query_range?query=up%7Bjob%3D~%22down%7Cnode%22%7D&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_range_empty.json	GET	/api/v1/query_range?query=tern_nonexistent_metric&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_range_error_resolution.json	GET	/api/v1/query_range?query=up&start=1790973098&end=1791577898&step=1	400	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_range_gaps.json	GET	/api/v1/query_range?query=vector%281%29%20and%20on%20%28%29%20%28floor%28vector%28time%28%29%29%20%2F%2060%29%20%25%202%20%3D%3D%200%29&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_range_multi.json	GET	/api/v1/query_range?query=rate%28node_cpu_seconds_total%7Bmode%3D~%22user%7Csystem%7Cidle%22%7D%5B1m%5D%29&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_range_nan_inf.json	GET	/api/v1/query_range?query=label_replace%28vector%280%2F0%29%2C%20%22kind%22%2C%20%22nan%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28vector%281%2F0%29%2C%20%22kind%22%2C%20%22inf%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28vector%28-1%2F0%29%2C%20%22kind%22%2C%20%22neginf%22%2C%20%22%22%2C%20%22%22%29&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_scalar.json	GET	/api/v1/query?query=scalar%28sum%28up%29%29&time=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_string.json	GET	/api/v1/query?query=%22tern%22&time=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/query_vector.json	GET	/api/v1/query?query=up&time=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/rules.json	GET	/api/v1/rules	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/rules_alert.json	GET	/api/v1/rules?type=alert	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/runtimeinfo.json	GET	/api/v1/status/runtimeinfo	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/series.json	GET	/api/v1/series?match%5B%5D=up&start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/targets.json	GET	/api/v1/targets	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/targets_active.json	GET	/api/v1/targets?state=active	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/tsdb.json	GET	/api/v1/status/tsdb	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/walreplay.json	GET	/api/v1/status/walreplay	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/3.15.0/alertmanagers.json	GET	/api/v1/alertmanagers	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/alerts.json	GET	/api/v1/alerts	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/buildinfo.json	GET	/api/v1/status/buildinfo	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/config.json	GET	/api/v1/status/config	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/flags.json	GET	/api/v1/status/flags	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/format_query.json	GET	/api/v1/format_query?query=sum%28rate%28prometheus_http_requests_total%7Bhandler%3D%22%2Fapi%2Fv1%2Fquery%22%7D%5B5m%5D%29%29by%28job%29	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/label_values_job.json	GET	/api/v1/label/job/values?start=1791576998&end=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/label_values_name.json	GET	/api/v1/label/__name__/values?start=1791576998&end=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/labels.json	GET	/api/v1/labels?start=1791576998&end=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/metadata.json	GET	/api/v1/metadata?limit=40	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/metadata_metric.json	GET	/api/v1/metadata?metric=prometheus_http_requests_total	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/parse_query.json	GET	/api/v1/parse_query?query=sum%20by%20%28job%29%20%28rate%28up%5B5m%5D%29%29	200	2026-10-09T20:31:39Z	3.15.0	-
+prometheus/3.15.0/query_empty.json	GET	/api/v1/query?query=tern_nonexistent_metric&time=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_error_exec.json	GET	/api/v1/query?query=up%20%2A%20on%20%28%29%20up&time=1791577898	422	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_error_parse.json	GET	/api/v1/query?query=sum%28rate%28up%5B5m%5D%29&time=1791577898	400	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_exemplars.json	GET	/api/v1/query_exemplars?query=traces_spanmetrics_latency_bucket&start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	3.15.0	-
+prometheus/3.15.0/query_matrix.json	GET	/api/v1/query?query=up%7Bjob%3D%22node%22%7D%5B1m%5D&time=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_post.json	POST	/api/v1/query	200	2026-10-09T20:31:38Z	3.15.0	prometheus/3.15.0/query_post.request.txt
+prometheus/3.15.0/query_range_down_target.json	GET	/api/v1/query_range?query=up%7Bjob%3D~%22down%7Cnode%22%7D&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_range_empty.json	GET	/api/v1/query_range?query=tern_nonexistent_metric&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_range_error_resolution.json	GET	/api/v1/query_range?query=up&start=1790973098&end=1791577898&step=1	400	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_range_gaps.json	GET	/api/v1/query_range?query=vector%281%29%20and%20on%20%28%29%20%28floor%28vector%28time%28%29%29%20%2F%2060%29%20%25%202%20%3D%3D%200%29&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_range_multi.json	GET	/api/v1/query_range?query=rate%28node_cpu_seconds_total%7Bmode%3D~%22user%7Csystem%7Cidle%22%7D%5B1m%5D%29&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_range_nan_inf.json	GET	/api/v1/query_range?query=label_replace%28vector%280%2F0%29%2C%20%22kind%22%2C%20%22nan%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28vector%281%2F0%29%2C%20%22kind%22%2C%20%22inf%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28vector%28-1%2F0%29%2C%20%22kind%22%2C%20%22neginf%22%2C%20%22%22%2C%20%22%22%29&start=1791576998&end=1791577898&step=15	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_scalar.json	GET	/api/v1/query?query=scalar%28sum%28up%29%29&time=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_string.json	GET	/api/v1/query?query=%22tern%22&time=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/query_vector.json	GET	/api/v1/query?query=up&time=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/rules.json	GET	/api/v1/rules	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/rules_alert.json	GET	/api/v1/rules?type=alert	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/runtimeinfo.json	GET	/api/v1/status/runtimeinfo	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/series.json	GET	/api/v1/series?match%5B%5D=up&start=1791576998&end=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/targets.json	GET	/api/v1/targets	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/targets_active.json	GET	/api/v1/targets?state=active	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/tsdb.json	GET	/api/v1/status/tsdb	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/walreplay.json	GET	/api/v1/status/walreplay	200	2026-10-09T20:31:38Z	3.15.0	-
+promtool/2.53.5/check_config.txt	CLI	promtool check config /etc/prometheus/prometheus.yml	0	2026-10-09T20:32:00Z	2.53.5	-
+promtool/2.53.5/check_rules_bad.txt	CLI	promtool check rules /etc/prometheus/promtool/rules-bad.yml	1	2026-10-09T20:32:00Z	2.53.5	-
+promtool/2.53.5/check_rules_good.txt	CLI	promtool check rules /etc/prometheus/rules/recording.yml /etc/prometheus/rules/alerts.yml	0	2026-10-09T20:31:59Z	2.53.5	-
+promtool/2.53.5/query_error.txt	CLI	promtool query instant http://prometheus2:9090 sum(up	1	2026-10-09T20:31:59Z	2.53.5	-
+promtool/2.53.5/query_instant.txt	CLI	promtool query instant http://prometheus2:9090 sum by (job) (up)	0	2026-10-09T20:31:58Z	2.53.5	-
+promtool/2.53.5/query_instant_json.txt	CLI	promtool query instant -o json http://prometheus2:9090 sum by (job) (up)	0	2026-10-09T20:31:58Z	2.53.5	-
+promtool/2.53.5/query_range.txt	CLI	promtool query range --start=1791577598 --end=1791577898 --step=60s http://prometheus2:9090 sum by (job) (up)	0	2026-10-09T20:31:59Z	2.53.5	-
+promtool/2.53.5/query_range_json.txt	CLI	promtool query range -o json --start=1791577598 --end=1791577898 --step=60s http://prometheus2:9090 sum by (job) (up)	0	2026-10-09T20:31:59Z	2.53.5	-
+promtool/2.53.5/test_rules_fail.txt	CLI	promtool test rules /etc/prometheus/promtool/rules-test-fail.yml	1	2026-10-09T20:32:00Z	2.53.5	-
+promtool/2.53.5/test_rules_pass.txt	CLI	promtool test rules /etc/prometheus/promtool/rules-test-pass.yml	0	2026-10-09T20:32:00Z	2.53.5	-
+promtool/3.15.0/check_config.txt	CLI	promtool check config /etc/prometheus/prometheus.yml	0	2026-10-09T20:31:57Z	3.15.0	-
+promtool/3.15.0/check_rules_bad.txt	CLI	promtool check rules /etc/prometheus/promtool/rules-bad.yml	1	2026-10-09T20:31:57Z	3.15.0	-
+promtool/3.15.0/check_rules_good.txt	CLI	promtool check rules /etc/prometheus/rules/recording.yml /etc/prometheus/rules/alerts.yml	0	2026-10-09T20:31:56Z	3.15.0	-
+promtool/3.15.0/query_error.txt	CLI	promtool query instant http://prometheus3:9090 sum(up	1	2026-10-09T20:31:56Z	3.15.0	-
+promtool/3.15.0/query_instant.txt	CLI	promtool query instant http://prometheus3:9090 sum by (job) (up)	0	2026-10-09T20:31:55Z	3.15.0	-
+promtool/3.15.0/query_instant_json.txt	CLI	promtool query instant -o json http://prometheus3:9090 sum by (job) (up)	0	2026-10-09T20:31:55Z	3.15.0	-
+promtool/3.15.0/query_range.txt	CLI	promtool query range --start=1791577598 --end=1791577898 --step=60s http://prometheus3:9090 sum by (job) (up)	0	2026-10-09T20:31:56Z	3.15.0	-
+promtool/3.15.0/query_range_json.txt	CLI	promtool query range -o json --start=1791577598 --end=1791577898 --step=60s http://prometheus3:9090 sum by (job) (up)	0	2026-10-09T20:31:56Z	3.15.0	-
+promtool/3.15.0/test_rules_fail.txt	CLI	promtool test rules /etc/prometheus/promtool/rules-test-fail.yml	1	2026-10-09T20:31:58Z	3.15.0	-
+promtool/3.15.0/test_rules_pass.txt	CLI	promtool test rules /etc/prometheus/promtool/rules-test-pass.yml	0	2026-10-09T20:31:57Z	3.15.0	-
+tempo/2.10.8/buildinfo.json	GET	/api/status/buildinfo	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/echo.txt	GET	/api/echo	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/metrics_query_range.json	GET	/api/metrics/query_range?q=%7B%7D%20%7C%20rate%28%29%20by%20%28resource.service.name%29&start=1791576998&end=1791577898&step=60s	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/search.json	GET	/api/search?q=%7Bresource.service.name%3D%22frontend%22%7D&limit=10&start=1791576998&end=1791577898	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/search_error.txt	GET	/api/search?q=%7B%20resource.service.name%20%3D%20&start=1791576998&end=1791577898	400	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/search_errors.json	GET	/api/search?q=%7Bstatus%3Derror%7D&limit=10&start=1791576998&end=1791577898	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/search_tag_values_v2.json	GET	/api/v2/search/tag/resource.service.name/values	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/search_tags.json	GET	/api/search/tags	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/search_tags_v2.json	GET	/api/v2/search/tags	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/trace.json	GET	/api/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/trace_not_found.txt	GET	/api/traces/0000000000000000000000000000beef	404	2026-10-09T20:32:03Z	2.10.8	-
+tempo/2.10.8/trace_v2.json	GET	/api/v2/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:32:03Z	2.10.8	-

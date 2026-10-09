@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"sum by (level) (count_over_time({job=\"loggen\"}[1m]))","legendFormat":"{{level}}","queryType":"range","intervalMs":60000,"maxDataPoints":200}],"from":"now-15m","to":"now"}

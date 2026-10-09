@@ -1,0 +1,147 @@
+# Grafana-managed alert rules. Their folder is separate from the dashboards folder so the
+# two provisioners never race to create the same folder title.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: tern-grafana-rules
+    folder: Tern Alerts
+    interval: 10s
+    rules:
+      - uid: tern-g-firing
+        title: TernGrafanaAlwaysFiring
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prom3
+            model:
+              refId: A
+              expr: 'vector(1)'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: TernGrafanaAlwaysFiring
+          runbook_url: https://example.com/runbooks/tern-grafana-always-firing
+          __dashboardUid__: tern-panels
+          __panelId__: "2"
+          description: Fires on every evaluation so Grafana alert views always have data.
+      - uid: tern-g-targetdown
+        title: TernGrafanaTargetDown
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prom3
+            model:
+              refId: A
+              expr: '1 - up{job="down"}'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: NoData
+        execErrState: Error
+        for: 30s
+        isPaused: false
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: TernGrafanaTargetDown
+          runbook_url: https://example.com/runbooks/target-down
+      - uid: tern-g-pending
+        title: TernGrafanaPending
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prom3
+            model:
+              refId: A
+              expr: 'vector(1)'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: NoData
+        execErrState: Error
+        for: 24h
+        isPaused: false
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: TernGrafanaPending
+      - uid: tern-g-normal
+        title: TernGrafanaNormal
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prom3
+            model:
+              refId: A
+              expr: 'vector(0)'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: TernGrafanaNormal

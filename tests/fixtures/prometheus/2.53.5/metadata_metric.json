@@ -1,0 +1,1 @@
+{"status":"success","data":{"prometheus_http_requests_total":[{"type":"counter","unit":"","help":"Counter of HTTP requests."}]}}

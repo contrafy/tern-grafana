@@ -1,0 +1,4 @@
+  FAILED:
+/etc/prometheus/promtool/rules-bad.yml: 6:15: group "tern-bad", rule 1, "job:up:sum": could not parse expression: 1:17: parse error: unclosed left parenthesis
+/etc/prometheus/promtool/rules-bad.yml: 0:0: group "tern-bad", rule 2, "MissingExpr": field 'expr' must be set in rule
+

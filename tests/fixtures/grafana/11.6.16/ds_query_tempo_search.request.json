@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"tempo","uid":"tempo"},"queryType":"traceql","query":"{resource.service.name=\"payments\"}","limit":20,"tableType":"traces"}],"from":"now-15m","to":"now"}

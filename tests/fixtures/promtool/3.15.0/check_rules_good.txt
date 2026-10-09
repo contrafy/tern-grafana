@@ -1,0 +1,6 @@
+Checking /etc/prometheus/rules/recording.yml
+  SUCCESS: 3 rules found
+
+Checking /etc/prometheus/rules/alerts.yml
+  SUCCESS: 4 rules found
+

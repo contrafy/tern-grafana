@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum(rate(up[1m])","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}],"from":"now-15m","to":"now"}

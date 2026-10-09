@@ -1,0 +1,1 @@
+Checking /etc/prometheus/promtool/rules-bad.yml

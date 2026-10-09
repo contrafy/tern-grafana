@@ -1,0 +1,8 @@
+groups:
+  # Loads fine but fails at every evaluation (many-to-many match on an empty label set), so the
+  # rules APIs report health "err" with a lastError. Kept out of recording.yml so the passing
+  # `promtool test rules` input does not evaluate it.
+  - name: tern-broken
+    rules:
+      - record: tern:broken:many_to_many
+        expr: up * on () up

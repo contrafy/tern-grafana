@@ -1,0 +1,165 @@
+# Local dev stack for tern-grafana. Drive it with `sh scripts/stack.sh up|down|status|reset|capture`.
+# Every published port binds to 127.0.0.1. Containers keep their state in their own writable layer
+# (nothing is bind-mounted read-write), so `down` discards it; config is mounted read-only from dev/.
+# Admin credentials below are for this local stack only.
+name: tern-grafana-dev
+
+x-grafana-env: &grafana-env
+  GF_SECURITY_ADMIN_USER: admin
+  GF_SECURITY_ADMIN_PASSWORD: tern-dev
+  GF_AUTH_ANONYMOUS_ENABLED: "false"
+  GF_ANALYTICS_REPORTING_ENABLED: "false"
+  GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+  GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+  GF_NEWS_NEWS_FEED_ENABLED: "false"
+  GF_PLUGINS_PREINSTALL_DISABLED: "true"
+  GF_LOG_LEVEL: warn
+  GF_UNIFIED_ALERTING_ENABLED: "true"
+  GF_UNIFIED_ALERTING_MIN_INTERVAL: 10s
+
+services:
+  grafana12:
+    image: grafana/grafana:12.4.12
+    depends_on: [renderer]
+    ports: ["127.0.0.1:3000:3000"]
+    environment:
+      <<: *grafana-env
+      GF_SERVER_ROOT_URL: http://127.0.0.1:3000/
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana12:3000/
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana-dashboards:ro
+    healthcheck: &grafana-health
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Deliberately without an image renderer, so the "no renderer" ladder step is capturable.
+  grafana11:
+    image: grafana/grafana:11.6.16
+    ports: ["127.0.0.1:3011:3000"]
+    environment:
+      <<: *grafana-env
+      GF_SERVER_ROOT_URL: http://127.0.0.1:3011/
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana-dashboards:ro
+    healthcheck: *grafana-health
+
+  renderer:
+    image: grafana/grafana-image-renderer:v5.12.6
+    environment:
+      GOMEMLIMIT: 1GiB
+
+  prometheus3:
+    image: prom/prometheus:v3.15.0
+    ports: ["127.0.0.1:9090:9090"]
+    command: &prom-args
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2d
+      - --enable-feature=exemplar-storage
+      - --web.enable-remote-write-receiver
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    healthcheck: &prom-health
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  prometheus2:
+    image: prom/prometheus:v2.53.5
+    ports: ["127.0.0.1:9091:9090"]
+    command: *prom-args
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    healthcheck: *prom-health
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    ports: ["127.0.0.1:9093:9093"]
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --cluster.listen-address=
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9093/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Loki and Tempo images ship no shell; scripts/stack.sh probes their /ready endpoints from the host.
+  loki:
+    image: grafana/loki:3.7.8
+    ports: ["127.0.0.1:3100:3100"]
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./loki:/etc/loki:ro
+
+  tempo:
+    image: grafana/tempo:2.10.8
+    ports: ["127.0.0.1:3200:3200"]
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./tempo:/etc/tempo:ro
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9100/metrics"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Pushes labeled, multi-level log lines to Loki.
+  loggen:
+    image: curlimages/curl:8.22.0
+    depends_on: [loki]
+    entrypoint: ["/bin/sh", "/gen/loggen.sh"]
+    environment:
+      LOKI_URL: http://loki:3100
+    volumes:
+      - ./generators:/gen:ro
+
+  # OTLP traces into Tempo. Tempo's metrics generator turns them into span metrics with
+  # exemplars (label traceID) remote-written to both Prometheus servers.
+  tracegen-frontend:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.162.0
+    depends_on: [tempo]
+    command:
+      - traces
+      - --otlp-endpoint=tempo:4317
+      - --otlp-insecure
+      - --duration=inf
+      - --rate=2
+      - --child-spans=3
+      - --span-duration=40ms
+      - --service=frontend
+      - --telemetry-attributes=http.route="/checkout"
+
+  tracegen-payments:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.162.0
+    depends_on: [tempo]
+    command:
+      - traces
+      - --otlp-endpoint=tempo:4317
+      - --otlp-insecure
+      - --duration=inf
+      - --rate=0.5
+      - --child-spans=2
+      - --span-duration=120ms
+      - --service=payments
+      - --status-code=Error
+
+  # CLI-only image for fixture capture (`docker compose run --rm logcli ...`); never started by `up`.
+  logcli:
+    image: grafana/logcli:3.7.8
+    profiles: [tools]
+    environment:
+      LOKI_ADDR: http://loki:3100

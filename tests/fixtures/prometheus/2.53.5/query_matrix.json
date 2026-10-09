@@ -1,0 +1,1 @@
+{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"__name__":"up","env":"dev","instance":"node-exporter:9100","job":"node"},"values":[[1791577845.580,"1"],[1791577855.580,"1"],[1791577865.583,"1"],[1791577875.580,"1"],[1791577885.580,"1"],[1791577895.580,"1"]]}]}}

@@ -1,0 +1,17 @@
+route:
+  receiver: blackhole
+  group_by: [alertname]
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 4h
+  routes:
+    - receiver: platform
+      matchers:
+        - team = "platform"
+receivers:
+  - name: blackhole
+  - name: platform
+inhibit_rules:
+  - source_matchers: [severity = "critical"]
+    target_matchers: [severity = "info"]
+    equal: [team]
