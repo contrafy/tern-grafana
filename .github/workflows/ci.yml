@@ -129,8 +129,8 @@ jobs:
           for kind, table in (("lens", "lenses"), ("block", "blocks")):
               for entry in manifest.get(table, []):
                   ident = entry.get("id", "")
-                  if not re.search(rf'tern\.{kind}\.define\(\s*"{re.escape(ident)}"', sources):
-                      errors.append(f"plugin.toml: {kind} {ident!r} has no tern.{kind}.define")
+                  if not re.search(rf'\.define\(\s*"{re.escape(ident)}"', sources):
+                      errors.append(f"plugin.toml: {kind} {ident!r} is never defined (tern.{kind}.define or an adapter's define)")
 
           for e in errors:
               print(f"::error::{e}")
