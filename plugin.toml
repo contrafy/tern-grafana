@@ -6,7 +6,13 @@ description = "Native Grafana and Prometheus views: queries, dashboards, alerts 
 icon = "chart"
 host = "plugin/host.luau"
 window = "plugin/window.luau"
-styles = ["plugin/tern-grafana.css", "plugin/settings.css"]
+styles = [
+	"plugin/tern-grafana.css",
+	"plugin/settings.css",
+	"plugin/dashboard.css",
+	"plugin/panels.css",
+	"plugin/alerts.css",
+]
 
 [[blocks]]
 id = "query"
@@ -17,6 +23,21 @@ icon = "chart"
 id = "settings"
 title = "Tern Grafana Settings"
 icon = "sliders"
+
+[[blocks]]
+id = "dashboard"
+title = "Tern Grafana Dashboard"
+icon = "chart"
+
+[[blocks]]
+id = "panel"
+title = "Tern Grafana Panel"
+icon = "chart"
+
+[[blocks]]
+id = "alerts"
+title = "Grafana Alerts"
+icon = "flame"
 
 [[lenses]]
 id = "promtool-query"

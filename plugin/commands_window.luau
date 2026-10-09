@@ -7,6 +7,7 @@ type Command = { id: string, title: string, icon: string, block: string }
 
 local COMMANDS: { Command } = {
 	{ id = "query", title = "Grafana: Query", icon = "chart", block = "tern-grafana.query" },
+	{ id = "dashboard", title = "Grafana: Dashboard", icon = "chart", block = "tern-grafana.dashboard" },
 	{ id = "settings", title = "Grafana: Settings", icon = "sliders", block = "tern-grafana.settings" },
 }
 
