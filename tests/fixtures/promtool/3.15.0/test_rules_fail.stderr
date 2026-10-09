@@ -1,0 +1,9 @@
+  FAILED:
+    alertname: TernTargetDown, time: 1m, 
+        exp:[
+            0:
+              Labels:{alertname="TernTargetDown", instance="node-exporter:9100", job="node", severity="warning"}
+              Annotations:{}
+            ], 
+        got:[]
+

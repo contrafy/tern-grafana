@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom2"},"expr":"sum by (job) (up)","legendFormat":"{{job}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}],"from":"now-15m","to":"now"}

@@ -1,0 +1,13 @@
+Checking /etc/prometheus/prometheus.yml
+  SUCCESS: 3 rule files found
+ SUCCESS: /etc/prometheus/prometheus.yml is valid prometheus config file syntax
+
+Checking /etc/prometheus/rules/alerts.yml
+  SUCCESS: 4 rules found
+
+Checking /etc/prometheus/rules/broken.yml
+  SUCCESS: 1 rules found
+
+Checking /etc/prometheus/rules/recording.yml
+  SUCCESS: 3 rules found
+

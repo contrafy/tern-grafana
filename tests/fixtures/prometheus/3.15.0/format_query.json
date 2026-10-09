@@ -1,0 +1,1 @@
+{"status":"success","data":"sum by (job) (rate(prometheus_http_requests_total{handler=\"/api/v1/query\"}[5m]))"}

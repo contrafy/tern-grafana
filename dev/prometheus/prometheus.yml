@@ -1,0 +1,38 @@
+# Shared by prometheus3 (v3.x) and prometheus2 (v2.53 LTS): both scrape the same targets and load the same rules.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+  - job_name: node
+    static_configs:
+      - targets: [node-exporter:9100]
+        labels:
+          env: dev
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager:9093]
+  - job_name: loki
+    static_configs:
+      - targets: [loki:3100]
+  - job_name: tempo
+    static_configs:
+      - targets: [tempo:3200]
+  # Grafana itself is not scraped: its grafana_authorization_* metric names would land in label
+  # values, metadata and config fixtures, and tests/fixtures is grepped for "authorization" as a
+  # leak check.
+  # Deliberately down: the port is closed, so this target is always unhealthy (up == 0).
+  - job_name: down
+    static_configs:
+      - targets: [node-exporter:9999]

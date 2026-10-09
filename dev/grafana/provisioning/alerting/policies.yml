@@ -1,0 +1,11 @@
+apiVersion: 1
+
+# Grafana re-sends firing alerts to the external Alertmanager only on repeat_interval; the external
+# Alertmanager resolves them once their endsAt passes. A short repeat keeps them active there.
+policies:
+  - orgId: 1
+    receiver: dev-alertmanager
+    group_by: [grafana_folder, alertname]
+    group_wait: 5s
+    group_interval: 30s
+    repeat_interval: 1m

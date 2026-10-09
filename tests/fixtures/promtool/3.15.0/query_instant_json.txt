@@ -1,0 +1,1 @@
+[{"metric":{"job":"alertmanager"},"value":[1791577915.787,"1"]},{"metric":{"job":"node"},"value":[1791577915.787,"1"]},{"metric":{"job":"down"},"value":[1791577915.787,"0"]},{"metric":{"job":"tempo"},"value":[1791577915.787,"1"]},{"metric":{"job":"loki"},"value":[1791577915.787,"1"]},{"metric":{"job":"prometheus"},"value":[1791577915.787,"1"]}]

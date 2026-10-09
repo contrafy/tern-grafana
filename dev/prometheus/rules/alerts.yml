@@ -1,0 +1,35 @@
+groups:
+  - name: tern-alerts
+    rules:
+      - alert: TernAlwaysFiring
+        expr: vector(1)
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: Always firing fixture alert
+          description: Fires on every evaluation so alert views always have data.
+          runbook_url: https://example.com/runbooks/tern-always-firing
+          dashboard_url: http://127.0.0.1:3000/d/tern-panels/tern-panels
+      - alert: TernTargetDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Target {{ $labels.instance }} of job {{ $labels.job }} is down"
+          runbook_url: https://example.com/runbooks/target-down
+      - alert: TernPending
+        expr: vector(1)
+        for: 24h
+        labels:
+          severity: info
+        annotations:
+          summary: Stays pending for a day
+      - alert: TernInactive
+        expr: vector(0) > 1
+        labels:
+          severity: info
+        annotations:
+          summary: Never fires

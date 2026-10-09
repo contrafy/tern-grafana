@@ -1,0 +1,9 @@
+groups:
+  - name: tern-recording
+    rules:
+      - record: job:up:sum
+        expr: sum by (job) (up)
+      - record: instance:node_cpu_utilisation:rate1m
+        expr: 1 - avg without (cpu) (sum without (mode) (rate(node_cpu_seconds_total{mode=~"idle|iowait|steal"}[1m])))
+      - record: job:prometheus_http_requests:rate1m
+        expr: sum by (job, handler) (rate(prometheus_http_requests_total[1m]))

@@ -1,0 +1,2 @@
+Alertname         Starts At                Summary                      State       
+TernAlwaysFiring  2026-10-09 20:15:54 UTC  Always firing fixture alert  suppressed  

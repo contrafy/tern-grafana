@@ -1,0 +1,5 @@
+{app="frontend", env="dev", job="loggen", level="info", service_name="frontend"}
+{app="payments", env="dev", job="loggen", level="error", service_name="payments"}
+{app="checkout", env="dev", job="loggen", level="info", service_name="checkout"}
+{app="payments", env="dev", job="loggen", level="warn", service_name="payments"}
+{app="checkout", env="dev", job="loggen", level="debug", service_name="checkout"}

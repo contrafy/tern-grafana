@@ -1,0 +1,64 @@
+{
+  "uid": "tern-lib-up",
+  "name": "Tern library: up by job",
+  "kind": 1,
+  "folderUid": "tern-fixtures",
+  "model": {
+    "id": 1,
+    "type": "bargauge",
+    "title": "Tern library: up by job",
+    "gridPos": {
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8
+    },
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prom3"
+    },
+    "fieldConfig": {
+      "defaults": {
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "red",
+              "value": null
+            },
+            {
+              "color": "green",
+              "value": 1
+            }
+          ]
+        }
+      },
+      "overrides": []
+    },
+    "options": {
+      "orientation": "vertical",
+      "displayMode": "basic",
+      "reduceOptions": {
+        "calcs": [
+          "lastNotNull"
+        ],
+        "fields": "",
+        "values": false
+      }
+    },
+    "targets": [
+      {
+        "refId": "A",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "expr": "sum by (job) (up)",
+        "range": false,
+        "instant": true,
+        "editorMode": "code",
+        "legendFormat": "{{job}}"
+      }
+    ]
+  }
+}

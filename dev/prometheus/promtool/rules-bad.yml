@@ -1,0 +1,8 @@
+# Invalid on purpose: input for `promtool check rules` failure fixtures. Not loaded by the servers.
+groups:
+  - name: tern-bad
+    rules:
+      - record: job:up:sum
+        expr: sum by (job) (up
+      - alert: MissingExpr
+        for: 5m

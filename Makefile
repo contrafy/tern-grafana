@@ -10,7 +10,7 @@ TERN_DEFS = .tools/types/tern.lsp.d.luau
 LUAU_DIRS = $(wildcard plugin tests)
 FILTER =
 
-.PHONY: bootstrap tools test test-runner-selfcheck e2e lint fmt fmt-check typecheck check \
+.PHONY: bootstrap tools fixtures test test-runner-selfcheck e2e lint fmt fmt-check typecheck check \
 	stack-up stack-down fixtures-capture
 
 bootstrap:
@@ -21,8 +21,12 @@ tools:
 		[ -e "$$f" ] || { echo "missing $$f: run 'make bootstrap'" >&2; exit 1; }; \
 	done
 
+# Embeds tests/fixtures into gitignored tests/fixtures/generated.luau (the standalone runner cannot read files).
+fixtures:
+	@if [ -f scripts/fixtures/embed.sh ]; then sh scripts/fixtures/embed.sh; fi
+
 # Zero specs is a valid state until the first pure module lands.
-test: tools
+test: tools fixtures
 	@set -- $$( [ -d tests/unit ] && find tests/unit -name '*.spec.luau' | sort); \
 	if [ $$# -eq 0 ]; then echo "0 specs ran (no tests/unit/**/*.spec.luau yet)"; exit 0; fi; \
 	if [ -n "$(FILTER)" ]; then set -- "$(FILTER)" "$$@"; fi; \
@@ -44,7 +48,7 @@ fmt: tools
 fmt-check: tools
 	$(STYLUA) --check $(LUAU_DIRS)
 
-typecheck: tools
+typecheck: tools fixtures
 	$(LUAU_LSP) analyze --platform=standard --definitions=@tern=$(TERN_DEFS) $(LUAU_DIRS)
 
 check: fmt-check lint typecheck test-runner-selfcheck test

@@ -5,3 +5,4 @@
 *.log
 .DS_Store
 dev/.data/
+tests/fixtures/generated.luau
