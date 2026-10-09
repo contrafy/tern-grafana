@@ -1,0 +1,46 @@
+# Brings up the docker dev stack (dev/) and smoke-tests it. Runs only when the stack or
+# the fixture tooling changes, plus weekly, to stay under Docker Hub's pull limits.
+name: dev-stack
+
+on:
+  push:
+    branches: [master]
+    paths: ["dev/**", "scripts/stack.sh", "scripts/fixtures/**", ".github/workflows/dev-stack.yml"]
+  pull_request:
+    paths: ["dev/**", "scripts/stack.sh", "scripts/fixtures/**", ".github/workflows/dev-stack.yml"]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-stack-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dev-stack:
+    name: dev stack smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the stack
+        run: sh scripts/stack.sh up
+
+      - name: Smoke
+        run: |
+          sh scripts/stack.sh smoke
+          sh scripts/stack.sh status
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -f dev/compose.yml logs --no-color --tail 200
+
+      - name: Stop the stack
+        if: always()
+        run: sh scripts/stack.sh down
