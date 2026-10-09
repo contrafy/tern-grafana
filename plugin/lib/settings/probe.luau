@@ -186,7 +186,7 @@ local function datasourceCheck(route: Route, list: { Grafana.Datasource }): Step
 			hint = "available uids: " .. (if #uids > 0 then table.concat(uids, ", ") else "none"),
 		}
 	end
-	return { ok = true, text = "datasources " .. table.concat(found, ", ") }
+	return { ok = true, text = table.concat(found, ", ") }
 end
 
 function M.parse(route: Route, step: Step, response: TransportTypes.Response, env: Env): StepResult

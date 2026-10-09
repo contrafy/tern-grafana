@@ -1,5 +1,7 @@
-/* Settings block (lib/settings/view.luau). Rows are `display: contents` so a
-   click on any cell reaches the row's action; cells line up in one grid. */
+/* Settings block (lib/settings/view.luau). Each row is a wrapping flex line:
+   name and action chips first, details on their own full-width line below,
+   so a narrow pane wraps chips instead of clipping them. Form rows keep the
+   value beside its label while there is room. */
 
 [data-role="tern-grafana.settings-header"] {
 	padding-bottom: 4px;
@@ -20,53 +22,77 @@
 }
 
 .tg-set-grid {
-	display: grid;
-	grid-template-columns: max-content minmax(0, 1fr) max-content;
-	column-gap: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
 	width: 100%;
+	min-width: 0;
 }
 
 .tg-set-r {
-	display: contents;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 12px;
+	min-width: 0;
+	padding: 3px 6px;
+	border-left: 3px solid transparent;
+	border-radius: 3px;
 	cursor: pointer;
 }
 
 .tg-set-c {
 	display: flex;
-	align-items: flex-start;
+	align-items: center;
 	min-width: 0;
-	padding: 3px 0;
+}
+
+.tg-set-name {
+	flex: 0 1 auto;
+}
+
+.tg-set-ctl {
+	flex: 0 1 auto;
+	margin-left: auto;
 }
 
 .tg-set-detail {
-	overflow: hidden;
+	flex: 1 1 100%;
+	padding-left: 8px;
 	overflow-wrap: anywhere;
 }
 
-.tg-set-ctx .tg-set-c {
-	margin-top: 6px;
+.tg-set-form .tg-set-name {
+	flex: 0 0 15em;
+}
+
+.tg-set-form .tg-set-detail {
+	flex: 1 1 14em;
+	padding-left: 0;
+}
+
+.tg-set-ctx {
+	margin-top: 8px;
 	border-top: 1px solid var(--l2);
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
 }
 
 .tg-set-ep {
-	padding-left: 16px;
+	margin-left: 14px;
 }
 
-.tg-set-r:hover .tg-set-c {
+.tg-set-r:hover {
 	background: var(--l1);
 }
 
-.tg-set-sel .tg-set-name,
-.tg-set-sel .tg-set-detail {
-	background: var(--accent-fill);
+.tg-set-sel {
+	border-left-color: var(--accent);
+	background: var(--l1);
 }
 
-.tg-set-sel .tg-set-name {
-	box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.tg-set-bad .tg-set-name {
-	box-shadow: inset 3px 0 0 var(--bad);
+.tg-set-bad {
+	border-left-color: var(--bad);
 }
 
 [data-role="tern-grafana.settings"] .tg-set-editing {

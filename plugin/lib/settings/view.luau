@@ -186,13 +186,12 @@ local function rowNode(s: State, i: number, row: State.Row): Node
 	if row.kind == "add" then
 		cells = {
 			cell("tg-set-name", { ui.text({ ui.span("+ new context", "accent") }) }),
-			cell("tg-set-detail", { ui.muted("a context is one environment: a lab, a cluster, a Grafana stack") }),
 			cell("tg-set-ctl", { ui.row({ chip("Add", "new_context", "n", { title = "New context (n)" }) }) }),
+			cell("tg-set-detail", { ui.muted("a context is one environment: a lab, a cluster, a Grafana stack") }),
 		}
 	elseif row.kind == "context" then
 		local name = row.context :: string
 		local isDefault = Model.defaultContext(s.raw) == name
-		local nameSpans: { SpanLike } = { ui.span(name, "strong mono") }
 		local count = #Model.endpointNames(s.raw, name)
 		local controls: { Node } = {
 			chip("Test", "test=" .. row.key, "t", { title = "Test every endpoint (t)" }),
@@ -203,23 +202,22 @@ local function rowNode(s: State, i: number, row: State.Row): Node
 		end
 		table.insert(controls, chip("Rename", "rename=" .. row.key, "r", { title = "Rename (r)" }))
 		table.insert(controls, chip("Remove", "remove=" .. row.key, "x", { tone = "error", title = "Remove (x)" }))
-		local nameNodes: { Node } = { ui.text(nameSpans) }
+		local nameNodes: { Node } = {
+			ui.text({
+				ui.span(name, "strong mono"),
+				ui.span(" " .. count .. (if count == 1 then " endpoint" else " endpoints"), "muted"),
+			}),
+		}
 		if isDefault then
 			table.insert(nameNodes, ui.badge("default", "accent", { key = "def" }))
 		end
 		cells = {
 			cell("tg-set-name", { ui.row(nameNodes, { key = "n" }) }),
-			cell("tg-set-detail", {
-				ui.muted(count .. (if count == 1 then " endpoint" else " endpoints")),
-			}),
 			cell("tg-set-ctl", { ui.row(controls, { key = "ctl", wrap = true }) }),
 		}
 	else
 		cells = {
-			cell("tg-set-name tg-set-ep", { ui.text({ ui.span(row.endpoint :: string, "mono") }) }),
-			cell("tg-set-detail", {
-				ui.col(endpointDetail(s, row.context :: string, row.endpoint :: string), { key = "d", gap = "none" }),
-			}),
+			cell("tg-set-name", { ui.text({ ui.span(row.endpoint :: string, "mono strong") }) }),
 			cell("tg-set-ctl", {
 				ui.row({
 					chip("Edit", "edit=" .. row.key, "e", { title = "Edit (enter)" }),
@@ -227,9 +225,13 @@ local function rowNode(s: State, i: number, row: State.Row): Node
 					chip("Remove", "remove=" .. row.key, "x", { tone = "error", title = "Remove (x)" }),
 				}, { key = "ctl", wrap = true }),
 			}),
+			cell("tg-set-detail", {
+				ui.col(endpointDetail(s, row.context :: string, row.endpoint :: string), { key = "d", gap = "none" }),
+			}),
 		}
 	end
-	local class = "tg-set-r" .. (if row.kind == "context" then " tg-set-ctx" else "")
+	local class = "tg-set-r"
+		.. (if row.kind == "context" then " tg-set-ctx" elseif row.kind == "endpoint" then " tg-set-ep" else "")
 	return ui.el("div", {
 		key = "r:" .. row.key,
 		class = if selected then class .. " tg-set-sel" else class,
@@ -323,7 +325,7 @@ local function formPage(s: State): { Node }
 	end
 	table.insert(
 		out,
-		ui.el("div", { key = "fields", class = "tg-set-grid", role = "tern-grafana.settings-form" }, rows)
+		ui.el("div", { key = "fields", class = "tg-set-grid tg-set-form", role = "tern-grafana.settings-form" }, rows)
 	)
 	for i, p in rest do
 		table.insert(out, ui.text({ ui.span(Validate.format(p), "error") }, { key = "rest" .. i }))
