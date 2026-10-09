@@ -1,0 +1,57 @@
+/* Native Grafana panels (plugin/lib/panels). Colors are Tern theme tones, so a
+   theme switch recolors panels without new SVG blobs. */
+
+/* Whole-series colors for fixed and by-value color modes: an extra class pair
+   on the SVG shapes and the legend swatch beats the palette class `tg-s<n>`. */
+.tgp-fx.tgp-success { color: var(--ok); stroke: var(--ok); fill: var(--ok); }
+.tgp-fx.tgp-error { color: var(--bad); stroke: var(--bad); fill: var(--bad); }
+.tgp-fx.tgp-warning { color: var(--warn); stroke: var(--warn); fill: var(--warn); }
+.tgp-fx.tgp-info { color: var(--accent); stroke: var(--accent); fill: var(--accent); }
+.tgp-fx.tgp-accent { color: var(--live); stroke: var(--live); fill: var(--live); }
+.tgp-fx.tgp-pending { color: var(--live); stroke: var(--live); fill: var(--live); }
+.tgp-fx.tgp-neutral { color: var(--t3); stroke: var(--t3); fill: var(--t3); }
+.tgp-fx.tgp-muted { color: var(--t4); stroke: var(--t4); fill: var(--t4); }
+
+/* Shape roles keep winning over the series color, as in tern-grafana.css. */
+.tgp-fx.tg-line { fill: none; }
+.tgp-fx.tg-area,
+.tgp-fx.tg-bar { stroke: none; }
+
+/* Stat tiles. */
+.tgp-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 120px;
+	flex: 1 1 120px;
+	padding: 6px 8px;
+	border-radius: 6px;
+}
+
+.tgp-stat-value {
+	font-size: 2em;
+	line-height: 1.2;
+}
+
+/* Tinted backgrounds: stat colorMode background, table color-background. */
+.tgp-bg { border-radius: 4px; padding: 0 4px; }
+.tgp-stat.tgp-bg { padding: 6px 8px; }
+.tgp-bg.tgp-success { background: color-mix(in oklab, var(--ok) 22%, transparent); }
+.tgp-bg.tgp-error { background: color-mix(in oklab, var(--bad) 22%, transparent); }
+.tgp-bg.tgp-warning { background: color-mix(in oklab, var(--warn) 22%, transparent); }
+.tgp-bg.tgp-info { background: color-mix(in oklab, var(--accent) 22%, transparent); }
+.tgp-bg.tgp-accent,
+.tgp-bg.tgp-pending { background: color-mix(in oklab, var(--live) 22%, transparent); }
+.tgp-bg.tgp-neutral,
+.tgp-bg.tgp-muted { background: var(--l1); }
+
+/* Solid backgrounds: stat colorMode background_solid. */
+.tgp-bgs { color: var(--page); }
+.tgp-bgs.tgp-success { background: var(--ok); }
+.tgp-bgs.tgp-error { background: var(--bad); }
+.tgp-bgs.tgp-warning { background: var(--warn); }
+.tgp-bgs.tgp-info { background: var(--accent); }
+.tgp-bgs.tgp-accent,
+.tgp-bgs.tgp-pending { background: var(--live); }
+.tgp-bgs.tgp-neutral,
+.tgp-bgs.tgp-muted { background: var(--l3); color: var(--t1); }
