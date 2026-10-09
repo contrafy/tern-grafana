@@ -1,29 +1,22 @@
 /* Tern Grafana styles. Class names are prefixed `tg-`. */
 
 /* Chart palette (lib/render/svg_timeseries.luau). Tern resolves no var() in
-   SVG attributes and drops inline styles, so series colors are classes bound
-   to theme variables here and follow light/dark and theme switches without a
-   new blob. Each class sets stroke and fill for SVG shapes and `color` for
+   SVG attributes and drops inline styles, so series colors are classes. They
+   follow Grafana's classic palette, whose hues stay distinct in light and dark
+   themes (theme variables such as --accent and --ok are too close in some
+   themes). Each class sets stroke and fill for SVG shapes and `color` for
    HTML (legend swatches); the role classes below switch off the half a shape
    does not paint, so they must stay after the palette. */
-.tg-s1 { color: var(--accent); stroke: var(--accent); fill: var(--accent); }
-.tg-s2 { color: var(--ok); stroke: var(--ok); fill: var(--ok); }
-.tg-s3 { color: var(--warn); stroke: var(--warn); fill: var(--warn); }
-.tg-s4 { color: var(--bad); stroke: var(--bad); fill: var(--bad); }
-.tg-s5 { color: var(--live); stroke: var(--live); fill: var(--live); }
-.tg-s6 { color: var(--tk-type); stroke: var(--tk-type); fill: var(--tk-type); }
-.tg-s7 { color: var(--tk-operator); stroke: var(--tk-operator); fill: var(--tk-operator); }
-.tg-s8 {
-	color: color-mix(in oklab, var(--warn) 50%, var(--bad));
-	stroke: color-mix(in oklab, var(--warn) 50%, var(--bad));
-	fill: color-mix(in oklab, var(--warn) 50%, var(--bad));
-}
-.tg-s9 {
-	color: color-mix(in oklab, var(--ok) 50%, var(--warn));
-	stroke: color-mix(in oklab, var(--ok) 50%, var(--warn));
-	fill: color-mix(in oklab, var(--ok) 50%, var(--warn));
-}
-.tg-s10 { color: var(--t2); stroke: var(--t2); fill: var(--t2); }
+.tg-s1 { color: #7eb26d; stroke: #7eb26d; fill: #7eb26d; }
+.tg-s2 { color: #eab839; stroke: #eab839; fill: #eab839; }
+.tg-s3 { color: #6ed0e0; stroke: #6ed0e0; fill: #6ed0e0; }
+.tg-s4 { color: #ef843c; stroke: #ef843c; fill: #ef843c; }
+.tg-s5 { color: #e24d42; stroke: #e24d42; fill: #e24d42; }
+.tg-s6 { color: #1f78c1; stroke: #1f78c1; fill: #1f78c1; }
+.tg-s7 { color: #ba43a9; stroke: #ba43a9; fill: #ba43a9; }
+.tg-s8 { color: #705da0; stroke: #705da0; fill: #705da0; }
+.tg-s9 { color: #508642; stroke: #508642; fill: #508642; }
+.tg-s10 { color: #cca300; stroke: #cca300; fill: #cca300; }
 
 /* Threshold tones (lib/units/thresholds.luau Tone). */
 .tg-th-success { stroke: var(--ok); fill: var(--ok); }

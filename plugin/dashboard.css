@@ -1,0 +1,45 @@
+/* Tern Grafana Dashboard and Panel blocks (lib/dashboard/view.luau). Chart
+   and table classes come from tern-grafana.css and panels.css; this sheet
+   adds the variable chips, row headers, links and panel sizing. */
+
+/* Variable chips: label muted, value strong, the whole chip clickable. */
+.tg-dash-var {
+	cursor: pointer;
+	padding: 1px 8px;
+	border: 1px solid var(--l2);
+	border-radius: 999px;
+}
+
+.tg-dash-var:hover {
+	border-color: var(--accent);
+}
+
+/* Row headers toggle their row. */
+.tg-dash-row {
+	cursor: pointer;
+	padding: 2px 0;
+	border-bottom: 1px solid var(--l2);
+}
+
+.tg-dash-row:hover {
+	border-bottom-color: var(--accent);
+}
+
+/* "Open in browser" and "Retry" actions. */
+.tg-dash-link {
+	cursor: pointer;
+}
+
+.tg-dash-link:hover {
+	text-decoration: underline;
+}
+
+/* Panels share a band's width by their gridPos fraction; let them shrink
+   below their content so images scale down instead of overflowing. */
+[data-role="tern-grafana.dashboard"] .sf-card {
+	min-width: 0;
+}
+
+[data-role="tern-grafana.dashboard"] .sf-card .sf-image {
+	max-width: 100%;
+}
