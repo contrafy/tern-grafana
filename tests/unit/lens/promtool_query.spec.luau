@@ -8,6 +8,7 @@
 local Fixtures = require("../../lib/fixtures")
 local Promtool = require("../../../plugin/lib/lens/promtool_query")
 local Scheme = require("../../../plugin/lib/links/scheme")
+local SeriesView = require("../../../plugin/lib/lens/series")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
@@ -185,10 +186,10 @@ local function withAction(act: string): (any) -> boolean
 end
 
 -- Series keyed by `job` (or the full name), each as its times and values.
-local function byName(series: { Promtool.Series }): { [string]: Promtool.Series }
-	local out: { [string]: Promtool.Series } = {}
+local function byName(series: { SeriesView.Series }): { [string]: SeriesView.Series }
+	local out: { [string]: SeriesView.Series } = {}
 	for _, s in series do
-		out[s.labels.job or Promtool.seriesName(s.labels)] = s
+		out[s.labels.job or SeriesView.seriesName(s.labels)] = s
 	end
 	return out
 end
@@ -269,7 +270,7 @@ describe("promtool query fixtures", function()
 					instance = "node-exporter:9100",
 					job = "node",
 				})
-				expect(Promtool.seriesName(node.labels)).toBe(
+				expect(SeriesView.seriesName(node.labels)).toBe(
 					'up{env="dev", instance="node-exporter:9100", job="node"}'
 				)
 			end)
@@ -372,7 +373,7 @@ describe("promtool query view", function()
 		for _, version in VERSIONS do
 			for _, s in result(capture(version, "query_range")).series do
 				local heights = {}
-				for i, bar in Promtool.spark(s.times, s.values) do
+				for i, bar in SeriesView.spark(s.times, s.values) do
 					heights[i] = bar.value
 				end
 				local expected = if s.labels.job == "down" then 0 else 1
@@ -383,15 +384,15 @@ describe("promtool query view", function()
 
 	it("names series by the labels that tell them apart", function()
 		local series = result(capture("3.15.0", "query_instant_vector_metric")).series
-		local common = Promtool.commonLabels(series)
+		local common = SeriesView.commonLabels(series)
 		expect(common).toEqual({ __name__ = "up" })
 		local node = byName(series).node
-		expect(Promtool.distinctName(node.labels, common)).toBe(
+		expect(SeriesView.distinctName(node.labels, common)).toBe(
 			'{env="dev", instance="node-exporter:9100", job="node"}'
 		)
 		-- A lone series keeps its whole name.
-		expect(Promtool.commonLabels({ node })).toEqual({})
-		expect(Promtool.distinctName({ __name__ = "up", job = "a" }, { __name__ = "up", job = "a" })).toBe(
+		expect(SeriesView.commonLabels({ node })).toEqual({})
+		expect(SeriesView.distinctName({ __name__ = "up", job = "a" }, { __name__ = "up", job = "a" })).toBe(
 			'up{job="a"}'
 		)
 	end)
@@ -564,54 +565,6 @@ describe("promtool text format details", function()
 		local js = Promtool.parseArgs("promtool", { "query", "instant", "-o", "json", "http://p", "x" })
 		expect(Promtool.build(js, { "[{" }, json.decode).kind).toBe("unreadable")
 		expect(Promtool.build(inv, {}, json.decode).kind).toBe("empty")
-	end)
-end)
-
-describe("Promtool.spark", function()
-	local function series(n: number, f: (number) -> number): ({ number }, { number })
-		local times, values = table.create(n), table.create(n)
-		for i = 1, n do
-			times[i] = 1791577598000 + (i - 1) * 15000
-			values[i] = f(i)
-		end
-		return times, values
-	end
-
-	it("never exceeds the bar budget, also for gap-heavy series", function()
-		local times, values = series(1000, function(i: number): number
-			return math.sin(i / 20)
-		end)
-		local bars = Promtool.spark(times, values)
-		expect(#bars).toBe(Promtool.MAX_SPARK)
-		local gappy, gv = series(1000, function(i: number): number
-			return if i % 2 == 0 then 0 / 0 else i
-		end)
-		expect(#Promtool.spark(gappy, gv) <= Promtool.MAX_SPARK).toBe(true)
-		expect(#Promtool.spark(times, values, 10) <= 10).toBe(true)
-	end)
-
-	it("keeps short series whole", function()
-		local times, values = series(5, function(i: number): number
-			return i
-		end)
-		expect(#Promtool.spark(times, values)).toBe(5)
-	end)
-
-	-- Tern scales bars to the tallest, so a series near 1000 must not look flat.
-	it("maps each series onto its own min..max and draws missing samples as stubs", function()
-		local times, values = series(4, function(i: number): number
-			return ({ 1000, 1001, 0 / 0, 1000.5 })[i]
-		end)
-		local bars = Promtool.spark(times, values)
-		expect(bars[1].value).toBe(0.1)
-		expect(bars[2].value).toBe(1)
-		expect(bars[3].value).toBeNil()
-		expect(bars[4].value).toBe(0.55)
-		expect(bars[2].title).toBe("1001 at 2026-10-09 20:26:53")
-		local flat = Promtool.spark(series(3, function(): number
-			return 7
-		end))
-		expect({ flat[1].value, flat[2].value, flat[3].value }).toEqual({ 1, 1, 1 })
 	end)
 end)
 
