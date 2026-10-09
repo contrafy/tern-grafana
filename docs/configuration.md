@@ -32,7 +32,7 @@ treated as absent.
 | `version` | number | `1` | Schema version. Only `1` exists. |
 | `default_context` | string | the only context, if there is exactly one | Context used when none is chosen. Must name a context in `contexts`. |
 | `contexts` | object | required | Context name to context. At least one. |
-| `query`, `alerts`, `annotations`, `impact`, `watches`, `hosts` | object | none | Feature sections. Each is documented below by the release that adds it; until then they are accepted and kept as written. |
+| `query`, `dashboard`, `alerts`, `annotations`, `impact`, `watches`, `hosts` | object | none | Feature sections. Each is documented below by the release that adds it; until then they are accepted and kept as written. |
 
 Context names may contain letters, digits, `.`, `_` and `-`.
 
@@ -111,28 +111,7 @@ of `password_cmd`, `password_env` or `password_file`. The basic `username` is no
 In every case trailing line breaks are removed; other whitespace is kept. The result must be a single line: output
 with several lines or control characters is rejected.
 
-### Query
-
-Defaults for the [Query block](query.md), in the `query` section:
-
-```json
-"query": {
-  "default_range": "now-1h",
-  "max_points": 600,
-  "refresh": "30s"
-}
-```
-
-| Field | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
-| `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern reports every block as 80x24, so this cannot be derived from the pane size. |
-| `refresh` | string | `"30s"` | Auto-refresh interval used by the `a` toggle, a duration of at least `5s`. |
-
-Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default instead
-of breaking the block.
-
-## Examples
+### Examples
 
 1Password CLI:
 
@@ -197,6 +176,67 @@ that endpoint's requests through `curl` instead (it must be on the `PATH` of the
 `~/.curlrc` is ignored. An all-default block (`insecure: false`, nothing else) changes nothing.
 
 If a request fails with a certificate error such as `invalid peer certificate: UnknownIssuer`, set `ca_file`.
+
+## Query
+
+Defaults for the [Query block](query.md), in the `query` section:
+
+```json
+"query": {
+  "default_range": "now-1h",
+  "max_points": 600,
+  "refresh": "30s"
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
+| `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern reports every block as 80x24, so this cannot be derived from the pane size. |
+| `refresh` | string | `"30s"` | Auto-refresh interval used by the `a` toggle, a duration of at least `5s`. |
+
+Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default instead
+of breaking the block.
+
+## Dashboard
+
+Settings for the [Dashboard and Panel blocks](dashboards.md), in the `dashboard` section:
+
+```json
+"dashboard": {
+  "max_points": 600,
+  "min_refresh": "30s",
+  "render_theme": "dark"
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `max_points` | number | `600` | maxDataPoints for panels that set none, from 10 to 11000 (a fraction is rounded down). Tern blocks have no pane width to derive it from. |
+| `min_refresh` | string or number | `"30s"` | Shortest auto-refresh interval: a duration such as `"1m"`, or a positive number of seconds. A dashboard whose own `refresh` is faster refreshes at this interval instead. |
+| `render_theme` | string | `"dark"` | Theme of panels rendered by Grafana's image renderer: `"dark"` or `"light"`. |
+
+A missing or invalid value uses its default.
+
+## Alerts
+
+Settings for the [alerts inbox and status segment](alerts.md), in the `alerts` section:
+
+```json
+"alerts": {
+  "contexts": ["prod", "staging"],
+  "group_by": ["alertname", "cluster"],
+  "poll_s": 60
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `contexts` | list of strings | `[default_context]` (none when there is no default context) | Contexts the background poll watches. Each must name a context in `contexts`; unknown names are reported and skipped. At most 16 are polled. |
+| `group_by` | list of strings | `["alertname"]` | Labels the inbox groups alerts by, at least one. `["..."]` puts every alert in its own group. |
+| `poll_s` | number | `60` | Whole seconds between background polls. `0` turns the poll and the status segment off; values from 1 to 14 are reported and raised to 15. |
+
+Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
 
 ## Examples
 

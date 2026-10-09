@@ -23,10 +23,24 @@ versions may break).
   autocomplete, range picker, native time series graph with a keyboard cursor and
   legend read-out, table/instant view, auto-refresh and query history.
 - `query` config section: `default_range`, `max_points`, `refresh`.
-- Grafana URL routing: Explore links open the Query block; dashboard, panel and
-  alert links open in a Tern browser pane.
+- Grafana URL routing: Explore links open the Query block; Grafana pages without a
+  native view open in a Tern browser pane.
 - Lens: `promtool query instant|range` output rendered as a native graph or table.
-
+- Dashboard block ("Grafana: Dashboard"): search and open Grafana dashboards with
+  their grid layout, rows, variables and picker, time range and auto-refresh.
+  Panels are drawn natively (time series, stat, gauge, bar gauge, table, text,
+  logs), else as a PNG from Grafana's image renderer when available, else with an
+  action to open them in a Tern browser pane.
+- Panel block: pin one dashboard panel as its own block.
+- Grafana `/d/` and `/d-solo/` links open the Dashboard and Panel blocks; alert
+  list and alert rule links open the alerts inbox.
+- Alerts inbox ("Grafana: Alerts"): firing, pending and silenced alerts from
+  Grafana unified alerting, Alertmanager v2 or Prometheus, grouped by labels, with
+  runbook and dashboard links from annotations.
+- Status-line segment with firing counts per context, toned by severity; clicking
+  it opens the inbox. Visible while Tern's status bar is on.
+- `dashboard` config section (`max_points`, `min_refresh`, `render_theme`) and
+  `alerts` config section (`contexts`, `group_by`, `poll_s`).
 - Project scaffold: `plugin.toml` at the repository root, sources under `plugin/`,
   pinned repo-local tooling (`make bootstrap`), formatting, lint, typecheck and
   unit test runner (`make check`), CI.
