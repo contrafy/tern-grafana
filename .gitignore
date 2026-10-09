@@ -1,0 +1,7 @@
+.tools/
+.sandbox/
+.secrets/
+/target/
+*.log
+.DS_Store
+dev/.data/

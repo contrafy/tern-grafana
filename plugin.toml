@@ -1,0 +1,9 @@
+schema = 1
+id = "tern-grafana"
+name = "Tern Grafana"
+version = "0.0.1"
+description = "Native Grafana and Prometheus views: queries, dashboards, alerts and silences inside Tern."
+icon = "chart"
+host = "plugin/host.luau"
+window = "plugin/window.luau"
+styles = ["plugin/tern-grafana.css"]
