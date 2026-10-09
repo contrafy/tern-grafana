@@ -220,13 +220,15 @@ A missing or invalid value uses its default.
 
 ## Alerts
 
-Settings for the [alerts inbox and status segment](alerts.md), in the `alerts` section:
+Settings for the [alerts inbox, status segment and toasts](alerts.md), in the `alerts` section:
 
 ```json
 "alerts": {
   "contexts": ["prod", "staging"],
   "group_by": ["alertname", "cluster"],
-  "poll_s": 60
+  "poll_s": 60,
+  "toasts": true,
+  "toast_severities": ["critical", "error"]
 }
 ```
 
@@ -235,6 +237,8 @@ Settings for the [alerts inbox and status segment](alerts.md), in the `alerts` s
 | `contexts` | list of strings | `[default_context]` (none when there is no default context) | Contexts the background poll watches. Each must name a context in `contexts`; unknown names are reported and skipped. At most 16 are polled. |
 | `group_by` | list of strings | `["alertname"]` | Labels the inbox groups alerts by, at least one. `["..."]` puts every alert in its own group. |
 | `poll_s` | number | `60` | Whole seconds between background polls. `0` turns the poll and the status segment off; values from 1 to 14 are reported and raised to 15. |
+| `toasts` | boolean | `false` | Show a toast when alerts start firing in a polled context. Needs the poll (`poll_s` above 0). |
+| `toast_severities` | list of strings | `["critical", "error", "warning"]` | Severities that toast: any of `critical`, `error`, `warning`, `info` and `none` (alerts without a severity), case-insensitive. An unknown severity is reported and the default list is used. |
 
 Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
 

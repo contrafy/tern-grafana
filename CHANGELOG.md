@@ -40,7 +40,22 @@ versions may break).
 - Status-line segment with firing counts per context, toned by severity; clicking
   it opens the inbox. Visible while Tern's status bar is on.
 - `dashboard` config section (`max_points`, `min_refresh`, `render_theme`) and
-  `alerts` config section (`contexts`, `group_by`, `poll_s`).
+  `alerts` config section (`contexts`, `group_by`, `poll_s`, `toasts`,
+  `toast_severities`).
+- Opt-in toasts when alerts start firing in a polled context (`alerts.toasts`),
+  filtered by severity and announced once across windows.
+- Silences block ("Grafana: Silences", or `s` on an alert): create a silence
+  prefilled from an alert with a preview of the alerts it covers, list and expire
+  silences, on Alertmanager v2 or Grafana's Alertmanager. Every write is shown on a
+  confirmation panel and sent only after you confirm.
+- Rules view (`v` in the alerts inbox): Grafana-managed and Prometheus alerting and
+  recording rules with status, health, last evaluation, last error and query.
+- Ops block ("Grafana: Ops"): Prometheus targets health, TSDB cardinality, and
+  build, runtime, config and flags info, directly or through Grafana's datasource
+  proxy.
+- Lenses: `promtool check rules|config` and `promtool test rules`; `curl` against
+  `/api/v1/query*` and `/api/ds/query`; `amtool alert` and `amtool silence`;
+  `logcli query`.
 - Project scaffold: `plugin.toml` at the repository root, sources under `plugin/`,
   pinned repo-local tooling (`make bootstrap`), formatting, lint, typecheck and
   unit test runner (`make check`), CI.
