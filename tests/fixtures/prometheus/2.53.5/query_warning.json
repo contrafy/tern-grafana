@@ -1,0 +1,1 @@
+{"status":"success","data":{"resultType":"vector","result":[]},"warnings":["PromQL warning: bucket label \"le\" is missing or has a malformed value of \"\" for metric name \"\" (1:25)"]}

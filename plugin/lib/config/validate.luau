@@ -23,7 +23,7 @@ M.MAX_TIMEOUT_MS = 600000
 M.RELATIVE_PATH = "tern-grafana/config.json"
 
 local ENDPOINTS = { "grafana", "prometheus", "alertmanager", "loki", "tempo" }
-local FEATURE_SECTIONS = { "query", "alerts", "annotations", "impact", "watches", "hosts" }
+local FEATURE_SECTIONS = { "query", "dashboard", "alerts", "annotations", "impact", "watches", "hosts" }
 local TOP_FIELDS = { "version", "default_context", "contexts" }
 local ENDPOINT_FIELDS = { "url", "auth", "headers", "path_prefix", "tls", "timeout_ms" }
 local GRAFANA_FIELDS = { "org_id", "datasources", "browser_url" }
@@ -550,6 +550,7 @@ function M.validate(raw: any): (Config?, { Problem })
 		default_context = default,
 		contexts = contexts,
 		query = raw.query,
+		dashboard = raw.dashboard,
 		alerts = raw.alerts,
 		annotations = raw.annotations,
 		impact = raw.impact,

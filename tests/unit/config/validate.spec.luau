@@ -141,7 +141,7 @@ describe("feature sections", function()
 		local cfg, problems = parse('{"contexts": {"lab": {"prometheus": {"url": "http://h"}}}, "contxts": {}}')
 		expect(cfg).toBeNil()
 		expect(messages(problems)).toEqual({
-			"contxts: unknown field; expected one of alerts, annotations, contexts, default_context, hosts, impact, query, version, watches",
+			"contxts: unknown field; expected one of alerts, annotations, contexts, dashboard, default_context, hosts, impact, query, version, watches",
 		})
 	end)
 end)

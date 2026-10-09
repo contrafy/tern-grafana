@@ -62,6 +62,7 @@ export type Config = {
 	contexts: { [string]: Context },
 	-- Feature sections owned by later milestones, kept exactly as decoded.
 	query: any,
+	dashboard: any,
 	alerts: any,
 	annotations: any,
 	impact: any,

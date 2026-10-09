@@ -14,6 +14,8 @@ export type Env = {
 	-- tern.json.null in Tern; the test codec's sentinel in specs.
 	null: any,
 	config: ConfigTypes.Config?,
+	-- tern.kv.get in Tern; nil in specs that need no kv.
+	kv_get: ((key: string) -> any)?,
 }
 
 local M = {}

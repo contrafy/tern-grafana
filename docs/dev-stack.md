@@ -138,11 +138,18 @@ Specs read fixtures through `tests/lib/fixtures.luau` (`Fixtures.read(path)`, `F
    provisioning under `dev/` and `sh scripts/stack.sh reset`.
 3. `sh scripts/stack.sh capture`, then `make fixtures`, and commit the new files and `MANIFEST.tsv`.
 
-Never hand-write a fixture that the stack can produce. A capture replaces each
-`<backend>/<version>` directory it records as a whole; other versions stay.
+Never hand-write a fixture that the stack can produce.
+
+A plain `capture` never overwrites anything: it installs only fixtures whose file does not exist
+yet (with their `.request.*` and `.stderr` companions) and adds their MANIFEST rows. Existing files
+and rows stay byte-for-byte, because specs assert on their exact values. To re-record on purpose,
+run `sh scripts/stack.sh capture --refresh 'PATTERN'`, where PATTERN is a shell glob over paths
+relative to `tests/fixtures` (for example `'prometheus/3.15.0/query_range_*'`; with no pattern,
+everything is refreshed). Then run `make fixtures test` and fix any spec that depended on the old
+values.
 
 ### Upgrading a pinned version
 
 Change the tag in `dev/compose.yml`, `sh scripts/stack.sh reset`, `capture`. The new version lands in
-its own directory next to the old one; move specs over, then delete the old directory and its
-MANIFEST rows when nothing references them.
+its own directory next to the old one (all new files, so a plain `capture` writes it); move specs
+over, then delete the old directory and its MANIFEST rows when nothing references them.

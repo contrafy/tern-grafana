@@ -8,7 +8,9 @@
 #   scripts/stack.sh status         containers, endpoint readiness, firing alerts, logs/traces presence
 #   scripts/stack.sh smoke          fail unless every server has a firing alert and logs/traces are
 #                                   queryable (waits up to STACK_WAIT_SECS); for CI after `up`
-#   scripts/stack.sh capture        record fixtures into tests/fixtures (scripts/fixtures/capture.sh)
+#   scripts/stack.sh capture [--refresh [PATTERN]]
+#                                   record new fixtures into tests/fixtures (scripts/fixtures/capture.sh);
+#                                   existing ones are only overwritten with --refresh matching PATTERN
 #   scripts/stack.sh token-path G   print the token file path for G (grafana12|grafana11), never the token
 #
 # Tokens live only in .sandbox/stack/<grafana>.token (mode 0600) and are never printed. Every

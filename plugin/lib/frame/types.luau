@@ -17,6 +17,10 @@ export type FieldConfig = {
 	decimals: number?,
 	min: number?,
 	max: number?,
+	-- Grafana's sample interval of a time field, ms.
+	interval: number?,
+	-- Grafana's field config `custom` (hidden, drawStyle, ...), verbatim.
+	custom: { [string]: any }?,
 }
 
 export type Field = {
@@ -33,6 +37,8 @@ export type FrameMeta = {
 	type: string?,
 	executedQueryString: string?,
 	notices: { Notice }?,
+	-- Grafana's meta `custom` (resultType, frameType, ...), verbatim.
+	custom: { [string]: any }?,
 }
 
 export type Frame = {
