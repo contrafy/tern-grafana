@@ -201,6 +201,10 @@ function exec(run: Run, effects: { Effect })
 			call(run, "copy", function()
 				run.cx:copy(e.text or "")
 			end)
+		elseif kind == "reveal" then
+			call(run, "reveal", function()
+				run.cx:frame({ { "reveal", e.id, e.at or "nearest" } })
+			end)
 		elseif kind == "focus" then
 			call(run, "focus", function()
 				run.cx:frame({ { "focus", e.id } })

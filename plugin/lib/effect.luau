@@ -28,6 +28,11 @@ export type Effect =
 	-- Moves keyboard focus to a view id ("main.q"); nil drops it. The view
 	-- diff never sends focus, so inputs need this to take the caret.
 	| { kind: "focus", id: string? }
+	-- Scrolls a view id into view (TSP `reveal`): a node in `main` scrolls the
+	-- block, one in a list or a `max.h` container scrolls that container.
+	-- Emit it when keyboard selection moves to a node that may be off screen;
+	-- the node must already be in the view (ids are `main.<key>.<key>`).
+	| { kind: "reveal", id: string, at: ("start" | "end" | "nearest")? }
 
 export type Msg =
 	{ kind: "http_done", tag: string, response: TransportTypes.Response }

@@ -419,6 +419,81 @@ describe("connection test", function()
 	end)
 end)
 
+-- Block regions scroll with the wheel only; without a reveal the keyboard
+-- selection walks off screen in a long config. A reveal must name a node the
+-- view actually has, or Tern scrolls nothing.
+describe("keyboard selection stays visible", function()
+	-- Every view id of the main region: "main", then each child's key (or index).
+	local function viewIds(s: any): { [string]: boolean }
+		local ids: { [string]: boolean } = {}
+		local function walk(node: any, id: string)
+			ids[id] = true
+			for i, child in node.c or {} do
+				walk(child, id .. "." .. tostring(if child.p and child.p.key then child.p.key else i))
+			end
+		end
+		walk((View.view(s, ENV) :: any).main, "main")
+		return ids
+	end
+
+	local function reveals(effects: { any }): { string }
+		local out = {}
+		for _, e in effects do
+			if e.kind == "reveal" then
+				table.insert(out, e.id)
+			end
+		end
+		return out
+	end
+
+	it("reveals the newly selected list row, a node the view renders", function()
+		local s = loaded(FILE)
+		local after, effects = press(s, "j", "j", "j")
+		local ids = reveals(effects)
+		expect(#ids).toBe(3)
+		expect(ids[3]).toBe("main.list.r:" .. State.selectedRow(after).key)
+		expect(viewIds(after)[ids[3]]).toBe(true)
+		local bottom, toEnd = press(after, "G")
+		expect(reveals(toEnd)).toEqual({ "main.list.r:+" })
+		expect(viewIds(bottom)["main.list.r:+"]).toBe(true)
+	end)
+
+	it("does not reveal when the selection did not move", function()
+		local s = loaded(FILE)
+		local _, effects = press(s, "k")
+		expect(reveals(effects)).toEqual({})
+	end)
+
+	it("reveals form fields as the selection moves, but not while typing into one", function()
+		local s = selectRow(loaded(FILE), "lab/grafana")
+		local effects
+		s, effects = press(s, "enter")
+		expect(viewIds(s)[reveals(effects)[1]]).toBe(true)
+		s, effects = press(s, "j", "j")
+		local ids = reveals(effects)
+		expect(#ids).toBe(2)
+		expect(viewIds(s)[ids[2]]).toBe(true)
+		expect(ids[2]).toBe("main.fields.f:" .. State.formFields(s)[s.form_sel].id)
+		-- The edit happens in the input at the top of the form: show it, then
+		-- return to the field once the edit is applied.
+		local field = ids[2]
+		s, effects = press(s, "enter")
+		expect(reveals(effects)).toEqual({ State.EDIT_INPUT })
+		expect(viewIds(s)[State.EDIT_INPUT]).toBe(true)
+		local typing
+		s, typing = press(s, "a", "b")
+		expect(reveals(typing)).toEqual({})
+		local _, done = press(s, "enter")
+		expect(reveals(done)).toEqual({ field })
+	end)
+
+	it("reveals the selected starter template", function()
+		local s, effects = press(loaded(nil), "j")
+		expect(reveals(effects)).toEqual({ "main.templates.tp:cloud" })
+		expect(viewIds(s)["main.templates.tp:cloud"]).toBe(true)
+	end)
+end)
+
 describe("view", function()
 	it("never renders a sensitive header value", function()
 		local text = string.gsub(

@@ -138,9 +138,14 @@ save(state: State) -> any            -- JSON values, never secrets
 
 `Effect` is a tagged table executed by the adapter: `{kind = "http", tag, context, signal, request}`,
 `{kind = "timer", tag, ms}`, `{kind = "kv_set", key, value}`, `{kind = "toast", level, text, sub}`,
-`{kind = "open", target}`, `{kind = "copy", text}`, `{kind = "exit"}`. Results come back as messages
-(`{kind = "http_done", tag, response}`, `{kind = "tick", tag}`, key and UI events). A generation counter in state
-drops late responses after the user changed the query or range.
+`{kind = "open", target}`, `{kind = "copy", text}`, `{kind = "exit"}`, `{kind = "focus", id?}` and
+`{kind = "reveal", id, at}`. Results come back as messages (`{kind = "http_done", tag, response}`,
+`{kind = "tick", tag}`, key and UI events). A generation counter in state drops late responses after the user
+changed the query or range.
+
+A block's `main` region scrolls with the mouse wheel but not with keys, so a machine that moves a keyboard
+selection emits `reveal` with the selected node's view id (region name, then each ancestor's `key` or index, joined
+with `.`), which the runner sends as the TSP `["reveal", id, at]` frame op.
 
 `Assets` maps an asset key to `{mime, bytes}`; `image` nodes reference assets by `p.asset`. `blob_host.luau`
 replaces `asset` with a blob id from `cx:blob`, reusing ids for unchanged bytes (Tern keeps every blob file, so

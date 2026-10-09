@@ -312,4 +312,38 @@ describe("svg_timeseries.render thresholds", function()
 	end)
 end)
 
+describe("svg_timeseries.render stacked bars", function()
+	-- Live Loki counts over a short step: each level has a sample only every
+	-- fourth step. Drawn one bar per sample, the bars are thinner than a pixel
+	-- and each sits on the baseline (its neighbours are missing at its time),
+	-- so the four colors blend into fewer. Bucketed, every slot stacks all four.
+	it("stacks sparse series in shared slots no thinner than MIN_BAR_PX", function()
+		local frames = {}
+		for k = 1, 4 do
+			table.insert(
+				frames,
+				series(1800, function(i)
+					return if i % 4 == k - 1 then 1 else NULL
+				end, { level = "l" .. k })
+			)
+		end
+		local r = Svg.render(frames, { draw = "bars", stack = "normal" })
+		local plotW = r.layout.plot_right - r.layout.plot_left
+		local slots = #r.layout.times
+		expect(slots > 0).toBe(true)
+		expect(plotW / slots >= Svg.MIN_BAR_PX - 0.5).toBe(true)
+		local baseline = string.format("%.1f", r.layout.plot_bottom)
+		for k = 1, 4 do
+			local d = paths(r.svg, "tg-s" .. k)
+			expect(#d).toBe(1)
+			expect(subpaths(d[1])).toBe(slots)
+			-- Only the first series starts at the baseline; the others sit on it.
+			local onBase = has(d[1], " " .. baseline .. "V")
+			expect(onBase).toBe(k == 1)
+		end
+		-- The legend still reads the samples as recorded.
+		expect(r.layout.series[2].calcs.max).toBe(1)
+	end)
+end)
+
 return nil

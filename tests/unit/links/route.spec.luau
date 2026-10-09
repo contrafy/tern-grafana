@@ -17,7 +17,18 @@ local cfg = Validate.parseFile(
 	json.decode
 )
 local CODEC = { decode = json.decode, encode = json.encode }
-local M1 = Route.CAPABILITIES
+-- Only the query block exists (the M1 shape); routing must follow the table it is given.
+local M1 = {
+	query = true,
+	dashboard = false,
+	panel = false,
+	alerts = false,
+	silence = false,
+	logs = false,
+	trace = false,
+	ops = false,
+	settings = false,
+}
 local ALL = {
 	query = true,
 	dashboard = true,

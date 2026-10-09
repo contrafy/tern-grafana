@@ -566,6 +566,56 @@ local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: 
 	return table.concat(out)
 end
 
+-- Narrowest slot a bar gets, in viewBox px. Thinner bars blend into their
+-- neighbors once the image is scaled down, so sparse series stacked over many
+-- samples (Loki counts over a short step) read as fewer colors than the legend.
+M.MIN_BAR_PX = 3
+
+-- Bars over more distinct times than the plot has slots: each series' samples
+-- are grouped into equal time buckets (the bucket's largest value, at the
+-- bucket's center), so every stacked series lands in the same slots.
+local function bucketBars(list: { Series.Series }, tFrom: number, tTo: number, slots: number): { Series.Series }
+	local distinct: { [number]: boolean } = {}
+	local n = 0
+	for _, s in list do
+		for _, t in s.times do
+			if not distinct[t] then
+				distinct[t] = true
+				n += 1
+			end
+		end
+	end
+	if n <= slots or slots < 1 or tTo <= tFrom then
+		return list
+	end
+	local width = (tTo - tFrom) / slots
+	local out: { Series.Series } = table.create(#list)
+	for i, s in list do
+		local best: { [number]: number } = {}
+		for j, t in s.times do
+			local v = finite(s.values[j])
+			if v then
+				local b = math.clamp(math.floor((t - tFrom) / width), 0, slots - 1)
+				if best[b] == nil or v > best[b] then
+					best[b] = v
+				end
+			end
+		end
+		local times, values = {}, {}
+		for b = 0, slots - 1 do
+			local v = best[b]
+			if v ~= nil then
+				table.insert(times, math.floor(tFrom + (b + 0.5) * width))
+				table.insert(values, v)
+			end
+		end
+		local copy = table.clone(s)
+		copy.times, copy.values = times, values
+		out[i] = copy
+	end
+	return out
+end
+
 local function unionTimes(plot: Plot): { number }
 	local seen: { [number]: boolean } = {}
 	local out: { number } = {}
@@ -631,10 +681,17 @@ function M.render(frames: { Frame }, options: Options?): Result
 	end
 	perSeries = math.max(3, perSeries)
 
+	-- What is drawn; `list` keeps the samples the legend calcs read.
+	local shown = list
+	if (opts.draw or "line") == "bars" then
+		local slots = math.floor((plotRight - 36) / M.MIN_BAR_PX)
+		shown = bucketBars(list, tFrom_, tTo_, slots)
+	end
+
 	local svg, layout, points = "", (nil :: any) :: Layout, 0
 	for _ = 1, 8 do
-		local plot = downsample(list, opts, perSeries)
-		local lo, hi = valueRange(list, plot, opts)
+		local plot = downsample(shown, opts, perSeries)
+		local lo, hi = valueRange(shown, plot, opts)
 		local hardMin, hardMax = opts.min, opts.max
 		if stack == "percent" then
 			hardMin, hardMax = hardMin or 0, hardMax or 1
@@ -674,7 +731,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 			series = drawn,
 			dropped = dropped,
 		}
-		svg = build(list, plot, layout, opts, yScale)
+		svg = build(shown, plot, layout, opts, yScale)
 		if #svg <= M.TARGET or perSeries <= 3 then
 			break
 		end

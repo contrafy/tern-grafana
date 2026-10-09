@@ -21,9 +21,9 @@ M.PLUGIN = "tern-grafana"
 -- Which actions have a native block. Later milestones flip entries.
 M.CAPABILITIES = table.freeze({
 	query = true,
-	dashboard = false,
-	panel = false,
-	alerts = false,
+	dashboard = true,
+	panel = true,
+	alerts = true,
 	silence = false,
 	logs = false,
 	trace = false,

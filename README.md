@@ -5,8 +5,8 @@
 alerts and silences rendered in the terminal, next to the commands that
 changed them.
 
-> Pre-release, in development. The foundation (M0) and query core (M1)
-> milestones have landed; the [Roadmap](#roadmap) shows what is planned and what has landed.
+> Pre-release, in development. The foundation (M0), query core (M1) and
+> dashboards and alerts (M2) milestones have landed; the [Roadmap](#roadmap) shows what is planned and what has landed.
 
 ## Why
 
@@ -70,7 +70,7 @@ saved state, and only talks to the URLs you configure. See
 
 ## Usage
 
-What works today (M1):
+What works today (M1 and M2):
 
 1. **Configure a context.** Write `~/.config/tern-grafana/config.json` (see
    [Configuration](docs/configuration.md)), or open the Settings block from the
@@ -90,11 +90,37 @@ What works today (M1):
    ![Query block cursor read-out](docs/screenshots/m1-query-cursor.png)
    ![Query block table view](docs/screenshots/m1-query-table.png)
 
-3. **Grafana links.** Clicking a Grafana Explore link under a configured Grafana
-   base URL opens the query in the Query block. Dashboard, panel and alert links
-   open in a Tern browser pane until the native dashboard block lands (M2).
+3. **Dashboards.** "Grafana: Dashboard" in the palette searches your Grafana
+   dashboards and opens one with its grid layout, variables (`v` opens the
+   picker), time range and auto-refresh. Each panel takes the first rung of a
+   ladder that works: drawn natively (time series, stat, gauge, bar gauge, table,
+   text, logs); else a PNG rendered by Grafana when its image renderer is
+   available; else the reason and an action (`o`) that opens the panel in a Tern
+   browser pane. See [Dashboards](docs/dashboards.md).
 
-4. **promtool lens.** Running `promtool query instant|range ...` renders the
+   ![Dashboard block](docs/screenshots/m2-dashboard.png)
+   ![Dashboard with a logs panel](docs/screenshots/m2-logs-dashboard.png)
+   ![Panel rendered by Grafana's image renderer](docs/screenshots/m2-png-fallback.png)
+   ![Panel falling back to a browser pane](docs/screenshots/m2-browser-fallback.png)
+
+4. **Pinned panels.** `p` on a focused dashboard panel pins it as its own Panel
+   block, with the same range keys and cursor.
+
+5. **Alerts.** "Grafana: Alerts" in the palette opens the inbox: firing, pending
+   and silenced alerts from Grafana unified alerting, Alertmanager v2 or
+   Prometheus, grouped by labels, with runbook and dashboard links from
+   annotations. A status-line segment shows firing counts per polled context,
+   toned by the worst severity; clicking it opens the inbox. The segment is only
+   visible while Tern's status bar is on. See [Alerts](docs/alerts.md).
+
+   ![Alerts inbox](docs/screenshots/m2-alerts.png)
+
+6. **Grafana links.** Clicking a Grafana link under a configured Grafana base URL
+   opens it natively: Explore links in the Query block, `/d/` links in the
+   Dashboard block, `/d-solo/` links in the Panel block, alert list and alert rule
+   links in the alerts inbox. Other Grafana pages open in a Tern browser pane.
+
+7. **promtool lens.** Running `promtool query instant|range ...` renders the
    result as a native graph or table.
 
    ![promtool query lens](docs/screenshots/m1-promtool-lens.png)
@@ -102,7 +128,7 @@ What works today (M1):
 ## Roadmap
 
 M0 (foundation: tooling, CI, docs, docker dev stack, recorded fixtures, SDK
-capability spike) and M1 (query core) have landed.
+capability spike), M1 (query core) and M2 (dashboards and alerts) have landed.
 
 | Milestone | ID | Feature | Status |
 | --- | --- | --- | --- |
@@ -114,10 +140,10 @@ capability spike) and M1 (query core) have landed.
 | M1 | B1 | Query block: PromQL scratchpad, autocomplete, range picker, native time series, keyboard cursor, table/instant view, history | landed (M1) |
 | M1 | B5 | Grafana URL routing (`/d/`, `/d-solo/`, `/explore`) with browser pane fallback | landed (M1) |
 | M1 | E1 | Lens: `promtool query instant\|range` to native graph/table | landed (M1) |
-| M2 | B2 | Dashboard block: search, load, grid layout, variables, refresh, native panels, per-panel fallback ladder | planned |
-| M2 | B3 | Pin one panel as its own small block | planned |
-| M2 | C1 | Alerts inbox: Grafana unified alerting and Alertmanager v2, grouping, runbook/dashboard links | planned |
-| M2 | C2 | Status-line segment: firing counts per context, tone by severity | planned |
+| M2 | B2 | Dashboard block: search, load, grid layout, variables, refresh, native panels, per-panel fallback ladder | landed (M2) |
+| M2 | B3 | Pin one panel as its own small block | landed (M2) |
+| M2 | C1 | Alerts inbox: Grafana unified alerting and Alertmanager v2, grouping, runbook/dashboard links | landed (M2) |
+| M2 | C2 | Status-line segment: firing counts per context, tone by severity | landed (M2) |
 | M3 | C3 | Toasts on newly firing alerts (opt-in, deduped) | planned |
 | M3 | C4 | Silences: create from alert with preview and confirm, list, expire | planned |
 | M3 | C5 | Alert and recording rules view: health, last eval, last error, query preview | planned |
@@ -144,7 +170,8 @@ capability spike) and M1 (query core) have landed.
 
 ## Documentation
 
-- [Configuration](docs/configuration.md), [Settings block](docs/settings.md), [Query block](docs/query.md)
+- [Configuration](docs/configuration.md), [Settings block](docs/settings.md), [Query block](docs/query.md),
+  [Dashboards](docs/dashboards.md), [Alerts](docs/alerts.md)
 - [Architecture](docs/architecture.md)
 - [SDK capability matrix](docs/sdk-capability-matrix.md)
 - [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), [Support](SUPPORT.md),

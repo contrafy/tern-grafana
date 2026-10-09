@@ -3,5 +3,6 @@
 
 require("./links_window").register(tern)
 require("./commands_window").register(tern)
+require("./alerts_window").register(tern)
 
 return nil
