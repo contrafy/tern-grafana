@@ -91,7 +91,13 @@ describe("alerts settings", function()
 	it("polls the default context every 60 s, grouped by alertname, when unset", function()
 		local s, problems =
 			Settings.read(config('{"default_context": "lab", "contexts": {"lab": {"grafana": {"url": "http://g"}}}}'))
-		expect(s).toEqual({ group_by = { "alertname" }, poll_s = 60, contexts = { "lab" } })
+		expect(s).toEqual({
+			group_by = { "alertname" },
+			poll_s = 60,
+			contexts = { "lab" },
+			toasts = false,
+			toast_severities = { "critical", "error", "warning" },
+		})
 		expect(problems).toEqual({})
 		expect(Settings.read(nil).contexts).toEqual({})
 	end)
@@ -101,20 +107,39 @@ describe("alerts settings", function()
 			config([[{"contexts": {"a": {"grafana": {"url": "http://g"}}, "b": {"grafana": {"url": "http://g"}}},
 			"alerts": {"group_by": ["alertname", "cluster"], "poll_s": 0, "contexts": ["b", "a"]}}]])
 		)
-		expect(s).toEqual({ group_by = { "alertname", "cluster" }, poll_s = 0, contexts = { "b", "a" } })
+		expect(s.group_by).toEqual({ "alertname", "cluster" })
+		expect(s.poll_s).toBe(0)
+		expect(s.contexts).toEqual({ "b", "a" })
 	end)
 
 	it("raises a too-short interval to the minimum and keeps defaults on bad values, naming the path", function()
 		local s, problems =
 			Settings.read(config([[{"default_context": "a", "contexts": {"a": {"grafana": {"url": "http://g"}}},
 			"alerts": {"group_by": "alertname", "poll_s": 5, "contexts": ["a", "zz"], "colour": 1}}]]))
-		expect(s).toEqual({ group_by = { "alertname" }, poll_s = 15, contexts = { "a" } })
+		expect(s.group_by).toEqual({ "alertname" })
+		expect(s.poll_s).toBe(15)
+		expect(s.contexts).toEqual({ "a" })
 		local paths = {}
 		for _, p in problems do
 			table.insert(paths, p.path)
 		end
 		table.sort(paths)
 		expect(paths).toEqual({ "alerts.colour", "alerts.contexts", "alerts.group_by", "alerts.poll_s" })
+	end)
+
+	-- Toasts interrupt: they stay off unless asked for, and a typo in the
+	-- severities keeps the default instead of silencing every toast.
+	it("reads toasts (off by default) and toast severities, refusing unknown severities", function()
+		local s, problems = Settings.read(config([[{"contexts": {"a": {"grafana": {"url": "http://g"}}},
+			"alerts": {"toasts": true, "toast_severities": ["Critical", "none"]}}]]))
+		expect(s.toasts).toBe(true)
+		expect(s.toast_severities).toEqual({ "critical", "none" })
+		expect(problems).toEqual({})
+		local bad, badProblems = Settings.read(config([[{"contexts": {"a": {"grafana": {"url": "http://g"}}},
+			"alerts": {"toasts": "yes", "toast_severities": ["sev1"]}}]]))
+		expect(bad.toasts).toBe(false)
+		expect(bad.toast_severities).toEqual({ "critical", "error", "warning" })
+		expect(#badProblems).toBe(2)
 	end)
 end)
 

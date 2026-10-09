@@ -59,6 +59,10 @@ local function opsView(v: string): boolean
 	return v == "targets" or v == "rules" or v == "cardinality" or v == "info"
 end
 
+local function alertsView(v: string): boolean
+	return v == "inbox" or v == "rules"
+end
+
 local function queryMode(v: string): boolean
 	return v == "graph" or v == "table"
 end
@@ -103,7 +107,7 @@ local ACTIONS: { [string]: Spec } = {
 	query = spec({}, false, withTime({ expr = text, ds = uid, mode = queryMode })),
 	dashboard = spec({ "uid" }, true, withTime({ uid = uid, panel = digits, org = digits })),
 	panel = spec({ "uid", "panel" }, true, withTime({ uid = uid, panel = digits, org = digits })),
-	alerts = spec({}, false, { rule = uid, filter = text }),
+	alerts = spec({}, false, { rule = uid, filter = text, view = alertsView }),
 	silence = spec({}, false, { id = uid, matchers = text }),
 	logs = spec({}, false, withTime({ expr = text, ds = uid })),
 	trace = spec({ "id" }, false, { id = traceId, ds = uid }),

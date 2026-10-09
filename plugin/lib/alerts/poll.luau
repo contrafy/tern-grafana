@@ -23,18 +23,19 @@ export type Job = {
 
 local M = {}
 
--- (jobs, poll_s); no jobs when polling is off or nothing is configured.
-function M.jobs(config: Config?): ({ Job }, number)
+-- (jobs, poll_s, toast severities or nil when toasts are off); no jobs when
+-- polling is off or nothing is configured.
+function M.jobs(config: Config?): ({ Job }, number, { string }?)
 	local settings = Settings.read(config)
 	if config == nil or settings.poll_s == 0 then
-		return {}, settings.poll_s
+		return {}, settings.poll_s, nil
 	end
 	local jobs: { Job } = {}
 	for _, name in settings.contexts do
 		local plan = Sources.plan(config, name)
 		table.insert(jobs, { context = name, plan = plan, responses = {} })
 	end
-	return jobs, settings.poll_s
+	return jobs, settings.poll_s, if settings.toasts then settings.toast_severities else nil
 end
 
 function M.complete(job: Job): boolean
@@ -51,7 +52,13 @@ end
 
 -- The kv payload after a poll; a context that failed keeps its previous
 -- counts with the error kind set.
-function M.payload(env: Env, jobs: { Job }, prevRaw: any, poll_s: number): Summary.Payload
+function M.payload(
+	env: Env,
+	jobs: { Job },
+	prevRaw: any,
+	poll_s: number,
+	toast_severities: { string }?
+): Summary.Payload
 	local prev = Summary.readPayload(prevRaw)
 	local contexts: { [string]: Summary.Summary } = {}
 	for _, job in jobs do
@@ -65,7 +72,7 @@ function M.payload(env: Env, jobs: { Job }, prevRaw: any, poll_s: number): Summa
 				else Summary.failed(before, result.error_kind or "http", env.now_ms)
 		end
 	end
-	return Summary.payload(contexts, env.now_ms, poll_s)
+	return Summary.payload(contexts, env.now_ms, poll_s, toast_severities)
 end
 
 return M

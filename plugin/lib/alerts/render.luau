@@ -8,6 +8,8 @@ local Normalize = require("./normalize")
 local Sources = require("./sources")
 local State = require("./state")
 local Summary = require("./summary")
+local RulesRender = require("./rules_render")
+local SilenceApi = require("../silences/api")
 local ui = require("../ui")
 
 type Node = ui.Node
@@ -102,14 +104,18 @@ local function filterLine(s: State): Node
 	if s.filter_text ~= "" then
 		table.insert(spans, ui.span("filter ", "muted"))
 		table.insert(spans, ui.span(s.filter_text, "mono"))
-		table.insert(spans, ui.span(string.format("  %d of %d", s.shown, #s.alerts), "muted"))
+		if s.view == "rules" then
+			table.insert(spans, ui.span(string.format("  %d of %d rules", #s.rule_rows, #s.rules), "muted"))
+		else
+			table.insert(spans, ui.span(string.format("  %d of %d", s.shown, #s.alerts), "muted"))
+		end
 	else
 		table.insert(spans, ui.span("/ filters by text or label matchers (a=b a!=b a=~re a!~re)", "muted"))
 	end
 	if s.filter_error then
 		table.insert(spans, ui.span("  " .. (s.filter_error :: string), "error"))
 	end
-	if not s.show_muted then
+	if not s.show_muted and s.view == "inbox" then
 		local muted = 0
 		for _, a in s.alerts do
 			if a.state == "silenced" or a.state == "inhibited" then
@@ -195,7 +201,11 @@ local function detail(s: State, a: Alert, env: Env.Env): Node
 		{ label = "Runbook (o)", target = Sources.runbookTarget(a), act = "runbook" },
 		{ label = "Dashboard (d)", target = Sources.dashboardTarget(a), act = "dashboard" },
 		{ label = "Source (g)", target = Sources.generatorTarget(a), act = "generator" },
-		{ label = "Silence (s)", target = if s.plan then Sources.silenceUrl(s.plan, a) else nil, act = "silence" },
+		{
+			label = "Silence (s)",
+			target = if s.plan and SilenceApi.target(s.plan) then "silence" else nil,
+			act = "silence",
+		},
 	}
 	for _, b in targets do
 		local n = link(b.label, b.target, b.act, "b" .. b.act)
@@ -310,8 +320,35 @@ local function emptyNote(s: State): Node?
 	return ui.muted("Nothing matches the filter. Esc clears it.", { key = "empty" })
 end
 
+local function viewTabs(s: State): { Node }
+	return {
+		chip("Inbox", "view=inbox", "vinbox", if s.view == "inbox" then "info" else "neutral"),
+		chip("Rules", "view=rules", "vrules", if s.view == "rules" then "info" else "neutral"),
+	}
+end
+
 function M.view(s: State, env: Env.Env): Effect.View
-	local children: { Node } = { header(s, env) }
+	local children: { Node } = { ui.row(viewTabs(s), { key = "tabs" }), header(s, env) }
+	if s.view == "rules" then
+		table.insert(children, filterLine(s))
+		if s.note then
+			table.insert(children, ui.text({ ui.span(s.note :: string, "warning") }, { key = "note" }))
+		end
+		for _, n in RulesRender.body(s, env) do
+			table.insert(children, n)
+		end
+		return {
+			main = ui.col(children, { role = "tern-grafana.alerts" }),
+			dock = ui.col({
+				ui.text({
+					ui.span(
+						"j/k move  enter details  q query  a alerts  p problems only  / filter  v inbox  c context  r refresh",
+						"muted"
+					),
+				}, { key = "keys" }),
+			}, { key = "dock" }),
+		}
+	end
 	if s.problem then
 		table.insert(children, ui.text({ ui.span(s.problem :: string, "error") }, { key = "problem" }))
 		return { main = ui.col(children, { role = "tern-grafana.alerts" }) }
@@ -342,7 +379,7 @@ function M.view(s: State, env: Env.Env): Effect.View
 	table.insert(children, groups(s, env))
 	local hints = ui.text({
 		ui.span(
-			"j/k move  enter open  / filter  m muted  c context  r refresh  o runbook  d dashboard  g source  s silence  y copy",
+			"j/k move  enter open  / filter  m muted  c context  r refresh  o runbook  d dashboard  g source  s silence  y copy  v rules",
 			"muted"
 		),
 	}, { key = "keys" })

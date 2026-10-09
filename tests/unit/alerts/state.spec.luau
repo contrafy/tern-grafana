@@ -11,6 +11,7 @@ local State = require("../../../plugin/lib/alerts/state")
 local Summary = require("../../../plugin/lib/alerts/summary")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Scheme = require("../../../plugin/lib/links/scheme")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -225,12 +226,15 @@ describe("filter and view", function()
 		expect(names(s)).toEqual({ "TernGrafanaTargetDown:firing" })
 	end)
 
-	it("opens the selected alert's silence page and runbook", function()
+	it("opens the native silence form for the selected alert, prefilled with its labels, and its runbook", function()
 		local s, env = loaded()
 		State.key(s, key("", "down"), env)
 		local _, effects = State.key(s, key("s"), env)
-		local target = find(effects, "open").target
-		expect(string.sub(target, 1, 46)).toBe("http://g/alerting/silence/new?alertmanager=gra")
+		local link = assert(Scheme.decode(find(effects, "open").target))
+		expect(link.action).toBe("silence")
+		expect(link.params.context).toBe("graf")
+		expect(string.find(link.params.matchers, 'alertname="TernGrafanaTargetDown"', 1, true) ~= nil).toBe(true)
+		expect(string.find(link.params.matchers, '__alert_rule_uid__="tern-g-targetdown"', 1, true) ~= nil).toBe(true)
 		_, effects = State.key(s, key("o"), env)
 		expect(find(effects, "open").target).toBe("https://example.com/runbooks/target-down")
 		_, effects = State.key(s, key("d"), env)
@@ -269,7 +273,13 @@ describe("filter and view", function()
 	it("saves only what to reopen with", function()
 		local s, env = loaded()
 		State.key(s, key("m"), env)
-		expect(State.save(s)).toEqual({ context = "graf", filter = "", show_muted = true })
+		expect(State.save(s)).toEqual({
+			context = "graf",
+			filter = "",
+			show_muted = true,
+			view = "inbox",
+			problems_only = false,
+		})
 	end)
 end)
 

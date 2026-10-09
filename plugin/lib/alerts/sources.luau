@@ -239,42 +239,6 @@ function M.silenceMatchers(alert: Alert): { { string } }
 	return out
 end
 
-local function quote(s: string): string
-	return '"' .. string.gsub(string.gsub(s, "\\", "\\\\"), '"', '\\"') .. '"'
-end
-
-local function grafanaBase(plan: Plan): string
-	local e = plan.route.endpoint
-	return string.gsub(e.browser_url or (e.url .. e.path_prefix), "/+$", "")
-end
-
--- The page that creates a silence for `alert` (until silences are native):
--- Alertmanager's UI or Grafana's. nil when the server has no silences.
-function M.silenceUrl(plan: Plan, alert: Alert): string?
-	local matchers = M.silenceMatchers(alert)
-	if plan.kind == "alertmanager" then
-		local parts: { string } = {}
-		for _, m in matchers do
-			table.insert(parts, m[1] .. "=" .. quote(m[2]))
-		end
-		local e = plan.route.endpoint
-		local base = string.gsub(e.url .. e.path_prefix, "/+$", "")
-		return base .. "/#/silences/new?filter=" .. Http.escape("{" .. table.concat(parts, ",") .. "}")
-	elseif plan.kind == "grafana" or plan.kind == "grafana_external" then
-		local am = if plan.kind == "grafana" then "grafana" else plan.route.datasource_uid :: string
-		local query = { "alertmanager=" .. Http.escape(am) }
-		for _, m in matchers do
-			table.insert(query, "matcher=" .. Http.escape(m[1] .. "=" .. m[2]))
-		end
-		local org = plan.route.endpoint.org_id
-		if org then
-			table.insert(query, "orgId=" .. tostring(org))
-		end
-		return grafanaBase(plan) .. "/alerting/silence/new?" .. table.concat(query, "&")
-	end
-	return nil
-end
-
 local function isHttp(url: string?): boolean
 	return url ~= nil and string.match(string.lower(url), "^https?://[^/@%s]+") ~= nil
 end

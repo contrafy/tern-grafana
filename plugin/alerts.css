@@ -46,3 +46,25 @@
 .tg-al-btn:hover {
 	border-color: var(--accent);
 }
+
+/* Rules view (lib/alerts/rules_render.luau). */
+
+.tg-al-rgroup {
+	margin-top: 6px;
+	padding: 0 6px;
+}
+
+/* Silences block (lib/silences/render.luau). Class names are prefixed `tg-sil-`. */
+
+.tg-al-row.tg-sil-active { border-left-color: var(--warn); }
+.tg-al-row.tg-sil-pending { border-left-color: var(--accent); }
+.tg-al-row.tg-sil-expired { border-left-color: var(--t4); }
+
+.tg-sil-panel {
+	margin: 4px 0;
+}
+
+.tg-al-btn.tg-sil-confirm {
+	border-color: var(--warn);
+	font-weight: 600;
+}

@@ -16,9 +16,15 @@ export type Settings = {
 	poll_s: number,
 	-- Contexts the background poller watches.
 	contexts: { string },
+	-- Toast newly firing alerts (opt-in).
+	toasts: boolean,
+	-- Severities that toast; "none" stands for alerts without a severity.
+	toast_severities: { string },
 }
 
 local M = {}
+M.DEFAULT_TOAST_SEVERITIES = table.freeze({ "critical", "error", "warning" })
+local SEVERITIES = { critical = true, error = true, warning = true, info = true, none = true }
 
 M.DEFAULT_POLL_S = 60
 M.MIN_POLL_S = 15
@@ -51,6 +57,8 @@ function M.read(config: Config?): (Settings, { Problem })
 		group_by = { "alertname" },
 		poll_s = M.DEFAULT_POLL_S,
 		contexts = {},
+		toasts = false,
+		toast_severities = table.clone(M.DEFAULT_TOAST_SEVERITIES),
 	}
 	local default = if config then config.default_context else nil
 	if default then
@@ -64,9 +72,47 @@ function M.read(config: Config?): (Settings, { Problem })
 		problem(problems, "", "must be an object")
 		return settings, problems
 	end
+	local KNOWN = { group_by = true, poll_s = true, contexts = true, toasts = true, toast_severities = true }
 	for key in raw do
-		if key ~= "group_by" and key ~= "poll_s" and key ~= "contexts" then
-			problem(problems, tostring(key), "unknown key (known: contexts, group_by, poll_s)")
+		if not KNOWN[key] then
+			problem(
+				problems,
+				tostring(key),
+				"unknown key (known: contexts, group_by, poll_s, toasts, toast_severities)"
+			)
+		end
+	end
+	if raw.toasts ~= nil then
+		if type(raw.toasts) == "boolean" then
+			settings.toasts = raw.toasts
+		else
+			problem(problems, "toasts", "must be true or false")
+		end
+	end
+	if raw.toast_severities ~= nil then
+		local list = stringList(raw.toast_severities, "toast_severities", problems)
+		if list then
+			local out: { string } = {}
+			local bad: string? = nil
+			for _, v in list do
+				local lower = string.lower(v)
+				if SEVERITIES[lower] then
+					if not table.find(out, lower) then
+						table.insert(out, lower)
+					end
+				else
+					bad = v
+				end
+			end
+			if bad then
+				problem(
+					problems,
+					"toast_severities",
+					string.format("unknown severity %q (known: critical, error, warning, info, none)", bad)
+				)
+			else
+				settings.toast_severities = out
+			end
 		end
 	end
 	if raw.group_by ~= nil then

@@ -46,7 +46,7 @@ local function run()
 	end
 	pcall(ConfigHost.load)
 	local config = ConfigHost.current()
-	local ok, jobs, poll_s = pcall(Poll.jobs, config)
+	local ok, jobs, poll_s, toastSeverities = pcall(Poll.jobs, config)
 	if not ok then
 		warn("plan", jobs)
 		schedule(M.IDLE_MS)
@@ -78,7 +78,8 @@ local function run()
 		done = true
 		inflightSince = nil
 		local okPrev, prev = pcall(tern.kv.get, Summary.KEY)
-		local okPayload, payload = pcall(Poll.payload, EnvHost.make(nil), jobs, if okPrev then prev else nil, poll_s)
+		local okPayload, payload =
+			pcall(Poll.payload, EnvHost.make(nil), jobs, if okPrev then prev else nil, poll_s, toastSeverities)
 		if okPayload then
 			write(payload)
 		else

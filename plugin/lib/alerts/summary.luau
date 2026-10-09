@@ -24,6 +24,9 @@ export type Summary = {
 	updated_ms: number,
 	-- Firing fingerprints, worst first, at most MAX_FINGERPRINTS (for diff).
 	fingerprints: { string },
+	-- One letter per fingerprint, same order (c, e, w, i, n): its severity,
+	-- for toast filtering. Letters keep the payload small.
+	severity_codes: string?,
 	-- The poll failed; the counts are the last good ones (or zero).
 	error: ErrorKind?,
 }
@@ -33,6 +36,9 @@ export type Payload = {
 	updated_ms: number,
 	poll_s: number,
 	contexts: { [string]: Summary },
+	-- Severities the window toasts newly firing alerts of; nil when toasts
+	-- are off (config `alerts.toasts`).
+	toast_severities: { string }?,
 }
 
 local M = {}
@@ -53,6 +59,15 @@ function M.tone(severity: Severity): string
 	return TONE[severity] or "muted"
 end
 
+local CODE: { [Severity]: string } = { critical = "c", error = "e", warning = "w", info = "i", none = "n" }
+local FROM_CODE: { [string]: Severity } = { c = "critical", e = "error", w = "warning", i = "info", n = "none" }
+
+-- The severity of the summary's i-th fingerprint ("none" when unknown).
+function M.severityAt(s: Summary, i: number): Severity
+	local code = if s.severity_codes then string.sub(s.severity_codes :: string, i, i) else ""
+	return FROM_CODE[code] or "none"
+end
+
 function M.empty(now_ms: number): Summary
 	return {
 		firing = 0,
@@ -63,6 +78,7 @@ function M.empty(now_ms: number): Summary
 		worst = "none",
 		updated_ms = now_ms,
 		fingerprints = {},
+		severity_codes = "",
 	}
 end
 
@@ -101,6 +117,7 @@ function M.summarize(alerts: { Alert }, now_ms: number): Summary
 		if not seen[a.fingerprint] then
 			seen[a.fingerprint] = true
 			table.insert(s.fingerprints, a.fingerprint)
+			s.severity_codes = (s.severity_codes or "") .. CODE[a.severity]
 		end
 	end
 	return s
@@ -135,8 +152,19 @@ function M.diff(prev: Summary?, next: Summary): { string }
 	return out
 end
 
-function M.payload(contexts: { [string]: Summary }, now_ms: number, poll_s: number): Payload
-	return { v = M.VERSION, updated_ms = now_ms, poll_s = poll_s, contexts = contexts }
+function M.payload(
+	contexts: { [string]: Summary },
+	now_ms: number,
+	poll_s: number,
+	toast_severities: { string }?
+): Payload
+	return {
+		v = M.VERSION,
+		updated_ms = now_ms,
+		poll_s = poll_s,
+		contexts = contexts,
+		toast_severities = toast_severities,
+	}
 end
 
 -- The kv value as written by another VM (or an older version): nil unless it
@@ -161,7 +189,12 @@ function M.withContext(prev: Payload?, context: string, summary: Summary, now_ms
 		end
 	end
 	contexts[context] = summary
-	return M.payload(contexts, now_ms, if prev then prev.poll_s else poll_s)
+	return M.payload(
+		contexts,
+		now_ms,
+		if prev then prev.poll_s else poll_s,
+		if prev then prev.toast_severities else nil
+	)
 end
 
 return M
