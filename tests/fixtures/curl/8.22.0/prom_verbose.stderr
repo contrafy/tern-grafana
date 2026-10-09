@@ -1,0 +1,21 @@
+* Host prometheus3:9090 was resolved.
+* IPv6: (none)
+* IPv4: 172.19.0.6
+*   Trying 172.19.0.6:9090...
+* Established connection to prometheus3 (172.19.0.6 port 9090) from 172.19.0.14 port 52054 
+* using HTTP/1.x
+> GET /api/v1/query?query=up HTTP/1.1
+> Host: prometheus3:9090
+> User-Agent: curl/8.22.0
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 200 OK
+< Content-Type: application/json
+< Vary: Accept-Encoding
+< Vary: Origin
+< Date: Fri, 09 Oct 2026 21:45:07 GMT
+< Content-Length: 685
+< 
+{ [685 bytes data]
+* Connection #0 to host prometheus3:9090 left intact

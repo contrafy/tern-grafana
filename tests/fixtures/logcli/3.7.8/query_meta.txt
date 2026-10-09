@@ -1,0 +1,5 @@
+2026-10-09T21:33:45Z {app="checkout", detected_level="info", level="info", service_name="checkout"}   level=info msg="order placed" order_id=2315 duration_ms=527 trace_id=3cfa7c31945d891d06d53eea0b81a806
+2026-10-09T21:33:45Z {app="frontend", detected_level="info", level="info", service_name="frontend"}   GET /checkout status=200 bytes=655 duration_ms=527
+2026-10-09T21:33:45Z {app="payments", detected_level="error", level="error", service_name="payments"} level=error msg="charge failed" error="card declined" order_id=2315 trace_id=3cfa7c31945d891d06d53eea0b81a806
+2026-10-09T21:33:43Z {app="checkout", detected_level="info", level="info", service_name="checkout"}   level=info msg="order placed" order_id=2314 duration_ms=526 trace_id=2570442a5d1e4f6f17ef05c286559bf7
+2026-10-09T21:33:43Z {app="frontend", detected_level="info", level="info", service_name="frontend"}   GET /checkout status=200 bytes=618 duration_ms=526

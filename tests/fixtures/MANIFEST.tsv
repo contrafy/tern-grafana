@@ -13,12 +13,20 @@ alertmanager/0.34.1/silences_active.json	GET	/api/v2/silences	200	2026-10-09T20:
 alertmanager/0.34.1/silences_after_expire.json	GET	/api/v2/silences	200	2026-10-09T20:31:55Z	0.34.1	-
 alertmanager/0.34.1/status.json	GET	/api/v2/status	200	2026-10-09T20:31:50Z	0.34.1	-
 amtool/0.34.1/alert_query.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 alert query	0	2026-10-09T20:31:53Z	0.34.1	-
+amtool/0.34.1/alert_query_bad_matcher.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 alert query foo=~(	0	2026-10-09T21:33:27Z	0.34.1	-
 amtool/0.34.1/alert_query_extended.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o extended alert query	0	2026-10-09T20:31:54Z	0.34.1	-
 amtool/0.34.1/alert_query_json.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o json alert query	0	2026-10-09T20:31:54Z	0.34.1	-
+amtool/0.34.1/alert_query_matcher.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 alert query severity=warning	0	2026-10-09T21:33:26Z	0.34.1	-
 amtool/0.34.1/alert_query_silenced.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 alert query --silenced	0	2026-10-09T20:31:53Z	0.34.1	-
+amtool/0.34.1/amtool_refused.txt	CLI	amtool --alertmanager.url=http://127.0.0.1:1 alert query	1	2026-10-09T21:33:27Z	0.34.1	-
 amtool/0.34.1/check_config.txt	CLI	amtool check-config /etc/alertmanager/alertmanager.yml	0	2026-10-09T20:31:55Z	0.34.1	-
 amtool/0.34.1/silence_query.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 silence query	0	2026-10-09T20:31:54Z	0.34.1	-
+amtool/0.34.1/silence_query_extended.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o extended silence query	0	2026-10-09T21:33:26Z	0.34.1	-
 amtool/0.34.1/silence_query_json.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o json silence query	0	2026-10-09T20:31:54Z	0.34.1	-
+amtool/0.34.1/silence_query_quiet.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 silence query -q	0	2026-10-09T21:33:26Z	0.34.1	-
+curl/8.22.0/prom_include_error.txt	CLI	curl -si http://prometheus3:9090/api/v1/query?query=sum(rate(up%5B5m%5D)	0	2026-10-09T21:45:07Z	8.22.0	-
+curl/8.22.0/prom_verbose.txt	CLI	curl -sv http://prometheus3:9090/api/v1/query?query=up	0	2026-10-09T21:45:07Z	8.22.0	-
+curl/8.22.0/prom_writeout.txt	CLI	curl -s -w %{http_code} http://prometheus3:9090/api/v1/query?query=up	0	2026-10-09T21:45:07Z	8.22.0	-
 grafana/11.6.16/alerting_am_alert_groups.json	GET	/api/alertmanager/grafana/api/v2/alerts/groups	200	2026-10-09T20:31:48Z	11.6.16	-
 grafana/11.6.16/alerting_am_alerts.json	GET	/api/alertmanager/grafana/api/v2/alerts	200	2026-10-09T20:31:48Z	11.6.16	-
 grafana/11.6.16/alerting_am_alerts_silenced.json	GET	/api/alertmanager/grafana/api/v2/alerts?silenced=true	200	2026-10-09T20:31:50Z	11.6.16	-
@@ -42,12 +50,17 @@ grafana/11.6.16/dashboard_tern_panels.json	GET	/api/dashboards/uid/tern-panels	2
 grafana/11.6.16/dashboard_tern_variables.json	GET	/api/dashboards/uid/tern-variables	200	2026-10-09T20:31:47Z	11.6.16	-
 grafana/11.6.16/datasource_prom3.json	GET	/api/datasources/uid/prom3	200	2026-10-09T20:31:47Z	11.6.16	-
 grafana/11.6.16/datasources.json	GET	/api/datasources	200	2026-10-09T20:31:47Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_buildinfo.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/buildinfo	200	2026-10-09T21:30:37Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_config.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/config	200	2026-10-09T21:30:37Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_flags.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/flags	200	2026-10-09T21:30:37Z	11.6.16	-
 grafana/11.6.16/ds_proxy_prom_label_values.json	GET	/api/datasources/proxy/uid/prom3/api/v1/label/job/values?start=1791576998&end=1791577898	200	2026-10-09T20:40:04Z	11.6.16	-
 grafana/11.6.16/ds_proxy_prom_labels.json	GET	/api/datasources/proxy/uid/prom3/api/v1/labels?start=1791576998&end=1791577898	200	2026-10-09T20:40:04Z	11.6.16	-
 grafana/11.6.16/ds_proxy_prom_metadata.json	GET	/api/datasources/proxy/uid/prom3/api/v1/metadata?limit=5&limit_per_metric=1	200	2026-10-09T20:40:04Z	11.6.16	-
 grafana/11.6.16/ds_proxy_prom_query.json	GET	/api/datasources/proxy/uid/prom3/api/v1/query?query=up	200	2026-10-09T20:31:48Z	11.6.16	-
 grafana/11.6.16/ds_proxy_prom_query_error.json	GET	/api/datasources/proxy/uid/prom3/api/v1/query?query=sum%28rate%28up%5B5m%5D%29	400	2026-10-09T20:40:04Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_runtimeinfo.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/runtimeinfo	200	2026-10-09T21:30:37Z	11.6.16	-
 grafana/11.6.16/ds_proxy_prom_targets.json	GET	/api/datasources/proxy/uid/prom3/api/v1/targets	200	2026-10-09T20:31:48Z	11.6.16	-
+grafana/11.6.16/ds_proxy_prom_tsdb.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/tsdb	200	2026-10-09T21:30:37Z	11.6.16	-
 grafana/11.6.16/ds_proxy_tempo_search.json	GET	/api/datasources/proxy/uid/tempo/api/search?q=%7Bresource.service.name%3D%22payments%22%7D&limit=10&start=1791576998&end=1791577898	200	2026-10-09T20:31:48Z	11.6.16	-
 grafana/11.6.16/ds_proxy_tempo_trace.json	GET	/api/datasources/proxy/uid/tempo/api/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:31:48Z	11.6.16	-
 grafana/11.6.16/ds_query_loki_logs.json	POST	/api/ds/query	200	2026-10-09T20:31:48Z	11.6.16	grafana/11.6.16/ds_query_loki_logs.request.json
@@ -99,12 +112,17 @@ grafana/12.4.12/dashboard_tern_panels.json	GET	/api/dashboards/uid/tern-panels	2
 grafana/12.4.12/dashboard_tern_variables.json	GET	/api/dashboards/uid/tern-variables	200	2026-10-09T20:31:39Z	12.4.12	-
 grafana/12.4.12/datasource_prom3.json	GET	/api/datasources/uid/prom3	200	2026-10-09T20:31:39Z	12.4.12	-
 grafana/12.4.12/datasources.json	GET	/api/datasources	200	2026-10-09T20:31:39Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_buildinfo.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/buildinfo	200	2026-10-09T21:30:29Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_config.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/config	200	2026-10-09T21:30:29Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_flags.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/flags	200	2026-10-09T21:30:29Z	12.4.12	-
 grafana/12.4.12/ds_proxy_prom_label_values.json	GET	/api/datasources/proxy/uid/prom3/api/v1/label/job/values?start=1791576998&end=1791577898	200	2026-10-09T20:40:04Z	12.4.12	-
 grafana/12.4.12/ds_proxy_prom_labels.json	GET	/api/datasources/proxy/uid/prom3/api/v1/labels?start=1791576998&end=1791577898	200	2026-10-09T20:40:04Z	12.4.12	-
 grafana/12.4.12/ds_proxy_prom_metadata.json	GET	/api/datasources/proxy/uid/prom3/api/v1/metadata?limit=5&limit_per_metric=1	200	2026-10-09T20:40:04Z	12.4.12	-
 grafana/12.4.12/ds_proxy_prom_query.json	GET	/api/datasources/proxy/uid/prom3/api/v1/query?query=up	200	2026-10-09T20:31:40Z	12.4.12	-
 grafana/12.4.12/ds_proxy_prom_query_error.json	GET	/api/datasources/proxy/uid/prom3/api/v1/query?query=sum%28rate%28up%5B5m%5D%29	400	2026-10-09T20:40:04Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_runtimeinfo.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/runtimeinfo	200	2026-10-09T21:30:29Z	12.4.12	-
 grafana/12.4.12/ds_proxy_prom_targets.json	GET	/api/datasources/proxy/uid/prom3/api/v1/targets	200	2026-10-09T20:31:40Z	12.4.12	-
+grafana/12.4.12/ds_proxy_prom_tsdb.json	GET	/api/datasources/proxy/uid/prom3/api/v1/status/tsdb	200	2026-10-09T21:30:29Z	12.4.12	-
 grafana/12.4.12/ds_proxy_tempo_search.json	GET	/api/datasources/proxy/uid/tempo/api/search?q=%7Bresource.service.name%3D%22payments%22%7D&limit=10&start=1791576998&end=1791577898	200	2026-10-09T20:31:40Z	12.4.12	-
 grafana/12.4.12/ds_proxy_tempo_trace.json	GET	/api/datasources/proxy/uid/tempo/api/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:31:40Z	12.4.12	-
 grafana/12.4.12/ds_query_loki_logs.json	POST	/api/ds/query	200	2026-10-09T20:31:40Z	12.4.12	grafana/12.4.12/ds_query_loki_logs.request.json
@@ -136,8 +154,12 @@ grafana/12.4.12/user_unauthorized.json	GET	/api/user	401	2026-10-09T20:50:44Z	12
 logcli/3.7.8/labels.txt	CLI	logcli labels --quiet --since=10m	0	2026-10-09T20:32:02Z	3.7.8	-
 logcli/3.7.8/query.txt	CLI	logcli query --quiet --limit=20 --since=10m {job="loggen"}	0	2026-10-09T20:32:01Z	3.7.8	-
 logcli/3.7.8/query_jsonl.txt	CLI	logcli query --quiet --limit=20 --since=10m --output=jsonl {job="loggen"}	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/query_meta.txt	CLI	logcli query --limit=5 --since=10m {job="loggen"}	0	2026-10-09T21:33:45Z	3.7.8	-
 logcli/3.7.8/query_metric.txt	CLI	logcli query --quiet --since=10m sum by (level) (count_over_time({job="loggen"}[5m]))	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/query_no_labels.txt	CLI	logcli query --quiet --limit=5 --since=10m --no-labels {job="loggen"}	0	2026-10-09T21:33:46Z	3.7.8	-
+logcli/3.7.8/query_parse_error.txt	CLI	logcli query --quiet --since=10m {job="loggen"	1	2026-10-09T21:33:46Z	3.7.8	-
 logcli/3.7.8/query_raw.txt	CLI	logcli query --quiet --limit=20 --since=10m --output=raw {app="payments"}	0	2026-10-09T20:32:02Z	3.7.8	-
+logcli/3.7.8/query_refused.txt	CLI	logcli --addr=http://127.0.0.1:1 query --quiet --since=10m {job="loggen"}	1	2026-10-09T21:33:46Z	3.7.8	-
 logcli/3.7.8/series.txt	CLI	logcli series --quiet --since=10m {job="loggen"}	0	2026-10-09T20:32:03Z	3.7.8	-
 loki/3.7.8/buildinfo.json	GET	/loki/api/v1/status/buildinfo	200	2026-10-09T20:32:00Z	3.7.8	-
 loki/3.7.8/index_stats.json	GET	/loki/api/v1/index/stats?query=%7Bjob%3D%22loggen%22%7D&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
@@ -154,6 +176,8 @@ loki/3.7.8/query_range_streams_json.json	GET	/loki/api/v1/query_range?query=%7Ba
 loki/3.7.8/query_range_streams_logfmt.json	GET	/loki/api/v1/query_range?query=%7Bapp%3D%22checkout%22%7D%20%7C%20logfmt%20%7C%20duration_ms%20%3E%20400&limit=20&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
 loki/3.7.8/query_vector.json	GET	/loki/api/v1/query?query=sum%20by%20%28app%29%20%28count_over_time%28%7Bjob%3D%22loggen%22%7D%5B5m%5D%29%29&time=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
 loki/3.7.8/series.json	GET	/loki/api/v1/series?match%5B%5D=%7Bjob%3D%22loggen%22%7D&start=1791576998000000000&end=1791577898000000000	200	2026-10-09T20:32:01Z	3.7.8	-
+loki/3.7.8/status_tsdb_404.txt	GET	/api/v1/status/tsdb	404	2026-10-09T21:31:00Z	3.7.8	-
+loki/3.7.8/targets_404.txt	GET	/api/v1/targets	404	2026-10-09T21:31:00Z	3.7.8	-
 prometheus/2.53.5/alertmanagers.json	GET	/api/v1/alertmanagers	200	2026-10-09T20:31:39Z	2.53.5	-
 prometheus/2.53.5/alerts.json	GET	/api/v1/alerts	200	2026-10-09T20:31:39Z	2.53.5	-
 prometheus/2.53.5/buildinfo.json	GET	/api/v1/status/buildinfo	200	2026-10-09T20:31:39Z	2.53.5	-
@@ -190,7 +214,9 @@ prometheus/2.53.5/runtimeinfo.json	GET	/api/v1/status/runtimeinfo	200	2026-10-09
 prometheus/2.53.5/series.json	GET	/api/v1/series?match%5B%5D=up&start=1791576998&end=1791577898	200	2026-10-09T20:31:39Z	2.53.5	-
 prometheus/2.53.5/targets.json	GET	/api/v1/targets	200	2026-10-09T20:31:39Z	2.53.5	-
 prometheus/2.53.5/targets_active.json	GET	/api/v1/targets?state=active	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/targets_dropped.json	GET	/api/v1/targets?state=dropped	200	2026-10-09T21:30:28Z	2.53.5	-
 prometheus/2.53.5/tsdb.json	GET	/api/v1/status/tsdb	200	2026-10-09T20:31:39Z	2.53.5	-
+prometheus/2.53.5/tsdb_limit.json	GET	/api/v1/status/tsdb?limit=5	200	2026-10-09T21:30:27Z	2.53.5	-
 prometheus/2.53.5/walreplay.json	GET	/api/v1/status/walreplay	200	2026-10-09T20:31:39Z	2.53.5	-
 prometheus/3.15.0/alertmanagers.json	GET	/api/v1/alertmanagers	200	2026-10-09T20:31:38Z	3.15.0	-
 prometheus/3.15.0/alerts.json	GET	/api/v1/alerts	200	2026-10-09T20:31:38Z	3.15.0	-
@@ -228,7 +254,9 @@ prometheus/3.15.0/runtimeinfo.json	GET	/api/v1/status/runtimeinfo	200	2026-10-09
 prometheus/3.15.0/series.json	GET	/api/v1/series?match%5B%5D=up&start=1791576998&end=1791577898	200	2026-10-09T20:31:38Z	3.15.0	-
 prometheus/3.15.0/targets.json	GET	/api/v1/targets	200	2026-10-09T20:31:38Z	3.15.0	-
 prometheus/3.15.0/targets_active.json	GET	/api/v1/targets?state=active	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/targets_dropped.json	GET	/api/v1/targets?state=dropped	200	2026-10-09T21:30:27Z	3.15.0	-
 prometheus/3.15.0/tsdb.json	GET	/api/v1/status/tsdb	200	2026-10-09T20:31:38Z	3.15.0	-
+prometheus/3.15.0/tsdb_limit.json	GET	/api/v1/status/tsdb?limit=5	200	2026-10-09T21:30:26Z	3.15.0	-
 prometheus/3.15.0/walreplay.json	GET	/api/v1/status/walreplay	200	2026-10-09T20:31:38Z	3.15.0	-
 promtool/2.53.5/check_config.txt	CLI	promtool check config /etc/prometheus/prometheus.yml	0	2026-10-09T20:32:00Z	2.53.5	-
 promtool/2.53.5/check_rules_bad.txt	CLI	promtool check rules /etc/prometheus/promtool/rules-bad.yml	1	2026-10-09T20:32:00Z	2.53.5	-

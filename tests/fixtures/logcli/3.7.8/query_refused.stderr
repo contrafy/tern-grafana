@@ -1,0 +1,3 @@
+2026/10/09 21:33:46 error sending request Get "http://127.0.0.1:1/loki/api/v1/query_range?direction=BACKWARD&end=1791581626509283754&limit=30&query=%7Bjob%3D%22loggen%22%7D&start=1791581026509283754": dial tcp 127.0.0.1:1: connect: connection refused
+2026/10/09 21:33:46 Query failed: run out of attempts while querying the server
+

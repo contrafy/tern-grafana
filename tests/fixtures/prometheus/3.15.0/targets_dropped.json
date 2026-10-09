@@ -1,0 +1,1 @@
+{"status":"success","data":{"activeTargets":[],"droppedTargets":[],"droppedTargetCounts":{"alertmanager":0,"down":0,"loki":0,"node":0,"prometheus":0,"tempo":0}}}

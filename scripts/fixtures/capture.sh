@@ -272,6 +272,7 @@ capture_prometheus() {
 	get flags /api/v1/status/flags
 	get runtimeinfo /api/v1/status/runtimeinfo
 	get tsdb /api/v1/status/tsdb
+	get tsdb_limit "/api/v1/status/tsdb?limit=5"
 	get config /api/v1/status/config
 	get walreplay /api/v1/status/walreplay
 	get query_vector "/api/v1/query?query=up&time=$END"
@@ -303,6 +304,7 @@ capture_prometheus() {
 	get metadata_limit_per_metric "/api/v1/metadata?limit=5&limit_per_metric=1"
 	get targets /api/v1/targets
 	get targets_active "/api/v1/targets?state=active"
+	get targets_dropped "/api/v1/targets?state=dropped"
 	get rules /api/v1/rules
 	get rules_alert "/api/v1/rules?type=alert"
 	get alerts /api/v1/alerts
@@ -331,6 +333,11 @@ capture_grafana() {
 	log "grafana $ver ($base)"
 	TOKEN_FILE=
 	get health /api/health
+	get user_unauthorized /api/user
+	# A syntactically plausible but unknown token (no glsa_ prefix, so the leak scan stays meaningful).
+	TOKEN_FILE=$TMP/invalid.token
+	printf 'invalid-token-for-fixtures' >"$TOKEN_FILE"
+	get user_bad_token /api/user
 	TOKEN_FILE=$tok
 	get frontend_settings /api/frontend/settings
 	get user /api/user
@@ -365,6 +372,9 @@ capture_grafana() {
 	ds_query ds_query_tempo_search '[{"refId":"A","datasource":{"type":"tempo","uid":"tempo"},"queryType":"traceql","query":"{resource.service.name=\"payments\"}","limit":20,"tableType":"traces"}]'
 
 	get ds_proxy_prom_targets /api/datasources/proxy/uid/prom3/api/v1/targets
+	for s in tsdb buildinfo flags runtimeinfo config; do
+		get "ds_proxy_prom_$s" "/api/datasources/proxy/uid/prom3/api/v1/status/$s"
+	done
 	get ds_proxy_prom_query "/api/datasources/proxy/uid/prom3/api/v1/query?query=up"
 	get ds_resource_prom_labels "/api/datasources/uid/prom3/resources/api/v1/labels?start=$START&end=$END"
 	get ds_resource_prom_label_values "/api/datasources/uid/prom3/resources/api/v1/label/job/values?start=$START&end=$END"
@@ -439,6 +449,11 @@ cli alert_query_extended alertmanager amtool "$AMURL" -o extended alert query
 cli alert_query_json alertmanager amtool "$AMURL" -o json alert query
 cli silence_query alertmanager amtool "$AMURL" silence query
 cli silence_query_json alertmanager amtool "$AMURL" -o json silence query
+cli silence_query_extended alertmanager amtool "$AMURL" -o extended silence query
+cli silence_query_quiet alertmanager amtool "$AMURL" silence query -q
+cli alert_query_matcher alertmanager amtool "$AMURL" alert query 'severity=warning'
+cli alert_query_bad_matcher alertmanager amtool "$AMURL" alert query 'foo=~('
+cli amtool_refused alertmanager amtool --alertmanager.url=http://127.0.0.1:1 alert query
 cli check_config alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
 
 use alertmanager "$(curl -fsS "$AM/api/v2/status" | jq -r '.versionInfo.version')" "$AM"
@@ -477,6 +492,16 @@ capture_promtool prometheus3
 capture_promtool prometheus2
 
 # ---------------------------------------------------------------------------------------------
+# curl (the loggen image, curlimages/curl) against Prometheus 3, as a curl lens sees it.
+
+ver=$(cli_version loggen curl)
+use curl "$ver" ""
+log "curl $ver"
+cli prom_include_error loggen curl -si 'http://prometheus3:9090/api/v1/query?query=sum(rate(up%5B5m%5D)'
+cli prom_verbose loggen curl -sv 'http://prometheus3:9090/api/v1/query?query=up'
+cli prom_writeout loggen curl -s -w '%{http_code}' 'http://prometheus3:9090/api/v1/query?query=up'
+
+# ---------------------------------------------------------------------------------------------
 # Loki (+ logcli)
 
 ver=$(curl -fsS "$LOKI/loki/api/v1/status/buildinfo" | jq -r '.version')
@@ -498,6 +523,9 @@ get query_error "/loki/api/v1/query_range?query=$(enc '{job="loggen"')&$lr"
 get index_volume "/loki/api/v1/index/volume?query=$(enc '{job="loggen"}')&$lr"
 get index_volume_range "/loki/api/v1/index/volume_range?query=$(enc '{job="loggen"}')&step=60&$lr"
 get index_stats "/loki/api/v1/index/stats?query=$(enc '{job="loggen"}')&$lr"
+# Prometheus-only endpoints asked of Loki: the "unsupported endpoint" shape.
+get targets_404 /api/v1/targets
+get status_tsdb_404 /api/v1/status/tsdb
 
 ver=$(cli_version logcli logcli)
 use logcli "$ver" ""
@@ -508,6 +536,11 @@ cli query_raw logcli logcli query --quiet --limit=20 --since=10m --output=raw '{
 cli query_metric logcli logcli query --quiet --since=10m 'sum by (level) (count_over_time({job="loggen"}[5m]))'
 cli labels logcli logcli labels --quiet --since=10m
 cli series logcli logcli series --quiet --since=10m '{job="loggen"}'
+# Without --quiet, stderr carries the request URL and "Common labels:".
+cli query_meta logcli logcli query --limit=5 --since=10m '{job="loggen"}'
+cli query_parse_error logcli logcli query --quiet --since=10m '{job="loggen"'
+cli query_refused logcli logcli --addr=http://127.0.0.1:1 query --quiet --since=10m '{job="loggen"}'
+cli query_no_labels logcli logcli query --quiet --limit=5 --since=10m --no-labels '{job="loggen"}'
 
 # ---------------------------------------------------------------------------------------------
 # Tempo

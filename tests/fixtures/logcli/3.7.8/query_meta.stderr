@@ -1,0 +1,2 @@
+2026/10/09 21:33:45 http://loki:3100/loki/api/v1/query_range?direction=BACKWARD&end=1791581625454724629&limit=5&query=%7Bjob%3D%22loggen%22%7D&start=1791581025454724629
+2026/10/09 21:33:45 Common labels: {env="dev", job="loggen"}

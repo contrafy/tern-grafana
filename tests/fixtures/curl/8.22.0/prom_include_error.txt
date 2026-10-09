@@ -1,0 +1,8 @@
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+Vary: Accept-Encoding
+Vary: Origin
+Date: Fri, 09 Oct 2026 21:45:07 GMT
+Content-Length: 125
+
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:17: parse error: unclosed left parenthesis"}

@@ -1,0 +1,3 @@
+Alertname              Starts At                Summary                                        State   
+TernGrafanaTargetDown  2026-10-09 20:16:30 UTC  TernGrafanaTargetDown                          active  
+TernTargetDown         2026-10-09 20:16:34 UTC  Target node-exporter:9999 of job down is down  active  
