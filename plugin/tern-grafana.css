@@ -1,1 +1,143 @@
 /* Tern Grafana styles. Class names are prefixed `tg-`. */
+
+/* Chart palette (lib/render/svg_timeseries.luau). Tern resolves no var() in
+   SVG attributes and drops inline styles, so series colors are classes bound
+   to theme variables here and follow light/dark and theme switches without a
+   new blob. Each class sets stroke and fill for SVG shapes and `color` for
+   HTML (legend swatches); the role classes below switch off the half a shape
+   does not paint, so they must stay after the palette. */
+.tg-s1 { color: var(--accent); stroke: var(--accent); fill: var(--accent); }
+.tg-s2 { color: var(--ok); stroke: var(--ok); fill: var(--ok); }
+.tg-s3 { color: var(--warn); stroke: var(--warn); fill: var(--warn); }
+.tg-s4 { color: var(--bad); stroke: var(--bad); fill: var(--bad); }
+.tg-s5 { color: var(--live); stroke: var(--live); fill: var(--live); }
+.tg-s6 { color: var(--tk-type); stroke: var(--tk-type); fill: var(--tk-type); }
+.tg-s7 { color: var(--tk-operator); stroke: var(--tk-operator); fill: var(--tk-operator); }
+.tg-s8 {
+	color: color-mix(in oklab, var(--warn) 50%, var(--bad));
+	stroke: color-mix(in oklab, var(--warn) 50%, var(--bad));
+	fill: color-mix(in oklab, var(--warn) 50%, var(--bad));
+}
+.tg-s9 {
+	color: color-mix(in oklab, var(--ok) 50%, var(--warn));
+	stroke: color-mix(in oklab, var(--ok) 50%, var(--warn));
+	fill: color-mix(in oklab, var(--ok) 50%, var(--warn));
+}
+.tg-s10 { color: var(--t2); stroke: var(--t2); fill: var(--t2); }
+
+/* Threshold tones (lib/units/thresholds.luau Tone). */
+.tg-th-success { stroke: var(--ok); fill: var(--ok); }
+.tg-th-error { stroke: var(--bad); fill: var(--bad); }
+.tg-th-warning { stroke: var(--warn); fill: var(--warn); }
+.tg-th-info { stroke: var(--accent); fill: var(--accent); }
+.tg-th-accent { stroke: var(--live); fill: var(--live); }
+.tg-th-pending { stroke: var(--live); fill: var(--live); }
+.tg-th-neutral { stroke: var(--t3); fill: var(--t3); }
+.tg-th-muted { stroke: var(--t4); fill: var(--t4); }
+
+/* Shape roles: after the palette and tones so they win the cascade. */
+.tg-line,
+.tg-th { fill: none; }
+.tg-area,
+.tg-bar,
+.tg-tharea { stroke: none; }
+
+.tg-grid { stroke: var(--l2); fill: none; }
+.tg-axis { stroke: var(--l3); fill: none; }
+.tg-label {
+	fill: var(--t3);
+	stroke: none;
+	font-family: var(--sans);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard cursor: a 1-px line in the image's overlay row
+   (lib/render/chart_view.luau). */
+.tg-cursor {
+	width: 1px;
+	flex: none;
+	align-self: stretch;
+	background: var(--accent);
+}
+
+/* Legend swatch: the series class supplies `color`. */
+.tg-swatch {
+	display: inline-block;
+	flex: none;
+	width: 14px;
+	height: 4px;
+	border-radius: 2px;
+	background: currentColor;
+}
+
+/* Tables and table legends (lib/render/grid.luau): a CSS grid of `el` divs.
+   Rows are `display: contents` so cells align across rows while the row keeps
+   its click action. */
+.tg-wrap {
+	width: 100%;
+	overflow-x: auto;
+}
+
+.tg-table {
+	display: grid;
+	width: 100%;
+	justify-content: start;
+}
+
+.tg-cols-1 { grid-template-columns: repeat(1, minmax(0, max-content)); }
+.tg-cols-2 { grid-template-columns: repeat(2, minmax(0, max-content)); }
+.tg-cols-3 { grid-template-columns: repeat(3, minmax(0, max-content)); }
+.tg-cols-4 { grid-template-columns: repeat(4, minmax(0, max-content)); }
+.tg-cols-5 { grid-template-columns: repeat(5, minmax(0, max-content)); }
+.tg-cols-6 { grid-template-columns: repeat(6, minmax(0, max-content)); }
+.tg-cols-7 { grid-template-columns: repeat(7, minmax(0, max-content)); }
+.tg-cols-8 { grid-template-columns: repeat(8, minmax(0, max-content)); }
+.tg-cols-9 { grid-template-columns: repeat(9, minmax(0, max-content)); }
+.tg-cols-10 { grid-template-columns: repeat(10, minmax(0, max-content)); }
+.tg-cols-11 { grid-template-columns: repeat(11, minmax(0, max-content)); }
+.tg-cols-12 { grid-template-columns: repeat(12, minmax(0, max-content)); }
+.tg-cols-13 { grid-template-columns: repeat(13, minmax(0, max-content)); }
+.tg-cols-14 { grid-template-columns: repeat(14, minmax(0, max-content)); }
+.tg-cols-15 { grid-template-columns: repeat(15, minmax(0, max-content)); }
+.tg-cols-16 { grid-template-columns: repeat(16, minmax(0, max-content)); }
+
+.tg-table .tg-h {
+	color: var(--t3);
+	padding: 2px 14px 4px 6px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tg-table .tg-r {
+	display: contents;
+}
+
+.tg-table .tg-click {
+	cursor: pointer;
+}
+
+.tg-table .tg-c {
+	padding: 2px 14px 2px 6px;
+	border-top: 1px solid var(--l2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+.tg-table .tg-c .sf-text,
+.tg-table .tg-h .sf-text {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tg-table .tg-num {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.tg-table .tg-click:hover .tg-c {
+	background: var(--l1);
+}
