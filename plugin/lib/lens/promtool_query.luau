@@ -13,15 +13,10 @@
 
 local ConfigTypes = require("../config/types")
 local EnvModule = require("../env")
-local Format = require("../units/format")
-local Frame = require("../frame/types")
-local GrafanaUrl = require("../links/grafana_url")
 local Grid = require("../render/grid")
 local LensTypes = require("./types")
-local Lttb = require("../time/lttb")
-local Range = require("../time/range")
-local Scheme = require("../links/scheme")
-local TableView = require("../render/table")
+local SeriesView = require("./series")
+local Target = require("./target")
 local ui = require("../ui")
 
 type Config = ConfigTypes.Config
@@ -29,22 +24,29 @@ type Env = EnvModule.Env
 type Node = ui.Node
 type Run = LensTypes.Run
 type Effect = LensTypes.Effect
-type Labels = { [string]: string }
+type Labels = SeriesView.Labels
+type ViewState = SeriesView.ViewState
 
 local M = {}
 
--- Bars in one spark; a spark bar is 4 px, so 60 fit a narrow pane.
-M.MAX_SPARK = 60
--- Rows shown before "Show all", and the hard cap behind it.
-M.MAX_ROWS = 50
-M.MAX_ALL_ROWS = 500
+-- Claimed command lines (plugin.toml [[lenses]] id "promtool-query").
+M.MATCH = {
+	"promtool query instant *",
+	"promtool query range *",
+	"promtool query series *",
+	"promtool query labels *",
+	"promtool query -* instant *",
+	"promtool query -* range *",
+	"promtool query -* series *",
+	"promtool query -* labels *",
+	"promtool -* query *",
+}
+
 -- Past these the capture stays raw (memory and the 2 s view budget).
 M.MAX_LINES = 50000
 M.MAX_BYTES = 8 * 1024 * 1024
 -- promtool's range defaults: end = now, start = end - 5m.
 local DEFAULT_RANGE_MS = 5 * 60 * 1000
--- The window an instant query at --time opens with in the Query block.
-local INSTANT_WINDOW_MS = 60 * 60 * 1000
 
 -- Invocation ---------------------------------------------------------------------
 
@@ -207,7 +209,7 @@ end
 
 -- Output ---------------------------------------------------------------------------
 
-export type Series = { labels: Labels, times: { number }, values: { number } }
+type Series = SeriesView.Series
 
 export type ErrorKind = "network" | "timeout" | "auth" | "query" | "usage"
 
@@ -385,37 +387,14 @@ function M.parseMetric(s: string, start: number?): (Labels?, number)
 	end
 end
 
--- model.SampleValue.String(): strconv 'f' formatting, NaN, +Inf, -Inf.
-local function sampleValue(text: string): number?
-	if text == "NaN" then
-		return 0 / 0
-	elseif text == "+Inf" then
-		return math.huge
-	elseif text == "-Inf" then
-		return -math.huge
-	elseif string.match(text, "^%-?%d+%.?%d*[eE]?[%+%-]?%d*$") then
-		return tonumber(text)
-	end
-	return nil
-end
-
--- Unix seconds (model.Time.String(), or a JSON number) to epoch ms.
-local function secondsToMs(v: any): number?
-	local n = if type(v) == "number" then v elseif type(v) == "string" then tonumber(v) else nil
-	if n == nil or n ~= n then
-		return nil
-	end
-	return math.floor(n * 1000 + 0.5)
-end
-
 -- `<value> @[<seconds>]`.
 local function parseSample(text: string): (number?, number?)
 	local v, ts = string.match(text, "^(%S+) @%[([%d%.]+)%]$")
 	if v == nil or ts == nil then
 		return nil, nil
 	end
-	local value = sampleValue(v)
-	local t = secondsToMs(ts)
+	local value = SeriesView.sampleValue(v)
+	local t = SeriesView.secondsToMs(ts)
 	if value == nil or t == nil then
 		return nil, nil
 	end
@@ -481,78 +460,14 @@ local function parseTextQuery(lines: { string }, result: Result)
 	end
 end
 
-local function stringLabels(v: any): Labels?
-	if type(v) ~= "table" then
-		return nil
-	end
-	local out: Labels = {}
-	for k, val in v do
-		if type(k) ~= "string" or type(val) ~= "string" then
-			return nil
-		end
-		out[k] = val
-	end
-	return out
-end
-
-local function jsonSample(pair: any): (number?, number?)
-	if type(pair) ~= "table" or type(pair[2]) ~= "string" then
-		return nil, nil
-	end
-	local t = secondsToMs(pair[1])
-	local v = sampleValue(pair[2])
-	if t == nil or v == nil then
-		return nil, nil
-	end
-	return t, v
-end
-
 local function parseJsonQuery(doc: any, result: Result)
-	if type(doc) ~= "table" then
-		result.unparsed += 1
-		return
+	local kind, series, unparsed = SeriesView.readJson(doc)
+	for _, s in series do
+		table.insert(result.series, s)
 	end
-	if type(doc[1]) == "number" then
-		local t, v = jsonSample(doc)
-		if t and v then
-			table.insert(result.series, { labels = {}, times = { t }, values = { v } })
-			result.kind = "scalar"
-		else
-			result.unparsed += 1
-		end
-		return
-	end
-	for _, entry in doc do
-		local labels = if type(entry) == "table" then stringLabels(entry.metric) else nil
-		if labels == nil then
-			result.unparsed += 1
-			continue
-		end
-		if type(entry.values) == "table" then
-			local s: Series = { labels = labels, times = {}, values = {} }
-			for _, pair in entry.values do
-				local t, v = jsonSample(pair)
-				if t and v then
-					table.insert(s.times, t)
-					table.insert(s.values, v)
-				end
-			end
-			table.insert(result.series, s)
-			result.kind = "matrix"
-		elseif type(entry.value) == "table" then
-			local t, v = jsonSample(entry.value)
-			if t and v then
-				table.insert(result.series, { labels = labels, times = { t }, values = { v } })
-				if result.kind ~= "matrix" then
-					result.kind = "vector"
-				end
-			else
-				result.unparsed += 1
-			end
-		else
-			-- Native histograms ("histogram"/"histograms") have no plain value.
-			result.unparsed += 1
-		end
+	result.unparsed += unparsed
+	if kind then
+		result.kind = kind :: any
 	end
 end
 
@@ -564,8 +479,8 @@ local function parseJsonList(verb: "series" | "labels", doc: any, result: Result
 	for _, entry in doc do
 		if verb == "labels" and type(entry) == "string" then
 			table.insert(result.values, entry)
-		elseif verb == "series" and stringLabels(entry) then
-			table.insert(result.label_sets, stringLabels(entry) :: Labels)
+		elseif verb == "series" and SeriesView.stringLabels(entry) then
+			table.insert(result.label_sets, SeriesView.stringLabels(entry) :: Labels)
 		else
 			result.unparsed += 1
 		end
@@ -636,122 +551,7 @@ function M.build(inv: Invocation, lines: { string }, decode: (string) -> any): R
 	return result
 end
 
--- Spark -----------------------------------------------------------------------------
-
-export type SparkBar = { value: number?, title: string }
-
-local function finite(v: number): boolean
-	return v == v and v ~= math.huge and v ~= -math.huge
-end
-
--- At most `maxBars` bars (LTTB keeps the shape; a gap-heavy series is then
--- thinned evenly). Tern scales bars to the tallest, so values are mapped
--- onto 0.1..1 of the series' own min..max: a flat series at 1000 and one
--- moving 1000..1001 both stay readable. A series that never changes has no
--- shape to show: all zeros draws flat 1 px stubs (Tern's look for zero), any
--- other constant draws flat full-height bars, because Tern scales every
--- spark to its own tallest bar and no value can draw a flat mid-level line;
--- the Last/Min/Max columns carry the level. Missing samples (NaN, Inf) draw
--- as stubs.
-function M.spark(times: { number }, values: { number }, maxBars: number?): { SparkBar }
-	local limit = math.max(2, maxBars or M.MAX_SPARK)
-	local t, v = Lttb.downsample(times, values, limit, Frame.NULL)
-	local n = #t
-	local picked: { number } = {}
-	if n > limit then
-		for i = 1, limit do
-			picked[i] = math.floor((i - 1) * (n - 1) / (limit - 1)) + 1
-		end
-	else
-		for i = 1, n do
-			picked[i] = i
-		end
-	end
-	local lo, hi = math.huge, -math.huge
-	for _, i in picked do
-		local x = v[i]
-		if type(x) == "number" and finite(x) then
-			lo = math.min(lo, x)
-			hi = math.max(hi, x)
-		end
-	end
-	local bars: { SparkBar } = table.create(#picked)
-	for k, i in picked do
-		local x = v[i]
-		local when = Range.formatMs(t[i])
-		if type(x) == "number" and finite(x) then
-			local h = if hi > lo then 0.1 + 0.9 * (x - lo) / (hi - lo) elseif x == 0 then 0 else 1
-			bars[k] = { value = h, title = Format.text(x) .. " at " .. when }
-		else
-			bars[k] =
-				{ value = nil, title = (if type(x) == "number" then Format.text(x) else "no value") .. " at " .. when }
-		end
-	end
-	return bars
-end
-
 -- Links -----------------------------------------------------------------------------
-
-export type Target = { context: string, ds: string? }
-
-local function samePlace(a: GrafanaUrl.ParsedUrl, b: GrafanaUrl.ParsedUrl): boolean
-	return a.scheme == b.scheme and a.authority == b.authority
-end
-
-local function sortedContexts(cfg: Config): { string }
-	local names: { string } = {}
-	for name in cfg.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
-	return names
-end
-
--- The configured context promtool's server URL belongs to: a context whose
--- prometheus endpoint is that URL, else a Grafana datasource proxy URL
--- (`<grafana>/api/datasources/proxy/uid/<uid>`) of a configured Grafana.
-function M.targetFor(server: string?, cfg: Config?): Target?
-	if server == nil or cfg == nil then
-		return nil
-	end
-	local url = GrafanaUrl.parse(server)
-	if url == nil then
-		return nil
-	end
-	for _, name in sortedContexts(cfg) do
-		local prom = cfg.contexts[name].prometheus
-		local base = if prom then GrafanaUrl.parse(prom.url .. prom.path_prefix) else nil
-		if base and samePlace(base, url) and base.path == url.path then
-			return { context = name }
-		end
-	end
-	for _, base in GrafanaUrl.bases(cfg) do
-		if base.scheme == url.scheme and base.authority == url.authority then
-			local prefix = string.gsub(base.path, "%p", "%%%0")
-			local uid = string.match(url.path, "^" .. prefix .. "/api/datasources/proxy/uid/([^/]+)$")
-			if uid then
-				return { context = base.context, ds = uid }
-			end
-		end
-	end
-	return nil
-end
-
--- A promtool time flag (RFC3339 or Unix seconds) in epoch ms.
-local function flagMs(text: string?): number?
-	if text == nil or Range.isRelative(text) then
-		return nil
-	end
-	return (Range.parse(text, false, { now_ms = 0 }))
-end
-
--- Link times are epoch ms; smaller numbers would read back as seconds.
-local function msParam(ms: number?): string?
-	if ms == nil or ms < 1e11 then
-		return nil
-	end
-	return string.format("%d", ms)
-end
 
 -- `tern-grafana://query?...` for the run, or nil and the reason.
 function M.queryLink(inv: Invocation, cfg: Config?): (string?, string?)
@@ -763,7 +563,7 @@ function M.queryLink(inv: Invocation, cfg: Config?): (string?, string?)
 	if (verb ~= "instant" and verb ~= "range" and verb ~= "series") or expr == nil then
 		return nil, "nothing to query"
 	end
-	local target = M.targetFor(inv.server, cfg)
+	local target = Target.targetFor(inv.server, cfg)
 	if target == nil then
 		return nil, string.format("no configured context serves %s", inv.server or "this server")
 	end
@@ -773,73 +573,29 @@ function M.queryLink(inv: Invocation, cfg: Config?): (string?, string?)
 	end
 	if verb == "range" then
 		params.mode = "graph"
-		local stop = flagMs(inv.stop)
-		local start = flagMs(inv.start)
-		local to = if inv.stop == nil then "now" else msParam(stop)
+		local stop = Target.timeMs(inv.stop)
+		local start = Target.timeMs(inv.start)
+		local to = if inv.stop == nil then "now" else Target.msParam(stop)
 		local from = if start
-			then msParam(start)
+			then Target.msParam(start)
 			elseif inv.start ~= nil then nil
 			elseif inv.stop == nil then "now-5m"
-			else msParam(if stop then stop - DEFAULT_RANGE_MS else nil)
+			else Target.msParam(if stop then stop - DEFAULT_RANGE_MS else nil)
 		if from and to then
 			params.from = from
 			params.to = to
 		end
 	else
 		params.mode = "table"
-		local at = flagMs(inv.time)
-		local to = msParam(at)
-		local from = msParam(if at then at - INSTANT_WINDOW_MS else nil)
+		local at = Target.timeMs(inv.time)
+		local to = Target.msParam(at)
+		local from = Target.msParam(if at then at - Target.INSTANT_WINDOW_MS else nil)
 		if from and to then
 			params.from = from
 			params.to = to
 		end
 	end
-	local link: Scheme.Link = { action = "query", params = params, vars = {} }
-	local ok, err = Scheme.validate(link)
-	if not ok then
-		return nil, if err then err.message else "invalid link"
-	end
-	return Scheme.encode(link), nil
-end
-
--- View state --------------------------------------------------------------------------
-
--- Carried whole in every action ("v=table:1;all:1"), so a click on a
--- rehydrated lens lands on the same view.
-export type ViewState = { table: boolean, all: boolean }
-
-function M.defaultView(): ViewState
-	return { table = false, all = false }
-end
-
-function M.encodeView(vs: ViewState): string
-	local parts: { string } = {}
-	if vs.table then
-		table.insert(parts, "table:1")
-	end
-	if vs.all then
-		table.insert(parts, "all:1")
-	end
-	return table.concat(parts, ";")
-end
-
--- Unknown fields are ignored (actions from another plugin version).
-function M.decodeView(s: string): ViewState
-	local vs = M.defaultView()
-	for part in string.gmatch(s, "[^;]+") do
-		local k, v = string.match(part, "^([^:]+):(.*)$")
-		if k == "table" then
-			vs.table = v == "1"
-		elseif k == "all" then
-			vs.all = v == "1"
-		end
-	end
-	return vs
-end
-
-local function viewAction(vs: ViewState): string
-	return "v=" .. M.encodeView(vs)
+	return Target.queryLink(params)
 end
 
 -- Rendering -----------------------------------------------------------------------------
@@ -852,69 +608,6 @@ local ERROR_TITLES: { [ErrorKind]: string } = {
 	usage = "promtool rejected the arguments",
 }
 
-function M.seriesName(labels: Labels): string
-	local name = (labels.__name__ or "") .. Frame.formatLabels(labels)
-	return if name == "" then "{}" else name
-end
-
--- Labels (`__name__` included) with the same value in every series; empty for
--- fewer than two series, where nothing is common to drop.
-function M.commonLabels(series: { Series }): Labels
-	local common: Labels = {}
-	if #series < 2 then
-		return common
-	end
-	for k, v in series[1].labels do
-		common[k] = v
-	end
-	for i = 2, #series do
-		local labels = series[i].labels
-		for k, v in common do
-			if labels[k] ~= v then
-				common[k] = nil
-			end
-		end
-	end
-	return common
-end
-
--- The series name without the labels every series shares (Grafana's legend
--- does the same), so rows read by what tells them apart; the full name when
--- nothing is left.
-function M.distinctName(labels: Labels, common: Labels): string
-	local rest: Labels = {}
-	local any = false
-	for k, v in labels do
-		if common[k] ~= v then
-			rest[k] = v
-			any = true
-		end
-	end
-	return M.seriesName(if any then rest else labels)
-end
-
-local function chip(text: string, action: string, active: boolean, title: string?): Node
-	return ui.badge(text, if active then "accent" else "neutral", { actions = { click = action }, title = title })
-end
-
-local function timeText(ms: number?): string
-	return if ms then Range.formatMs(ms) .. " UTC" else "?"
-end
-
-local function dataSpan(result: Result): (number?, number?)
-	local lo, hi = math.huge, -math.huge
-	for _, s in result.series do
-		for _, t in s.times do
-			lo = math.min(lo, t)
-			hi = math.max(hi, t)
-		end
-	end
-	if lo > hi then
-		return nil, nil
-	end
-	return lo, hi
-end
-
 local function item(key: string, value: ui.SpanLike): { { ui.SpanLike } }
 	return { { key }, { value } }
 end
@@ -922,91 +615,22 @@ end
 local function summaryItems(inv: Invocation, result: Result): { { { ui.SpanLike } } }
 	local items: { { { ui.SpanLike } } } = {}
 	table.insert(items, item("Server", ui.span(inv.server or "?", "mono")))
-	local lo, hi = dataSpan(result)
+	local lo, hi = SeriesView.dataSpan(result.series)
 	if inv.verb == "range" then
-		local from = flagMs(inv.start) or lo
-		local to = flagMs(inv.stop) or hi
-		local text = timeText(from) .. "  to  " .. timeText(to)
+		local from = Target.timeMs(inv.start) or lo
+		local to = Target.timeMs(inv.stop) or hi
+		local text = SeriesView.timeText(from) .. "  to  " .. SeriesView.timeText(to)
 		if inv.step then
 			text ..= "  step " .. inv.step
 		end
 		table.insert(items, item("Range", text))
 	elseif inv.verb == "instant" and hi then
-		table.insert(items, item("Time", timeText(hi)))
+		table.insert(items, item("Time", SeriesView.timeText(hi)))
 	end
 	if #inv.matches > 0 then
 		table.insert(items, item("Match", ui.span(table.concat(inv.matches, "  "), "code")))
 	end
 	return items
-end
-
-local function countText(n: number, one: string, many: string): string
-	return string.format("%d %s", n, if n == 1 then one else many)
-end
-
-local function shownCount(total: number, vs: ViewState): number
-	return math.min(total, if vs.all then M.MAX_ALL_ROWS else M.MAX_ROWS)
-end
-
-local function overflowNodes(total: number, shown: number, vs: ViewState, out: { Node })
-	if total <= shown then
-		return
-	end
-	if not vs.all then
-		table.insert(
-			out,
-			ui.row({
-				ui.muted(string.format("%d more", total - shown)),
-				chip(string.format("Show all %d", total), viewAction({ table = vs.table, all = true }), false),
-			})
-		)
-	else
-		table.insert(out, ui.muted(string.format("... %d more (Raw shows everything)", total - shown)))
-	end
-end
-
-local function rangeGrid(series: { Series }, shown: number, common: Labels): Node
-	local columns: { Grid.Column } = {
-		{ head = "Series" },
-		{ head = "Trend" },
-		{ head = "Last", numeric = true },
-		{ head = "Min", numeric = true },
-		{ head = "Max", numeric = true },
-	}
-	local rows: { Grid.Row } = table.create(shown)
-	for i = 1, shown do
-		local s = series[i]
-		local lo, hi = math.huge, -math.huge
-		for _, v in s.values do
-			if finite(v) then
-				lo = math.min(lo, v)
-				hi = math.max(hi, v)
-			end
-		end
-		local n = #s.values
-		local full = M.seriesName(s.labels)
-		local name = M.distinctName(s.labels, common)
-		rows[i] = {
-			key = "s" .. i,
-			cells = {
-				{ k = "text", p = { spans = { { t = name } }, title = full } },
-				{ k = "chart", p = { kind = "spark", series = M.spark(s.times, s.values), token = "accent" } },
-				Grid.text(if n > 0 then Format.text(s.values[n]) else TableView.NO_VALUE),
-				Grid.text(if lo <= hi then Format.text(lo) else TableView.NO_VALUE),
-				Grid.text(if lo <= hi then Format.text(hi) else TableView.NO_VALUE),
-			},
-		}
-	end
-	return Grid.grid("series", columns, rows, "tern-grafana.lens-series")
-end
-
-local function framesOf(series: { Series }, shown: number): { Frame.Frame }
-	local frames: { Frame.Frame } = table.create(shown)
-	for i = 1, shown do
-		local s = series[i]
-		frames[i] = Frame.timeSeries(s.labels, s.times, s.values)
-	end
-	return frames
 end
 
 local function labelSetGrid(sets: { Labels }, shown: number): Node
@@ -1073,11 +697,11 @@ end
 local function headSpans(inv: Invocation, result: Result): { ui.SpanLike }
 	local head: { ui.SpanLike } = { ui.span("promtool query " .. (inv.verb or ""), "strong") }
 	local count = if result.kind == "labels"
-		then countText(#result.values, "value", "values")
-		elseif result.kind == "series" then countText(#result.label_sets, "series", "series")
+		then SeriesView.countText(#result.values, "value", "values")
+		elseif result.kind == "series" then SeriesView.countText(#result.label_sets, "series", "series")
 		elseif result.kind == "scalar" then "scalar"
 		elseif result.kind == "empty" then "no data"
-		else countText(#result.series, "series", "series")
+		else SeriesView.countText(#result.series, "series", "series")
 	table.insert(head, ui.span("  " .. count, "muted"))
 	return head
 end
@@ -1099,21 +723,20 @@ function M.render(inv: Invocation, result: Result, vs: ViewState, cfg: Config?):
 			ui.text({ ui.span(exprText, "code") }, { key = "expr", actions = { click = "copy" }, title = "Copy" })
 		)
 	end
-	local common = if kind == "matrix" then M.commonLabels(result.series) else {}
+	local common = if kind == "matrix" then SeriesView.commonLabels(result.series) else {}
 	local items = summaryItems(inv, result)
 	if next(common) ~= nil then
-		table.insert(items, item("Common labels", ui.span(M.seriesName(common), "code")))
+		table.insert(items, item("Common labels", ui.span(SeriesView.seriesName(common), "code")))
 	end
 	table.insert(children, ui.kv(items))
 
 	local tools: { Node } = {}
 	if kind == "matrix" then
-		table.insert(tools, chip("Graph", viewAction({ table = false, all = vs.all }), not vs.table))
-		table.insert(tools, chip("Table", viewAction({ table = true, all = vs.all }), vs.table))
+		SeriesView.viewChips(vs, tools)
 	end
 	local link, why = M.queryLink(inv, cfg)
 	if link then
-		table.insert(tools, chip("Open in Query block", "query", false, link))
+		table.insert(tools, SeriesView.chip("Open in Query block", "query", false, link))
 	elseif inv.verb ~= "labels" then
 		table.insert(tools, ui.muted("Open in Query block: " .. (why or "unavailable")))
 	end
@@ -1127,33 +750,26 @@ function M.render(inv: Invocation, result: Result, vs: ViewState, cfg: Config?):
 
 	if kind == "empty" then
 		table.insert(children, ui.muted("No data", { key = "body" }))
-	elseif kind == "scalar" then
-		local s = result.series[1]
-		table.insert(children, ui.text({ ui.span(Format.text(s.values[1]), "strong num") }, { key = "body" }))
 	elseif kind == "series" then
-		local shown = shownCount(#result.label_sets, vs)
+		local shown = SeriesView.shownCount(#result.label_sets, vs)
 		table.insert(children, labelSetGrid(result.label_sets, shown))
-		overflowNodes(#result.label_sets, shown, vs, children)
+		SeriesView.overflow(#result.label_sets, shown, vs, children)
 	elseif kind == "labels" then
-		local shown = shownCount(#result.values, vs)
+		local shown = SeriesView.shownCount(#result.values, vs)
 		table.insert(children, valuesGrid(inv.label or "value", result.values, shown))
-		overflowNodes(#result.values, shown, vs, children)
-	else
-		local shown = shownCount(#result.series, vs)
-		if kind == "matrix" and not vs.table then
-			table.insert(children, rangeGrid(result.series, shown, common))
-		else
-			table.insert(
-				children,
-				TableView.view(framesOf(result.series, shown), { key = "table", show_time = kind == "matrix" })
-			)
-		end
-		overflowNodes(#result.series, shown, vs, children)
+		SeriesView.overflow(#result.values, shown, vs, children)
+	elseif kind == "vector" or kind == "matrix" or kind == "scalar" then
+		SeriesView.body(kind, result.series, vs, common, children)
 	end
 	if result.unparsed > 0 then
 		table.insert(
 			children,
-			ui.muted(string.format("%s not shown (Raw shows everything)", countText(result.unparsed, "line", "lines")))
+			ui.muted(
+				string.format(
+					"%s not shown (Raw shows everything)",
+					SeriesView.countText(result.unparsed, "line", "lines")
+				)
+			)
 		)
 	end
 	return ui.card(headSpans(inv, result), children)
@@ -1178,7 +794,7 @@ function M.open(run: Run): State
 		bytes = 0,
 		overflow = false,
 		status = nil,
-		view = M.defaultView(),
+		view = SeriesView.defaultView(),
 		result = nil,
 	}
 end
@@ -1224,7 +840,7 @@ function M.event(state: State, ev: LensTypes.Event, env: Env): { Effect }
 		return {}
 	end
 	if ev.act == "v" then
-		state.view = M.decodeView(ev.value or "")
+		state.view = SeriesView.decodeView(ev.value or "")
 	elseif ev.act == "query" then
 		local link, why = M.queryLink(state.invocation, env.config)
 		if link then

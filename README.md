@@ -5,8 +5,8 @@
 alerts and silences rendered in the terminal, next to the commands that
 changed them.
 
-> Pre-release, in development. The foundation (M0), query core (M1) and
-> dashboards and alerts (M2) milestones have landed; the [Roadmap](#roadmap) shows what is planned and what has landed.
+> Pre-release, in development. The foundation (M0), query core (M1),
+> dashboards and alerts (M2) and ops and lenses (M3) milestones have landed; the [Roadmap](#roadmap) shows what is planned and what has landed.
 
 ## Why
 
@@ -70,7 +70,7 @@ saved state, and only talks to the URLs you configure. See
 
 ## Usage
 
-What works today (M1 and M2):
+What works today (M1 to M3):
 
 1. **Configure a context.** Write `~/.config/tern-grafana/config.json` (see
    [Configuration](docs/configuration.md)), or open the Settings block from the
@@ -111,24 +111,63 @@ What works today (M1 and M2):
    Prometheus, grouped by labels, with runbook and dashboard links from
    annotations. A status-line segment shows firing counts per polled context,
    toned by the worst severity; clicking it opens the inbox. The segment is only
-   visible while Tern's status bar is on. See [Alerts](docs/alerts.md).
+   visible while Tern's status bar is on. With `alerts.toasts` turned on, newly
+   firing alerts also raise a toast. See [Alerts](docs/alerts.md).
 
    ![Alerts inbox](docs/screenshots/m2-alerts.png)
 
-6. **Grafana links.** Clicking a Grafana link under a configured Grafana base URL
+6. **Rules.** `v` in the inbox (or `tern-grafana://alerts?view=rules`) lists the
+   context's alerting and recording rules from Grafana and Prometheus: status,
+   health, time since the last evaluation and the last error; `q` opens a rule's
+   query in the Query block.
+
+   ![Rules view](docs/screenshots/m3-rules.png)
+
+7. **Silences.** `s` on an alert, or "Grafana: Silences" in the palette, opens the
+   Silences block on the Alertmanager or Grafana Alertmanager the inbox reads.
+   A new silence is prefilled with the alert's matchers and previews the alerts it
+   covers; the list expires silences. Nothing is written until you confirm (`y`
+   or the Confirm button) on a panel showing the matchers, times, comment, server
+   and affected alerts.
+
+   ![Silence confirmation](docs/screenshots/m3-silence-confirm.png)
+
+8. **Ops.** "Grafana: Ops" in the palette shows a Prometheus server's own health,
+   directly or through Grafana's datasource proxy: scrape targets, a link to the
+   rules view, TSDB cardinality (top series, labels and pairs, each opening a
+   breakdown query) and build, runtime, config and flags info. See
+   [Ops](docs/ops.md).
+
+   ![Ops targets](docs/screenshots/m3-ops-targets.png)
+   ![Ops cardinality](docs/screenshots/m3-ops-cardinality.png)
+
+9. **Grafana links.** Clicking a Grafana link under a configured Grafana base URL
    opens it natively: Explore links in the Query block, `/d/` links in the
    Dashboard block, `/d-solo/` links in the Panel block, alert list and alert rule
    links in the alerts inbox. Other Grafana pages open in a Tern browser pane.
 
-7. **promtool lens.** Running `promtool query instant|range ...` renders the
-   result as a native graph or table.
+10. **Command lenses.** These commands render natively in the terminal, with
+    Tern's Native/Raw toggle to see the raw output (see [Lenses](docs/lenses.md)):
 
-   ![promtool query lens](docs/screenshots/m1-promtool-lens.png)
+    | Lens | Claims | Shows |
+    | --- | --- | --- |
+    | `promtool-query` | `promtool query instant\|range\|series\|labels ...` | series with sparks and a Graph/Table switch, or a table of the result |
+    | `promtool-check` | `promtool check rules`, `promtool check config ...`, `promtool test rules ...` | pass/fail per file with findings |
+    | `curl` | `curl` against `.../api/v1/query*` (Prometheus, a Grafana datasource proxy, Loki) or `.../api/ds/query` | the response as series, a table, log lines or an error |
+    | `amtool` | `amtool alert ...`, `amtool silence ...` | alert and silence grids |
+    | `logcli` | `logcli query ...` | log lines with levels and labels, or metric results |
+
+    ![promtool query lens](docs/screenshots/m1-promtool-lens.png)
+    ![promtool check lens](docs/screenshots/m3-lens-promtool-check.png)
+    ![curl lens](docs/screenshots/m3-lens-curl.png)
+    ![amtool lens](docs/screenshots/m3-lens-amtool.png)
+    ![logcli lens](docs/screenshots/m3-lens-logcli.png)
 
 ## Roadmap
 
 M0 (foundation: tooling, CI, docs, docker dev stack, recorded fixtures, SDK
-capability spike), M1 (query core) and M2 (dashboards and alerts) have landed.
+capability spike), M1 (query core), M2 (dashboards and alerts) and M3 (ops
+and lenses) have landed.
 
 | Milestone | ID | Feature | Status |
 | --- | --- | --- | --- |
@@ -144,17 +183,17 @@ capability spike), M1 (query core) and M2 (dashboards and alerts) have landed.
 | M2 | B3 | Pin one panel as its own small block | landed (M2) |
 | M2 | C1 | Alerts inbox: Grafana unified alerting and Alertmanager v2, grouping, runbook/dashboard links | landed (M2) |
 | M2 | C2 | Status-line segment: firing counts per context, tone by severity | landed (M2) |
-| M3 | C3 | Toasts on newly firing alerts (opt-in, deduped) | planned |
-| M3 | C4 | Silences: create from alert with preview and confirm, list, expire | planned |
-| M3 | C5 | Alert and recording rules view: health, last eval, last error, query preview | planned |
-| M3 | D1 | Targets health (`/api/v1/targets`) | planned |
-| M3 | D2 | Rules (`/api/v1/rules`) | planned |
-| M3 | D3 | Cardinality (`/api/v1/status/tsdb`) | planned |
-| M3 | D4 | Build, flags and runtime info | planned |
-| M3 | E2 | Lens: `promtool check rules\|config`, `promtool test rules` | planned |
-| M3 | E3 | Lens: `amtool alert\|silence query` | planned |
-| M3 | E4 | Lens: `logcli query` | planned |
-| M3 | E5 | Lens: `curl` against `/api/v1/query*` and `/api/ds/query` | planned |
+| M3 | C3 | Toasts on newly firing alerts (opt-in, deduped) | landed (M3) |
+| M3 | C4 | Silences: create from alert with preview and confirm, list, expire | landed (M3) |
+| M3 | C5 | Alert and recording rules view: health, last eval, last error, query preview | landed (M3) |
+| M3 | D1 | Targets health (`/api/v1/targets`) | landed (M3) |
+| M3 | D2 | Rules (`/api/v1/rules`) | landed (M3) |
+| M3 | D3 | Cardinality (`/api/v1/status/tsdb`) | landed (M3) |
+| M3 | D4 | Build, flags and runtime info | landed (M3) |
+| M3 | E2 | Lens: `promtool check rules\|config`, `promtool test rules` | landed (M3) |
+| M3 | E3 | Lens: `amtool alert\|silence query` | landed (M3) |
+| M3 | E4 | Lens: `logcli query` | landed (M3) |
+| M3 | E5 | Lens: `curl` against `/api/v1/query*` and `/api/ds/query` | landed (M3) |
 | M4 | G1 | Deploy annotations from finished commands (opt-in, confirm on first use per context) | planned |
 | M4 | G2 | Post-command impact watch: golden signals before/after | planned |
 | M4 | G3 | Carly exports (promql, alerts, find_dashboard, logs) and firing summary context | planned |
@@ -171,7 +210,8 @@ capability spike), M1 (query core) and M2 (dashboards and alerts) have landed.
 ## Documentation
 
 - [Configuration](docs/configuration.md), [Settings block](docs/settings.md), [Query block](docs/query.md),
-  [Dashboards](docs/dashboards.md), [Alerts](docs/alerts.md)
+  [Dashboards](docs/dashboards.md), [Alerts](docs/alerts.md), [Ops](docs/ops.md),
+  [Lenses](docs/lenses.md)
 - [Architecture](docs/architecture.md)
 - [SDK capability matrix](docs/sdk-capability-matrix.md)
 - [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), [Support](SUPPORT.md),

@@ -66,6 +66,12 @@ export type Rule = {
 	annotations: { [string]: string },
 	-- Grafana-managed rules only.
 	uid: string?,
+	-- Grafana: the rule is paused (not evaluated).
+	paused: boolean,
+	-- Grafana 12: the datasources the rule queries.
+	datasource_uids: { string },
+	-- The group's evaluation interval.
+	interval_s: number?,
 	alerts: { Alert },
 	source: Source,
 	context: string,
@@ -213,6 +219,11 @@ local function time(env: Env, v: any): number?
 		return nil
 	end
 	return (Range.parse(s, false, { now_ms = env.now_ms }))
+end
+
+local function num(env: Env, v: any): number?
+	v = Env.value(env, v)
+	return if type(v) == "number" then v else nil
 end
 
 local function firstLine(s: string): string
@@ -434,6 +445,7 @@ function M.parseRules(env: Env, body: string, context: string, source: Source): 
 		if type(g) == "table" and type(g.rules) == "table" then
 			local groupName = str(env, g.name) or ""
 			local file = str(env, g.file) or ""
+			local interval = num(env, g.interval)
 			for _, r in g.rules do
 				if type(r) == "table" then
 					local kind: "alerting" | "recording" = if str(env, r.type) == "recording"
@@ -449,12 +461,15 @@ function M.parseRules(env: Env, body: string, context: string, source: Source): 
 						health = str(env, r.health) or "unknown",
 						last_error = if lastError and lastError ~= "" then lastError else nil,
 						last_evaluation_ms = time(env, r.lastEvaluation),
-						evaluation_s = Env.value(env, r.evaluationTime),
+						evaluation_s = num(env, r.evaluationTime),
 						query = str(env, r.query) or "",
-						duration_s = Env.value(env, r.duration),
+						duration_s = num(env, r.duration),
 						labels = strMap(env, r.labels),
 						annotations = strMap(env, r.annotations),
 						uid = str(env, r.uid),
+						paused = Env.value(env, r.isPaused) == true,
+						datasource_uids = strList(env, Env.value(env, r.queriedDatasourceUIDs)),
+						interval_s = interval,
 						alerts = {},
 						source = source,
 						context = context,

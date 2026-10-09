@@ -57,6 +57,14 @@ describe("scheme.decode", function()
 		expect(code("tern-grafana://query?from=1710510330123&to=now%2Fd")).toBeNil()
 	end)
 
+	-- The ops block's Rules tab opens the alerts block on its rules view.
+	it("opens the alerts block on the inbox or the rules view, nothing else", function()
+		local l = Scheme.decode("tern-grafana://alerts?context=lab&view=rules")
+		expect(l and l.params.view).toBe("rules")
+		expect(code("tern-grafana://alerts?view=inbox")).toBeNil()
+		expect(code("tern-grafana://alerts?view=targets")).toBe("bad_param")
+	end)
+
 	-- A token in a link would be written to state files and scrollback.
 	it("refuses credential-shaped parameters and variables", function()
 		expect(code("tern-grafana://query?token=x")).toBe("credential")

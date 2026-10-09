@@ -12,6 +12,7 @@ styles = [
 	"plugin/dashboard.css",
 	"plugin/panels.css",
 	"plugin/alerts.css",
+	"plugin/ops.css",
 ]
 
 [[blocks]]
@@ -39,6 +40,16 @@ id = "alerts"
 title = "Grafana Alerts"
 icon = "flame"
 
+[[blocks]]
+id = "silence"
+title = "Grafana Silences"
+icon = "flame"
+
+[[blocks]]
+id = "ops"
+title = "Grafana Ops"
+icon = "chart"
+
 [[lenses]]
 id = "promtool-query"
 match = [
@@ -51,4 +62,40 @@ match = [
 	"promtool query -* series *",
 	"promtool query -* labels *",
 	"promtool -* query *",
+]
+
+[[lenses]]
+id = "promtool-check"
+match = [
+	"promtool check rules",
+	"promtool check rules *",
+	"promtool check config *",
+	"promtool test rules *",
+]
+
+[[lenses]]
+id = "curl"
+match = [
+	"curl *api/v1/query*",
+	"curl *api/ds/query*",
+]
+
+[[lenses]]
+id = "amtool"
+match = [
+	"amtool alert",
+	"amtool alert *",
+	"amtool silence",
+	"amtool silence *",
+	"amtool -* alert",
+	"amtool -* alert *",
+	"amtool -* silence",
+	"amtool -* silence *",
+]
+
+[[lenses]]
+id = "logcli"
+match = [
+	"logcli query *",
+	"logcli -* query *",
 ]

@@ -3,7 +3,7 @@
 -- direct Alertmanager wins over Grafana), Grafana-managed alerting must show
 -- pending alerts its Alertmanager never sees, and a Prometheus-only context
 -- still gets an inbox. Links from an alert must land on the native block when
--- one exists, and silence pages must preselect exactly that alert.
+-- one exists.
 local Fixtures = require("../../lib/fixtures")
 local Scheme = require("../../../plugin/lib/links/scheme")
 local Sources = require("../../../plugin/lib/alerts/sources")
@@ -169,39 +169,6 @@ describe("links", function()
 		expect(Sources.dashboardTarget(prom)).toBe("http://127.0.0.1:3000/d/tern-panels/tern-panels")
 		expect(Sources.runbookTarget(prom)).toBe("https://example.com/runbooks/tern-always-firing")
 		expect(Sources.dashboardTarget(alerts("alertmanager/0.34.1/alerts.json", "am").TernTargetDown)).toBeNil()
-	end)
-
-	it("preselects the alert's labels on Alertmanager's silence page", function()
-		local plan = assert(Sources.plan(CFG, "am"))
-		local a = alerts("alertmanager/0.34.1/alerts.json", "am").TernAlwaysFiring
-		expect(Sources.silenceUrl(plan, a)).toBe(
-			"http://am:9093/#/silences/new?filter="
-				.. "%7Balertname%3D%22TernAlwaysFiring%22%2Cseverity%3D%22critical%22%2Cteam%3D%22platform%22%7D"
-		)
-	end)
-
-	it("preselects Grafana's matchers, rule uid included, on Grafana's silence page", function()
-		local plan = assert(Sources.plan(CFG, "graf"))
-		local r = Sources.combine(env, plan, {
-			am = ok(Fixtures.read("grafana/12.4.12/alerting_am_alerts.json")),
-			rules = ok("{}"),
-		})
-		local a = byName(r.alerts).TernGrafanaAlwaysFiring
-		expect(Sources.silenceUrl(plan, a)).toBe(
-			"http://g/sub/alerting/silence/new?alertmanager=grafana"
-				.. "&matcher=__alert_rule_uid__%3Dtern-g-firing&matcher=alertname%3DTernGrafanaAlwaysFiring"
-				.. "&matcher=grafana_folder%3DTern%20Alerts&matcher=severity%3Dcritical&matcher=team%3Dplatform&orgId=2"
-		)
-		local ext = assert(Sources.plan(CFG, "ext"))
-		expect(string.find(Sources.silenceUrl(ext, a) :: string, "?alertmanager=alertmanager&", 1, true) ~= nil).toBe(
-			true
-		)
-	end)
-
-	it("has no silence page for Prometheus", function()
-		local plan = assert(Sources.plan(CFG, "prom"))
-		local r = Sources.combine(env, plan, { prom = ok(Fixtures.read("prometheus/3.15.0/alerts.json")) })
-		expect(Sources.silenceUrl(plan, r.alerts[1])).toBeNil()
 	end)
 end)
 

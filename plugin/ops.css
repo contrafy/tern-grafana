@@ -1,0 +1,46 @@
+/* Tern Grafana ops block (lib/ops/view.luau). Class names are prefixed `tg-op-`. */
+
+.tg-op-head {
+	align-items: center;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--t4);
+}
+
+.tg-op-chip {
+	cursor: pointer;
+}
+
+.tg-op-row {
+	cursor: pointer;
+	padding: 1px 6px;
+	border-left: 2px solid transparent;
+	border-radius: 3px;
+}
+
+.tg-op-row.tg-op-down { border-left-color: var(--bad); }
+.tg-op-row.tg-op-unknown { border-left-color: var(--warn); }
+
+.tg-op-row.is-sel {
+	background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.tg-op-detail {
+	margin: 4px 0 6px 12px;
+	padding-left: 8px;
+	border-left: 1px solid var(--t4);
+	cursor: default;
+}
+
+.tg-op-btn {
+	cursor: pointer;
+	padding: 1px 8px;
+	border: 1px solid var(--t4);
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+
+.tg-op-btn:hover {
+	border-color: var(--accent);
+}

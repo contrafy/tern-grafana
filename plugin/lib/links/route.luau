@@ -24,11 +24,11 @@ M.CAPABILITIES = table.freeze({
 	dashboard = true,
 	panel = true,
 	alerts = true,
-	silence = false,
+	silence = true,
 	logs = false,
 	trace = false,
-	ops = false,
-	settings = false,
+	ops = true,
+	settings = true,
 })
 
 export type Capabilities = { [string]: boolean }
