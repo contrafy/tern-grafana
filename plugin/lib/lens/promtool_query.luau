@@ -647,8 +647,12 @@ end
 -- At most `maxBars` bars (LTTB keeps the shape; a gap-heavy series is then
 -- thinned evenly). Tern scales bars to the tallest, so values are mapped
 -- onto 0.1..1 of the series' own min..max: a flat series at 1000 and one
--- moving 1000..1001 both stay readable. Missing samples (NaN, Inf) draw as
--- stubs.
+-- moving 1000..1001 both stay readable. A series that never changes has no
+-- shape to show: all zeros draws flat 1 px stubs (Tern's look for zero), any
+-- other constant draws flat full-height bars, because Tern scales every
+-- spark to its own tallest bar and no value can draw a flat mid-level line;
+-- the Last/Min/Max columns carry the level. Missing samples (NaN, Inf) draw
+-- as stubs.
 function M.spark(times: { number }, values: { number }, maxBars: number?): { SparkBar }
 	local limit = math.max(2, maxBars or M.MAX_SPARK)
 	local t, v = Lttb.downsample(times, values, limit, Frame.NULL)
@@ -676,7 +680,7 @@ function M.spark(times: { number }, values: { number }, maxBars: number?): { Spa
 		local x = v[i]
 		local when = Range.formatMs(t[i])
 		if type(x) == "number" and finite(x) then
-			local h = if hi > lo then 0.1 + 0.9 * (x - lo) / (hi - lo) else 1
+			local h = if hi > lo then 0.1 + 0.9 * (x - lo) / (hi - lo) elseif x == 0 then 0 else 1
 			bars[k] = { value = h, title = Format.text(x) .. " at " .. when }
 		else
 			bars[k] =
@@ -853,6 +857,42 @@ function M.seriesName(labels: Labels): string
 	return if name == "" then "{}" else name
 end
 
+-- Labels (`__name__` included) with the same value in every series; empty for
+-- fewer than two series, where nothing is common to drop.
+function M.commonLabels(series: { Series }): Labels
+	local common: Labels = {}
+	if #series < 2 then
+		return common
+	end
+	for k, v in series[1].labels do
+		common[k] = v
+	end
+	for i = 2, #series do
+		local labels = series[i].labels
+		for k, v in common do
+			if labels[k] ~= v then
+				common[k] = nil
+			end
+		end
+	end
+	return common
+end
+
+-- The series name without the labels every series shares (Grafana's legend
+-- does the same), so rows read by what tells them apart; the full name when
+-- nothing is left.
+function M.distinctName(labels: Labels, common: Labels): string
+	local rest: Labels = {}
+	local any = false
+	for k, v in labels do
+		if common[k] ~= v then
+			rest[k] = v
+			any = true
+		end
+	end
+	return M.seriesName(if any then rest else labels)
+end
+
 local function chip(text: string, action: string, active: boolean, title: string?): Node
 	return ui.badge(text, if active then "accent" else "neutral", { actions = { click = action }, title = title })
 end
@@ -925,7 +965,7 @@ local function overflowNodes(total: number, shown: number, vs: ViewState, out: {
 	end
 end
 
-local function rangeGrid(series: { Series }, shown: number): Node
+local function rangeGrid(series: { Series }, shown: number, common: Labels): Node
 	local columns: { Grid.Column } = {
 		{ head = "Series" },
 		{ head = "Trend" },
@@ -944,11 +984,12 @@ local function rangeGrid(series: { Series }, shown: number): Node
 			end
 		end
 		local n = #s.values
-		local name = M.seriesName(s.labels)
+		local full = M.seriesName(s.labels)
+		local name = M.distinctName(s.labels, common)
 		rows[i] = {
 			key = "s" .. i,
 			cells = {
-				{ k = "text", p = { spans = { { t = name } }, title = name } },
+				{ k = "text", p = { spans = { { t = name } }, title = full } },
 				{ k = "chart", p = { kind = "spark", series = M.spark(s.times, s.values), token = "accent" } },
 				Grid.text(if n > 0 then Format.text(s.values[n]) else TableView.NO_VALUE),
 				Grid.text(if lo <= hi then Format.text(lo) else TableView.NO_VALUE),
@@ -1058,7 +1099,12 @@ function M.render(inv: Invocation, result: Result, vs: ViewState, cfg: Config?):
 			ui.text({ ui.span(exprText, "code") }, { key = "expr", actions = { click = "copy" }, title = "Copy" })
 		)
 	end
-	table.insert(children, ui.kv(summaryItems(inv, result)))
+	local common = if kind == "matrix" then M.commonLabels(result.series) else {}
+	local items = summaryItems(inv, result)
+	if next(common) ~= nil then
+		table.insert(items, item("Common labels", ui.span(M.seriesName(common), "code")))
+	end
+	table.insert(children, ui.kv(items))
 
 	local tools: { Node } = {}
 	if kind == "matrix" then
@@ -1095,7 +1141,7 @@ function M.render(inv: Invocation, result: Result, vs: ViewState, cfg: Config?):
 	else
 		local shown = shownCount(#result.series, vs)
 		if kind == "matrix" and not vs.table then
-			table.insert(children, rangeGrid(result.series, shown))
+			table.insert(children, rangeGrid(result.series, shown, common))
 		else
 			table.insert(
 				children,

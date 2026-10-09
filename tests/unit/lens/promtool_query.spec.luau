@@ -366,6 +366,57 @@ describe("promtool query view", function()
 		expect(string.find(text, '{job="down"}', 1, true) ~= nil).toBe(true)
 	end)
 
+	-- The `down` target is 0 throughout the capture: a dead series must not
+	-- look like the busiest one.
+	it("draws an all-zero series as flat stubs and a constant series as flat bars", function()
+		for _, version in VERSIONS do
+			for _, s in result(capture(version, "query_range")).series do
+				local heights = {}
+				for i, bar in Promtool.spark(s.times, s.values) do
+					heights[i] = bar.value
+				end
+				local expected = if s.labels.job == "down" then 0 else 1
+				expect(heights).toEqual({ expected, expected, expected, expected, expected, expected })
+			end
+		end
+	end)
+
+	it("names series by the labels that tell them apart", function()
+		local series = result(capture("3.15.0", "query_instant_vector_metric")).series
+		local common = Promtool.commonLabels(series)
+		expect(common).toEqual({ __name__ = "up" })
+		local node = byName(series).node
+		expect(Promtool.distinctName(node.labels, common)).toBe(
+			'{env="dev", instance="node-exporter:9100", job="node"}'
+		)
+		-- A lone series keeps its whole name.
+		expect(Promtool.commonLabels({ node })).toEqual({})
+		expect(Promtool.distinctName({ __name__ = "up", job = "a" }, { __name__ = "up", job = "a" })).toBe(
+			'up{job="a"}'
+		)
+	end)
+
+	it("shows common labels once and the full name as the row tooltip", function()
+		local state = Promtool.open(run({ "query", "range", "http://prometheus3:9090", "rate(x[5m])" }))
+		for _, code in { "200", "500" } do
+			Promtool.line(state, string.format('{code="%s", handler="/api/v1/query", job="prometheus"} =>', code))
+			Promtool.line(state, "1 @[1791577598]")
+			Promtool.line(state, "2 @[1791577658]")
+		end
+		Promtool.finish(state, 0)
+		local view = Promtool.view(state, env(nil))
+		local text = textOf(view)
+		expect(string.find(text, 'Common labels|{handler="/api/v1/query", job="prometheus"}', 1, true) ~= nil).toBe(
+			true
+		)
+		local rows = findAll(view, function(n: any): boolean
+			return n.k == "text" and n.p.title ~= nil and string.find(n.p.title, "code=", 1, true) ~= nil
+		end)
+		expect(#rows).toBe(2)
+		expect(rows[1].p.spans[1].t).toBe('{code="200"}')
+		expect(rows[1].p.title).toBe('{code="200", handler="/api/v1/query", job="prometheus"}')
+	end)
+
 	it("shows the instant vector as a table without sparks", function()
 		local view = Promtool.view(lensFor(capture("2.53.5", "query_instant")), env(LAB))
 		assert(view, "instant view")
