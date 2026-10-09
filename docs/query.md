@@ -7,7 +7,7 @@ through the context's direct Prometheus-compatible endpoint or through Grafana (
 
 ## Opening it
 
-- **Palette:** the "Tern Grafana Query" block entry opens an empty block on the default context, with the input
+- **Palette:** the "Grafana: Query" command opens an empty block beside the focused pane on the default context, with the input
   focused.
 - **Link:** opening `tern-grafana://query?...` (from a terminal, a note, another block) opens the block on that
   query. Parameters:

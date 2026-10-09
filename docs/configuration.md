@@ -111,7 +111,28 @@ of `password_cmd`, `password_env` or `password_file`. The basic `username` is no
 In every case trailing line breaks are removed; other whitespace is kept. The result must be a single line: output
 with several lines or control characters is rejected.
 
-### Examples
+### Query
+
+Defaults for the [Query block](query.md), in the `query` section:
+
+```json
+"query": {
+  "default_range": "now-1h",
+  "max_points": 600,
+  "refresh": "30s"
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
+| `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern reports every block as 80x24, so this cannot be derived from the pane size. |
+| `refresh` | string | `"30s"` | Auto-refresh interval used by the `a` toggle, a duration of at least `5s`. |
+
+Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default instead
+of breaking the block.
+
+## Examples
 
 1Password CLI:
 

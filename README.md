@@ -5,8 +5,8 @@
 alerts and silences rendered in the terminal, next to the commands that
 changed them.
 
-> Pre-release, in development. Nothing below the foundation milestone is
-> built yet; the [Roadmap](#roadmap) shows what is planned and what has landed.
+> Pre-release, in development. The foundation (M0) and query core (M1)
+> milestones have landed; the [Roadmap](#roadmap) shows what is planned and what has landed.
 
 ## Why
 
@@ -68,21 +68,52 @@ writes a credential to disk, Tern's key-value store, logs, block arguments or
 saved state, and only talks to the URLs you configure. See
 [SECURITY.md](SECURITY.md).
 
+## Usage
+
+What works today (M1):
+
+1. **Configure a context.** Write `~/.config/tern-grafana/config.json` (see
+   [Configuration](docs/configuration.md)), or open the Settings block from the
+   palette with "Grafana: Settings" to edit it safely and test each endpoint
+   ([Settings block](docs/settings.md)).
+
+   ![Settings block testing endpoints](docs/screenshots/m1-settings-tests.png)
+
+2. **Query.** "Grafana: Query" in the palette opens the Query block: a PromQL
+   scratchpad with metric and label autocomplete, rendered natively as a time
+   series graph or a table. Main keys: `g` / `t` graph or table, `left` / `right`
+   move the cursor (the legend shows the values under it), `[` / `]` shift and
+   `-` / `+` zoom the range, `1`..`9` pick a "last N" range, `a` auto-refresh,
+   `h` history, `o` open in Grafana Explore. See [Query block](docs/query.md).
+
+   ![Query block graph](docs/screenshots/m1-query-graph.png)
+   ![Query block cursor read-out](docs/screenshots/m1-query-cursor.png)
+   ![Query block table view](docs/screenshots/m1-query-table.png)
+
+3. **Grafana links.** Clicking a Grafana Explore link under a configured Grafana
+   base URL opens the query in the Query block. Dashboard, panel and alert links
+   open in a Tern browser pane until the native dashboard block lands (M2).
+
+4. **promtool lens.** Running `promtool query instant|range ...` renders the
+   result as a native graph or table.
+
+   ![promtool query lens](docs/screenshots/m1-promtool-lens.png)
+
 ## Roadmap
 
 M0 (foundation: tooling, CI, docs, docker dev stack, recorded fixtures, SDK
-capability spike) is in progress.
+capability spike) and M1 (query core) have landed.
 
 | Milestone | ID | Feature | Status |
 | --- | --- | --- | --- |
-| M1 | A1 | Contexts, config and auth (token_cmd/env/file, bearer/basic/headers, tenant header) | planned |
-| M1 | A2 | Settings block to edit config safely | planned |
-| M1 | A3 | Transport: `tern.fetch`, with `curl` fallback for mTLS, custom CA and insecure TLS | planned |
-| M1 | A4 | Grafana unit ids, value formatting, thresholds to Tern tones | planned |
-| M1 | A5 | Time range and step math (`now-6h`, `$__interval`, `$__rate_interval`, `$__range`, LTTB downsampling) | planned |
-| M1 | B1 | Query block: PromQL scratchpad, autocomplete, range picker, native time series, keyboard cursor, table/instant view, history | planned |
-| M1 | B5 | Grafana URL routing (`/d/`, `/d-solo/`, `/explore`) with browser pane fallback | planned |
-| M1 | E1 | Lens: `promtool query instant\|range` to native graph/table | planned |
+| M1 | A1 | Contexts, config and auth (token_cmd/env/file, bearer/basic/headers, tenant header) | landed (M1) |
+| M1 | A2 | Settings block to edit config safely | landed (M1) |
+| M1 | A3 | Transport: `tern.fetch`, with `curl` fallback for mTLS, custom CA and insecure TLS | landed (M1) |
+| M1 | A4 | Grafana unit ids, value formatting, thresholds to Tern tones | landed (M1) |
+| M1 | A5 | Time range and step math (`now-6h`, `$__interval`, `$__rate_interval`, `$__range`, LTTB downsampling) | landed (M1) |
+| M1 | B1 | Query block: PromQL scratchpad, autocomplete, range picker, native time series, keyboard cursor, table/instant view, history | landed (M1) |
+| M1 | B5 | Grafana URL routing (`/d/`, `/d-solo/`, `/explore`) with browser pane fallback | landed (M1) |
+| M1 | E1 | Lens: `promtool query instant\|range` to native graph/table | landed (M1) |
 | M2 | B2 | Dashboard block: search, load, grid layout, variables, refresh, native panels, per-panel fallback ladder | planned |
 | M2 | B3 | Pin one panel as its own small block | planned |
 | M2 | C1 | Alerts inbox: Grafana unified alerting and Alertmanager v2, grouping, runbook/dashboard links | planned |
@@ -113,6 +144,7 @@ capability spike) is in progress.
 
 ## Documentation
 
+- [Configuration](docs/configuration.md), [Settings block](docs/settings.md), [Query block](docs/query.md)
 - [Architecture](docs/architecture.md)
 - [SDK capability matrix](docs/sdk-capability-matrix.md)
 - [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), [Support](SUPPORT.md),
