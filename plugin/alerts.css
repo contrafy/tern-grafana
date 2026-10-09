@@ -1,0 +1,48 @@
+/* Tern Grafana alerts inbox (lib/alerts/render.luau). Class names are prefixed `tg-al-`. */
+
+.tg-al-head {
+	align-items: center;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--t4);
+}
+
+.tg-al-chip {
+	cursor: pointer;
+}
+
+.tg-al-row {
+	cursor: pointer;
+	padding: 1px 6px;
+	border-left: 2px solid transparent;
+	border-radius: 3px;
+}
+
+.tg-al-row.tg-al-error { border-left-color: var(--bad); }
+.tg-al-row.tg-al-warning { border-left-color: var(--warn); }
+.tg-al-row.tg-al-info { border-left-color: var(--accent); }
+.tg-al-row.tg-al-muted { border-left-color: var(--t4); }
+
+.tg-al-row.is-sel {
+	background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.tg-al-detail {
+	margin: 4px 0 6px 12px;
+	padding-left: 8px;
+	border-left: 1px solid var(--t4);
+	cursor: default;
+}
+
+.tg-al-btn {
+	cursor: pointer;
+	padding: 1px 8px;
+	border: 1px solid var(--t4);
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+
+.tg-al-btn:hover {
+	border-color: var(--accent);
+}
