@@ -6,6 +6,7 @@
 -- validate yields no config at all (lib/config/validate rejects a partial
 -- one), with problems that say why.
 
+local ReadFile = require("./lib/read_file")
 local TransportHost = require("./transport_host")
 local Types = require("./lib/config/types")
 local Validate = require("./lib/config/validate")
@@ -43,14 +44,14 @@ local function read(path: string): (string?, { Problem })
 				)
 			)
 	end
-	local ok, text = pcall(tern.fs.read, path, M.MAX_BYTES)
-	if not ok then
+	local text, err = ReadFile.read(tern.fs.read, path, M.MAX_BYTES)
+	if text == nil then
 		return nil,
 			problem(
 				string.format(
-					"could not read %s: %s (it must be a regular file of at most %d bytes)",
+					"could not read %s: %s (it must be a file of at most %d bytes)",
 					path,
-					tostring(text),
+					tostring(err),
 					M.MAX_BYTES
 				)
 			)

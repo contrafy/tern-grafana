@@ -8,6 +8,7 @@
 
 local BlockRunner = require("./block_runner")
 local ConfigHost = require("./config_host")
+local ReadFile = require("./lib/read_file")
 local Json = require("./lib/settings/json")
 local State = require("./lib/settings/state")
 local View = require("./lib/settings/view")
@@ -27,24 +28,25 @@ local function configPath(): string?
 	return if ok then path else nil
 end
 
--- (exists, text, error)
-local function readFile(path: string): (boolean, string?, string?)
+-- (exists, text, error, linked): `linked` when the path is a symlink.
+local function readFile(path: string): (boolean, string?, string?, boolean)
 	local okExists, exists = pcall(tern.fs.exists, path)
 	if okExists and not exists then
-		return false, nil, nil
+		return false, nil, nil, false
 	end
-	local ok, text = pcall(tern.fs.read, path, ConfigHost.MAX_BYTES)
-	if not ok then
+	local text, err, linked = ReadFile.read(tern.fs.read, path, ConfigHost.MAX_BYTES)
+	if text == nil then
 		return true,
 			nil,
 			string.format(
-				"could not read %s: %s (it must be a regular file, not a symlink, of at most %d bytes)",
+				"could not read %s: %s (it must be a file of at most %d bytes)",
 				path,
-				tostring(text),
+				tostring(err),
 				ConfigHost.MAX_BYTES
-			)
+			),
+			false
 	end
-	return true, text, nil
+	return true, text, nil, linked
 end
 
 local function onRead(_effect: any, send: Send)
@@ -75,9 +77,15 @@ local function onWrite(e: State.WriteEffect, send: Send)
 		finish(false, "the config path has no directory")
 		return
 	end
-	local exists, current, readErr = readFile(target)
+	local exists, current, readErr, linked = readFile(target)
 	if readErr then
 		finish(false, readErr)
+		return
+	end
+	if linked then
+		-- The rename below would replace the link with a plain file and
+		-- detach the config from whatever manages it (stow, home-manager).
+		finish(false, target .. " is a symlink; edit the file it points to instead")
 		return
 	end
 	local same = if e.base_hash == nil then not exists else current ~= nil and Json.hash(current) == e.base_hash
@@ -105,8 +113,8 @@ local function onWrite(e: State.WriteEffect, send: Send)
 				finish(false, "mv failed: " .. (string.match(r.stderr, "^[^\n]*") or ""))
 				return
 			end
-			local okBack, written = pcall(tern.fs.read, target, ConfigHost.MAX_BYTES)
-			if not okBack or written ~= e.text then
+			local written = ReadFile.read(tern.fs.read, target, ConfigHost.MAX_BYTES)
+			if written ~= e.text then
 				finish(false, "the file does not hold the new text after the rename; check " .. target)
 				return
 			end
