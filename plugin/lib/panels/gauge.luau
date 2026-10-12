@@ -523,9 +523,18 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	for i, spec in specs do
 		spec.width, spec.height = math.max(cw, 40), math.max(ch, 40)
 		local key = opts.key .. ".g" .. i
-		assets[key] = { mime = Assets.SVG, bytes = SvgGauge.render(spec) }
+		-- The SVG's viewBox is tight around the gauge, so the image fills the
+		-- pane's width (down to narrow splits) and the card bounds its height.
+		local svg, iw, ih = SvgGauge.render(spec)
+		assets[key] = { mime = Assets.SVG, bytes = svg }
 		local alt = (spec.name or "Gauge") .. ": " .. (spec.prefix or "") .. (spec.text or "") .. (spec.suffix or "")
-		nodes[i] = { k = "image", p = { key = "g" .. i, asset = key, w = spec.width, h = spec.height, alt = alt } }
+		-- Bounded by the cell's height in Tern lines (16 px), so a wide pane cannot
+		-- grow the gauge past the card's Grafana height and clip it.
+		local maxLines = math.max(3, math.floor(spec.height / 16))
+		nodes[i] = {
+			k = "image",
+			p = { key = "g" .. i, asset = key, w = iw, h = ih, alt = alt, max = { h = maxLines .. "lines" } },
+		}
 	end
 	return ui.row(nodes, { key = opts.key, gap = "md", wrap = true, role = "tern-grafana.gauge" }), assets
 end

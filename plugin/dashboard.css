@@ -43,3 +43,9 @@
 [data-role="tern-grafana.dashboard"] .sf-card .sf-image {
 	max-width: 100%;
 }
+
+/* Panel cards have no head icon, so the body does not need Tern's 36px icon
+   gutter; giving the width back lets gauges and charts fill narrow panes. */
+[data-role="tern-grafana.dashboard"] .sf-card .sf-card-body {
+	padding-left: 12px;
+}

@@ -245,7 +245,42 @@ function M.segmentLayout(d: Dimensions, count: number, spacing: number): (number
 	return math.max(n, 1), between
 end
 
-function M.render(s: Spec): string
+export type Box = { x0: number, y0: number, x1: number, y1: number }
+
+local function grow(b: Box, x: number, y: number)
+	b.x0, b.y0 = math.min(b.x0, x), math.min(b.y0, y)
+	b.x1, b.y1 = math.max(b.x1, x), math.max(b.y1, y)
+end
+
+-- The box around what the arc part draws: the bar (its rounded caps), the
+-- threshold ring and labels over the arc's sweep, and the center the text
+-- sits on. Grafana draws a gauge at min(width, height) of its panel; a
+-- viewBox this tight lets the image scale to whatever the pane allows.
+function M.arcBounds(s: Spec, d: Dimensions): Box
+	local outer = d.radius + d.bar / 2 + (if s.rounded then d.bar / 2 else 0)
+	if s.ring then
+		outer = math.max(outer, d.ring_radius + d.ring_width / 2)
+	end
+	local b: Box = { x0 = d.cx, y0 = d.cy, x1 = d.cx, y1 = d.cy }
+	local steps = math.max(1, math.ceil(d.range / 5))
+	for i = 0, steps do
+		local a = rad(d.start + d.range * i / steps)
+		grow(b, d.cx + outer * math.cos(a), d.cy + outer * math.sin(a))
+	end
+	local labels: { Label } = s.labels or {}
+	for _, l in labels do
+		local a = rad(d.start + clamp01(l.at) * d.range)
+		local r = d.labels_radius - d.labels_size * 0.6
+		local x, y = d.cx + r * math.cos(a), d.cy + r * math.sin(a)
+		local half = 0.3 * d.labels_size * (utf8.len(l.text) or #l.text)
+		grow(b, x - half, y - d.labels_size * 0.6)
+		grow(b, x + half, y + d.labels_size * 0.6)
+	end
+	return b
+end
+
+-- The SVG and its size in px (the tight viewBox's).
+function M.render(s: Spec): (string, number, number)
 	local d = M.dimensions(s)
 	local out: { string } = {}
 	local function push(fmtString: string, ...: any)
@@ -454,8 +489,39 @@ function M.render(s: Spec): string
 			push('<path class="tgg-s-%s" fill="none" stroke-width="1" d="%s"/>', tone, path)
 		end
 	end
+	-- Tight viewBox (2 px margin) inside the design box: text and
+	-- sparkline join the arc's box.
+	local b = M.arcBounds(s, d)
+	if showValue then
+		local half = 0.3 * vSize * (utf8.len(valueText) or #valueText)
+		grow(b, d.cx - half, valueY - offset - vH / 2)
+		grow(b, d.cx + half, valueY - offset + vH / 2)
+	end
+	if showName then
+		local name = s.name :: string
+		local half = 0.3 * nSize * (utf8.len(name) or #name)
+		grow(b, d.cx - half, nameY - offset - nH / 2)
+		grow(b, d.cx + half, nameY - offset + nH / 2)
+	end
+	if spark and #spark > 1 then
+		local sw = d.radius * (if s.style == "circle" then 1.6 else 1.4) - d.bar
+		grow(b, d.cx - sw / 2, d.bottom)
+		grow(b, d.cx + sw / 2, d.bottom)
+	end
+	local x0, y0 = math.max(0, math.floor(b.x0 - 2)), math.max(0, math.floor(b.y0 - 2))
+	local x1, y1 = math.min(s.width, math.ceil(b.x1 + 2)), math.min(s.height, math.ceil(b.y1 + 2))
+	local w, h = math.max(1, x1 - x0), math.max(1, y1 - y0)
+	out[1] = string.format(
+		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="%d %d %d %d" width="%d" height="%d" class="tgg">',
+		x0,
+		y0,
+		w,
+		h,
+		w,
+		h
+	)
 	table.insert(out, "</svg>")
-	return table.concat(out)
+	return table.concat(out), w, h
 end
 
 return M

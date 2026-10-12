@@ -34,6 +34,12 @@ M.HINT = "arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh 
 	.. "o browser  p pin  I investigate  / search"
 -- Tern's text line in px: card heights are given in lines.
 M.LINE_PX = 16
+-- Narrowest a panel gets before its band wraps (Grafana stacks panels on narrow screens); small
+-- enough that a wrapped panel still fits a narrow split.
+M.MIN_PANEL_WIDTH = "18ch"
+-- Bases are scaled down this much so a band's gaps fit and it only wraps on a narrow pane;
+-- flex-grow hands the slack back.
+M.BASIS_SLACK = 0.96
 
 -- A panel's Grafana height (gridPos h rows of 30 px with 8 px margins,
 -- lib/dashboard/render_png size) in Tern lines, never above it.
@@ -321,11 +327,14 @@ local function layoutNode(
 	parent: string
 ): Node
 	if n.kind == "gap" then
-		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis, grow = 0, shrink = 0 } }
+		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis * M.BASIS_SLACK, grow = 0, shrink = 1 } }
 	elseif n.kind == "panel" then
 		local card = panelCard(s, byKey[n.key], env, assets, false)
 		local p = card.p :: { [string]: any }
-		p.basis, p.grow, p.shrink = n.basis, 0, 1
+		-- Like Grafana's narrow-screen layout, a band wraps once a panel would get
+		-- narrower than MIN_PANEL_WIDTH, and a wrapped panel takes the full width.
+		p.basis, p.grow, p.shrink = n.basis * M.BASIS_SLACK, 1, 1
+		p.min = { w = M.MIN_PANEL_WIDTH }
 		-- Every panel type is Grafana's panel height: content past it (a
 		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
@@ -339,11 +348,13 @@ local function layoutNode(
 	for i, c in kids do
 		table.insert(children, layoutNode(c, byKey, s, env, assets, i, parent .. "." .. key))
 	end
-	local props = { key = key, basis = n.basis, grow = if n.kind == "col" then 0 else 1, shrink = 1 }
+	local props: { [string]: any } = { key = key, basis = n.basis * M.BASIS_SLACK, grow = 1, shrink = 1 }
 	if n.kind == "row" then
 		props.align = "start"
+		props.wrap = true
 		return ui.row(children, props)
 	end
+	props.min = { w = M.MIN_PANEL_WIDTH }
 	return ui.col(children, props)
 end
 
