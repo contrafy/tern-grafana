@@ -25,6 +25,16 @@ describe("errorView", function()
 		expect(main.c[1].p.spans[1].t).toBe("tern-grafana.query failed in update(http_done)")
 		expect(main.c[2].p.spans[1].t).toBe("boom")
 	end)
+
+	it("shows one line, never a Lua stack traceback", function()
+		local err = "runtime error: tern.process.run op: No such file or directory (os error 2)\n"
+			.. "stack traceback:\n\t[C] function run\n\tplugin/transport_host.luau:95"
+		local main = Effect.errorView("tern-grafana.dashboard", "init", err).main :: any
+		expect(main.c[2].p.spans[1].t).toBe("tern.process.run op: No such file or directory (os error 2)")
+		for _, child in main.c do
+			expect((string.find(child.p.spans[1].t, "traceback", 1, true))).toBeNil()
+		end
+	end)
 end)
 
 return nil

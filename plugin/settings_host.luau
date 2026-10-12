@@ -1,13 +1,15 @@
 --!strict
 -- Host glue for the Settings block (`tern-grafana.settings`): runs the pure
--- machine (lib/settings) through block_runner and performs its two file
--- effects. The only file it writes is the config file, atomically: the text
--- the edit was computed from must still be on disk (same hash), the previous
--- file is copied to `<config>.bak`, the new text goes to a temporary file in
--- the same directory and is renamed over the config with `mv`.
+-- machine (lib/settings) through block_runner and performs its file and
+-- keychain effects. The only file it writes is the config file, atomically:
+-- the text the edit was computed from must still be on disk (same hash), the
+-- previous file is copied to `<config>.bak`, the new text goes to a temporary
+-- file in the same directory and is renamed over the config with `mv`.
+-- Keychain items go through CredentialsHost (secret on stdin only).
 
 local BlockRunner = require("./block_runner")
 local ConfigHost = require("./config_host")
+local CredentialsHost = require("./credentials_host")
 local ReadFile = require("./lib/read_file")
 local Json = require("./lib/settings/json")
 local State = require("./lib/settings/state")
@@ -129,6 +131,23 @@ local function onWrite(e: State.WriteEffect, send: Send)
 	end
 end
 
+local function onProbe(_effect: any, send: Send)
+	local ok, platform = pcall(CredentialsHost.platform)
+	send({ kind = "credentials_platform", platform = if ok then platform else nil })
+end
+
+local function onStore(e: State.StoreEffect, send: Send)
+	CredentialsHost.store(e.item, e.secret, function(ok: boolean, err: string?)
+		send({ kind = "credential_stored", item = e.item, ok = ok, error = err })
+	end)
+end
+
+local function onDelete(e: State.DeleteEffect, send: Send)
+	CredentialsHost.delete(e.item, function(ok: boolean, err: string?)
+		send({ kind = "credential_deleted", item = e.item, ok = ok, error = err })
+	end)
+end
+
 local machine = {
 	init = State.init,
 	update = State.update,
@@ -142,6 +161,9 @@ function M.register()
 	BlockRunner.define("settings", machine :: any, {
 		config_read = onRead,
 		config_write = onWrite :: any,
+		credentials_probe = onProbe,
+		credential_store = onStore :: any,
+		credential_delete = onDelete :: any,
 	})
 end
 

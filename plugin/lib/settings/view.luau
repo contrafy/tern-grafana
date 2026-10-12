@@ -5,6 +5,7 @@
 -- credentials are masked everywhere.
 
 local ConfigTypes = require("../config/types")
+local Connect = require("./connect")
 local Effect = require("../effect")
 local Env = require("../env")
 local Json = require("./json")
@@ -71,6 +72,15 @@ local function header(s: State): Node
 	end
 	if s.writing then
 		table.insert(bar, ui.badge("writing", "warning", { key = "w" }))
+	end
+	if s.page == "list" and s.loaded and s.path then
+		table.insert(
+			bar,
+			chip("Connect Grafana", "connect", "connect", {
+				tone = "accent",
+				title = "Add a Grafana stack with a service account token (c)",
+			})
+		)
 	end
 	table.insert(bar, chip("Reload", "reload", "reload", { title = "Re-read the file (R)" }))
 	if s.exists then
@@ -216,14 +226,23 @@ local function rowNode(s: State, i: number, row: State.Row): Node
 			cell("tg-set-ctl", { ui.row(controls, { key = "ctl", wrap = true }) }),
 		}
 	else
+		local controls: { Node } = {
+			chip("Edit", "edit=" .. row.key, "e", { title = "Edit (enter)" }),
+			chip("Test", "test=" .. row.key, "t", { title = "Test connection (t)" }),
+		}
+		if row.endpoint == "grafana" then
+			table.insert(
+				controls,
+				chip("Update token", "update_token=" .. (row.context :: string), "u", {
+					title = "Test and store a new service account token (u)",
+				})
+			)
+		end
+		table.insert(controls, chip("Remove", "remove=" .. row.key, "x", { tone = "error", title = "Remove (x)" }))
 		cells = {
 			cell("tg-set-name", { ui.text({ ui.span(row.endpoint :: string, "mono strong") }) }),
 			cell("tg-set-ctl", {
-				ui.row({
-					chip("Edit", "edit=" .. row.key, "e", { title = "Edit (enter)" }),
-					chip("Test", "test=" .. row.key, "t", { title = "Test connection (t)" }),
-					chip("Remove", "remove=" .. row.key, "x", { tone = "error", title = "Remove (x)" }),
-				}, { key = "ctl", wrap = true }),
+				ui.row(controls, { key = "ctl", wrap = true }),
 			}),
 			cell("tg-set-detail", {
 				ui.col(endpointDetail(s, row.context :: string, row.endpoint :: string), { key = "d", gap = "none" }),
@@ -352,17 +371,163 @@ local function formPage(s: State): { Node }
 	return out
 end
 
+-- Connect Grafana -------------------------------------------------------------------------
+
+local function connectResult(c: Connect.Conn): { Node }
+	local out: { Node } = {}
+	if c.phase == "testing" then
+		table.insert(out, ui.text({ ui.span("Testing the token ...", "muted") }, { key = "res" }))
+	elseif c.failure then
+		local f = c.failure :: Connect.Failure
+		local spans: { SpanLike } = { ui.span(f.message, "error") }
+		if f.hint then
+			table.insert(spans, ui.span("  fix: " .. f.hint, "muted"))
+		end
+		table.insert(out, ui.text(spans, { key = "res" }))
+	elseif c.result then
+		local r = c.result :: Connect.Result
+		local spans: { SpanLike } = { ui.span("Signed in as " .. r.login, "success") }
+		if r.version then
+			table.insert(spans, ui.span(" on Grafana " .. r.version, "success"))
+		end
+		table.insert(out, ui.text(spans, { key = "res" }))
+		for i, w in Connect.warnings(c) do
+			table.insert(out, ui.text({ ui.span(w, "warning") }, { key = "w" .. i }))
+		end
+	elseif c.phase == "stored" then
+		table.insert(out, ui.text({ ui.span("The token is in the keychain.", "success") }, { key = "res" }))
+	end
+	return out
+end
+
+local function connectPage(s: State): { Node }
+	local c = s.connect :: Connect.Conn
+	local fields = Connect.fields(c)
+	local selected = fields[s.form_sel]
+	local out: { Node } = {
+		ui.text({ ui.span(State.connectTitle(c), "strong") }, { key = "ft" }),
+		ui.text({ ui.span("Get a token: ", "strong"), ui.span(Connect.GUIDE, "muted") }, { key = "guide" }),
+	}
+	local editing = s.editing
+	local text: string
+	if editing then
+		text = if editing.id == "token" then Connect.bullets(editing.text) else editing.text
+	elseif selected then
+		text = if selected.secret then Connect.bullets(c.token) else Connect.display(c, selected)
+	else
+		text = ""
+	end
+	table.insert(out, {
+		k = "input",
+		p = {
+			key = "edit",
+			text = text,
+			cursor = utf8.len(text) or #text,
+			prompt = (if selected then selected.label else "") .. " = ",
+			placeholder = if selected then selected.hint else "",
+			class = if editing then "tg-set-editing" else nil,
+		},
+	})
+	if selected then
+		table.insert(
+			out,
+			ui.text({
+				ui.span(selected.hint, "muted"),
+				ui.span(
+					if selected.kind == "enum"
+						then "   enter/space or left/right cycles"
+						elseif selected.secret then "   enter, then paste (cmd+v); enter ends"
+						else "   enter edits",
+					"muted mono"
+				),
+			}, { key = "hint" })
+		)
+	end
+	local rows: { Node } = {}
+	for i, f in fields do
+		local valueText = if editing and editing.id == f.id
+			then (if f.secret then Connect.masked(editing.text) else editing.text)
+			else Connect.display(c, f)
+		local class = "tg-set-r" .. (if i == s.form_sel then " tg-set-sel" else "")
+		table.insert(
+			rows,
+			ui.el("div", { key = State.fieldNodeKey(f.id), class = class, actions = { click = "cfield=" .. f.id } }, {
+				cell("tg-set-name", { ui.text({ ui.span(f.label, "mono") }) }),
+				cell("tg-set-detail", {
+					ui.text({
+						ui.span(
+							if valueText == "" then "unset" else valueText,
+							if valueText == "" then "muted" else "mono"
+						),
+					}),
+				}),
+				cell("tg-set-ctl", {}),
+			})
+		)
+	end
+	table.insert(
+		out,
+		ui.el(
+			"div",
+			{ key = State.FIELDS_KEY, class = "tg-set-grid tg-set-form", role = "tern-grafana.settings-connect" },
+			rows
+		)
+	)
+	for _, n in connectResult(c) do
+		table.insert(out, n)
+	end
+	local ready = c.phase == "tested" or c.phase == "stored"
+	local saveTitle = if c.storage == "keychain"
+		then "Store the token in the keychain and write the context (w)"
+		else "Write the context; you set " .. c.env_name .. " yourself (w)"
+	table.insert(
+		out,
+		ui.row({
+			chip("Test", "connect_test", "test", {
+				tone = if ready then "neutral" else "accent",
+				title = "Sign in with the token; nothing is stored (t)",
+			}),
+			chip(if c.mode == "update" then "Save" else "Connect", "connect_save", "save", {
+				tone = if ready then "accent" else "neutral",
+				title = if ready then saveTitle else "Test first",
+			}),
+			chip("Cancel", "cancel", "cancel", { title = "Discard; nothing is stored (escape)" }),
+			ui.muted(
+				if c.storage == "keychain"
+					then "The token goes to the OS keychain only after Grafana accepts it."
+					else "The plugin stores nothing: it reads " .. c.env_name .. " when it needs the token."
+			),
+		}, { key = "actions", wrap = true })
+	)
+	return out
+end
+
 -- Templates and confirm -------------------------------------------------------------------
 
 local function templatesPage(s: State, env: Env.Env): { Node }
 	local out: { Node } = {
 		ui.text({
 			ui.span("No config file yet. ", "strong"),
-			ui.span("Pick a starter; it is validated, then written to the path above. Edit it afterwards.", "muted"),
+			ui.span(
+				"Connect Grafana with a service account token, or pick a starter template (validated, then "
+					.. "written to the path above).",
+				"muted"
+			),
 		}, { key = "intro" }),
 	}
 	local rows: { Node } = {}
-	for i, t in Model.TEMPLATES do
+	local starters: { { id: string, title: string, description: string } } = {
+		{
+			id = State.CONNECT_STARTER,
+			title = "Connect Grafana",
+			description = "Grafana Cloud or any Grafana: paste the URL and a service account token; it is tested, "
+				.. "stored in the OS keychain and the datasources are found for you.",
+		},
+	}
+	for _, t in Model.TEMPLATES do
+		table.insert(starters, { id = t.id, title = t.title, description = t.description })
+	end
+	for i, t in starters do
 		local class = "tg-set-r" .. (if i == s.template_sel then " tg-set-sel" else "")
 		table.insert(
 			rows,
@@ -374,13 +539,24 @@ local function templatesPage(s: State, env: Env.Env): { Node }
 		)
 	end
 	table.insert(out, ui.el("div", { key = State.TEMPLATES_KEY, class = "tg-set-grid" }, rows))
-	local t = Model.TEMPLATES[s.template_sel]
+	local t = State.selectedTemplate(s)
 	if t then
 		table.insert(out, ui.code(Json.encode(t.raw, env.encode), "json", nil, { key = "preview" }))
 		table.insert(
 			out,
 			ui.row({
 				chip("Create config file", "write_template", "write", { tone = "accent", title = "Write it (enter)" }),
+			}, { key = "actions" })
+		)
+	else
+		table.insert(
+			out,
+			ui.text({ ui.span("Get a token: ", "strong"), ui.span(Connect.GUIDE, "muted") }, { key = "guide" })
+		)
+		table.insert(
+			out,
+			ui.row({
+				chip("Connect Grafana", "connect", "write", { tone = "accent", title = "Start (enter)" }),
 			}, { key = "actions" })
 		)
 	end
@@ -392,29 +568,50 @@ local function confirmPage(s: State): { Node }
 	if c == nil then
 		return {}
 	end
-	return {
-		ui.text({ ui.span(c.text, "warning") }, { key = "q" }),
-		ui.row({
+	local out: { Node } = { ui.text({ ui.span(c.text, "warning") }, { key = "q" }) }
+	local actions: { Node }
+	if #c.items > 0 then
+		table.insert(
+			out,
+			ui.text({
+				ui.span("Its token is in the keychain as ", "muted"),
+				ui.span(table.concat(c.items, ", "), "mono"),
+				ui.span(" (service tern-grafana).", "muted"),
+			}, { key = "items" })
+		)
+		actions = {
+			chip("Remove and delete the keychain item", "confirm", "yes", { tone = "error", title = "Confirm (y)" }),
+			chip("Remove, keep the item", "confirm_keep", "keep", { title = "Keep the keychain item (k)" }),
+			chip("Cancel", "cancel", "no", { title = "Keep it (n, escape)" }),
+		}
+	else
+		actions = {
 			chip("Remove", "confirm", "yes", { tone = "error", title = "Confirm (y)" }),
 			chip("Cancel", "cancel", "no", { title = "Keep it (n, escape)" }),
-		}, { key = "actions" }),
-	}
+		}
+	end
+	table.insert(out, ui.row(actions, { key = "actions" }))
+	return out
 end
 
 local HELP: { { string } } = {
 	{ "j/k, up/down", "move" },
+	{ "c", "Connect Grafana: URL and service account token, tested, then stored in the keychain" },
+	{ "u", "update the token of the selected context's grafana endpoint" },
 	{ "enter, e", "edit the endpoint; on a context: add an endpoint" },
-	{ "n", "new context" },
+	{ "n", "new context (advanced: password managers, env, files)" },
 	{ "a", "add an endpoint to the selected context" },
 	{ "d", "make the selected context the default" },
 	{ "r", "rename the selected context" },
-	{ "x", "remove (asks first)" },
+	{ "x", "remove (asks first; offers to delete its keychain item)" },
 	{ "t", "test the endpoint (on a context: all of its endpoints)" },
 	{ "R", "reload the file" },
 	{ "o", "open the file in Tern" },
 	{ "form: enter/space", "edit a field or cycle a choice" },
 	{ "form: w, ctrl+s", "validate the whole file and save" },
 	{ "form: x", "remove the selected header" },
+	{ "connect: t", "test the token (nothing is stored)" },
+	{ "connect: w, ctrl+s", "store the token and write the context" },
 	{ "escape", "cancel the edit, close the form, or close the block" },
 }
 
@@ -447,6 +644,8 @@ function M.view(s: State, env: Env.Env): Effect.Regions
 		page = { ui.muted("Reading the config file ...", { key = "loading" }) }
 	elseif s.page == "form" and s.form then
 		page = formPage(s)
+	elseif s.page == "connect" and s.connect then
+		page = connectPage(s)
 	elseif s.page == "templates" then
 		page = templatesPage(s, env)
 	elseif s.page == "confirm" then

@@ -93,6 +93,12 @@ end
 
 -- What to try next for a failure.
 function M.hint(route: Route, err: QueryError): string?
+	-- Credential failures already say how to fix them (lib/auth/keychain
+	-- explain, classify); an endpoint without auth needs auth configured first.
+	local own = (err :: any).hint
+	if type(own) == "string" and own ~= "" and route.endpoint.auth.type ~= "none" then
+		return own
+	end
 	local message = err.message
 	if err.kind == "auth" then
 		if route.endpoint.auth.type == "none" then
@@ -130,8 +136,17 @@ function M.hint(route: Route, err: QueryError): string?
 	return nil
 end
 
+-- The error without a fix classify appended to it: the hint line shows it.
 local function failed(route: Route, err: QueryError): StepResult
-	return { ok = false, error = err.message, hint = M.hint(route, err) }
+	local message = err.message
+	local own = (err :: any).hint
+	if type(own) == "string" and own ~= "" then
+		local suffix = "; " .. own
+		if string.sub(message, -#suffix) == suffix then
+			message = string.sub(message, 1, -#suffix - 1)
+		end
+	end
+	return { ok = false, error = message, hint = M.hint(route, err) }
 end
 
 local TITLE: { [string]: string } = {

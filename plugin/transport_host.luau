@@ -1,15 +1,19 @@
 --!strict
 -- Executes one Request against a routed endpoint: resolves the credential
--- (command, environment variable or file), then sends with tern.fetch, or with
--- curl when the endpoint has TLS options. Decisions live in plugin/lib; this
--- file only performs the effects and hands back a Response.
+-- (keychain item, environment variable, command or file), then sends with
+-- tern.fetch, or with curl when the endpoint has TLS options. Decisions live
+-- in plugin/lib; this file only performs the effects and hands back a
+-- Response.
 --
 -- Secrets live only in this VM's memory, in `cache`, for SECRET_TTL_MS. They
--- are never logged, persisted, or put in argv or URLs.
+-- are never logged, persisted, or put in argv or URLs. A credential failure
+-- becomes one actionable line (Keychain.line), never a raw host error.
 
 local Auth = require("./lib/auth/auth")
+local CredentialsHost = require("./credentials_host")
 local Curl = require("./lib/transport/curl")
 local Http = require("./lib/transport/http")
+local Keychain = require("./lib/auth/keychain")
 local ReadFile = require("./lib/read_file")
 local Route = require("./lib/config/route")
 local TransportTypes = require("./lib/transport/types")
@@ -19,6 +23,7 @@ type Request = TransportTypes.Request
 type Response = TransportTypes.Response
 type QueryError = TransportTypes.QueryError
 type Plan = Auth.Plan
+type Explained = Auth.Explained
 
 export type Callback = (Response) -> ()
 
@@ -30,18 +35,22 @@ M.MAX_SECRET_FILE_BYTES = 65536
 type Entry = { secret: string, expires: number }
 
 local cache: { [string]: Entry } = {}
-local pending: { [string]: { (string?, string?) -> () } } = {}
+local pending: { [string]: { (string?, Explained?) -> () } } = {}
 -- Bumped by forget(); a resolution started before it is not cached.
 local generation = 0
 
-local function failure(kind: "auth" | "network", message: string): Response
+local function failure(kind: "auth" | "network", message: string, hint: string?): Response
 	return {
 		status = 0,
 		headers = {},
 		body = "",
 		timed_out = false,
-		failure = { kind = kind, message = message },
+		failure = { kind = kind, message = message, hint = hint },
 	}
+end
+
+local function authFailure(e: Explained): Response
+	return failure("auth", Keychain.line(e), e.hint)
 end
 
 local function home(): string?
@@ -53,12 +62,13 @@ local function cacheKey(route: Route, plan: Plan): string
 	local source = if plan.kind == "process"
 		then table.concat(plan.argv, "\0")
 		elseif plan.kind == "env" then plan.name
+		elseif plan.kind == "keychain" then plan.item
 		else plan.path
 	return table.concat({ route.context, route.endpoint_name, plan.kind, source }, "\0")
 end
 
-local function settle(key: string, gen: number, plan: Plan, outcome: Auth.Outcome)
-	local secret, err = Auth.secret(plan, outcome)
+local function settle(key: string, gen: number, plan: Plan, where: Auth.Where, outcome: Auth.Outcome)
+	local secret, err = Auth.secret(plan, outcome, where)
 	if secret and gen == generation then
 		cache[key] = { secret = secret, expires = tern.now() + M.SECRET_TTL_MS }
 	end
@@ -71,7 +81,7 @@ local function settle(key: string, gen: number, plan: Plan, outcome: Auth.Outcom
 	end
 end
 
-local function resolve(key: string, plan: Plan, done: (string?, string?) -> ())
+local function resolve(key: string, plan: Plan, where: Auth.Where, done: (string?, Explained?) -> ())
 	local hit = cache[key]
 	if hit and hit.expires > tern.now() then
 		done(hit.secret, nil)
@@ -86,18 +96,31 @@ local function resolve(key: string, plan: Plan, done: (string?, string?) -> ())
 	pending[key] = { done }
 	local gen = generation
 	if plan.kind == "env" then
-		settle(key, gen, plan, { text = tern.getenv(plan.name) })
+		CredentialsHost.env(plan.name, function(value)
+			settle(key, gen, plan, where, { text = value })
+		end)
+	elseif plan.kind == "keychain" then
+		CredentialsHost.lookup(plan.item, function(outcome)
+			settle(key, gen, plan, where, outcome)
+		end)
 	elseif plan.kind == "file" then
 		local text, err = ReadFile.read(tern.fs.read, plan.path, M.MAX_SECRET_FILE_BYTES)
-		settle(key, gen, plan, if text then { text = text } else { error = err })
+		settle(key, gen, plan, where, if text then { text = text } else { error = err })
 	else
 		local ok, err = pcall(function()
 			tern.process.run(plan.argv, { timeout_ms = Auth.PROCESS_TIMEOUT_MS }, function(result: ProcessResult)
-				settle(key, gen, plan, { text = result.stdout, status = result.status, timed_out = result.timed_out })
+				settle(
+					key,
+					gen,
+					plan,
+					where,
+					{ text = result.stdout, status = result.status, timed_out = result.timed_out }
+				)
 			end)
 		end)
 		if not ok then
-			settle(key, gen, plan, { error = tostring(err) })
+			pcall(tern.log.warn, "tern-grafana " .. plan.field .. " could not start " .. plan.argv[1], tostring(err))
+			settle(key, gen, plan, where, { error = tostring(err) })
 		end
 	end
 end
@@ -122,7 +145,13 @@ local function send(route: Route, request: Request, secret: string?, cb: Callbac
 			)
 		end)
 		if not ok then
-			cb(failure("network", "curl (needed for tls options) could not be started: " .. tostring(spawnErr)))
+			cb(
+				failure(
+					"network",
+					"curl (needed for tls options) could not be started: " .. Keychain.firstLine(tostring(spawnErr)),
+					"install curl and make sure it is on Tern's PATH"
+				)
+			)
 		end
 		return
 	end
@@ -148,7 +177,7 @@ local function send(route: Route, request: Request, secret: string?, cb: Callbac
 		for _, value in authHeaders do
 			table.insert(hide, value)
 		end
-		cb(failure("network", "invalid request: " .. Auth.redact(tostring(fetchErr), hide)))
+		cb(failure("network", "invalid request: " .. Keychain.firstLine(Auth.redact(tostring(fetchErr), hide))))
 	end
 end
 
@@ -156,7 +185,7 @@ end
 function M.execute(route: Route, request: Request, cb: Callback)
 	local plan, planErr = Auth.plan(route.endpoint.auth, home())
 	if planErr then
-		cb(failure("auth", planErr))
+		cb(authFailure(planErr))
 		return
 	end
 	if plan == nil then
@@ -164,9 +193,13 @@ function M.execute(route: Route, request: Request, cb: Callback)
 		return
 	end
 	local key = cacheKey(route, plan)
-	resolve(key, plan, function(secret, err)
+	resolve(key, plan, { context = route.context, os = CredentialsHost.os() }, function(secret, err)
 		if secret == nil then
-			cb(failure("auth", err or "credential could not be resolved"))
+			cb(
+				authFailure(
+					err or { message = "The credential could not be resolved", hint = "check the auth settings" }
+				)
+			)
 			return
 		end
 		send(route, request, secret, function(response)
@@ -182,10 +215,18 @@ function M.execute(route: Route, request: Request, cb: Callback)
 	end)
 end
 
--- Drops every cached secret (config reload, settings change).
+-- Drops every cached secret and login-shell answer (config reload,
+-- settings change).
 function M.forget()
 	table.clear(cache)
 	generation += 1
+	CredentialsHost.forget()
 end
+
+-- A stored or deleted keychain item: the next request reads it again.
+CredentialsHost.onChange(function()
+	table.clear(cache)
+	generation += 1
+end)
 
 return M

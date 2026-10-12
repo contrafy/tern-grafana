@@ -2,10 +2,13 @@
 -- Validated shape of the user's config file (docs/configuration.md). The file
 -- only describes where secrets come from; no field ever holds one.
 
--- Where a token or password is read from, in the host half, on demand.
+-- Where a token or password is read from, in the host half, on demand:
+-- the OS keychain (service tern-grafana, account = item), an environment
+-- variable, a command's output or a file.
 export type SecretSource =
-	{ from: "cmd", field: string, argv: { string } }
+	{ from: "keychain", field: string, item: string }
 	| { from: "env", field: string, name: string }
+	| { from: "cmd", field: string, argv: { string } }
 	| { from: "file", field: string, path: string }
 
 export type Auth =

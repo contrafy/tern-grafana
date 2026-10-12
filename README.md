@@ -357,23 +357,42 @@ For development, load a checkout in place (reloads on save):
 tern plugin link /path/to/tern-grafana
 ```
 
-Configure contexts in `~/.config/tern-grafana/config.json`
-(`$XDG_CONFIG_HOME/tern-grafana/config.json` when set), or with
-**Grafana: Settings** in the palette, which edits it safely and tests each
-endpoint. The whole file is validated and every problem reported with its
-JSON path ([configuration](docs/configuration.md), [Settings block](docs/settings.md)).
+Then connect Grafana: open **Grafana: Settings** from the palette and pick
+**Connect Grafana** (the first starter, or `c` in the context list). Paste
+your Grafana URL (for example `https://you.grafana.net`) and a service account
+token. The block signs in with the token first, shows who you are signed in
+as, finds your Prometheus, Loki and Tempo datasources, then stores the token in
+the OS keychain and writes the context. Nothing is stored until Grafana
+accepts the token.
+
+### Get a Grafana Cloud token
+
+1. Open your stack (`https://<stack>.grafana.net`) and go to
+   **Administration > Users and access > Service accounts**.
+2. **Add service account**. Role **Viewer** is enough to read dashboards,
+   metrics, logs and alerts; choose **Editor** to also create silences and
+   deploy annotations.
+3. **Add service account token**, then copy it (it starts with `glsa_` and is
+   shown only once) and paste it into Connect Grafana.
+
+The same steps work on a self-hosted Grafana 11 or 12.
+
+The config lives in `~/.config/tern-grafana/config.json`
+(`$XDG_CONFIG_HOME/tern-grafana/config.json` when set). The Settings block
+edits it safely and tests each endpoint; the whole file is validated and every
+problem reported with its JSON path ([configuration](docs/configuration.md),
+[Settings block](docs/settings.md)). After Connect Grafana it looks like:
 
 ```json
 {
-  "default_context": "lab",
+  "default_context": "you",
   "contexts": {
-    "lab": {
+    "you": {
       "grafana": {
-        "url": "http://localhost:3000",
-        "auth": { "type": "bearer", "token_cmd": ["op", "read", "op://vault/grafana/token"] },
-        "datasources": { "prometheus": "prom3", "loki": "loki" }
-      },
-      "prometheus": { "url": "http://localhost:9090" }
+        "url": "https://you.grafana.net",
+        "auth": { "type": "bearer", "token_keychain": "you/grafana" },
+        "datasources": { "prometheus": "grafanacloud-prom", "loki": "grafanacloud-logs", "tempo": "grafanacloud-traces" }
+      }
     }
   }
 }
@@ -390,17 +409,24 @@ To remove: `tern plugin remove tern-grafana`.
 
 Each endpoint resolves its credential at request time from one of:
 
-- `token_cmd`: an argv run without a shell, for example
-  `["op", "read", "op://vault/grafana/token"]` or
-  `["security", "find-generic-password", "-s", "grafana", "-w"]`;
-- an environment variable;
-- a file readable only by you (mode `0600`).
+- `token_keychain` (`password_keychain` for basic auth): an item in the OS
+  keychain, service `tern-grafana` (macOS login keychain via `security`,
+  Linux Secret Service via `secret-tool`). Connect Grafana and **Update token**
+  (`u` on a grafana endpoint) store it for you; removing the context offers to
+  delete it.
+- `token_env`: an environment variable. When Tern does not have it (Tern
+  started from the Dock does not see variables exported in `~/.zshrc`), the
+  plugin reads it from your login shell.
+- Advanced, for password managers: `token_cmd`, an argv run without a shell,
+  for example `["op", "read", "op://vault/grafana/token"]` (needs the 1Password
+  CLI), or `token_file`, a file readable only by you (mode `0600`).
 
 Auth is bearer, basic, or none, plus extra headers such as `X-Scope-OrgID`.
 Custom CAs, mutual TLS and insecure TLS go through `curl`. A literal token or
-password in the config is rejected. The plugin never writes a credential to
-disk, Tern's key-value store, logs, block arguments or saved state, and only
-talks to the URLs you configure. See [SECURITY.md](SECURITY.md).
+password in the config is rejected. Apart from the keychain item you ask it to
+store, the plugin never writes a credential anywhere: not to disk, Tern's
+key-value store, logs, block arguments or saved state, and it only talks to
+the URLs you configure. See [SECURITY.md](SECURITY.md).
 
 ## Compatibility
 

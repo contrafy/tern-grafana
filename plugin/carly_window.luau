@@ -7,9 +7,11 @@
 -- loads on the first call, not with the window entry (50 ms load budget).
 --
 -- Requests go through transport_host in this VM, so credentials resolve
--- exactly as in the host half (token_cmd via tern.process.run, env var or
--- 0600 file, curl for TLS options), are cached only in this VM's memory and
--- never reach Carly: answers hold names, values and links only.
+-- exactly as in the host half (keychain item, token_env with the login-shell
+-- fallback, token_cmd, 0600 file; curl for TLS options), are cached only in
+-- this VM's memory and never reach Carly: answers hold names, values and
+-- links only. A credential failure reaches Carly as the same one-line
+-- message plus fix a block shows; raised errors lose their traceback.
 
 local CarlyContext = require("./lib/carly/context")
 local Specs = require("./lib/carly/specs")
@@ -24,11 +26,16 @@ local function answer(name: string, args: { any }, call: any): any
 	local ConfigHost = require("./config_host")
 	local EnvHost = require("./env_host")
 	local Exports = require("./lib/carly/exports")
+	local Keychain = require("./lib/auth/keychain")
 	local TransportHost = require("./transport_host")
+	local function raised(what: string, err: any)
+		pcall(tern.log.warn, "tern-grafana carly " .. name .. " " .. what .. " failed", tostring(err))
+		call:fail(string.format("%s failed: %s", name, Keychain.firstLine(tostring(err))))
+	end
 	pcall(ConfigHost.load)
 	local ok, plan, err = pcall(Exports.plan, name, args, EnvHost.make(nil))
 	if not ok then
-		call:fail(string.format("%s failed: %s", name, tostring(plan)))
+		raised("plan", plan)
 		return call:wait(M.WAIT_MS)
 	end
 	if plan == nil then
@@ -41,7 +48,7 @@ local function answer(name: string, args: { any }, call: any): any
 	local function done()
 		local okFinish, value, message = pcall(p.finish, responses, EnvHost.make(nil))
 		if not okFinish then
-			call:fail(string.format("%s failed: %s", name, tostring(value)))
+			raised("finish", value)
 		elseif value == nil then
 			call:fail(message or (name .. " failed"))
 		else
@@ -65,7 +72,7 @@ local function answer(name: string, args: { any }, call: any): any
 			end
 		end)
 		if not okSend then
-			call:fail(string.format("%s: the request could not be sent: %s", name, tostring(sendErr)))
+			raised("send", sendErr)
 			break
 		end
 	end

@@ -71,7 +71,7 @@ end
 
 local function loaded(text: string?): any
 	local s, effects = State.init({}, nil, ENV)
-	expect(effects).toEqual({ { kind = "config_read" } })
+	expect(effects).toEqual({ { kind = "config_read" }, { kind = "credentials_probe" } })
 	s = update(s, { kind = "config_file", path = PATH, text = text, exists = text ~= nil })
 	return s
 end
@@ -246,7 +246,7 @@ describe("starter templates", function()
 	it("offers templates when the file is missing and writes a valid one only for a missing file", function()
 		local s = loaded(nil)
 		expect(s.page).toBe("templates")
-		local after, effects = press(s, "j", "j", "j", "enter")
+		local after, effects = press(s, "j", "j", "j", "j", "enter")
 		local w = writes(effects)
 		expect(#w).toBe(1)
 		expect(w[1].base_hash).toBeNil()
@@ -256,8 +256,15 @@ describe("starter templates", function()
 		expect(after.writing).toBe(true)
 	end)
 
+	it("puts Connect Grafana first: enter opens it on the URL field instead of writing a template", function()
+		local s, effects = press(loaded(nil), "enter")
+		expect(s.page).toBe("connect")
+		expect(s.editing.id).toBe("url")
+		expect(#writes(effects)).toBe(0)
+	end)
+
 	it("renders a preview of the selected template", function()
-		local view = View.view(loaded(nil), ENV)
+		local view = View.view(press(loaded(nil), "j"), ENV)
 		local found = false
 		for _, n in (view.main :: any).c do
 			if n.k == "code" then
@@ -488,8 +495,8 @@ describe("keyboard selection stays visible", function()
 	end)
 
 	it("reveals the selected starter template", function()
-		local s, effects = press(loaded(nil), "j")
-		expect(reveals(effects)).toEqual({ "main.templates.tp:cloud" })
+		local s, effects = press(loaded(nil), "j", "j")
+		expect(reveals(effects)).toEqual({ "main.templates.tp:local", "main.templates.tp:cloud" })
 		expect(viewIds(s)["main.templates.tp:cloud"]).toBe(true)
 	end)
 end)

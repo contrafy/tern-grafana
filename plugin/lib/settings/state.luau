@@ -6,17 +6,21 @@
 -- and atomically writes the file; plugin/block_runner.luau runs the http
 -- effects.
 
+local Auth = require("../auth/auth")
 local ConfigTypes = require("../config/types")
+local Connect = require("./connect")
 local EffectTypes = require("../effect")
 local Env = require("../env")
 local Json = require("./json")
 local Model = require("./model")
 local Probe = require("./probe")
+local RouteMod = require("../config/route")
 local Validate = require("../config/validate")
 local Tbl = require("../tbl")
 
 type Config = ConfigTypes.Config
 type Problem = ConfigTypes.Problem
+type Route = RouteMod.Route
 type Env = Env.Env
 type Raw = Model.Raw
 type Form = Model.Form
@@ -34,7 +38,13 @@ export type WriteEffect = {
 	-- not exist. The host refuses the write when the file no longer matches.
 	base_hash: string?,
 }
-export type Effect = EffectTypes.Effect | ReadEffect | WriteEffect
+-- Asks which OS keychain is available (answered by `credentials_platform`).
+export type ProbeEffect = { kind: "credentials_probe" }
+-- The only effect that carries a secret: the host hands it to the keychain
+-- tool on stdin (CredentialsHost.store), never argv or logs.
+export type StoreEffect = { kind: "credential_store", item: string, secret: string }
+export type DeleteEffect = { kind: "credential_delete", item: string }
+export type Effect = EffectTypes.Effect | ReadEffect | WriteEffect | ProbeEffect | StoreEffect | DeleteEffect
 
 export type FileMsg = {
 	kind: "config_file",
@@ -45,11 +55,14 @@ export type FileMsg = {
 	error: string?,
 }
 export type WrittenMsg = { kind: "config_written", ok: boolean, conflict: boolean?, error: string? }
-export type Msg = EffectTypes.Msg | FileMsg | WrittenMsg
+export type PlatformMsg = { kind: "credentials_platform", platform: string? }
+export type StoredMsg = { kind: "credential_stored", item: string, ok: boolean, error: string? }
+export type DeletedMsg = { kind: "credential_deleted", item: string, ok: boolean, error: string? }
+export type Msg = EffectTypes.Msg | FileMsg | WrittenMsg | PlatformMsg | StoredMsg | DeletedMsg
 
 export type Message = { level: "info" | "success" | "error", text: string }
 
-export type Page = "list" | "form" | "templates" | "confirm"
+export type Page = "list" | "form" | "templates" | "confirm" | "connect"
 
 export type RowKind = "context" | "endpoint" | "add"
 export type Row = { key: string, kind: RowKind, context: string?, endpoint: string? }
@@ -59,6 +72,8 @@ export type Confirm = {
 	context: string,
 	endpoint: string?,
 	text: string,
+	-- Keychain items the removed auth references; offered for deletion.
+	items: { string },
 }
 
 export type TestStep = { step: Probe.Step, result: Probe.StepResult? }
@@ -93,6 +108,14 @@ export type State = {
 	tests: { [string]: Test },
 	gen: number,
 	help: boolean,
+	-- The Connect Grafana flow; holds the typed token until it is stored.
+	connect: Connect.Conn?,
+	-- A config write started by Connect is in flight.
+	connect_writing: boolean,
+	-- "macos" | "linux" | nil, from the host.
+	platform: string?,
+	-- Keychain items to delete once the pending removal is written.
+	pending_deletes: { string },
 }
 
 M.EDIT_INPUT = "main.edit"
@@ -126,8 +149,12 @@ function M.init(_args: { string }, saved: any, _env: Env): (State, { Effect })
 		tests = {},
 		gen = 0,
 		help = false,
+		connect = nil,
+		connect_writing = false,
+		platform = nil,
+		pending_deletes = {},
 	}
-	return s, { { kind = "config_read" } }
+	return s, { { kind = "config_read" }, { kind = "credentials_probe" } }
 end
 
 function M.save(s: State): any
@@ -138,8 +165,14 @@ end
 function M.title(s: State): string?
 	if s.page == "form" and s.form then
 		return "Grafana settings: " .. M.formTitle(s.form)
+	elseif s.page == "connect" and s.connect then
+		return "Grafana settings: " .. M.connectTitle(s.connect)
 	end
 	return "Grafana settings"
+end
+
+function M.connectTitle(c: Connect.Conn): string
+	return if c.mode == "update" then "update token for " .. c.context else "Connect Grafana"
 end
 
 local function isObject(v: any): boolean
@@ -163,7 +196,7 @@ local function applyFile(s: State, msg: FileMsg, env: Env)
 	end
 	if msg.text == nil then
 		if s.path ~= nil then
-			s.page = if s.form then s.page else "templates"
+			s.page = if s.form or s.connect then s.page else "templates"
 		end
 		return
 	end
@@ -243,24 +276,34 @@ local function formatAll(problems: { Problem }): string
 	return table.concat(lines, "\n")
 end
 
--- Validates `raw` as the whole new file and asks the host to write it.
--- Returns the problems that block the write (empty when the write started).
-local function commit(s: State, raw: Raw, env: Env, what: string, effects: { Effect }): { Problem }
+-- Validates `raw` as the whole new file: its text, or the problems that
+-- block writing it.
+local function check(s: State, raw: Raw, env: Env): (string?, { Problem })
 	if s.writing then
-		return { { path = "", message = "a write is still in progress" } }
+		return nil, { { path = "", message = "a write is still in progress" } }
 	end
 	if s.path == nil then
-		return { { path = "", message = "the config path is unknown (neither XDG_CONFIG_HOME nor HOME is set)" } }
+		return nil, { { path = "", message = "the config path is unknown (neither XDG_CONFIG_HOME nor HOME is set)" } }
 	end
 	if s.read_error then
-		return { { path = "", message = s.read_error } }
+		return nil, { { path = "", message = s.read_error } }
 	end
 	if s.decode_error then
-		return { { path = "", message = s.decode_error .. "; fix it in an editor (o opens the file)" } }
+		return nil, { { path = "", message = s.decode_error .. "; fix it in an editor (o opens the file)" } }
 	end
 	local text = Json.encode(raw, env.encode)
 	local config, problems = Validate.parseFile(text, env.decode)
 	if config == nil then
+		return nil, problems
+	end
+	return text, {}
+end
+
+-- Validates `raw` as the whole new file and asks the host to write it.
+-- Returns the problems that block the write (empty when the write started).
+local function commit(s: State, raw: Raw, env: Env, what: string, effects: { Effect }): { Problem }
+	local text, problems = check(s, raw, env)
+	if text == nil then
 		return problems
 	end
 	s.writing = true
@@ -408,6 +451,38 @@ local function setDefault(s: State, context: string, env: Env, effects: { Effect
 	end
 end
 
+-- Keychain items referenced by the endpoints of `context` (all of them, or
+-- just `endpoint`) in `raw`.
+local function itemsOf(raw: Raw?, context: string, endpoint: string?): { string }
+	local out: { string } = {}
+	local names: { string } = if endpoint then { endpoint } else Model.endpointNames(raw, context)
+	for _, ep in names do
+		for _, item in Connect.keychainItems(Model.rawEndpoint(raw, context, ep)) do
+			if not table.find(out, item) then
+				table.insert(out, item)
+			end
+		end
+	end
+	return out
+end
+
+-- Items still referenced somewhere in `raw` are not deleted.
+local function unreferenced(raw: Raw?, items: { string }): { string }
+	local used: { [string]: boolean } = {}
+	for _, ctx in Model.contextNames(raw) do
+		for _, item in itemsOf(raw, ctx, nil) do
+			used[item] = true
+		end
+	end
+	local out: { string } = {}
+	for _, item in items do
+		if not used[item] then
+			table.insert(out, item)
+		end
+	end
+	return out
+end
+
 local function askRemove(s: State, row: Row)
 	if not guardEditable(s) then
 		return
@@ -417,13 +492,21 @@ local function askRemove(s: State, row: Row)
 		if (s.raw :: Raw).default_context == row.context then
 			text ..= " It is the default context; default_context is unset."
 		end
-		s.confirm = { action = "remove_context", context = row.context :: string, text = text }
+		local raw = Model.removeContext(s.raw, row.context :: string)
+		s.confirm = {
+			action = "remove_context",
+			context = row.context :: string,
+			text = text,
+			items = unreferenced(raw, itemsOf(s.raw, row.context :: string, nil)),
+		}
 	elseif row.kind == "endpoint" then
+		local raw = Model.removeEndpoint(s.raw, row.context :: string, row.endpoint :: string)
 		s.confirm = {
 			action = "remove_endpoint",
 			context = row.context :: string,
 			endpoint = row.endpoint,
 			text = string.format("Remove endpoint %s from context %q?", row.endpoint :: string, row.context :: string),
+			items = unreferenced(raw, itemsOf(s.raw, row.context :: string, row.endpoint)),
 		}
 	else
 		return
@@ -431,7 +514,9 @@ local function askRemove(s: State, row: Row)
 	s.page = "confirm"
 end
 
-local function confirm(s: State, env: Env, effects: { Effect })
+-- `deleteItems`: also delete the keychain items the removed auth used, once
+-- the file no longer references them.
+local function confirm(s: State, env: Env, effects: { Effect }, deleteItems: boolean)
 	local c = s.confirm
 	s.confirm = nil
 	s.page = "list"
@@ -447,6 +532,8 @@ local function confirm(s: State, env: Env, effects: { Effect })
 	local problems = commit(s, raw, env, what, effects)
 	if #problems > 0 then
 		blocked(s, "remove", problems)
+	elseif deleteItems then
+		s.pending_deletes = Tbl.copy(c.items)
 	end
 end
 
@@ -542,10 +629,279 @@ function M.testStatus(test: Test): "pending" | "ok" | "error"
 	return status
 end
 
+-- Connect Grafana -------------------------------------------------------------------
+
+local CONNECT_TAG = "connect"
+
+function M.connectFields(s: State): { Connect.Field }
+	return if s.connect then Connect.fields(s.connect :: Connect.Conn) else {}
+end
+
+local function startConnectEdit(s: State, f: Connect.Field, effects: { Effect })
+	local c = s.connect :: Connect.Conn
+	if f.kind == "enum" then
+		s.connect = Connect.cycle(c, f, 1)
+		return
+	end
+	s.editing = { id = f.id, text = Connect.value(c, f.id) }
+	table.insert(effects, { kind = "focus", id = M.EDIT_INPUT })
+end
+
+-- Ends the edit; `advance` moves to the next field and starts editing it
+-- when it is an empty text field (url, then token, then context).
+local function finishConnectEdit(s: State, effects: { Effect }, advance: boolean)
+	local edit = s.editing :: Edit
+	local c, problem = Connect.setField(s.connect :: Connect.Conn, edit.id, edit.text)
+	if problem then
+		s.message = { level = "error", text = problem }
+		return
+	end
+	s.connect = c
+	s.editing = nil
+	s.message = nil
+	table.insert(effects, { kind = "focus", id = nil })
+	if not advance then
+		return
+	end
+	local fields = M.connectFields(s)
+	local nextField = fields[s.form_sel + 1]
+	if nextField then
+		s.form_sel += 1
+		if nextField.kind == "text" and Connect.value(c, nextField.id) == "" then
+			startConnectEdit(s, nextField, effects)
+		end
+	end
+end
+
+local function connectGuard(s: State): boolean
+	if s.decode_error or s.read_error then
+		s.message = { level = "error", text = (s.decode_error or s.read_error :: string) .. "; o opens the file" }
+		return false
+	elseif s.path == nil then
+		s.message = { level = "error", text = "The config path is unknown (neither XDG_CONFIG_HOME nor HOME is set)." }
+		return false
+	end
+	return true
+end
+
+local function openConnect(s: State, c: Connect.Conn?, field: string, effects: { Effect })
+	if c == nil or not connectGuard(s) then
+		return
+	end
+	s.connect = c
+	s.connect_writing = false
+	s.form = nil
+	s.page = "connect"
+	s.editing = nil
+	s.message = nil
+	for i, f in Connect.fields(c) do
+		if f.id == field then
+			s.form_sel = i
+			startConnectEdit(s, f, effects)
+		end
+	end
+end
+
+-- Leaves the flow; the token goes with it.
+local function closeConnect(s: State)
+	s.connect = nil
+	s.connect_writing = false
+	s.editing = nil
+	s.page = if s.raw == nil and not s.exists and s.path ~= nil then "templates" else "list"
+end
+
+local function savedRoute(s: State): Route?
+	local c = s.connect
+	if c and c.mode == "update" and s.config then
+		return Probe.route(s.config :: Config, c.context, "grafana")
+	end
+	return nil
+end
+
+local function testConnect(s: State, effects: { Effect })
+	if s.editing then
+		finishConnectEdit(s, effects, false)
+		if s.editing then
+			return
+		end
+	end
+	local c = s.connect :: Connect.Conn
+	local problem = Connect.testProblem(c)
+	if problem then
+		s.message = { level = "error", text = problem }
+		return
+	end
+	c = Connect.startTest(c)
+	s.connect = c
+	local route = Connect.route(c, savedRoute(s)) :: Route
+	for _, p in Connect.requests(c) do
+		table.insert(effects, {
+			kind = "http",
+			tag = table.concat({ CONNECT_TAG, tostring(c.gen), p.step }, "|"),
+			route = route,
+			request = p.request,
+		})
+	end
+	s.message = { level = "info", text = "Testing the token against " .. route.endpoint.url .. " ..." }
+end
+
+local function onConnectHttp(s: State, tag: string, response: any, env: Env): boolean
+	local gen, step = string.match(tag, "^" .. CONNECT_TAG .. "|(%d+)|(%a+)$")
+	local c = s.connect
+	if gen == nil or c == nil or c.phase ~= "testing" or tostring(c.gen) ~= gen then
+		return false
+	end
+	local route = Connect.route(c, savedRoute(s))
+	if route == nil then
+		return false
+	end
+	local answered = Connect.answer(c, route, step :: Connect.Step, response, env)
+	s.connect = answered
+	local phase: Connect.Phase = answered.phase
+	c = answered
+	if phase == "tested" then
+		s.message = {
+			level = "success",
+			text = "Grafana accepted the token. Check the datasources, then "
+				.. (if c.mode == "update" then "Save (w)." else "Connect (w)."),
+		}
+	elseif c.failure then
+		s.message = { level = "error", text = "The test failed; nothing was stored." }
+	end
+	return true
+end
+
+local function writeConnect(s: State, env: Env, effects: { Effect })
+	local c = s.connect :: Connect.Conn
+	local what = (if c.mode == "update" then "Saving " else "Connecting ") .. c.context
+	local problems = commit(s, Connect.apply(s.raw, c), env, what, effects)
+	s.connect_writing = #problems == 0
+	if #problems > 0 then
+		blocked(s, "connect", problems)
+	end
+end
+
+-- Test, then store, then write: the token is stored only once Grafana
+-- accepted it and the new file validates, and dropped once stored.
+local function saveConnect(s: State, env: Env, effects: { Effect })
+	if s.editing then
+		finishConnectEdit(s, effects, false)
+		if s.editing then
+			return
+		end
+	end
+	local c = s.connect :: Connect.Conn
+	if s.connect_writing or c.phase == "storing" then
+		s.message = { level = "info", text = "Still saving ..." }
+		return
+	end
+	local problem = Connect.saveProblem(c, s.raw)
+	if problem then
+		s.message = { level = "error", text = "Not saved: " .. problem }
+		return
+	end
+	local _, problems = check(s, Connect.apply(s.raw, c), env)
+	if #problems > 0 then
+		blocked(s, "connect", problems)
+		return
+	end
+	if c.storage == "keychain" and c.phase ~= "stored" then
+		local storing = Tbl.copy(c)
+		storing.phase = "storing"
+		s.connect = storing
+		local item = Connect.itemName(c.context)
+		table.insert(effects, { kind = "credential_store", item = item, secret = c.token })
+		s.message = { level = "info", text = "Storing the token in the keychain as " .. item .. " ..." }
+		return
+	end
+	s.connect = Connect.forget(c)
+	writeConnect(s, env, effects)
+end
+
+local function onStored(s: State, msg: StoredMsg, env: Env, effects: { Effect }): boolean
+	local c = s.connect
+	if c == nil or c.phase ~= "storing" then
+		return false
+	end
+	if msg.ok then
+		local stored = Connect.forget(c)
+		stored.phase = "stored"
+		s.connect = stored
+		writeConnect(s, env, effects)
+	else
+		local back = Tbl.copy(c)
+		back.phase = "tested"
+		s.connect = back
+		s.message = {
+			level = "error",
+			text = "The token was not stored: "
+				.. Auth.redact(msg.error or "the keychain tool failed", { c.token })
+				.. ". Try again, or store it in an environment variable.",
+		}
+	end
+	return true
+end
+
+local function connectDone(s: State, ok: boolean)
+	local c = s.connect
+	s.connect_writing = false
+	if not ok or c == nil then
+		return
+	end
+	local text = if c.storage == "keychain"
+		then string.format(
+			"Connected %s; the token is in the keychain as %s. Open a dashboard or query block to use it.",
+			c.context,
+			Connect.itemName(c.context)
+		)
+		else string.format(
+			"Saved %s. Set %s to the token where Tern runs: export it in your shell profile "
+				.. "(read from your login shell) or launchctl setenv %s <token> for Tern started from the Dock.",
+			c.context,
+			c.env_name,
+			c.env_name
+		)
+	s.sel_key = c.context .. "/grafana"
+	closeConnect(s)
+	s.page = "list"
+	s.message = { level = "success", text = text }
+end
+
+local function updateToken(s: State, context: string, effects: { Effect })
+	if Model.rawEndpoint(s.raw, context, "grafana") == nil then
+		s.message = { level = "info", text = context .. " has no grafana endpoint; Connect Grafana adds one." }
+		return
+	end
+	openConnect(s, Connect.forUpdate(s.raw, context, s.platform), "token", effects)
+end
+
 -- Templates ---------------------------------------------------------------------------
 
+-- The starter screen: Connect Grafana first, then the templates.
+M.CONNECT_STARTER = "connect"
+
+function M.starterCount(): number
+	return #Model.TEMPLATES + 1
+end
+
+function M.starterId(i: number): string?
+	if i == 1 then
+		return M.CONNECT_STARTER
+	end
+	local t = Model.TEMPLATES[i - 1]
+	return if t then t.id else nil
+end
+
+function M.selectedTemplate(s: State): Model.Template?
+	return if s.template_sel > 1 then Model.TEMPLATES[s.template_sel - 1] else nil
+end
+
 local function writeTemplate(s: State, env: Env, effects: { Effect })
-	local t = Model.TEMPLATES[s.template_sel]
+	if s.template_sel == 1 then
+		openConnect(s, Connect.new(s.platform), "url", effects)
+		return
+	end
+	local t = M.selectedTemplate(s)
 	if t == nil then
 		return
 	end
@@ -586,11 +942,18 @@ local function editKey(s: State, key: Key, effects: { Effect }): boolean
 		s.message = nil
 		table.insert(effects, { kind = "focus", id = nil })
 	elseif name == "enter" or name == "return" then
-		finishEdit(s, effects)
+		if s.page == "connect" then
+			finishConnectEdit(s, effects, true)
+		else
+			finishEdit(s, effects)
+		end
 	elseif name == "backspace" then
 		s.editing = { id = edit.id, text = string.sub(edit.text, 1, -2) }
 	elseif name == "paste" then
-		s.editing = { id = edit.id, text = edit.text .. string.gsub(key.text or "", "[\r\n]+", " ") }
+		local pasted = if s.page == "connect" and edit.id == "token"
+			then Connect.cleanToken(key.text or "")
+			else string.gsub(key.text or "", "[\r\n]+", " ")
+		s.editing = { id = edit.id, text = edit.text .. pasted }
 	elseif key.ctrl and name == "u" then
 		s.editing = { id = edit.id, text = "" }
 	else
@@ -644,6 +1007,51 @@ local function formKey(s: State, key: Key, env: Env, effects: { Effect }): boole
 	return true
 end
 
+local function connectKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
+	if s.editing then
+		return editKey(s, key, effects)
+	end
+	local name = key.name
+	local ch = printable(key)
+	local fields = M.connectFields(s)
+	local f = fields[s.form_sel]
+	if name == "escape" then
+		closeConnect(s)
+		s.message = { level = "info", text = "Connect cancelled; nothing was stored." }
+		return true
+	elseif (key.ctrl and name == "s") or ch == "w" then
+		saveConnect(s, env, effects)
+	elseif ch == "t" then
+		testConnect(s, effects)
+	elseif ch == "j" or name == "down" or name == "tab" then
+		s.form_sel = math.clamp(s.form_sel + 1, 1, #fields)
+	elseif ch == "k" or name == "up" then
+		s.form_sel = math.clamp(s.form_sel - 1, 1, #fields)
+	elseif name == "enter" or name == "return" or ch == "e" or ch == " " then
+		if f == nil then
+			return false
+		end
+		startConnectEdit(s, f, effects)
+	elseif name == "left" or name == "right" then
+		if f == nil or f.kind ~= "enum" then
+			return false
+		end
+		s.connect = Connect.cycle(s.connect :: Connect.Conn, f, if name == "left" then -1 else 1)
+	elseif name == "paste" then
+		-- A paste on a selected text field replaces its value.
+		if f == nil or f.kind ~= "text" then
+			return false
+		end
+		local c, problem = Connect.setField(s.connect :: Connect.Conn, f.id, key.text or "")
+		s.connect = c
+		s.message = if problem then { level = "error", text = problem } else nil
+	else
+		return false
+	end
+	s.form_sel = math.clamp(s.form_sel, 1, math.max(1, #M.connectFields(s)))
+	return true
+end
+
 local function listKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	local name = key.name
 	local ch = printable(key)
@@ -689,6 +1097,13 @@ local function listKey(s: State, key: Key, env: Env, effects: { Effect }): boole
 			return false
 		end
 		testRow(s, row, effects)
+	elseif ch == "c" then
+		openConnect(s, Connect.new(s.platform), "url", effects)
+	elseif ch == "u" then
+		if row == nil or row.context == nil or not guardEditable(s) then
+			return row ~= nil
+		end
+		updateToken(s, row.context :: string, effects)
 	else
 		return false
 	end
@@ -699,9 +1114,9 @@ local function templatesKey(s: State, key: Key, env: Env, effects: { Effect }): 
 	local name = key.name
 	local ch = printable(key)
 	if ch == "j" or name == "down" then
-		s.template_sel = math.clamp(s.template_sel + 1, 1, #Model.TEMPLATES)
+		s.template_sel = math.clamp(s.template_sel + 1, 1, M.starterCount())
 	elseif ch == "k" or name == "up" then
-		s.template_sel = math.clamp(s.template_sel - 1, 1, #Model.TEMPLATES)
+		s.template_sel = math.clamp(s.template_sel - 1, 1, M.starterCount())
 	elseif name == "enter" or name == "return" or ch == "w" then
 		writeTemplate(s, env, effects)
 	else
@@ -713,7 +1128,7 @@ end
 local function onKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	local name = key.name
 	local ch = printable(key)
-	if s.page == "form" and s.editing then
+	if (s.page == "form" or s.page == "connect") and s.editing then
 		return editKey(s, key, effects)
 	end
 	if s.help then
@@ -728,8 +1143,11 @@ local function onKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 		return true
 	end
 	if s.page == "confirm" then
+		local items = if s.confirm then #s.confirm.items else 0
 		if ch == "y" or name == "enter" or name == "return" then
-			confirm(s, env, effects)
+			confirm(s, env, effects, true)
+		elseif ch == "k" and items > 0 then
+			confirm(s, env, effects, false)
 		elseif ch == "n" or name == "escape" then
 			s.confirm = nil
 			s.page = "list"
@@ -740,6 +1158,8 @@ local function onKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	end
 	if s.page == "form" then
 		return formKey(s, key, env, effects)
+	elseif s.page == "connect" then
+		return connectKey(s, key, env, effects)
 	end
 	if ch == "R" then
 		s.message = { level = "info", text = "Reloaded the config file." }
@@ -785,9 +1205,12 @@ function M.selectionViewId(s: State): string?
 	if s.page == "form" and s.form then
 		local f = M.formFields(s)[s.form_sel]
 		return if f then "main." .. M.FIELDS_KEY .. "." .. M.fieldNodeKey(f.id) else nil
+	elseif s.page == "connect" and s.connect then
+		local f = M.connectFields(s)[s.form_sel]
+		return if f then "main." .. M.FIELDS_KEY .. "." .. M.fieldNodeKey(f.id) else nil
 	elseif s.page == "templates" then
-		local t = Model.TEMPLATES[s.template_sel]
-		return if t then "main." .. M.TEMPLATES_KEY .. "." .. M.templateNodeKey(t.id) else nil
+		local id = M.starterId(s.template_sel)
+		return if id then "main." .. M.TEMPLATES_KEY .. "." .. M.templateNodeKey(id) else nil
 	elseif s.page == "list" and s.raw then
 		local row = M.selectedRow(s)
 		return if row then "main." .. M.LIST_KEY .. "." .. M.rowNodeKey(row.key) else nil
@@ -901,19 +1324,57 @@ local function onAction(s: State, act: string, value: string, env: Env, effects:
 		if s.page == "confirm" then
 			s.confirm = nil
 			s.page = "list"
+		elseif s.page == "connect" then
+			closeConnect(s)
+			s.message = { level = "info", text = "Connect cancelled; nothing was stored." }
 		elseif s.form then
 			closeForm(s)
 		end
 	elseif act == "confirm" then
-		confirm(s, env, effects)
+		confirm(s, env, effects, true)
+	elseif act == "confirm_keep" then
+		confirm(s, env, effects, false)
 	elseif act == "template" then
 		local i = tonumber(value)
-		if i == nil or Model.TEMPLATES[i] == nil then
+		if i == nil or M.starterId(i) == nil then
 			return false
 		end
 		s.template_sel = i
 	elseif act == "write_template" then
 		writeTemplate(s, env, effects)
+	elseif act == "connect" then
+		openConnect(s, Connect.new(s.platform), "url", effects)
+	elseif act == "update_token" then
+		if guardEditable(s) then
+			updateToken(s, value, effects)
+		end
+	elseif act == "cfield" then
+		if s.connect == nil then
+			return false
+		end
+		for i, f in M.connectFields(s) do
+			if f.id == value then
+				if s.editing and s.editing.id ~= f.id then
+					finishConnectEdit(s, effects, false)
+				end
+				s.form_sel = i
+				if s.editing == nil then
+					startConnectEdit(s, f, effects)
+				end
+				return true
+			end
+		end
+		return false
+	elseif act == "connect_test" then
+		if s.connect == nil then
+			return false
+		end
+		testConnect(s, effects)
+	elseif act == "connect_save" then
+		if s.connect == nil then
+			return false
+		end
+		saveConnect(s, env, effects)
 	elseif act == "reload" then
 		return onKey(
 			s,
@@ -955,20 +1416,49 @@ function M.update(prev: State, msg: Msg, env: Env): (State, { Effect })
 			if s.form then
 				closeForm(s)
 			end
+			for _, item in s.pending_deletes do
+				table.insert(effects, { kind = "credential_delete", item = item })
+			end
 		elseif m.conflict then
 			s.conflict = true
 			s.message = {
 				level = "error",
 				text = "Not saved: the file changed on disk since it was loaded. It has been reloaded"
-					.. (if s.form then "; review the form and save again." else "; review and try again."),
+					.. (if s.form or s.connect then "; review the form and save again." else "; review and try again."),
 			}
 		else
 			s.message = { level = "error", text = "Not saved: " .. tostring(m.error) }
 		end
+		s.pending_deletes = {}
+		if s.connect_writing then
+			connectDone(s, m.ok)
+		end
 		table.insert(effects, { kind = "config_read" })
 		changed = true
+	elseif m.kind == "credentials_platform" then
+		s.platform = m.platform
+		local c = s.connect
+		if c then
+			local updated = Tbl.copy(c)
+			updated.platform = m.platform
+			if m.platform == nil then
+				updated.storage = "env"
+			end
+			s.connect = updated
+		end
+		changed = true
+	elseif m.kind == "credential_stored" then
+		changed = onStored(s, m, env, effects)
+	elseif m.kind == "credential_deleted" then
+		s.message = if m.ok
+			then { level = "success", text = "Removed; keychain item " .. m.item .. " deleted." }
+			else {
+				level = "error",
+				text = "Removed, but keychain item " .. m.item .. " was not deleted: " .. tostring(m.error),
+			}
+		changed = true
 	elseif m.kind == "http_done" then
-		changed = onHttp(s, m.tag, m.response, env)
+		changed = onHttp(s, m.tag, m.response, env) or onConnectHttp(s, m.tag, m.response, env)
 	elseif m.kind == "key" then
 		changed = keyWithReveal(prev, s, m.key, env, effects)
 	elseif m.kind == "event" then

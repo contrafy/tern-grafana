@@ -15,8 +15,12 @@ export type Request = {
 
 export type QueryError = {
 	kind: "auth" | "network" | "timeout" | "http" | "parse" | "query" | "unsupported",
+	-- One line a view can show alone; for credential failures it already
+	-- ends with the fix ("...; open Grafana: Settings and use ...").
 	message: string,
 	status: number?,
+	-- The fix part of `message` on its own, for views that show it apart.
+	hint: string?,
 }
 
 -- Same shape as tern.fetch's result, whichever transport produced it.
