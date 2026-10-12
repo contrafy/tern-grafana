@@ -34,6 +34,7 @@ M.KEYS = table.freeze({
 	{ "h", "Query history" },
 	{ "y", "Copy the query" },
 	{ "o", "Open in Grafana Explore" },
+	{ "I", "Investigate with an agent (preview first)" },
 	{ "?", "This help" },
 	{ "q  esc", "Close" },
 })

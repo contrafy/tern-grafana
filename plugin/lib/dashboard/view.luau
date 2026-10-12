@@ -25,11 +25,11 @@ type State = State.State
 local M = {}
 
 M.HINT =
-	"arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh  a auto  l labels  o browser  p pin  / search"
+	"arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh  a auto  l labels  o browser  p pin  I investigate  / search"
 -- Text lines per Grafana grid row (30 px rows, 8 px margins, about 15 px lines).
 M.LINES_PER_ROW = 2.5
 
-M.SOLO_HINT = "left/right cursor  1-9 [ ] - + range  r refresh  l labels  o browser  y copy URL"
+M.SOLO_HINT = "left/right cursor  1-9 [ ] - + range  r refresh  l labels  o browser  y copy URL  I investigate"
 
 local function title(s: State, inst: Repeat.Instance): string
 	local t = inst.panel.title

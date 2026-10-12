@@ -220,6 +220,13 @@ local function detail(s: State, a: Alert, env: Env.Env): Node
 			{ key = "bcopy", class = "tg-al-btn", text = "Copy matchers (y)", actions = { click = "copy" } }
 		)
 	)
+	table.insert(
+		buttons,
+		ui.el(
+			"button",
+			{ key = "binvestigate", class = "tg-al-btn", text = "Investigate (i)", actions = { click = "investigate" } }
+		)
+	)
 	local children: { Node } = { ui.kv(items) }
 	if #labelItems > 0 then
 		table.insert(children, ui.rule({ "labels" }, { key = "rl" }))
@@ -379,7 +386,7 @@ function M.view(s: State, env: Env.Env): Effect.View
 	table.insert(children, groups(s, env))
 	local hints = ui.text({
 		ui.span(
-			"j/k move  enter open  / filter  m muted  c context  r refresh  o runbook  d dashboard  g source  s silence  y copy  v rules",
+			"j/k move  enter open  / filter  m muted  c context  r refresh  o runbook  d dashboard  g source  s silence  y copy  i investigate  v rules",
 			"muted"
 		),
 	}, { key = "keys" })

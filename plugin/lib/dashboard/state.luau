@@ -19,7 +19,9 @@ local Effect = require("../effect")
 local Env = require("../env")
 local GrafanaSource = require("../source/grafana")
 local GrafanaUrl = require("../links/grafana_url")
+local Handoff = require("../investigate/handoff")
 local Interpolate = require("./interpolate")
+local InvestigateSubject = require("../investigate/subject")
 local Ladder = require("./ladder")
 local Layout = require("./layout")
 local Model = require("./model")
@@ -1254,6 +1256,51 @@ local function toggleLabels(s: State): boolean
 	return true
 end
 
+-- Starts an Investigate preview (G4) for the focused panel with its
+-- interpolated queries and the values it shows; nothing is sent before the
+-- user presses Send there.
+local function investigate(s: State, env: Env, effects: { Effect }): boolean
+	local d = s.dashboard
+	local inst = if s.focus then Repeat.find(s.sections, s.focus :: string) else nil
+	if d == nil or inst == nil then
+		return false
+	end
+	local scope = M.panelScope(s, inst)
+	local pq = Queries.build(inst.panel.json, queryContext(s, scope, env), env)
+	local queries: { InvestigateSubject.Query } = {}
+	if pq then
+		for _, q in pq.queries do
+			local text = if type(q.expr) == "string" then q.expr elseif type(q.query) == "string" then q.query else nil
+			if text and text ~= "" then
+				local ds = if type(q.datasource) == "table" then q.datasource.type else nil
+				table.insert(queries, {
+					ref = if type(q.refId) == "string" then q.refId else nil,
+					expr = text,
+					datasource = if type(ds) == "string" then ds else nil,
+				})
+			end
+		end
+	end
+	local r = s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
+	local ps = s.panels[inst.key]
+	local subject = InvestigateSubject.fromPanel({
+		context = s.context,
+		dashboard = d.title,
+		uid = s.uid,
+		panel_id = inst.panel.id,
+		title = Interpolate.replace(inst.panel.title, scope),
+		type = inst.panel.type,
+		queries = queries,
+		range = { from = s.from or d.time.from, to = s.to or d.time.to, from_ms = r.from_ms, to_ms = r.to_ms },
+		vars = M.instanceVars(s, inst),
+		frames = if ps and ps.data then (ps.data :: Queries.PanelData).frames else nil,
+	}, env.config, env.encode)
+	for _, e in Handoff.start(subject, env) do
+		table.insert(effects, e)
+	end
+	return true
+end
+
 local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	local name = key.name
 	local ch = key.text or ""
@@ -1345,6 +1392,8 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 			table.insert(effects, { kind = "toast", level = "info", text = "Copied the Grafana URL" })
 		end
 		return url ~= nil
+	elseif ch == "I" then
+		return investigate(s, env, effects)
 	elseif ch == "l" then
 		return toggleLabels(s)
 	elseif ch == "p" and not s.solo then

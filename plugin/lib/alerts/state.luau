@@ -7,6 +7,8 @@
 local Effect = require("../effect")
 local Env = require("../env")
 local Group = require("./group")
+local Handoff = require("../investigate/handoff")
+local InvestigateSubject = require("../investigate/subject")
 local Normalize = require("./normalize")
 local Rules = require("./rules")
 local Scheme = require("../links/scheme")
@@ -541,6 +543,20 @@ local function copyMatchers(s: State, effects: { Effect })
 	table.insert(effects, { kind = "copy", text = SilenceMatchers.formatList(SilenceMatchers.fromLabels(a :: Alert)) })
 end
 
+-- Starts an Investigate preview (G4) for the selected alert: nothing is
+-- sent before the user presses Send there.
+local function investigate(s: State, env: Env, effects: { Effect })
+	local a = M.selectedAlert(s)
+	if a == nil then
+		s.note = "Select an alert first."
+		return
+	end
+	s.note = nil
+	for _, e in Handoff.start(InvestigateSubject.fromAlert(a :: Alert, env.config, env.encode), env) do
+		table.insert(effects, e)
+	end
+end
+
 local function editKey(s: State, key: any): boolean
 	local text = s.editing :: string
 	local name = key.name
@@ -689,6 +705,8 @@ local function normalKey(s: State, key: any, env: Env, effects: { Effect }): boo
 		open(s, "generator", effects)
 	elseif text == "y" then
 		copyMatchers(s, effects)
+	elseif text == "i" then
+		investigate(s, env, effects)
 	else
 		return false
 	end
@@ -728,6 +746,8 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 		open(s, value, effects)
 	elseif act == "copy" then
 		copyMatchers(s, effects)
+	elseif act == "investigate" then
+		investigate(s, env, effects)
 	elseif act == "view" and (value == "inbox" or value == "rules") then
 		setView(s, env, value :: View, effects)
 	elseif act == "rrow" and value then

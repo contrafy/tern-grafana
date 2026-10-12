@@ -16,7 +16,9 @@ local Effect = require("../effect")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local GrafanaUrl = require("../links/grafana_url")
+local Handoff = require("../investigate/handoff")
 local History = require("./history")
+local InvestigateSubject = require("../investigate/subject")
 local Metrics = require("../source/metrics")
 local Options = require("./options")
 local Promql = require("./promql")
@@ -722,6 +724,36 @@ local function armTimer(s: State, effects: { Effect })
 	table.insert(effects, { kind = "timer", tag = M.REFRESH_TAG .. s.timer_gen, ms = s.refresh_ms :: number })
 end
 
+-- Starts an Investigate preview (G4) for the expression with the values
+-- the block shows; nothing is sent before the user presses Send there.
+local function investigate(s: State, env: Env, effects: { Effect })
+	local expr = trim(s.expr)
+	if expr == "" then
+		table.insert(effects, { kind = "toast", level = "info", text = "Write a query to investigate first" })
+		return
+	end
+	local r = s.ran
+	local current = r ~= nil and r.expr == expr and s.status == "ok"
+	local from_ms, to_ms
+	if current then
+		from_ms, to_ms = (r :: Run).from_ms, (r :: Run).to_ms
+	else
+		local range = resolve(s, env)
+		from_ms = if range then range.from_ms else env.now_ms
+		to_ms = if range then range.to_ms else env.now_ms
+	end
+	local subject = InvestigateSubject.fromQuery({
+		context = s.context,
+		expr = expr,
+		ds = s.ds,
+		range = { from = s.from, to = s.to, from_ms = from_ms, to_ms = to_ms },
+		frames = if current then s.frames else nil,
+	}, env.config, env.encode)
+	for _, e in Handoff.start(subject, env) do
+		table.insert(effects, e)
+	end
+end
+
 local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	local name = key.name
 	local ch = if key.ctrl or key.meta then nil else key.text
@@ -813,6 +845,9 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		end
 		s.overlay = "history"
 		s.history = { all = all, filter = "", selected = 1 }
+		return true
+	elseif ch == "I" then
+		investigate(s, env, effects)
 		return true
 	elseif ch == "?" then
 		s.overlay = "help"
