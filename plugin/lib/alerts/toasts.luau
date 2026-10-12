@@ -12,6 +12,7 @@
 -- the summary carries no labels.
 
 local Summary = require("./summary")
+local Tbl = require("../tbl")
 
 export type Entry = { updated_ms: number, fingerprints: { string } }
 export type Notified = { v: number, contexts: { [string]: Entry } }
@@ -112,7 +113,7 @@ function M.check(summaryRaw: any, notifiedRaw: any): (Notified?, { Toast })
 					table.insert(toasts, toastFor(name, counts, total))
 				end
 			end
-			notified.contexts[name] = { updated_ms = sum.updated_ms, fingerprints = table.clone(sum.fingerprints) }
+			notified.contexts[name] = { updated_ms = sum.updated_ms, fingerprints = Tbl.copy(sum.fingerprints) }
 			changed = true
 		end
 	end

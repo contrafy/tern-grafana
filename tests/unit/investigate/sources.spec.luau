@@ -1,8 +1,9 @@
 --!strict
 -- Investigate starts from what the user is looking at: the selected alert
 -- (i), the query block's expression and values (I) and the focused dashboard
--- panel (I). Each only stores a draft and opens the preview: nothing reaches
--- an agent from a key in a source block.
+-- panel (I). Each only opens the preview with the subject in the link
+-- (kv is per machine, and the block may run on a remote host): nothing
+-- reaches an agent from a key in a source block.
 local AlertsState = require("../../../plugin/lib/alerts/state")
 local DashState = require("../../../plugin/lib/dashboard/state")
 local DS = require("../dashboard/support")
@@ -20,17 +21,15 @@ local function key(text: string): any
 	return { name = text, text = text, ctrl = false, alt = false, shift = text ~= string.lower(text), meta = false }
 end
 
--- The draft the effects store, after checking they only store and open.
+-- The subject the link carries, after checking the effects only open it.
 local function draftOf(effects: { any }): any
-	expect(#effects).toBe(2)
-	local kv, open = effects[1], effects[2]
-	expect(kv.kind).toBe("kv_set")
+	expect(#effects).toBe(1)
+	local open = effects[1]
 	expect(open.kind).toBe("open")
 	local l = assert((Scheme.decode(open.target)), "the open effect must be a tern-grafana link")
 	expect(l.action).toBe("investigate")
-	expect(kv.key).toBe(Handoff.key(l.params.id))
-	expect(kv.value.stage).toBe("draft")
-	return json.decode(json.encode(kv.value.subject))
+	local opened = Handoff.open(open.target, json.decode)
+	return assert(opened.subject, opened.err)
 end
 
 describe("alerts inbox", function()

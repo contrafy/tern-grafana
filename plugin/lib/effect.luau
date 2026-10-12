@@ -20,7 +20,8 @@ export type Effect =
 	| { kind: "timer", tag: string, ms: number }
 	-- tern.kv (a 0644 file): never secrets.
 	| { kind: "kv_set", key: string, value: any }
-	| { kind: "toast", level: "info" | "warn" | "error", text: string, sub: string? }
+	-- Exactly Tern's ToastLevel: Tern raises on any other level ("warn").
+	| { kind: "toast", level: ToastLevel, text: string, sub: string? }
 	-- A path or URL, through the window's route.link.
 	| { kind: "open", target: string }
 	| { kind: "copy", text: string }

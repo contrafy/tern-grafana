@@ -20,6 +20,7 @@
 local Env = require("../env")
 local Frame = require("./types")
 local LogsPanel = require("../panels/logs")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -268,7 +269,7 @@ function M.fromFrames(frames: { Frame }, env: Env): { Line }
 				end
 				ns = string.format("%d", math.floor(t * 1e6 + 0.5))
 			end
-			local all = table.clone(bodyField.labels or {})
+			local all: Labels = Tbl.copy(bodyField.labels or {})
 			for k, v in strings(env, if labelsField then labelsField.values[j] else nil) do
 				all[k] = v
 			end

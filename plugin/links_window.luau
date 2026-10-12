@@ -4,6 +4,7 @@
 -- contexts; Tern has no stat, so the parsed config is cached by file content.
 
 local Investigate = require("./investigate_window")
+local ReadFile = require("./lib/read_file")
 local Route = require("./lib/links/route")
 local Validate = require("./lib/config/validate")
 local Types = require("./lib/config/types")
@@ -22,8 +23,8 @@ local function loadConfig(t: any): Config?
 	if not path then
 		return nil
 	end
-	local ok, text = pcall(t.fs.read, path, MAX_CONFIG_BYTES)
-	if not ok or type(text) ~= "string" then
+	local text = ReadFile.read(t.fs.read, path, MAX_CONFIG_BYTES)
+	if text == nil then
 		cachedText, cachedConfig = nil, nil
 		return nil
 	end
@@ -47,7 +48,7 @@ function M.register(t: any)
 		end,
 	}
 	t.route.link(function(link: any, cx: any): any
-		-- Investigate handoffs read kv and may start an agent: their own handler.
+		-- Investigate handoffs may start an agent: their own handler.
 		if Investigate.claims(link.url) then
 			local okInv, answer = pcall(Investigate.handle, link, cx, t)
 			if not okInv then

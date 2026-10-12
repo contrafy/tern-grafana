@@ -21,6 +21,7 @@ local Range = require("../time/range")
 local Reduce = require("./reduce")
 local Regex = require("../regex")
 local Thresholds = require("../units/thresholds")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -192,8 +193,8 @@ function M.defaults(panel: any, env: Env, d: Defaults?): Config
 end
 
 local function cloneConfig(c: Config): Config
-	local out = table.clone(c)
-	out.custom = table.clone(c.custom)
+	local out = Tbl.copy(c)
+	out.custom = Tbl.copy(c.custom)
 	return out
 end
 
@@ -555,8 +556,8 @@ end
 -- The field with the resolved display name and unit/decimals/min/max baked
 -- into its config, for renderers that read Frame configs (lib/render).
 function M.bake(item: Item): Field
-	local f = table.clone(item.field)
-	local c: Frame.FieldConfig = if f.config then table.clone(f.config) else {}
+	local f = Tbl.copy(item.field)
+	local c: Frame.FieldConfig = if f.config then Tbl.copy(f.config) else {}
 	c.displayName = item.name
 	c.unit = item.config.unit
 	c.decimals = item.config.decimals

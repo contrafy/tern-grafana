@@ -12,6 +12,7 @@
 
 local Route = require("../config/route")
 local Types = require("../config/types")
+local Tbl = require("../tbl")
 
 type Config = Types.Config
 type Problem = Types.Problem
@@ -167,7 +168,7 @@ function M.apply(config: Config?, hostname: string?): Config?
 	if effective == config.default_context then
 		return config
 	end
-	local out = table.clone(config)
+	local out = Tbl.copy(config)
 	out.default_context = effective
 	return out
 end

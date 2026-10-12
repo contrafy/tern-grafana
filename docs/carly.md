@@ -20,7 +20,7 @@ signatures. `context` is optional everywhere and defaults to `default_context`.
 `{from = "now-2h", to = "now-1h"}`.
 
 Every answer is a summary, never raw samples, and is cut to 12 KiB (Carly refuses values over 16 KiB); `omitted`
-says how many series, alerts, dashboards or lines were left out. A response body over 2 MiB is refused with a hint
+says how many series, alerts, dashboards or lines were left out. A response body over 512 KiB is refused with a hint
 to aggregate (`sum by`, `topk`) or shorten the range, because the window half has a 50 ms budget per call.
 
 Errors are plain messages Carly can act on, for example `no context named "prod" (contexts: lab, staging)`,

@@ -13,6 +13,7 @@ local Json = require("./json")
 local Model = require("./model")
 local Probe = require("./probe")
 local Validate = require("../config/validate")
+local Tbl = require("../tbl")
 
 type Config = ConfigTypes.Config
 type Problem = ConfigTypes.Problem
@@ -489,7 +490,7 @@ local function testEndpoint(s: State, context: string, endpoint: string, effects
 end
 
 local function testRow(s: State, row: Row, effects: { Effect })
-	s.tests = table.clone(s.tests)
+	s.tests = Tbl.copy(s.tests)
 	if row.kind == "endpoint" then
 		testEndpoint(s, row.context :: string, row.endpoint :: string, effects)
 	elseif row.kind == "context" then
@@ -514,13 +515,13 @@ local function onHttp(s: State, tag: string, response: any, env: Env): boolean
 		return false
 	end
 	local result = Probe.parse(route, step :: any, response, env)
-	local steps = table.clone(test.steps)
+	local steps = Tbl.copy(test.steps)
 	for i, st in steps do
 		if st.step == step then
 			steps[i] = { step = st.step, result = result }
 		end
 	end
-	s.tests = table.clone(s.tests)
+	s.tests = Tbl.copy(s.tests)
 	s.tests[key] = { gen = test.gen, steps = steps, error = nil }
 	return true
 end
@@ -818,7 +819,7 @@ local function keyWithReveal(prev: State, s: State, key: Key, env: Env, effects:
 end
 
 function M.key(prev: State, key: Key, env: Env): (State, { Effect }, boolean)
-	local s = table.clone(prev)
+	local s = Tbl.copy(prev)
 	local effects: { Effect } = {}
 	local changed = keyWithReveal(prev, s, key, env, effects)
 	if not changed and #effects == 0 then
@@ -938,7 +939,7 @@ end
 -- Update ----------------------------------------------------------------------------------
 
 function M.update(prev: State, msg: Msg, env: Env): (State, { Effect })
-	local s = table.clone(prev)
+	local s = Tbl.copy(prev)
 	local effects: { Effect } = {}
 	local m: any = msg
 	local changed = false

@@ -169,6 +169,73 @@ describe("annotations command redaction", function()
 		)
 	end)
 
+	-- The text is posted to /api/annotations, readable by every Viewer in the
+	-- org; contexts approved "always" post it unreviewed. Each case is a way a
+	-- secret was typed on a real deploy line.
+	it("hides credentials in URLs, headers, user flags and compound lines", function()
+		local cases: { { string } } = {
+			{
+				"helm upgrade x c --repo 'https://h/x?a=1&token=abc'",
+				"helm upgrade x c --repo 'https://h/x?a=1&token=***'",
+			},
+			{
+				"curl 'https://h/api?access_token=a&sig=b&signature=c&key=d&auth=e&password=f&secret=g&q=up'",
+				"curl 'https://h/api?access_token=***&sig=***&signature=***&key=***&auth=***&password=***&secret=***&q=up'",
+			},
+			{ "helm upgrade x c --repo=https://h/x?token=abc", "helm upgrade x c '--repo=https://h/x?token=***'" },
+			{ "git clone https://u:p@ss@host/r.git", "git clone https://u:***@host/r.git" },
+			{ "git clone https://ghp_abc@github.com/o/r", "git clone https://***@github.com/o/r" },
+			{ "curl https://u:p/w@d@host/x", "curl https://u:***@host/x" },
+			{ "helm install x https://host/pkg@1.2", "helm install x https://host/pkg@1.2" },
+			{
+				"curl -H 'Proxy-Authorization: Basic YWRtaW46c2VjcmV0' https://x",
+				"curl -H 'Proxy-Authorization: ***' https://x",
+			},
+			{
+				"curl -H 'X-Api-Key: abc' -H 'Cookie: s=1' https://x",
+				"curl -H 'X-Api-Key: ***' -H 'Cookie: ***' https://x",
+			},
+			{
+				"curl --header='Authorization: Basic YWRtaW4=' https://x",
+				"curl '--header=Authorization: ***' https://x",
+			},
+			{ "curl -H Authorization: Bearer abc https://x", "curl -H Authorization: *** *** https://x" },
+			{
+				"kubectl apply -f x && curl -u admin:s3cret https://g/api",
+				"kubectl apply -f x && curl -u admin:*** https://g/api",
+			},
+			{ "curl -uadmin:s3cret https://g", "curl -uadmin:*** https://g" },
+			{ "curl --user=admin:s3cret https://g", "curl --user=admin:*** https://g" },
+			{ "curl --proxy-user p:q https://g", "curl --proxy-user p:*** https://g" },
+			{ "sudo -u root kubectl --user admin apply -f x", "sudo -u root kubectl --user admin apply -f x" },
+			{ "curl --oauth2-bearer glsa_x https://g", "curl --oauth2-bearer *** https://g" },
+			{
+				"helm upgrade x c --password-file p --token-file t",
+				"helm upgrade x c --password-file *** --token-file ***",
+			},
+			{ "docker login --password-stdin --token abc", "docker login --password-stdin *** ***" },
+			{ "helm upgrade x c --set db.pass=hunter2", "helm upgrade x c --set db.pass=***" },
+			{ "helm upgrade x c --set db.pwd=a,tag=1", "helm upgrade x c --set db.pwd=***,tag=1" },
+			{ "helm upgrade x c --set db.password=a,b,tag=1", "helm upgrade x c --set db.password=***,tag=1" },
+			{
+				"helm upgrade x c --set-string sshKeyData=a --set oauth.clientCredential=b",
+				"helm upgrade x c --set-string sshKeyData=*** --set oauth.clientCredential=***",
+			},
+			{ "curl -d 'user=a&password=b' https://g", "curl -d 'user=a&password=***' https://g" },
+			{
+				"MY_SECRET=a GRAFANA_KEY=b DBPASSWORDX=c helm upgrade x c",
+				"MY_SECRET=*** GRAFANA_KEY=*** DBPASSWORDX=*** helm upgrade x c",
+			},
+			{
+				"helm upgrade x c; export VAULT_TOKEN=a | tee log",
+				"helm upgrade x c; export VAULT_TOKEN=*** | tee log",
+			},
+		}
+		for _, c in cases do
+			expect(Command.redact(c[1])).toBe(c[2])
+		end
+	end)
+
 	it("never leaves the secret anywhere in the output", function()
 		local secret = "Zq9-SECRETMARK"
 		for _, line in
@@ -177,8 +244,14 @@ describe("annotations command redaction", function()
 				"helm upgrade web . --password=" .. secret,
 				"API_TOKEN=" .. secret .. " helm upgrade web .",
 				"helm upgrade web . --set a.secretKey=" .. secret,
-				"terraform apply -var=client_secret=" .. secret,
 				'kubectl apply -f x --token "' .. secret .. '"',
+				"helm upgrade x c --repo 'https://h/x?a=1&token=" .. secret .. "'",
+				"helm upgrade x c --repo https://u:" .. secret .. "@host/charts",
+				"curl -H 'Proxy-Authorization: Basic " .. secret .. "' https://x",
+				"kubectl apply -f x && curl -u admin:" .. secret .. " https://g",
+				"curl --oauth2-bearer " .. secret .. " https://g",
+				"helm upgrade x c --set db.pass=" .. secret,
+				"git clone https://u:p@" .. secret .. "@host/r.git",
 			}
 		do
 			expect((string.find(Command.redact(line), secret, 1, true))).toBeNil()

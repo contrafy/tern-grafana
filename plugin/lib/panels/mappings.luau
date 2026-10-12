@@ -7,6 +7,7 @@
 local Env = require("../env")
 local Frame = require("../frame/types")
 local Regex = require("../regex")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 
@@ -174,7 +175,7 @@ function M.apply(mappings: { Mapping }, value: any): Result?
 			end
 			local re = m.regex :: Regex.Regex
 			if Regex.test(re, value) then
-				local r = table.clone(m.result)
+				local r = Tbl.copy(m.result)
 				if r.text ~= nil then
 					r.text = (Regex.replace(re, value, m.result.text or ""))
 				end

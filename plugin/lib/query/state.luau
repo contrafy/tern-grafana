@@ -37,6 +37,7 @@ local Svg = require("../render/svg_timeseries")
 local TimeRange = require("./timerange")
 local Cursor = require("../render/cursor")
 local Edit = require("./edit")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -870,7 +871,7 @@ local function openTrace(s: State, effects: { Effect })
 	if target then
 		table.insert(effects, { kind = "open", target = target })
 	else
-		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open the trace" })
+		table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open the trace" })
 	end
 end
 
@@ -879,7 +880,7 @@ end
 function M.selectedLabels(s: State): { [string]: string }
 	local e = M.selectedExemplar(s)
 	if e then
-		local out = table.clone(e.series)
+		local out = Tbl.copy(e.series)
 		for k, v in e.labels do
 			out[k] = out[k] or v
 		end
@@ -900,7 +901,7 @@ local function openLogs(s: State, env: Env, effects: { Effect })
 	if target then
 		table.insert(effects, { kind = "open", target = target })
 	else
-		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open logs" })
+		table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open logs" })
 	end
 end
 
@@ -1019,7 +1020,7 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		if target then
 			table.insert(effects, { kind = "open", target = target })
 		else
-			table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open in Grafana" })
+			table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open in Grafana" })
 		end
 		return true
 	elseif ch == "h" then

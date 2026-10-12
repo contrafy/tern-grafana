@@ -35,6 +35,7 @@ local Shared = require("../time/shared")
 local Tail = require("./tail")
 local TimeRange = require("../query/timerange")
 local Volume = require("./volume")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -381,7 +382,7 @@ local function poll(s: State, env: Env, effects: { Effect })
 	s.tail_inflight = true
 	table.insert(effects, { kind = "http", tag = M.POLL_TAG .. s.gen, route = r.route, request = request })
 	if s.show_volume and not s.volume_loading and env.now_ms - (s.volume_at_ms or 0) >= M.VOLUME_TAIL_MS then
-		local live: Run = table.clone(r)
+		local live: Run = Tbl.copy(r)
 		live.from_ms, live.to_ms = range.from_ms, range.to_ms
 		volumeRequest(s, env, live, effects)
 	end
@@ -648,7 +649,7 @@ local function applyFilter(
 )
 	local expr, err = LogQL.filter(s.expr, name, value, exclude, indexed)
 	if err then
-		table.insert(effects, { kind = "toast", level = "warn", text = "Cannot filter: " .. err })
+		table.insert(effects, { kind = "toast", level = "error", text = "Cannot filter: " .. err })
 		return
 	end
 	s.expr, s.cursor = expr, #expr
@@ -824,7 +825,7 @@ local function openMetrics(s: State, effects: { Effect })
 	if target then
 		table.insert(effects, { kind = "open", target = target })
 	else
-		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open metrics" })
+		table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open metrics" })
 	end
 end
 
@@ -1016,7 +1017,7 @@ local function toggleVolume(s: State, env: Env, effects: { Effect })
 	local r = s.ran
 	if s.show_volume and r and not r.metric then
 		local range = resolve(s, env)
-		local live: Run = table.clone(r)
+		local live: Run = Tbl.copy(r)
 		if range then
 			live.from_ms, live.to_ms = range.from_ms, range.to_ms
 		end
@@ -1147,7 +1148,7 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		if target then
 			table.insert(effects, { kind = "open", target = target })
 		else
-			table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open in Grafana" })
+			table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open in Grafana" })
 		end
 		return true
 	elseif ch == "?" then

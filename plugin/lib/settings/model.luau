@@ -7,6 +7,8 @@
 -- environment variable name, a file path) and header values, which the
 -- config already stores in plain text.
 
+local Tbl = require("../tbl")
+
 local M = {}
 
 M.ENDPOINTS = table.freeze({ "grafana", "prometheus", "alertmanager", "loki", "tempo" })
@@ -615,8 +617,8 @@ end
 -- Sets a field's text. "header_new" takes "Name: value" and adds (or
 -- replaces) that header; an empty edit of a sensitive header keeps its value.
 function M.setField(form: Form, id: string, text: string): (Form, string?)
-	local out = table.clone(form)
-	out.values = table.clone(form.values)
+	local out = Tbl.copy(form)
+	out.values = Tbl.copy(form.values)
 	if id == "header_new" then
 		local t = trim(text)
 		if t == "" then
@@ -629,7 +631,7 @@ function M.setField(form: Form, id: string, text: string): (Form, string?)
 		if string.lower(name :: string) == "authorization" then
 			return form, "set credentials with auth, not an Authorization header"
 		end
-		out.headers = table.clone(form.headers)
+		out.headers = Tbl.copy(form.headers)
 		if not table.find(out.headers, name) then
 			table.insert(out.headers, name)
 		end
@@ -648,8 +650,8 @@ function M.setField(form: Form, id: string, text: string): (Form, string?)
 end
 
 function M.removeHeader(form: Form, name: string): Form
-	local out = table.clone(form)
-	out.values = table.clone(form.values)
+	local out = Tbl.copy(form)
+	out.values = Tbl.copy(form.values)
 	out.values["header:" .. name] = nil
 	out.headers = {}
 	for _, h in form.headers do
@@ -684,8 +686,8 @@ function M.cycle(form: Form, f: Field, delta: number): Form
 	end
 	local i = table.find(values, form.values[f.id]) or 0
 	local nextValue = values[(i - 1 + delta) % #values + 1]
-	local out = table.clone(form)
-	out.values = table.clone(form.values)
+	local out = Tbl.copy(form)
+	out.values = Tbl.copy(form.values)
 	out.values[f.id] = nextValue
 	return out
 end
@@ -765,7 +767,7 @@ function M.endpointFromForm(form: Form, original: Raw?, decode: (string) -> any)
 	local problems: { Problem } = {}
 	local v = form.values
 	local base = basePath(form)
-	local ep: Raw = if original then table.clone(original) else {}
+	local ep: Raw = if original then Tbl.copy(original) else {}
 	for _, key in MANAGED do
 		ep[key] = nil
 	end
@@ -842,13 +844,13 @@ end
 -- A `contexts` that is not an object stays as written (the validator reports
 -- it) and edits land in a detached table.
 local function withContexts(raw: Raw?): (Raw, Raw)
-	local out: Raw = if raw then table.clone(raw) else {}
+	local out: Raw = if raw then Tbl.copy(raw) else {}
 	local current = out.contexts
 	local contexts: Raw = {}
 	if current == nil then
 		out.contexts = contexts
 	elseif isTable(current) and #current == 0 then
-		contexts = table.clone(current)
+		contexts = Tbl.copy(current)
 		out.contexts = contexts
 	end
 	if out.version == nil then
@@ -909,7 +911,7 @@ function M.applyForm(raw: Raw?, form: Form, decode: (string) -> any): (Raw?, { P
 	if not isTable(ctx) then
 		return nil, { { path = "contexts." .. name, message = "this context is no longer in the file; reload" } }
 	end
-	local ctxCopy: Raw = table.clone(ctx)
+	local ctxCopy: Raw = Tbl.copy(ctx)
 	if form.mode == "new_endpoint" and ctxCopy[kind] ~= nil then
 		return nil, { { path = "contexts." .. name .. "." .. kind, message = "this context already has one" } }
 	end
@@ -927,7 +929,7 @@ function M.removeEndpoint(raw: Raw?, context: string, endpoint: string): Raw
 	local out, contexts = withContexts(raw)
 	local ctx = contexts[context]
 	if isTable(ctx) then
-		local copy = table.clone(ctx)
+		local copy = Tbl.copy(ctx)
 		copy[endpoint] = nil
 		contexts[context] = copy
 	end

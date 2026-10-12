@@ -22,6 +22,8 @@
 -- (a+)+b against a long run of "a" returns an error instead of hanging the
 -- host past its 2 s budget.
 
+local Tbl = require("./tbl")
+
 export type Match = {
 	-- Byte range of the whole match, inclusive (finish = start - 1 when empty).
 	start: number,
@@ -422,7 +424,7 @@ local function parseAtom(p: Parser, flags: Flags): Node?
 		return charNode(parseClass(p), flags)
 	elseif c == "(" then
 		p.pos += 1
-		local inner = table.clone(flags)
+		local inner = Tbl.copy(flags)
 		local node: Node
 		if peek(p) == "?" then
 			p.pos += 1
@@ -885,7 +887,7 @@ function M.compile(source: string, flags: string?): (Regex?, string?)
 			return nil, "regex: unsupported flag " .. c
 		end
 	end
-	local initial = table.clone(fl)
+	local initial = Tbl.copy(fl)
 	local p: Parser = { src = source, pos = 1, ncap = 0, names = {}, backrefs = {} }
 	local ok, res = pcall(function(): Node
 		local node = parseAlt(p, fl)

@@ -19,6 +19,7 @@ local Regex = require("../regex")
 local Route = require("../config/route")
 local Step = require("../time/step")
 local TransportTypes = require("../transport/types")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Request = TransportTypes.Request
@@ -242,7 +243,7 @@ local function variableOf(env: Env, raw: any): Variable?
 		v.datasource_type = v.query
 	end
 	if #v.texts ~= #v.values then
-		v.texts = table.clone(v.values)
+		v.texts = Tbl.copy(v.values)
 	end
 	v.deps = depsOf(v)
 	return v
@@ -278,7 +279,7 @@ local function validate(v: Variable)
 	end
 	if v.from_url and #v.values > 0 then
 		-- Grafana accepts values from the URL that the options do not list.
-		v.texts = table.clone(v.values)
+		v.texts = Tbl.copy(v.values)
 		return
 	end
 	if v.include_all then
@@ -383,12 +384,12 @@ function M.applyUrl(vars: { Variable }, overrides: { [string]: { string } })
 		if v.include_all and #values == 1 and isAllText(values[1]) then
 			v.values = { M.ALL }
 		else
-			v.values = table.clone(values)
+			v.values = Tbl.copy(values)
 			if not v.multi then
 				v.values = { values[1] }
 			end
 		end
-		v.texts = table.clone(v.values)
+		v.texts = Tbl.copy(v.values)
 		v.from_url = true
 		if v.kind ~= "query" and v.kind ~= "datasource" then
 			if v.kind == "textbox" then
@@ -473,7 +474,7 @@ function M.urlValues(vars: { Variable }): { [string]: { string } }
 		if #v.values == 1 and v.values[1] == M.ALL then
 			out[v.name] = { "$__all" }
 		else
-			out[v.name] = table.clone(v.values)
+			out[v.name] = Tbl.copy(v.values)
 		end
 	end
 	return out
@@ -852,10 +853,10 @@ function M.select(v: Variable, values: { string })
 	if not v.multi and #values > 1 then
 		values = { values[1] }
 	end
-	v.values = table.clone(values)
+	v.values = Tbl.copy(values)
 	v.from_url = false
 	if v.kind == "textbox" then
-		v.texts = table.clone(values)
+		v.texts = Tbl.copy(values)
 		v.options = { { text = values[1] or "", value = values[1] or "" } }
 		return
 	end
@@ -896,7 +897,7 @@ end
 
 -- Marks fetched variables named (and everything depending on them) for a refetch.
 function M.invalidate(vars: { Variable }, names: { string })
-	local all = table.clone(names)
+	local all = Tbl.copy(names)
 	for _, d in M.dependents(vars, names) do
 		table.insert(all, d)
 	end

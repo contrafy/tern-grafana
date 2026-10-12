@@ -10,6 +10,7 @@
 local Auth = require("./lib/auth/auth")
 local Curl = require("./lib/transport/curl")
 local Http = require("./lib/transport/http")
+local ReadFile = require("./lib/read_file")
 local Route = require("./lib/config/route")
 local TransportTypes = require("./lib/transport/types")
 
@@ -87,8 +88,8 @@ local function resolve(key: string, plan: Plan, done: (string?, string?) -> ())
 	if plan.kind == "env" then
 		settle(key, gen, plan, { text = tern.getenv(plan.name) })
 	elseif plan.kind == "file" then
-		local ok, text = pcall(tern.fs.read, plan.path, M.MAX_SECRET_FILE_BYTES)
-		settle(key, gen, plan, if ok then { text = text } else { error = tostring(text) })
+		local text, err = ReadFile.read(tern.fs.read, plan.path, M.MAX_SECRET_FILE_BYTES)
+		settle(key, gen, plan, if text then { text = text } else { error = err })
 	else
 		local ok, err = pcall(function()
 			tern.process.run(plan.argv, { timeout_ms = Auth.PROCESS_TIMEOUT_MS }, function(result: ProcessResult)

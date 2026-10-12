@@ -11,6 +11,7 @@
 local Interpolate = require("./interpolate")
 local Model = require("./model")
 local Variables = require("./variables")
+local Tbl = require("../tbl")
 
 type Panel = Model.Panel
 type Row = Model.Row
@@ -63,7 +64,7 @@ local function scopedValue(vals: Values, i: number): Interpolate.Var
 end
 
 local function withGrid(p: Panel, x: number, y: number, w: number, h: number): Panel
-	local copy = table.clone(p)
+	local copy = Tbl.copy(p)
 	copy.grid = { x = x, y = y, w = w, h = h }
 	return copy
 end
@@ -99,7 +100,7 @@ local function expandPanels(panels: { Panel }, vars: { Variables.Variable }, pre
 		local extra = 0
 		if r.direction == "v" then
 			for i = 1, n do
-				local s = table.clone(scope)
+				local s = Tbl.copy(scope)
 				s[r.var] = scopedValue(vals, i)
 				table.insert(out, {
 					key = prefix .. "p" .. p.id .. (if i > 1 then "." .. (i - 1) else ""),
@@ -114,7 +115,7 @@ local function expandPanels(panels: { Panel }, vars: { Variables.Variable }, pre
 			local w = math.max(24 / n, 24 / perRow)
 			local x, y = 0, baseY
 			for i = 1, n do
-				local s = table.clone(scope)
+				local s = Tbl.copy(scope)
 				s[r.var] = scopedValue(vals, i)
 				table.insert(out, {
 					key = prefix .. "p" .. p.id .. (if i > 1 then "." .. (i - 1) else ""),

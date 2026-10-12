@@ -12,6 +12,7 @@ local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
+local JSON_ENV = { encode = json.encode, array = json.array }
 
 local NOW = 1791577898000
 
@@ -35,7 +36,14 @@ local CFG = config([[{"default_context": "lab", "contexts": {
 
 local MARKS = { "TENANTMARK", "CMDMARK", "USERMARK", "PWENVMARK", "FILEMARK", "TOKENENVMARK" }
 
-local env: any = { now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null, config = CFG }
+local env: any = {
+	now_ms = NOW,
+	decode = json.decode,
+	encode = json.encode,
+	null = json.null,
+	array = json.array,
+	config = CFG,
+}
 
 local function ok(path: string): any
 	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
@@ -146,6 +154,8 @@ describe("promql", function()
 		expect(out.kind).toBe("instant")
 		expect(out.step).toBeNil()
 		expect(#out.series > 0).toBe(true)
+		-- No warnings must still read as a list, matching the declared signature.
+		expect((string.find(json.encode(out), '"warnings":[]', 1, true)) ~= nil).toBe(true)
 	end)
 
 	it("passes the server's query error through", function()
@@ -203,16 +213,21 @@ describe("compaction", function()
 	it("cuts any answer to the byte budget and says how much was cut", function()
 		local series, omitted = Compact.series(frames(200), { max_series = 200 })
 		expect(omitted).toBe(0)
-		local out = Compact.fit({ omitted = omitted, series = series }, "series", json.encode)
+		local out = Compact.fit({ omitted = omitted, series = series }, "series", JSON_ENV)
 		expect(#json.encode(out) <= Compact.MAX_BYTES).toBe(true)
 		expect(out.omitted > 0).toBe(true)
 		expect(#out.series + out.omitted).toBe(200)
 	end)
 
 	it("leaves an answer that fits unchanged", function()
-		local out = Compact.fit({ series = { { name = "a" } } }, "series", json.encode)
+		local out = Compact.fit({ series = { { name = "a" } } }, "series", JSON_ENV)
 		expect(out.omitted).toBeNil()
 		expect(#out.series).toBe(1)
+	end)
+
+	it("answers an empty list as a JSON array, so Carly reads no results instead of an object", function()
+		local out = Compact.fit({ series = {} }, "series", JSON_ENV)
+		expect(json.encode(out)).toBe('{"series":[]}')
 	end)
 
 	it("skips NaN and infinities: they are not JSON values Carly can take", function()
@@ -254,6 +269,22 @@ describe("find_dashboard", function()
 		expect(d.link).toBe("tern-grafana://dashboard?context=graf&uid=" .. d.uid)
 		expect(string.sub(d.url, 1, #"http://g:3000/sub/d/")).toBe("http://g:3000/sub/d/")
 		assertNoSecrets(plan("find_dashboard", { "tern" }).finish({ q = ok("grafana/12.4.12/search.json") }, env))
+	end)
+
+	-- Grafana sends `"tags": []` for most dashboards; Carly's signature says
+	-- `tags: {string}`, so an empty list must not encode as an object.
+	it("answers an untagged dashboard's tags as an empty JSON array", function()
+		local body = string.gsub(Fixtures.read("grafana/12.4.12/search.json"), '"tags":%[[^%]]*%]', '"tags":[]')
+		local out = assert(finish(plan("find_dashboard", { "tern", "graf" }), {
+			status = 200,
+			headers = {},
+			body = body,
+			timed_out = false,
+		}))
+		expect(#out.dashboards > 0).toBe(true)
+		local text = json.encode(out)
+		expect((string.find(text, '"tags":{}', 1, true))).toBeNil()
+		expect((string.find(text, '"tags":[]', 1, true)) ~= nil).toBe(true)
 	end)
 end)
 

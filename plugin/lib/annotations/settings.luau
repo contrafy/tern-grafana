@@ -5,6 +5,7 @@
 
 local Command = require("./command")
 local Types = require("../config/types")
+local Tbl = require("../tbl")
 
 type Config = Types.Config
 type Problem = Types.Problem
@@ -79,9 +80,9 @@ function M.read(config: Config?): (Settings, { Problem })
 	local settings: Settings = {
 		enabled = false,
 		on = "success",
-		patterns = table.clone(Command.DEFAULT_PATTERNS),
+		patterns = Tbl.copy(Command.DEFAULT_PATTERNS),
 		compiled = Command.compileAll(Command.DEFAULT_PATTERNS),
-		tags = table.clone(M.DEFAULT_TAGS),
+		tags = Tbl.copy(M.DEFAULT_TAGS),
 		context = nil,
 		dashboard_uid = nil,
 		panel_id = nil,

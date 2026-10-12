@@ -37,9 +37,15 @@ M.MAX_SERIES = 20
 M.SPARK = 12
 -- What one answer may encode to: under Carly's 16 KiB cap with headroom.
 M.MAX_BYTES = 12 * 1024
--- Raw response bodies above this are refused before parsing: the window
--- half runs under a 50 ms budget and a huge matrix would blow it.
-M.MAX_BODY_BYTES = 2 * 1024 * 1024
+-- Raw response bodies above this are refused before parsing: Carly's
+-- exports finish in the window half, under a 50 ms budget whose trip
+-- disables the VM's fetch hook. Measured with the pinned luau and the
+-- tests' pure-Luau JSON decoder (slower than Tern's native one, so a
+-- conservative proxy): decode, parse and summarize of a Prometheus matrix
+-- of 120-point series with kubelet-style labels cost about 0.033 ms per
+-- KiB (13 ms at 400 KiB, 52 ms at 1.6 MiB). 512 KiB stays near 17 ms,
+-- leaving room for a cold VM and GC.
+M.MAX_BODY_BYTES = 512 * 1024
 
 local SECOND = 1000
 local MINUTE = 60 * SECOND
@@ -91,6 +97,9 @@ local function summarize(frame: Frame, field: Frame.Field, spark: number): Serie
 	}
 	local sum = 0
 	local finite: { number } = {}
+	-- Only the last finite sample's time is kept; formatting it once (after
+	-- the loop) keeps civil-date math out of the per-sample cost.
+	local lastTime: number? = nil
 	for i, raw in field.values do
 		local v = Frame.finite(raw)
 		if v == nil then
@@ -104,10 +113,13 @@ local function summarize(frame: Frame, field: Frame.Field, spark: number): Serie
 		end
 		s.last = v
 		if times and type(times.values[i]) == "number" then
-			s.last_at = M.iso(times.values[i])
+			lastTime = times.values[i]
 		end
 		s.min = if s.min == nil then v else math.min(s.min :: number, v)
 		s.max = if s.max == nil then v else math.max(s.max :: number, v)
+	end
+	if lastTime ~= nil then
+		s.last_at = M.iso(lastTime)
 	end
 	if s.points > 0 then
 		s.avg = M.round(sum / s.points)
@@ -165,15 +177,35 @@ function M.clip(s: string, max: number): string
 	return string.sub(s, 1, math.max(0, max - 3)) .. "..."
 end
 
+export type Codec = {
+	encode: (any) -> string,
+	-- tern.json.array in Tern: tags a list so an empty one still encodes as `[]`.
+	array: (<T>(T) -> T)?,
+}
+
+-- An untagged list (getmetatable nil) tagged as a JSON array, so an empty
+-- one encodes as `[]` rather than `{}`; tagged or foreign tables pass
+-- through. Every list in an answer goes through this, nested ones too.
+function M.asArray(codec: Codec, list: any): any
+	if codec.array and type(list) == "table" and getmetatable(list) == nil then
+		return codec.array(list)
+	end
+	return list
+end
+local asArray = M.asArray
+
 -- Drops items from the end of `result[list]` until `encode(result)` fits
 -- `max_bytes` (default MAX_BYTES), adding the number dropped to
--- `result.omitted`. Returns the result (changed in place).
-function M.fit(result: { [string]: any }, list: string, encode: (any) -> string, max_bytes: number?): { [string]: any }
+-- `result.omitted`. The list is tagged as a JSON array so an empty answer
+-- reads `[]`. Returns the result (changed in place).
+function M.fit(result: { [string]: any }, list: string, codec: Codec, max_bytes: number?): { [string]: any }
+	local encode = codec.encode
 	local limit = max_bytes or M.MAX_BYTES
 	local items = result[list]
 	if type(items) ~= "table" then
 		return result
 	end
+	result[list] = asArray(codec, items)
 	if #encode(result) <= limit then
 		return result
 	end
@@ -183,7 +215,7 @@ function M.fit(result: { [string]: any }, list: string, encode: (any) -> string,
 	for i, item in items do
 		sizes[i] = #encode(item) + 1
 	end
-	result[list] = {}
+	result[list] = asArray(codec, {})
 	local base = #encode(result) + 32
 	local keep = 0
 	local total = base
@@ -195,7 +227,7 @@ function M.fit(result: { [string]: any }, list: string, encode: (any) -> string,
 		keep = i
 	end
 	local dropped = #items - keep
-	local kept = table.create(keep)
+	local kept = asArray(codec, table.create(keep))
 	for i = 1, keep do
 		kept[i] = items[i]
 	end

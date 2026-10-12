@@ -8,6 +8,7 @@ local Correlate = require("./correlate")
 local Range = require("../time/range")
 local Step = require("../time/step")
 local Types = require("../config/types")
+local Tbl = require("../tbl")
 
 type Problem = Types.Problem
 
@@ -53,7 +54,7 @@ function M.defaults(): Options
 		limit = M.LIMIT,
 		tail_ms = M.TAIL_MS,
 		volume = true,
-		correlate_labels = table.clone(Correlate.DEFAULT_LABELS),
+		correlate_labels = Tbl.copy(Correlate.DEFAULT_LABELS),
 		trace_id_pattern = Correlate.DEFAULT_TRACE_PATTERN,
 	}
 end

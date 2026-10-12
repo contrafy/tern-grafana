@@ -30,15 +30,26 @@ A toast confirms the start or says why the agent could not start.
 
 ## How the prompt travels
 
-Tern's halves share only the plugin's kv store and links, and links never carry data. The source block stores a
-draft under `tern-grafana.investigate.<id>` and opens `tern-grafana://investigate?id=<id>`; the preview takes the
-draft and deletes it. Send stores the final prompt under a new id and opens the same kind of link; the window
-deletes that record before it starts the agent. A record is refused once it is older than its lifetime (10 minutes
-for a draft, 2 minutes for a send) or already used, so clicking an old link never starts an agent.
+The source and preview blocks run on the machine whose panes they serve (possibly a remote Tern host), while the
+agent is started by the window on the machine showing it. The plugin's kv store is per machine, so the
+investigation travels in the link itself:
 
-The preview keeps the subject (names, labels, queries, value statistics) in its saved state, so a restored preview
-shows the same prompt; restoring never sends. kv and saved state are plain files: neither the records nor the
-prompt ever contain a credential, a credential source or a header value.
+1. The source block opens `tern-grafana://investigate?subject=<payload>`, the subject as base64url JSON. When it
+   would be longer than 32768 characters, recent-value series are dropped first (the prompt then says how many
+   were left out), then long text (queries, summary, labels, annotations) is clipped to 400 characters; a subject
+   that still does not fit is refused with a toast.
+2. The window opens the preview with that link and a ticket it mints and keeps in memory.
+3. Send opens `tern-grafana://investigate?prompt=<payload>&title=<title>&ticket=<ticket>`. The window starts the
+   agent only for a ticket it minted in the last 12 hours.
+
+Any other prompt link (one printed in a terminal, or sent by a preview restored after Tern restarted) opens a new
+preview of that exact prompt, with a note that it came from a link, instead of starting an agent. So no link on its
+own ever starts an agent: you always read the prompt in a preview and press Send.
+
+The preview keeps the subject (names, labels, queries, value statistics), or the prompt of a prompt-only preview,
+in its saved state, so a restored preview shows the same prompt; restoring never sends. Links, block arguments and
+saved state never contain a credential, a credential source or a header value; links in the subject with userinfo
+or a credential-named query parameter (`?token=`, `?api_key=`) are left out.
 
 ## Configuration
 

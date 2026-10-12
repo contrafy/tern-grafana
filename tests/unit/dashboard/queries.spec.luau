@@ -7,6 +7,7 @@ local Model = require("../../../plugin/lib/dashboard/model")
 local Queries = require("../../../plugin/lib/dashboard/queries")
 local Route = require("../../../plugin/lib/config/route")
 local S = require("./support")
+local Tbl = require("../../../plugin/lib/tbl")
 local Variables = require("../../../plugin/lib/dashboard/variables")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
@@ -79,9 +80,9 @@ for _, version in S.VERSIONS do
 		end)
 
 		it("skips hidden targets", function()
-			local raw = table.clone(assert(Model.findPanel(panels, 3)).json)
-			raw.targets = table.clone(raw.targets)
-			raw.targets[2] = table.clone(raw.targets[2])
+			local raw = Tbl.copy(assert(Model.findPanel(panels, 3)).json)
+			raw.targets = Tbl.copy(raw.targets)
+			raw.targets[2] = Tbl.copy(raw.targets[2])
 			raw.targets[2].hide = true
 			local pq = assert(Queries.build(raw, ctx(), env))
 			expect(pq.ref_ids).toEqual({ "A", "C" })
@@ -135,8 +136,8 @@ for _, version in S.VERSIONS do
 		end)
 
 		it("resolves the panel's ${ds} datasource and a constant", function()
-			local raw = table.clone(assert(Model.findPanel(d, 3)).json)
-			raw.targets = { table.clone(raw.targets[1]) }
+			local raw = Tbl.copy(assert(Model.findPanel(d, 3)).json)
+			raw.targets = { Tbl.copy(raw.targets[1]) }
 			raw.targets[1].datasource = nil
 			local pq = assert(Queries.build(raw, ctx(scope, 1800000), env))
 			expect(pq.queries[1].datasource).toEqual({ uid = "prom3", type = "prometheus" })

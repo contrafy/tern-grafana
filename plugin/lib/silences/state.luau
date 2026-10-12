@@ -20,6 +20,7 @@ local Normalize = require("../alerts/normalize")
 local Scheme = require("../links/scheme")
 local Sources = require("../alerts/sources")
 local TransportTypes = require("../transport/types")
+local Tbl = require("../tbl")
 
 type Alert = Normalize.Alert
 type Env = Env.Env
@@ -694,7 +695,7 @@ local function listKey(s: State, key: any, env: Env, effects: { Effect }): boole
 		local x = M.selected(s)
 		if x then
 			-- A new silence like the selected one (Alertmanager's "recreate").
-			openForm(s, table.clone(x.matchers))
+			openForm(s, Tbl.copy(x.matchers))
 		end
 	elseif text == "m" then
 		s.show_expired = not s.show_expired
@@ -773,7 +774,7 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 		stageExpire(s)
 	elseif act == "recreate" and i and M.visible(s)[i] then
 		s.sel = i
-		openForm(s, table.clone((M.visible(s)[i] :: Silence).matchers))
+		openForm(s, Tbl.copy((M.visible(s)[i] :: Silence).matchers))
 	elseif s.form and act == "frow" and i then
 		local form = s.form :: Form
 		local rows = M.formRows(form)

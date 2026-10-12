@@ -26,6 +26,7 @@ local Scheme = require("../links/scheme")
 local SeriesView = require("./series")
 local Target = require("./target")
 local ui = require("../ui")
+local Tbl = require("../tbl")
 
 type Config = ConfigTypes.Config
 type Env = EnvModule.Env
@@ -642,7 +643,7 @@ local function framesToSeries(frames: { Frame.Frame }, section: Section)
 			continue
 		end
 		for _, field in Frame.numberFields(frame) do
-			local labels: { [string]: string } = if field.labels then table.clone(field.labels) else {}
+			local labels: { [string]: string } = if field.labels then Tbl.copy(field.labels) else {}
 			local s: Series = { labels = labels, times = {}, values = {} }
 			for i, v in field.values do
 				local t = tf.values[i]

@@ -10,8 +10,13 @@ local Env = require("./lib/env")
 
 local M = {}
 
--- tern.now() is monotonic; anchor it to the wall clock once so now_ms is
--- epoch ms with sub-second resolution between calls.
+-- tern.now() is monotonic and gives sub-second resolution, but a monotonic
+-- clock may stop while the machine sleeps, and window code compares host
+-- times with os.time(). So the offset is re-anchored whenever now_ms drifts
+-- from the wall clock by more than DRIFT_MS (os.time() has 1 s resolution,
+-- so a smaller bound would re-anchor on rounding alone). Correct whether or
+-- not tern.now() pauses during sleep.
+local DRIFT_MS = 1500
 local offset = os.time() * 1000 - tern.now()
 
 local function kvGet(key: string): any
@@ -20,7 +25,13 @@ local function kvGet(key: string): any
 end
 
 function M.nowMs(): number
-	return tern.now() + offset
+	local wall = os.time() * 1000
+	local now = tern.now() + offset
+	if math.abs(now - wall) > DRIFT_MS then
+		offset = wall - tern.now()
+		now = wall
+	end
+	return now
 end
 
 function M.make(cx: BlockCx?): Env.Env
@@ -32,6 +43,7 @@ function M.make(cx: BlockCx?): Env.Env
 		decode = tern.json.decode,
 		encode = tern.json.encode,
 		null = tern.json.null,
+		array = tern.json.array,
 		config = config,
 		kv_get = kvGet,
 	}

@@ -6,6 +6,7 @@
 
 local Base64 = require("./base64")
 local Types = require("../config/types")
+local Tbl = require("../tbl")
 
 type Auth = Types.Auth
 type SecretSource = Types.SecretSource
@@ -59,7 +60,7 @@ function M.plan(auth: Auth, home: string?): (Plan?, string?)
 		return nil, nil
 	end
 	if source.from == "cmd" then
-		return { kind = "process", field = source.field, argv = table.clone(source.argv) }, nil
+		return { kind = "process", field = source.field, argv = Tbl.copy(source.argv) }, nil
 	elseif source.from == "env" then
 		return { kind = "env", field = source.field, name = source.name }, nil
 	end
@@ -137,7 +138,7 @@ end
 -- matching, since a secret may contain pattern characters; longer secrets
 -- first, so one that contains another is hidden whole.
 function M.redact(text: string, secrets: { string }): string
-	local sorted = table.clone(secrets)
+	local sorted = Tbl.copy(secrets)
 	table.sort(sorted, function(a: string, b: string): boolean
 		return #a > #b
 	end)
