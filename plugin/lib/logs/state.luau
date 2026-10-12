@@ -649,7 +649,7 @@ local function applyFilter(
 )
 	local expr, err = LogQL.filter(s.expr, name, value, exclude, indexed)
 	if err then
-		table.insert(effects, { kind = "toast", level = "warn", text = "Cannot filter: " .. err })
+		table.insert(effects, { kind = "toast", level = "error", text = "Cannot filter: " .. err })
 		return
 	end
 	s.expr, s.cursor = expr, #expr
@@ -825,7 +825,7 @@ local function openMetrics(s: State, effects: { Effect })
 	if target then
 		table.insert(effects, { kind = "open", target = target })
 	else
-		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open metrics" })
+		table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open metrics" })
 	end
 end
 
@@ -1148,7 +1148,7 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		if target then
 			table.insert(effects, { kind = "open", target = target })
 		else
-			table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open in Grafana" })
+			table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open in Grafana" })
 		end
 		return true
 	elseif ch == "?" then

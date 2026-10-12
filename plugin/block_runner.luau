@@ -190,8 +190,13 @@ function exec(run: Run, effects: { Effect })
 				tern.kv.set(e.key, e.value)
 			end)
 		elseif kind == "toast" then
+			-- Tern raises on an unknown level, which would lose the message.
+			local level = e.level
+			if level ~= "success" and level ~= "error" then
+				level = "info"
+			end
 			call(run, "toast", function()
-				run.cx:toast(e.level or "info", e.text or "", e.sub)
+				run.cx:toast(level, e.text or "", e.sub)
 			end)
 		elseif kind == "open" then
 			call(run, "open", function()

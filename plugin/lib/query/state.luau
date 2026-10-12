@@ -871,7 +871,7 @@ local function openTrace(s: State, effects: { Effect })
 	if target then
 		table.insert(effects, { kind = "open", target = target })
 	else
-		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open the trace" })
+		table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open the trace" })
 	end
 end
 
@@ -901,7 +901,7 @@ local function openLogs(s: State, env: Env, effects: { Effect })
 	if target then
 		table.insert(effects, { kind = "open", target = target })
 	else
-		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open logs" })
+		table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open logs" })
 	end
 end
 
@@ -1020,7 +1020,7 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		if target then
 			table.insert(effects, { kind = "open", target = target })
 		else
-			table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open in Grafana" })
+			table.insert(effects, { kind = "toast", level = "info", text = err or "Cannot open in Grafana" })
 		end
 		return true
 	elseif ch == "h" then
