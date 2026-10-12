@@ -68,6 +68,9 @@ export type Config = {
 	impact: any,
 	watches: any,
 	hosts: any,
+	logs: any,
+	trace: any,
+	investigate: any,
 }
 
 export type Problem = { path: string, message: string }
