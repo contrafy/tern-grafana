@@ -7,6 +7,34 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-12
+
+### Fixed
+
+- Settings: choosing the Grafana Cloud (or any) starter template no longer fails
+  with "table has a protected metatable". Tern tags decoded JSON arrays with a
+  protected metatable, which `table.clone` refuses; every copy of decoded data
+  now avoids it, and the test suite decodes JSON the same way Tern does.
+- Config and `token_file`/`password_file` paths that are symlinks (stow, chezmoi,
+  home-manager, sops-nix) are read; Settings refuses to overwrite a symlinked
+  config and says to edit its target.
+- Deploy annotations redact more secrets before posting: tokens in URL query
+  strings, URL userinfo (passwords containing `@`), auth, token, cookie and key
+  headers, `-u user:pass`, `--oauth2-bearer`, and `--set` values under secret keys.
+- Investigate works for blocks on remote hosts: the prompt travels in the link
+  instead of the local key-value store, and only a preview opened in this window
+  can start the agent.
+- Explanations such as "Cannot open logs" are shown; they used a toast level
+  Tern does not accept.
+- Times stay on the wall clock after the machine sleeps (alert staleness, watch
+  toasts, Investigate expiry, silence and annotation times).
+- Carly answers encode empty lists as `[]`, and large answers are refused
+  earlier (512 KiB) so they stay within the window's time budget.
+
+### Changed
+
+- Alert fingerprints are computed without per-byte allocation.
+
 ## [0.1.0] - 2026-10-12
 
 ### Added
@@ -100,5 +128,6 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/contrafy/tern-grafana/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/contrafy/tern-grafana/releases/tag/v0.1.0
