@@ -8,7 +8,7 @@ browser pane.
 
 ![A Grafana dashboard drawn natively in Tern](docs/screenshots/dashboard.png)
 
-> Pre-release, in active development. See [Features](#features) for what is done and what is planned.
+> Public beta, in active development. See [Features](#features) for what is done and what is planned.
 
 - **Query** PromQL with metric and label autocomplete; read values under a
   keyboard cursor; switch graph and table.
