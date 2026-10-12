@@ -7,6 +7,30 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-12
+
+### Added
+
+- **Connect Grafana** in the Settings block (first starter, `c`): paste a Grafana
+  or Grafana Cloud URL and a service account token; the token is tested first,
+  datasources are discovered automatically, then the token is stored and the
+  context written. **Update token** rotates it; removing a context offers to
+  delete the stored token.
+- OS keychain credentials: `token_keychain` / `password_keychain` read from the
+  macOS keychain or the Linux Secret Service (service `tern-grafana`). Tokens are
+  written over stdin, never on a command line.
+- `token_env` also finds variables exported in your login shell, so they work
+  when Tern is opened from the Dock or Finder.
+
+### Changed
+
+- Credential problems are one actionable line (for example "No token stored for
+  cloud in the macOS keychain; open Grafana: Settings and use Connect or Update
+  token", or "the 1Password CLI (op) is not installed"); Lua tracebacks go to
+  Tern's log, never to the screen.
+- No starter template uses the 1Password CLI anymore; `token_cmd` and
+  `token_file` remain as advanced options for password managers.
+
 ## [0.1.1] - 2026-10-12
 
 ### Fixed
@@ -128,6 +152,7 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/contrafy/tern-grafana/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/contrafy/tern-grafana/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/contrafy/tern-grafana/releases/tag/v0.1.0
