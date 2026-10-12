@@ -12,10 +12,15 @@
 -- (LTTB) to a point budget derived from a byte budget, drops series beyond
 -- the cap (reported as `dropped`), and shrinks the budget until the document
 -- fits.
+--
+-- Exemplars are diamonds in one `tg-exemplar` path over the series, at most
+-- EXEMPLAR_CAP of them (thinned evenly over time); layout.exemplars lists
+-- the ones drawn so a block can select one by index.
 
 local Axis = require("./axis")
 local Format = require("../units/format")
 local Frame = require("../frame/types")
+local FrameProm = require("../frame/prom")
 local Layout = require("./layout")
 local Lttb = require("../time/lttb")
 local Series = require("./series")
@@ -54,6 +59,9 @@ export type Options = {
 	offset_min: number?,
 	-- Grafana legendFormat for series names.
 	legend: string?,
+	-- Exemplar markers (any order); those in the time range are drawn, at
+	-- most EXEMPLAR_CAP of them.
+	exemplars: { FrameProm.Exemplar }?,
 }
 
 export type Result = { svg: string, layout: Layout, dropped: number, points: number }
@@ -64,6 +72,11 @@ M.CAP = 262144
 -- Aim below the cap: estimates are rough and the next refresh may grow.
 M.TARGET = 240 * 1024
 M.PALETTE = 10
+-- Most exemplar markers drawn: a dense histogram keeps one per bucket per
+-- scrape, which would bury the lines.
+M.EXEMPLAR_CAP = 200
+-- Half the width of an exemplar diamond, in viewBox px.
+M.EXEMPLAR_R = 4
 
 local NULL = Frame.NULL
 local finite = Frame.finite
@@ -76,6 +89,8 @@ local X_AXIS_H = 24
 local BYTES_LINE = 12
 local BYTES_BAR = 30
 local FIXED_BYTES = 8 * 1024
+-- "M123.4 56.7l4 4l-4 4l-4 -4Z" per exemplar marker.
+local BYTES_EXEMPLAR = 32
 -- Beyond this, tick labels use automatic decimals.
 local MAX_TICK_DECIMALS = 4
 
@@ -552,6 +567,17 @@ local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: 
 		end
 	end
 
+	-- Exemplars: one path of diamonds over the lines.
+	local exemplars = layout.exemplars
+	if exemplars and #exemplars > 0 then
+		local r = M.EXEMPLAR_R
+		local buf: { string } = table.create(#exemplars)
+		for i, e in exemplars do
+			buf[i] = fmt("M%.1f %.1fl%d %dl%d %dl%d %dZ", g.xOf(e.time_ms), g.yOf(e.value) - r, r, r, -r, r, -r, -r)
+		end
+		table.insert(out, '<path class="tg-exemplar" stroke-width="1" d="' .. table.concat(buf) .. '"/>')
+	end
+
 	if #list == 0 then
 		table.insert(
 			out,
@@ -631,6 +657,32 @@ local function unionTimes(plot: Plot): { number }
 	return out
 end
 
+-- The exemplars a chart over [from_ms, to_ms] draws, sorted by time and
+-- thinned evenly to EXEMPLAR_CAP, and how many in range were left out.
+-- layout.exemplars holds the same list, so a block can pick one by index.
+function M.drawnExemplars(
+	list: { FrameProm.Exemplar },
+	from_ms: number,
+	to_ms: number
+): ({ FrameProm.Exemplar }, number)
+	local inRange: { FrameProm.Exemplar } = {}
+	for _, e in list do
+		if e.time_ms >= from_ms and e.time_ms <= to_ms then
+			table.insert(inRange, e)
+		end
+	end
+	FrameProm.sortExemplars(inRange)
+	local n = #inRange
+	if n <= M.EXEMPLAR_CAP then
+		return inRange, 0
+	end
+	local kept: { FrameProm.Exemplar } = table.create(M.EXEMPLAR_CAP)
+	for k = 1, M.EXEMPLAR_CAP do
+		kept[k] = inRange[math.floor((k - 1) * n / M.EXEMPLAR_CAP) + 1]
+	end
+	return kept, n - M.EXEMPLAR_CAP
+end
+
 function M.render(frames: { Frame }, options: Options?): Result
 	local opts: Options = options or {}
 	local W = opts.width or 960
@@ -675,9 +727,15 @@ function M.render(frames: { Frame }, options: Options?): Result
 	if (opts.fill_opacity or 0) > 0 and (opts.draw or "line") == "line" then
 		estimate *= 2
 	end
+	local marks: { FrameProm.Exemplar }?, marksDropped = nil, 0
+	if opts.exemplars then
+		marks, marksDropped = M.drawnExemplars(opts.exemplars, tFrom_, tTo_)
+	end
+	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
+
 	local perSeries = opts.point_budget or math.floor(plotRight)
 	if #list > 0 then
-		perSeries = math.min(perSeries, math.floor((M.TARGET - FIXED_BYTES) / (#list * estimate)))
+		perSeries = math.min(perSeries, math.floor((M.TARGET - fixed) / (#list * estimate)))
 	end
 	perSeries = math.max(3, perSeries)
 
@@ -692,6 +750,14 @@ function M.render(frames: { Frame }, options: Options?): Result
 	for _ = 1, 8 do
 		local plot = downsample(shown, opts, perSeries)
 		local lo, hi = valueRange(shown, plot, opts)
+		-- Exemplars share the axis (as in Grafana): a marker pinned to the
+		-- plot edge would misstate its value. Percent stacks keep 0..1.
+		if marks and stack ~= "percent" then
+			for _, e in marks do
+				lo = if lo == nil then e.value else math.min(lo :: number, e.value)
+				hi = if hi == nil then e.value else math.max(hi :: number, e.value)
+			end
+		end
 		local hardMin, hardMax = opts.min, opts.max
 		if stack == "percent" then
 			hardMin, hardMax = hardMin or 0, hardMax or 1
@@ -730,6 +796,8 @@ function M.render(frames: { Frame }, options: Options?): Result
 			times = unionTimes(plot),
 			series = drawn,
 			dropped = dropped,
+			exemplars = marks,
+			exemplars_dropped = if marks then marksDropped else nil,
 		}
 		svg = build(shown, plot, layout, opts, yScale)
 		if #svg <= M.TARGET or perSeries <= 3 then

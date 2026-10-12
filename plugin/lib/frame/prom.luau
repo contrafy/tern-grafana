@@ -197,4 +197,82 @@ function M.result(doc: any, env: Env): Frame.QueryResult
 	return { ok = true, frames = frames, warnings = warnings }
 end
 
+-- Exemplars ------------------------------------------------------------------
+
+-- One exemplar: a sample of a histogram bucket (or counter) the server kept
+-- with the labels of the request that produced it, usually a trace id.
+-- Grafana's exemplar frame merges both label sets into string fields, so
+-- its exemplars carry everything in `labels` and nothing in `series`.
+export type Exemplar = {
+	time_ms: number,
+	value: number,
+	-- The exemplar's own labels (trace_id, ...).
+	labels: { [string]: string },
+	-- The labels of the series it belongs to.
+	series: { [string]: string },
+}
+
+-- Label names that carry a trace id, tried in order after a configured one.
+M.TRACE_LABELS = table.freeze({ "trace_id", "traceID", "traceId" })
+
+function M.sortExemplars(list: { Exemplar })
+	table.sort(list, function(a, b)
+		return a.time_ms < b.time_ms
+	end)
+end
+
+-- The `data` of a /api/v1/query_exemplars success body (Prometheus 2.x and
+-- 3.x send the same shape), sorted by time. Exemplars without a finite
+-- value are dropped: they cannot be placed on the chart.
+function M.exemplars(doc: any, env: Env): { Exemplar }
+	local out: { Exemplar } = {}
+	local data = if type(doc) == "table" then Env.value(env, doc.data) else nil
+	if type(data) ~= "table" then
+		return out
+	end
+	for _, group in data do
+		if type(group) ~= "table" then
+			continue
+		end
+		local seriesLabels = labels(env, group.seriesLabels)
+		local list = Env.value(env, group.exemplars)
+		if type(list) ~= "table" then
+			continue
+		end
+		for _, e in list do
+			if type(e) ~= "table" then
+				continue
+			end
+			local value = Frame.finite(M.sample(Env.value(env, e.value)))
+			local t = tonumber(Env.value(env, e.timestamp))
+			if value and t then
+				table.insert(
+					out,
+					{ time_ms = M.ms(t), value = value, labels = labels(env, e.labels), series = seriesLabels }
+				)
+			end
+		end
+	end
+	M.sortExemplars(out)
+	return out
+end
+
+-- The trace id an exemplar (or any label set) carries and the label it came
+-- from: `preferred` first, then TRACE_LABELS.
+function M.traceId(lbls: { [string]: string }, preferred: string?): (string?, string?)
+	if preferred and preferred ~= "" then
+		local v = lbls[preferred]
+		if v and v ~= "" then
+			return v, preferred
+		end
+	end
+	for _, name in M.TRACE_LABELS do
+		local v = lbls[name]
+		if v and v ~= "" then
+			return v, name
+		end
+	end
+	return nil, nil
+end
+
 return M

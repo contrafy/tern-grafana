@@ -5,6 +5,7 @@
 -- rung each fixture panel lands on per Grafana version, and what the keys
 -- and clicks do. Late answers to superseded requests must never overwrite
 -- newer data, and nothing that opens a pane may happen in init.
+local Frame = require("../../../plugin/lib/frame/types")
 local PanelState = require("../../../plugin/lib/dashboard/panel_state")
 local Repeat = require("../../../plugin/lib/dashboard/repeat")
 local S = require("./support")
@@ -503,6 +504,134 @@ for _, version in S.VERSIONS do
 		end)
 	end
 end
+
+-- The body of the panel query pending under `panel`.
+local function panelBody(h: Harness, panel: string): any
+	for tag, e in h.pending do
+		if string.match(tag, "^q/%d+/%d+/" .. panel .. "$") then
+			return json.decode(e.request.body)
+		end
+	end
+	return nil
+end
+
+local function answer(h: Harness, panel: string, path: string)
+	for tag in h.pending do
+		if string.match(tag, "^q/%d+/%d+/" .. panel .. "$") then
+			h.pending[tag] = nil
+			State.update(h.s, { kind = "http_done", tag = tag, response = S.response(path) }, h.env)
+			return
+		end
+	end
+	error("no pending query for " .. panel)
+end
+
+for _, version in S.VERSIONS do
+	describe("dashboard exemplars on Grafana " .. version, function()
+		it("asks time series range targets for exemplars, and no other panel", function()
+			local h = start(version, PANELS)
+			expect(panelBody(h, "p2").queries[1].exemplar).toBe(true)
+			expect(panelBody(h, "p5").queries[1].exemplar).toBe(false)
+		end)
+
+		it("never asks with query.exemplars off", function()
+			local cfg = table.clone(S.CONFIG) :: any
+			cfg.query = { exemplars = false }
+			local env = S.env(cfg)
+			local s, effects = State.init({ PANELS }, nil, env)
+			local h: Harness = { s = s, env = env, pending = {}, opened = {} }
+			apply(h, version, "tern-panels", effects)
+			expect(panelBody(h, "p2").queries[1].exemplar).toBe(false)
+		end)
+
+		it("draws the exemplars as markers, keeps them out of the series, and opens a trace from one", function()
+			local h = start(version, PANELS)
+			answer(h, "p2", S.grafana(version, "ds_query_prom_exemplars.json"))
+			local data = h.s.panels.p2.data :: any
+			expect(#data.frames).toBe(2)
+			expect(#data.exemplars).toBe(120)
+			local _, assets = View.view(h.s, h.env)
+			local svg = (assets :: any).p2.bytes :: string
+			expect(svg).toContain('class="tg-exemplar"')
+			press(h, version, key("enter"))
+			expect(h.s.expanded).toBe(true)
+			press(h, version, char("x"))
+			local e = State.selectedExemplar(h.s) :: any
+			expect(h.s.cursor).toBe(e.time_ms)
+			local _, effects = press(h, version, key("enter"))
+			expect(h.s.expanded).toBe(true)
+			local l = Scheme.decode(h.opened[#h.opened]) :: any
+			expect(l.action).toBe("trace")
+			expect(l.params.id).toBe(e.labels.traceID)
+			expect(#effects).toBe(1)
+			-- L follows the exemplar's series labels to the logs block.
+			press(h, version, char("L"))
+			local logs = Scheme.decode(h.opened[#h.opened]) :: any
+			expect(logs.action).toBe("logs")
+			expect(logs.params.expr).toBe('{service="' .. e.labels.service .. '"}')
+			expect(logs.params.from).toBe(h.s.from or "now-1h")
+			-- escape drops the selection first, then leaves the expanded view.
+			press(h, version, key("escape"))
+			expect(h.s.exemplar).toBeNil()
+			expect(h.s.expanded).toBe(true)
+		end)
+	end)
+end
+
+describe("dashboard logs jump and time sync", function()
+	it("L on a panel opens logs for the labels its series share", function()
+		local h = start("12.4.12", PANELS)
+		answer(h, "p2", S.grafana("12.4.12", "ds_query_prom_range.json"))
+		local _, effects = press(h, "12.4.12", char("L"))
+		-- CPU by mode: the series share no correlating label.
+		expect(#h.opened).toBe(0)
+		expect(effects[1].kind).toBe("toast")
+		h.s.panels.p2.data = {
+			frames = { Frame.timeSeries({ job = "node", mode = "idle" }, { 1 }, { 1 }) },
+			errors = {},
+			warnings = {},
+		}
+		press(h, "12.4.12", char("L"))
+		local l = Scheme.decode(h.opened[1]) :: any
+		expect(l.params).toEqual({
+			context = "lab",
+			expr = '{job="node"}',
+			from = h.s.from or "now-1h",
+			to = h.s.to or "now",
+		})
+	end)
+
+	it("S syncs the dashboard's range with a query block and persists", function()
+		local h = start("12.4.12", PANELS)
+		local env = h.env
+		local kv: { [string]: any } = {}
+		env.kv_get = function(k: string): any
+			return kv[k]
+		end
+		local _, effects = press(h, "12.4.12", char("S"))
+		for _, e in effects do
+			if e.kind == "kv_set" then
+				kv[e.key] = e.value
+			end
+		end
+		expect(kv["tern-grafana.time.shared"] ~= nil).toBe(true)
+		expect(State.save(h.s).sync).toBe(true)
+		-- Another block publishes a new range; the next poll re-queries the panels.
+		kv["tern-grafana.time.shared"] = { from = "now-6h", to = "now", origin = "other", seq = 99 }
+		local _, fx = State.update(h.s, { kind = "tick", tag = "sync:" .. h.s.sync.gen }, env)
+		expect(h.s.from).toBe("now-6h")
+		local queries = 0
+		for _, e in fx do
+			if e.kind == "http" and string.match(e.tag, "^q/") then
+				queries += 1
+			end
+		end
+		expect(queries > 0).toBe(true)
+		local again, restored = State.init({}, State.save(h.s), S.env())
+		expect(again.sync.on).toBe(true)
+		expect((restored[1] :: any).tag).toBe("sync:0")
+	end)
+end)
 
 describe("dashboard block search and errors", function()
 	it("opens a search picker without a uid and loads the picked dashboard", function()

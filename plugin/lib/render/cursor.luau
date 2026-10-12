@@ -91,4 +91,30 @@ function M.step(layout: Layout, t: number?, dir: number, count: number?): number
 	return times[k]
 end
 
+-- `x`: the next drawn exemplar (index into layout.exemplars) in order of
+-- distance from `anchor` (the cursor time when cycling began; earlier first
+-- on a tie), wrapping; the nearest when none is selected. nil without any.
+function M.nextExemplar(layout: Layout, anchor: number, current: number?): number?
+	local list = layout.exemplars
+	if list == nil or #list == 0 then
+		return nil
+	end
+	local order: { number } = table.create(#list)
+	for i = 1, #list do
+		order[i] = i
+	end
+	table.sort(order, function(a, b)
+		local da, db = math.abs(list[a].time_ms - anchor), math.abs(list[b].time_ms - anchor)
+		if da ~= db then
+			return da < db
+		end
+		return a < b
+	end)
+	local at = if current then table.find(order, current) else nil
+	if at == nil then
+		return order[1]
+	end
+	return order[at % #order + 1]
+end
+
 return M

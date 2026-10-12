@@ -11,14 +11,19 @@
 --   and cached per context for TTL_MS.
 -- - The chart SVG is rendered once per result; the keyboard cursor only moves
 --   an overlay, so stepping through samples mints no new blob.
+-- - Range queries also fetch exemplars (`x` selects, `enter` opens the
+--   trace); `L` jumps to logs; `S` joins the shared time range
+--   (lib/time/shared.luau), adopted on a 2 s poll while synced.
 
 local Effect = require("../effect")
 local Env = require("../env")
 local Frame = require("../frame/types")
+local FrameProm = require("../frame/prom")
 local GrafanaUrl = require("../links/grafana_url")
 local Handoff = require("../investigate/handoff")
 local History = require("./history")
 local InvestigateSubject = require("../investigate/subject")
+local Jumps = require("./jumps")
 local Metrics = require("../source/metrics")
 local Options = require("./options")
 local Promql = require("./promql")
@@ -26,6 +31,7 @@ local Range = require("../time/range")
 local Route = require("../config/route")
 local Scheme = require("../links/scheme")
 local Step = require("../time/step")
+local Shared = require("../time/shared")
 local Suggest = require("./suggest")
 local Svg = require("../render/svg_timeseries")
 local TimeRange = require("./timerange")
@@ -111,6 +117,17 @@ export type State = {
 	seq: number,
 	overlay: ("help" | "history")?,
 	history: HistoryPicker?,
+	-- Exemplars for the query of generation exemplars_gen (a direct endpoint
+	-- answers them apart from the query), and why they failed.
+	exemplars: { FrameProm.Exemplar }?,
+	exemplars_gen: number?,
+	exemplars_error: string?,
+	-- Selected exemplar (index into chart.layout.exemplars) and the cursor
+	-- time `x` cycling began at.
+	exemplar: number?,
+	ex_anchor: number?,
+	-- Shared time range and cursor (key S).
+	sync: Shared.Sync,
 }
 
 local M = {}
@@ -120,6 +137,7 @@ M.TTL_MS = 5 * 60 * 1000
 M.ERROR_TTL_MS = 30 * 1000
 M.QUERY_TAG = "q:"
 M.SUGGEST_TAG = "s:"
+M.EXEMPLAR_TAG = "e:"
 M.REFRESH_TAG = "refresh:"
 -- shift+left/right steps this many samples.
 M.FAST_STEP = 10
@@ -181,6 +199,8 @@ end
 local function run(s: State, env: Env, effects: { Effect })
 	s.gen += 1
 	s.inflight = nil
+	s.exemplar, s.ex_anchor = nil, nil
+	s.exemplars, s.exemplars_gen, s.exemplars_error = nil, nil, nil
 	local expr = trim(s.expr)
 	if expr == "" then
 		s.status = "idle"
@@ -210,15 +230,18 @@ local function run(s: State, env: Env, effects: { Effect })
 	local interval = Step.interval(span, points).interval_ms
 	local sent = Step.interpolate(expr, Step.macros(span, step, interval))
 	local kind: "range" | "instant" = if s.mode == "graph" then "range" else "instant"
+	local wantExemplars = kind == "range" and s.options.exemplars
+	local rangeQuery: Metrics.RangeQuery = {
+		expr = sent,
+		from_ms = range.from_ms,
+		to_ms = range.to_ms,
+		step_ms = step,
+		max_points = points,
+		ref_id = "A",
+		exemplars = wantExemplars,
+	}
 	local request = if kind == "range"
-		then Metrics.rangeRequest(route, {
-			expr = sent,
-			from_ms = range.from_ms,
-			to_ms = range.to_ms,
-			step_ms = step,
-			max_points = points,
-			ref_id = "A",
-		})
+		then Metrics.rangeRequest(route, rangeQuery)
 		else Metrics.instantRequest(route, { expr = sent, time_ms = range.to_ms, ref_id = "A" })
 	s.inflight = {
 		gen = s.gen,
@@ -232,6 +255,10 @@ local function run(s: State, env: Env, effects: { Effect })
 	}
 	s.status = "loading"
 	table.insert(effects, { kind = "http", tag = M.QUERY_TAG .. s.gen, route = route, request = request })
+	local exRequest = if wantExemplars then Metrics.exemplarsRequest(route, rangeQuery) else nil
+	if exRequest then
+		table.insert(effects, { kind = "http", tag = M.EXEMPLAR_TAG .. s.gen, route = route, request = exRequest })
+	end
 end
 
 local function hasNumbers(frames: { Frame }): boolean
@@ -247,10 +274,32 @@ local function inChart(chart: Svg.Result, t: number?): boolean
 	return t ~= nil and t >= chart.layout.t_from and t <= chart.layout.t_to
 end
 
+-- Draws the chart of the result on screen with the exemplars of its run.
+local function renderChart(s: State)
+	local r = s.ran :: Run
+	local exemplars = if s.exemplars_gen == r.gen then s.exemplars else nil
+	local ok, chart =
+		pcall(Svg.render, s.frames :: { Frame }, { from_ms = r.from_ms, to_ms = r.to_ms, exemplars = exemplars })
+	s.exemplar = nil
+	if not ok then
+		s.status = "error"
+		s.failure = { kind = "render", message = tostring(chart) }
+		s.chart, s.cursor_t = nil, nil
+		return
+	end
+	s.chart = chart
+	if inChart(chart, s.restore_cursor) then
+		s.cursor_t = s.restore_cursor
+	elseif not inChart(chart, s.cursor_t) then
+		s.cursor_t = nil
+	end
+	s.restore_cursor = nil
+end
+
 local function finish(s: State, env: Env, response: any)
 	local r = s.inflight :: Run
 	s.inflight = nil
-	local result: any = Metrics.parse(r.route, response, env, r.kind)
+	local result: any, exemplars = Metrics.parseWithExemplars(r.route, response, env, r.kind)
 	if not result.ok then
 		local e = result.error
 		s.status = "error"
@@ -258,6 +307,9 @@ local function finish(s: State, env: Env, response: any)
 		s.ran, s.frames, s.chart, s.cursor_t = r, nil, nil, nil
 		s.warnings = {}
 		return
+	end
+	if #exemplars > 0 then
+		s.exemplars, s.exemplars_gen = exemplars, r.gen
 	end
 	local frames: { Frame } = result.frames
 	s.status = "ok"
@@ -267,22 +319,27 @@ local function finish(s: State, env: Env, response: any)
 	s.warnings = result.warnings or {}
 	s.chart = nil
 	if r.kind == "range" and hasNumbers(frames) then
-		local ok, chart = pcall(Svg.render, frames, { from_ms = r.from_ms, to_ms = r.to_ms })
-		if not ok then
-			s.status = "error"
-			s.failure = { kind = "render", message = tostring(chart) }
-			s.cursor_t = nil
-			return
-		end
-		s.chart = chart
-		if inChart(chart, s.restore_cursor) then
-			s.cursor_t = s.restore_cursor
-		elseif not inChart(chart, s.cursor_t) then
-			s.cursor_t = nil
-		end
-		s.restore_cursor = nil
+		renderChart(s)
 	else
 		s.cursor_t = nil
+	end
+end
+
+-- The answer of a direct endpoint's /api/v1/query_exemplars. Arriving after
+-- the query, it redraws the chart once with the markers.
+local function exemplarsDone(s: State, env: Env, gen: number, response: any)
+	local r = s.inflight or s.ran
+	if r == nil or r.gen ~= gen then
+		return
+	end
+	local result: any = Metrics.parseExemplars(r.route, response, env)
+	if not result.ok then
+		s.exemplars_error = "Exemplars: " .. result.error.message
+		return
+	end
+	s.exemplars, s.exemplars_gen = result.exemplars, gen
+	if s.ran and s.ran.gen == gen and s.chart and #result.exemplars > 0 then
+		renderChart(s)
 	end
 end
 
@@ -561,6 +618,12 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		seq = 0,
 		overlay = nil,
 		history = nil,
+		exemplars = nil,
+		exemplars_gen = nil,
+		exemplars_error = nil,
+		exemplar = nil,
+		ex_anchor = nil,
+		sync = Shared.new("query", env.now_ms, savedTable.sync == true),
 	}
 	local effects: { Effect } = {}
 	if cfg and context and cfg.contexts[context] == nil then
@@ -575,6 +638,10 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 			s.status = "error"
 			s.failure = { kind = "config", message = NO_CONFIG }
 		end
+	end
+	if s.sync.on then
+		-- The first poll adopts what the other blocks share.
+		table.insert(effects, Shared.timer(s.sync))
 	end
 	return s, effects
 end
@@ -711,13 +778,130 @@ local function historyKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 	return false
 end
 
+-- Publishes the range and cursor when sync is on.
+local function share(s: State, env: Env, effects: { Effect })
+	local e = Shared.share(s.sync, { from = s.from, to = s.to }, s.cursor_t, env)
+	if e then
+		table.insert(effects, e)
+	end
+end
+
 local function setRange(s: State, env: Env, from: string?, to: string?, effects: { Effect }): boolean
 	if from == nil or to == nil then
 		return false
 	end
 	s.from, s.to = from, to
 	run(s, env, effects)
+	share(s, env, effects)
 	return true
+end
+
+-- Applies a range and cursor another synced block shared. The SVG is only
+-- re-rendered when the range changed; a cursor only moves the overlay.
+local function adoptShared(s: State, env: Env, r: Shared.Range, cursor: number?, effects: { Effect })
+	if r.from ~= s.from or r.to ~= s.to then
+		s.from, s.to = r.from, r.to
+		run(s, env, effects)
+	end
+	if s.mode ~= "graph" or cursor == s.cursor_t then
+		return
+	end
+	s.exemplar, s.ex_anchor = nil, nil
+	local chart = s.chart
+	if cursor == nil then
+		s.cursor_t = nil
+	elseif s.status == "loading" then
+		s.restore_cursor = cursor
+	elseif chart and inChart(chart, cursor) then
+		s.cursor_t = cursor
+	end
+end
+
+local function toggleSync(s: State, env: Env, effects: { Effect })
+	local t = Shared.toggle(s.sync)
+	if t == nil then
+		return
+	end
+	table.insert(effects, t)
+	local r, cursor, e = Shared.join(s.sync, { from = s.from, to = s.to }, s.cursor_t, env)
+	if r then
+		adoptShared(s, env, r, cursor, effects)
+	end
+	if e then
+		table.insert(effects, e)
+	end
+end
+
+function M.selectedExemplar(s: State): FrameProm.Exemplar?
+	local chart = s.chart
+	if chart == nil or s.exemplar == nil then
+		return nil
+	end
+	local list = chart.layout.exemplars
+	return if list then list[s.exemplar :: number] else nil
+end
+
+-- `x`: the next exemplar nearest the cursor; the cursor follows it.
+local function cycleExemplar(s: State, env: Env, effects: { Effect }): boolean
+	local chart = s.chart
+	if s.mode ~= "graph" or chart == nil then
+		return false
+	end
+	local layout = chart.layout
+	local anchor = if s.exemplar and s.ex_anchor then s.ex_anchor else (s.cursor_t or layout.t_to)
+	local idx = Cursor.nextExemplar(layout, anchor, s.exemplar)
+	if idx == nil then
+		local text = if s.options.exemplars then "No exemplars in this chart" else "Exemplars are off (query.exemplars)"
+		table.insert(effects, { kind = "toast", level = "info", text = text })
+		return true
+	end
+	s.exemplar, s.ex_anchor = idx, anchor
+	s.cursor_t = ((layout.exemplars :: { FrameProm.Exemplar })[idx]).time_ms
+	share(s, env, effects)
+	return true
+end
+
+local function openTrace(s: State, effects: { Effect })
+	local e = M.selectedExemplar(s)
+	if e == nil then
+		return
+	end
+	local target, err = Jumps.traceLink(s.context, e, s.options.exemplar_trace_label)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open the trace" })
+	end
+end
+
+-- The labels `L` correlates: the selected exemplar's series, else what
+-- every series on screen shares.
+function M.selectedLabels(s: State): { [string]: string }
+	local e = M.selectedExemplar(s)
+	if e then
+		local out = table.clone(e.series)
+		for k, v in e.labels do
+			out[k] = out[k] or v
+		end
+		return out
+	end
+	return Jumps.commonLabels(s.frames or {})
+end
+
+local function openLogs(s: State, env: Env, effects: { Effect })
+	if s.frames == nil then
+		table.insert(
+			effects,
+			{ kind = "toast", level = "info", text = "Run a query first: L opens logs for its series" }
+		)
+		return
+	end
+	local target, err = Jumps.logsLink(s.context, M.selectedLabels(s), Jumps.correlateLabels(env.config), s.from, s.to)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open logs" })
+	end
 end
 
 local function armTimer(s: State, effects: { Effect })
@@ -772,6 +956,14 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 			return false
 		end
 		s.cursor_t = t
+		s.exemplar, s.ex_anchor = nil, nil
+		share(s, env, effects)
+		return true
+	elseif (name == "enter" or name == "return") and s.exemplar then
+		openTrace(s, effects)
+		return true
+	elseif name == "escape" and s.exemplar then
+		s.exemplar, s.ex_anchor = nil, nil
 		return true
 	elseif name == "escape" or ch == "q" then
 		table.insert(effects, { kind = "exit" })
@@ -849,6 +1041,14 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 	elseif ch == "I" then
 		investigate(s, env, effects)
 		return true
+	elseif ch == "x" then
+		return cycleExemplar(s, env, effects)
+	elseif ch == "L" then
+		openLogs(s, env, effects)
+		return true
+	elseif ch == "S" then
+		toggleSync(s, env, effects)
+		return true
 	elseif ch == "?" then
 		s.overlay = "help"
 		return true
@@ -916,8 +1116,20 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			end
 		elseif string.sub(tag, 1, #M.SUGGEST_TAG) == M.SUGGEST_TAG then
 			suggestionDone(s, env, tag, msg.response, effects)
+		elseif string.sub(tag, 1, #M.EXEMPLAR_TAG) == M.EXEMPLAR_TAG then
+			local gen = tonumber(string.sub(tag, #M.EXEMPLAR_TAG + 1))
+			if gen then
+				exemplarsDone(s, env, gen, msg.response)
+			end
 		end
 	elseif msg.kind == "tick" then
+		if Shared.isTick(s.sync, msg.tag) then
+			local r, cursor = Shared.poll(s.sync, env)
+			if r then
+				adoptShared(s, env, r, cursor, effects)
+			end
+			table.insert(effects, Shared.timer(s.sync))
+		end
 		if msg.tag == M.REFRESH_TAG .. s.timer_gen and s.refresh_ms then
 			if s.status ~= "loading" then
 				run(s, env, effects)
@@ -949,7 +1161,12 @@ function M.title(s: State): string?
 end
 
 function M.save(s: State): any
-	return { link = M.link(s), mode = s.mode, cursor = s.cursor_t }
+	return {
+		link = M.link(s),
+		mode = s.mode,
+		cursor = s.cursor_t,
+		sync = if s.sync.on then true else nil,
+	}
 end
 
 return M

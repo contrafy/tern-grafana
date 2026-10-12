@@ -346,4 +346,76 @@ describe("svg_timeseries.render stacked bars", function()
 	end)
 end)
 
+-- `count` exemplars spread over the first `points` samples.
+local function exemplars(count: number, points: number): { any }
+	local out = {}
+	for k = 1, count do
+		local i = (k - 1) * points // count + 1
+		table.insert(out, {
+			time_ms = T0 + (i - 1) * STEP,
+			value = 1000 + k % 50,
+			labels = { traceID = string.format("%032x", k) },
+			series = {},
+		})
+	end
+	return out
+end
+
+describe("svg_timeseries.render exemplars", function()
+	it("draws in-range exemplars as one tg-exemplar path of diamonds over the lines", function()
+		local ex = exemplars(20, 100)
+		-- Outside the drawn range: not drawn, not counted.
+		table.insert(ex, { time_ms = T0 - 3600000, value = 1, labels = {}, series = {} })
+		local r = Svg.render(many(2, 100), { from_ms = T0, to_ms = T0 + 99 * STEP, exemplars = ex })
+		assertTernSafe(r.svg)
+		local marks = paths(r.svg, "tg-exemplar")
+		expect(#marks).toBe(1)
+		expect(subpaths(marks[1])).toBe(20)
+		expect(#(r.layout.exemplars :: { any })).toBe(20)
+		expect(r.layout.exemplars_dropped).toBe(0)
+		-- Markers come after the series so they stay visible.
+		expect(
+			(string.find(r.svg, "tg-exemplar", 1, true) :: number) > (string.find(r.svg, "tg-line", 1, true) :: number)
+		).toBe(true)
+	end)
+
+	it("caps markers at EXEMPLAR_CAP, thinned evenly over time, and counts the rest", function()
+		local r = Svg.render(many(1, 1000), { exemplars = exemplars(1000, 1000) })
+		local drawn = r.layout.exemplars :: { any }
+		expect(#drawn).toBe(Svg.EXEMPLAR_CAP)
+		expect(r.layout.exemplars_dropped).toBe(1000 - Svg.EXEMPLAR_CAP)
+		expect(subpaths(paths(r.svg, "tg-exemplar")[1])).toBe(Svg.EXEMPLAR_CAP)
+		expect(drawn[1].time_ms).toBe(T0)
+		expect(drawn[#drawn].time_ms > T0 + 900 * STEP).toBe(true)
+		for i = 2, #drawn do
+			expect(drawn[i - 1].time_ms <= drawn[i].time_ms).toBe(true)
+		end
+	end)
+
+	it("stays under the 256 KiB cap with 10 x 5000 points and a full set of markers", function()
+		for _, opts in { {}, { fill_opacity = 100 }, { draw = "bars" } } :: { Svg.Options } do
+			opts.exemplars = exemplars(5000, 5000)
+			local r = Svg.render(many(10, 5000), opts)
+			expect(#r.svg <= Svg.CAP).toBe(true)
+			expect(#(r.layout.exemplars :: { any })).toBe(Svg.EXEMPLAR_CAP)
+			checkXml(r.svg)
+		end
+	end)
+
+	it("widens the value axis to the exemplars instead of pinning them to the edge", function()
+		local ex = { { time_ms = T0 + STEP, value = 5000, labels = {}, series = {} } }
+		local r = Svg.render(many(1, 10), { exemplars = ex })
+		expect(r.layout.y_max >= 5000).toBe(true)
+		-- Hard bounds still win.
+		local capped = Svg.render(many(1, 10), { exemplars = ex, max = 2000 })
+		expect(capped.layout.y_max).toBe(2000)
+	end)
+
+	it("draws no marker path without exemplars", function()
+		local r = Svg.render(many(1, 10), {})
+		expect(#paths(r.svg, "tg-exemplar")).toBe(0)
+		expect(r.layout.exemplars).toBeNil()
+	end)
+end)
+
 return nil

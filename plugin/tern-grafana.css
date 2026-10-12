@@ -53,6 +53,15 @@
 	background: var(--accent);
 }
 
+/* Exemplar markers (diamonds in the chart SVG) and the cursor once `x`
+   selects one. */
+.tg-exemplar {
+	fill: var(--live);
+	stroke: var(--l3);
+	fill-opacity: 0.85;
+}
+.tg-cursor.tg-exemplar-cursor { background: var(--live); }
+
 /* Legend swatch: the series class supplies `color`. */
 .tg-swatch {
 	display: inline-block;

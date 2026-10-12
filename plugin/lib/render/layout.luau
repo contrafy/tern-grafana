@@ -3,6 +3,7 @@
 -- hold it in state and place the cursor overlay (a fraction of the image
 -- width) without rebuilding the SVG.
 
+local FrameProm = require("../frame/prom")
 local Series = require("./series")
 
 export type DrawnSeries = {
@@ -36,6 +37,11 @@ export type Layout = {
 	series: { DrawnSeries },
 	-- Series beyond the cap, not drawn.
 	dropped: number,
+	-- Exemplar markers drawn, sorted by time (at most svg_timeseries
+	-- EXEMPLAR_CAP); nil when none were given.
+	exemplars: { FrameProm.Exemplar }?,
+	-- Exemplars in range left out by the cap.
+	exemplars_dropped: number?,
 }
 
 local M = {}

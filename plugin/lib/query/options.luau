@@ -17,6 +17,12 @@ export type Options = {
 	max_points: number,
 	-- Auto-refresh interval used when the user turns it on with `a`.
 	refresh_ms: number,
+	-- Fetch and draw exemplars with range queries (Query block and dashboard
+	-- time series panels).
+	exemplars: boolean,
+	-- Exemplar label holding a trace id, tried before trace_id, traceID and
+	-- traceId.
+	exemplar_trace_label: string?,
 }
 
 local M = {}
@@ -31,10 +37,22 @@ M.MIN_POINTS = 10
 -- evicted within a session).
 M.MIN_REFRESH_MS = 5000
 
-local KEYS: { [string]: boolean } = { default_range = true, max_points = true, refresh = true }
+local KEYS: { [string]: boolean } = {
+	default_range = true,
+	max_points = true,
+	refresh = true,
+	exemplars = true,
+	exemplar_trace_label = true,
+}
 
 function M.defaults(): Options
-	return { default_range = M.DEFAULT_RANGE, max_points = M.MAX_POINTS, refresh_ms = M.REFRESH_MS }
+	return {
+		default_range = M.DEFAULT_RANGE,
+		max_points = M.MAX_POINTS,
+		refresh_ms = M.REFRESH_MS,
+		exemplars = true,
+		exemplar_trace_label = nil,
+	}
 end
 
 -- Options from the decoded section (nil when absent) and what was wrong with it.
@@ -92,6 +110,24 @@ function M.read(section: any): (Options, { Problem })
 			bad("refresh", string.format('must be a duration of at least %ds, like "30s"', M.MIN_REFRESH_MS // 1000))
 		else
 			o.refresh_ms = ms
+		end
+	end
+
+	local exemplars = section.exemplars
+	if exemplars ~= nil then
+		if type(exemplars) ~= "boolean" then
+			bad("exemplars", "must be true or false")
+		else
+			o.exemplars = exemplars
+		end
+	end
+
+	local label = section.exemplar_trace_label
+	if label ~= nil then
+		if type(label) ~= "string" or string.match(label, "^[%a_][%w_]*$") == nil then
+			bad("exemplar_trace_label", "must be a label name like trace_id")
+		else
+			o.exemplar_trace_label = label
 		end
 	end
 	return o, problems

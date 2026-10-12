@@ -87,11 +87,52 @@ Outside the input:
 | `h` | History: type to filter, `up`/`down`, `enter` runs, `escape` closes |
 | `y` | Copy the query |
 | `o` | Open the query in Grafana Explore in a Tern browser pane (contexts with Grafana only) |
+| `x` | Select the exemplar nearest the cursor; again, the next nearest (graph mode) |
+| `enter` | With an exemplar selected: open its trace in the Trace block |
+| `L` | Open the Logs block for the series' labels over the same range (see [Jumps to logs and traces](#jumps-to-logs-and-traces)) |
+| `S` | Sync the time range and cursor with other synced blocks on or off (see [Shared time](#shared-time)) |
 | `?` | Help |
-| `q`, `escape` | Close the block (`escape` first closes help or history) |
+| `q`, `escape` | Close the block (`escape` first closes help or history, or drops the exemplar selection) |
 
 Zooming a "last N" range keeps it ending at now (`now-1h` becomes `now-2h` or `now-30m`), so auto-refresh keeps
 following the present; zooming any other range, and every shift, gives absolute times, as in Grafana.
+
+## Exemplars
+
+A range query also asks for exemplars (with `query.exemplars` on, the default): `/api/v1/query_exemplars` over the
+same range for a direct endpoint, or `exemplar: true` in Grafana's `/api/ds/query` (Prometheus datasources). They are
+drawn as small diamonds (class `tg-exemplar`) in the chart at their time and value, part of the same SVG; at most
+200 are drawn, thinned evenly over time, and the header counts them ("120 exemplars", plus how many were not drawn).
+A Prometheus without exemplar storage simply returns none; a failed exemplar request is listed as a warning and the
+chart still shows.
+
+`x` selects the exemplar nearest the cursor (the end of the range without a cursor) and moves the cursor onto it;
+pressing `x` again walks outwards to the next nearest. Under the legend the block shows the exemplar's time, value,
+trace id and other labels. `enter` opens `tern-grafana://trace?context=<context>&id=<trace id>` when the exemplar has
+a trace id in `query.exemplar_trace_label` (when set) or `trace_id`, `traceID` or `traceId`; the Trace block reads it
+from the context's Tempo. Moving the cursor or `escape` drops the selection.
+
+## Jumps to logs and traces
+
+`L` opens `tern-grafana://logs?context=<context>&expr=<selector>&from=<from>&to=<to>`: a LogQL stream selector built
+from the labels every series on screen shares (with an exemplar selected, the labels of the exemplar and its
+series), kept to `logs.correlate_labels` in that list's order (default `job`, `namespace`, `pod`, `container`,
+`service`, `service_name`, `app`, `instance`; see [logs.md](logs.md)). For example
+`rate(node_cpu_seconds_total[1m])` on one node opens `{job="node",instance="node-exporter:9100"}`. When the series
+share none of those labels the block says so instead of opening an unfiltered query.
+
+## Shared time
+
+`S` turns time sync on for the block (off by default; a `synced` badge shows in the header, and the setting is saved).
+Synced blocks (Query, Dashboard and Panel, Logs, Trace search) share one range and cursor through kv key
+`tern-grafana.time.shared` (`{from, to, cursor_ms, origin, seq}`: Grafana range strings, the cursor time, the
+writing block and a sequence number; nothing else):
+
+- a range change (quick ranges, `[`/`]`, `-`/`+`) and a cursor move publish;
+- every 2 seconds, while synced, the block reads the record and adopts a newer one written by another block: a new
+  range re-runs the query, a cursor only moves the overlay (no new chart);
+- a block ignores its own writes and records older than the newest it has seen;
+- turning sync on adopts the range other synced blocks share, or publishes this block's own when none does.
 
 ## Config keys
 
@@ -102,6 +143,8 @@ In the `query` section of the config file:
 | `query.default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
 | `query.max_points` | number | `600` | Points per series a range query asks for, 10 to 11000. The step is Grafana's: range / max points, rounded, at least 15s. Tern blocks report a fixed 80-column size, so this is not derived from the pane. |
 | `query.refresh` | string | `"30s"` | Auto-refresh interval used by `a`, at least `5s`. Auto-refresh is off when a block opens. |
+| `query.exemplars` | boolean | `true` | Fetch and draw exemplars with range queries, in the Query block and in dashboard time series panels. |
+| `query.exemplar_trace_label` | string | none | Exemplar label holding the trace id, tried before `trace_id`, `traceID` and `traceId`. |
 
 A bad value is reported as a warning in the block and its default is used.
 
@@ -110,5 +153,6 @@ A bad value is reported as a warning in the block and its default is used.
 Each run from the input or the history picker records the expression in kv key `tern-grafana.query.history`: the
 last 100 distinct expressions per context, newest first, shared by all Query blocks. No results are stored.
 
-A block saves only its link (context, expression, range, mode, datasource) and the cursor time, so it reopens on
-the same query after a restart and runs it again. Results, tokens and credentials are never saved.
+A block saves only its link (context, expression, range, mode, datasource), the cursor time and whether time sync is
+on, so it reopens on the same query after a restart and runs it again. Results, exemplars, tokens and credentials are
+never saved.
