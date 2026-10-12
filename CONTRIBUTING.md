@@ -48,7 +48,7 @@ uses the same sandbox and drives it with `tern ctl` (`plugins expect`, `click`,
 
 - **Conventional Commits** (`feat:`, `fix:`, `docs:`, `test:`, `build:`,
   `ci:`, `chore:`, `refactor:`), imperative, small and atomic.
-- **One branch per milestone** (or smaller change), PR against `master`.
+- **One feature branch per change**, PR against `master`.
 - **TDD**: write the failing test first; tests state why the behavior matters.
   No tests of wiring, forwarding or source text.
 - **Pure core**: code under `plugin/lib/` never references the `tern` global;
