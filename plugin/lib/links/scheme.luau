@@ -59,10 +59,23 @@ local function spanId(v: string): boolean
 	return #v <= 16 and string.match(v, "^%x+$") ~= nil
 end
 
--- An Investigate handoff key (lib/investigate/handoff.luau): lower-case
+-- An Investigate window ticket (lib/investigate/handoff.luau): lower-case
 -- hex and dashes only, so it can never smuggle a path or a prompt.
-local function nonce(v: string): boolean
+local function ticket(v: string): boolean
 	return #v >= 8 and #v <= 40 and string.match(v, "^[%x%-]+$") ~= nil and string.lower(v) == v
+end
+
+-- An Investigate payload: base64url (no padding) of a subject's JSON or a
+-- prompt, bounded so a link stays a link.
+M.MAX_PAYLOAD = 32768
+
+local function payload(v: string): boolean
+	return #v > 0 and #v <= M.MAX_PAYLOAD and string.match(v, "^[%w%-_]+$") ~= nil
+end
+
+-- A one-line label: no control characters at all.
+local function title(v: string): boolean
+	return #v > 0 and #v <= 200 and string.find(v, "[%z\1-\31\127]") == nil
 end
 
 local function opsView(v: string): boolean
@@ -139,8 +152,15 @@ local ACTIONS: { [string]: Spec } = {
 	trace = spec({}, false, withTime({ id = traceId, ds = uid, q = text, span = spanId })),
 	ops = spec({}, false, { view = opsView }),
 	settings = spec({}, false, {}),
-	-- Investigate (G4): `id` names a kv handoff record; the link carries nothing else.
-	investigate = { params = { id = nonce }, required = { "id" }, vars = false },
+	-- Investigate (G4): the subject (source block -> preview) or the prompt
+	-- (preview -> window) travels in the link, since kv is per machine and the
+	-- halves may run on different ones. `ticket` is minted by the window for
+	-- one preview; without a valid one a prompt link only opens a preview.
+	investigate = {
+		params = { subject = payload, prompt = payload, title = title, ticket = ticket },
+		required = {},
+		vars = false,
+	},
 	-- Deploy annotation approval (G1): `id` names a pending draft held in host
 	-- memory; without it the block lists the remembered decisions.
 	annotate = spec({}, false, { id = uid }),
@@ -176,6 +196,9 @@ local function isCredentialName(name: string): boolean
 	end
 	return false
 end
+
+-- Whether a parameter name looks like it carries a credential (links never do).
+M.isCredentialName = isCredentialName
 
 local function fail(code: ErrorCode, message: string): (nil, LinkError)
 	return nil, { code = code, message = message }

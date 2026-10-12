@@ -1,10 +1,11 @@
 --!strict
 -- What an Investigate prompt is about (G4): an alert, a query or a dashboard
 -- panel, reduced to plain JSON values. The block that starts an
--- investigation builds the subject; it travels through kv to the preview
+-- investigation builds the subject; it travels in the link to the preview
 -- block (lib/investigate/handoff.luau), which also saves it. It holds names,
 -- labels, queries, series statistics and http(s) links built from the
--- config's endpoint URLs, never credentials or raw samples.
+-- config's endpoint URLs, never credentials or raw samples: links with
+-- userinfo or a credential-named query parameter are left out.
 
 local Compact = require("../carly/compact")
 local ConfigTypes = require("../config/types")
@@ -52,6 +53,8 @@ export type Values = {
 	omitted: number,
 	from_ms: number,
 	to_ms: number,
+	-- Series were dropped (counted in `omitted`) so the subject fits in its link.
+	trimmed: boolean?,
 }
 
 export type Subject = {
@@ -102,8 +105,20 @@ M.MAX_EXPR = 4000
 
 local KINDS: { [string]: boolean } = { alert = true, query = true, panel = true }
 
+-- An http(s) URL with no userinfo and no credential-named query parameter
+-- (`?token=`, `?api_key=`): subjects end up in links and block args.
 local function isHttp(url: string?): boolean
-	return url ~= nil and GrafanaUrl.parse(url :: string) ~= nil
+	local parsed = if url then GrafanaUrl.parse(url :: string) else nil
+	if parsed == nil then
+		return false
+	end
+	for part in string.gmatch(parsed.query, "[^&;]+") do
+		local name = string.match(part, "^[^=]*") :: string
+		if Scheme.isCredentialName(Scheme.percentDecode(name, true) or name) then
+			return false
+		end
+	end
+	return true
 end
 
 local function base(config: Config?, context: string?): string?

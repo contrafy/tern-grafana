@@ -2,15 +2,16 @@
 -- The Investigate preview block (`tern-grafana.investigate`, G4): shows the
 -- exact prompt an agent would get and sends it only when the user says so.
 --
--- - Args are `tern-grafana://investigate?id=<nonce>`; init takes the draft
---   the source block stored in kv and deletes it. save() keeps the subject
---   (no secrets, no raw samples), so a restored block shows the same prompt.
+-- - Args are the `tern-grafana://investigate` link and the window's ticket
+--   (lib/investigate/handoff.luau). The link holds the subject, or only a
+--   prompt when the window wants it read again before it sends. save()
+--   keeps the subject (no secrets, no raw samples) or that prompt, so a
+--   restored block shows the same prompt.
 -- - An alert subject carries its query but no samples: the block fetches the
 --   recent values itself (read-only, also after a restore) and rebuilds the
 --   prompt.
--- - Nothing is sent from init or a timer. Send stores the prompt in kv and
---   opens the investigate link; the window starts the agent
---   (plugin/investigate_window.luau).
+-- - Nothing is sent from init or a timer. Send opens a prompt link with the
+--   ticket; the window starts the agent (plugin/investigate_window.luau).
 
 local Effect = require("../effect")
 local Env = require("../env")
@@ -18,7 +19,6 @@ local Handoff = require("./handoff")
 local Metrics = require("../source/metrics")
 local Prompt = require("./prompt")
 local Route = require("../config/route")
-local Scheme = require("../links/scheme")
 local Settings = require("./settings")
 local Step = require("../time/step")
 local Subject = require("./subject")
@@ -32,9 +32,13 @@ type Subject = Subject.Subject
 export type Status = "ready" | "loading" | "expired"
 
 export type State = {
-	nonce: string?,
+	-- The window's ticket for this preview (args[2]); nil when restored
+	-- without one, in which case the window previews the prompt again.
+	ticket: string?,
 	subject: Subject?,
 	prompt: string,
+	-- The title of a prompt-only preview (no subject).
+	title: string?,
 	status: Status,
 	-- Why the block has nothing to show, or why values are missing.
 	note: string?,
@@ -123,40 +127,42 @@ local function onValues(s: State, response: any, env: Env)
 	rebuild(s, env)
 end
 
-local function nonceOf(args: { string }): string?
-	local raw = args[1]
-	if type(raw) ~= "string" then
-		return nil
-	end
-	local l = Scheme.decode(raw)
-	if l == nil or l.action ~= "investigate" then
-		return nil
-	end
-	return l.params.id
+local PROMPT_ONLY_NOTE = "This prompt came from a link, not from a preview Tern Grafana opened in this window. "
+	.. "Read it before you send it."
+
+local function ticketOf(args: { string }): string?
+	local raw = args[2]
+	return if type(raw) == "string" and #raw <= 40 and string.match(raw, "^[%x%-]+$") then raw else nil
 end
 
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local s: State = { nonce = nonceOf(args or {}), prompt = "", status = "ready", gen = 0 }
+	local s: State = { ticket = ticketOf(args or {}), prompt = "", status = "ready", gen = 0 }
 	local effects: { Effect } = {}
 	local savedSubject = if type(saved) == "table" then Subject.read(saved.subject) else nil
-	if savedSubject then
+	local savedPrompt = if type(saved) == "table" then saved.prompt else nil
+	if savedSubject or (type(savedPrompt) == "string" and savedPrompt ~= "" and #savedPrompt <= Handoff.MAX_PROMPT) then
 		s.subject = savedSubject
-		s.sent_ms = if type(saved.sent_ms) == "number" then saved.sent_ms else nil
-	elseif s.nonce then
-		local key = Handoff.key(s.nonce :: string)
-		local raw = if env.kv_get then env.kv_get(key) else nil
-		local subject, err = Handoff.takeDraft(raw, env.now_ms)
-		if raw ~= nil then
-			-- Taken (or unusable): a draft is read once.
-			table.insert(effects, { kind = "kv_set", key = key, value = nil })
+		if savedSubject == nil then
+			s.prompt = savedPrompt
+			s.title = if type(saved.title) == "string" then saved.title else nil
 		end
-		s.subject = subject
-		s.note = err
+		s.sent_ms = if type(saved.sent_ms) == "number" then saved.sent_ms else nil
 	else
-		s.note = "This block was opened without an investigation."
+		local opened = Handoff.open((args or {})[1], env.decode)
+		s.subject = opened.subject
+		if opened.prompt then
+			s.prompt = opened.prompt :: string
+			s.title = opened.title
+			s.note = PROMPT_ONLY_NOTE
+		end
+		if opened.err then
+			s.note = opened.err
+		end
 	end
 	if s.subject == nil then
-		s.status = "expired"
+		if s.prompt == "" then
+			s.status = "expired"
+		end
 		return s, effects
 	end
 	rebuild(s, env)
@@ -164,12 +170,15 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 	return s, effects
 end
 
+local function titleOf(s: State): string
+	return if s.subject then (s.subject :: Subject).title else s.title or "Investigation"
+end
+
 local function send(s: State, env: Env, effects: { Effect })
-	local subject = s.subject
-	if subject == nil or s.prompt == "" then
+	if s.prompt == "" then
 		return
 	end
-	for _, e in Handoff.send(s.prompt, subject.title, env) do
+	for _, e in Handoff.send(s.prompt, titleOf(s), s.ticket) do
 		table.insert(effects, e)
 	end
 	s.sent_ms = env.now_ms
@@ -240,18 +249,21 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 end
 
 function M.title(s: State): string?
-	if s.subject then
-		return "Investigate: " .. (s.subject :: Subject).title
+	if s.subject or s.prompt ~= "" then
+		return "Investigate: " .. titleOf(s)
 	end
 	return "Investigate"
 end
 
--- The subject only: names, labels, queries and series statistics.
+-- The subject only (names, labels, queries and series statistics), or the
+-- prompt of a prompt-only preview. Never the ticket: it dies with the window.
 function M.save(s: State): any
-	if s.subject == nil then
-		return nil
+	if s.subject then
+		return { subject = s.subject, sent_ms = s.sent_ms }
+	elseif s.prompt ~= "" then
+		return { prompt = s.prompt, title = s.title, sent_ms = s.sent_ms }
 	end
-	return { subject = s.subject, sent_ms = s.sent_ms }
+	return nil
 end
 
 return M

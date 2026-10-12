@@ -1,15 +1,20 @@
 --!strict
--- Window glue for `tern-grafana://investigate?id=<nonce>` (G4), called by
+-- Window glue for `tern-grafana://investigate` links (G4), called by
 -- links_window before the generic link routing. Decisions live in
--- lib/investigate/handoff.luau: a draft opens the preview block; a send
--- record is deleted, then the default Tern agent starts with its prompt in
--- the origin pane's working directory (or HOME). Every agents call is
--- pcalled and failures toast; the prompt is never logged. Handoff loads on
--- the first investigate link, not with the window entry (50 ms load budget).
+-- lib/investigate/handoff.luau: a subject link (or a prompt link without a
+-- ticket this window minted) opens the preview block; a prompt link with a
+-- valid ticket starts the default Tern agent with that prompt in the origin
+-- pane's working directory (or HOME). Tickets live only in this VM's memory.
+-- Every agents call is pcalled and failures toast; the prompt is never
+-- logged. Handoff loads on the first investigate link, not with the window
+-- entry (50 ms load budget).
 
 local Scheme = require("./lib/links/scheme")
 
 local M = {}
+
+-- Tickets minted for open previews (Handoff.Tickets).
+local tickets: { [string]: number } = {}
 
 -- True for links this module answers.
 function M.claims(url: string): boolean
@@ -22,6 +27,12 @@ end
 
 local function nowMs(): number
 	return os.time() * 1000
+end
+
+-- Unpredictable enough that a link printed in a terminal cannot guess a
+-- live ticket: the PRNG mixed with the CPU clock.
+local function rand(): number
+	return bit32.bxor(math.random(0, 0x7fffffff), math.floor(os.clock() * 1e6) % 0x80000000)
 end
 
 -- The origin pane's working directory, else HOME.
@@ -45,20 +56,9 @@ function M.handle(link: any, cx: any, t: any): any
 		cx:toast("error", "Invalid investigation link", if err then err.message else nil)
 		return { handled = true }
 	end
-	local nonce = l.params.id
-	local key = Handoff.key(nonce)
-	local okGet, raw = pcall(t.kv.get, key)
-	if not okGet then
-		cx:toast("error", "Tern Grafana could not read the investigation", tostring(raw))
-		return { handled = true }
-	end
-	local decision: any = Handoff.decide(nonce, raw, nowMs())
+	local decision: any = Handoff.decide(l, tickets, nowMs(), rand())
 	if decision.kind == "preview" then
-		return { block = Handoff.BLOCK, args = { decision.link } }
-	end
-	-- Used once: delete before acting, so a second click finds nothing.
-	if decision.kind == "send" or decision.delete then
-		pcall(t.kv.set, key, nil)
+		return { block = Handoff.BLOCK, args = decision.args }
 	end
 	if decision.kind == "refused" then
 		cx:toast("info", decision.message)

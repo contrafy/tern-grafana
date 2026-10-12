@@ -79,8 +79,13 @@ local function valuesBlock(out: { string }, s: Subject)
 			if vals.omitted > 0 then string.format(", the %d with the largest last value", #vals.series) else ""
 		)
 	)
+	if vals.trimmed then
+		table.insert(out, string.format("  (%d series left out to fit the handoff to the preview)", vals.omitted))
+	end
 	if #vals.series == 0 then
-		table.insert(out, "  (no data in this range)")
+		if not vals.trimmed then
+			table.insert(out, "  (no data in this range)")
+		end
 		return
 	end
 	for _, series in vals.series do
