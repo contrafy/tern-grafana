@@ -807,7 +807,15 @@ end
 -- Options of a datasource variable from Grafana's datasource list.
 function M.datasourceOptions(
 	v: Variable,
-	datasources: { { uid: string, type: string, name: string, is_default: boolean } },
+	datasources: {
+		{
+			uid: string,
+			type: string,
+			name: string,
+			is_default: boolean,
+			manage_alerts: boolean?,
+		}
+	},
 	scope: Interpolate.Scope
 ): ({ Option }, string?)
 	local re: Regex.Regex? = nil

@@ -164,3 +164,148 @@
 
 /* Chart value labels (pie slices, bar values): Grafana text.primary. */
 .tgc-text { fill: var(--t1); stroke: none; }
+
+/* List panels: alertlist, annolist, dashlist, news (lib/panels/{alertlist,annolist,dashlist,news}.luau). */
+.tgl-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+.tgl-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: var(--l1);
+	min-width: 0;
+}
+.tgl-item:hover { background: var(--l2); }
+.tgl-col {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+.tgl-grow { flex: 1; min-width: 0; }
+.tgl-icon { padding-top: 2px; }
+.tgl-row-head {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	min-width: 0;
+}
+.tgl-instances {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 2px;
+}
+.tgl-instance {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: baseline;
+}
+.tgl-labels,
+.tgl-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.tgl-label {
+	padding: 0 4px;
+	border-radius: 3px;
+	border: 1px solid var(--l3);
+	color: var(--t3);
+	font-size: 0.9em;
+}
+.tgl-anno {
+	align-items: center;
+	flex-wrap: wrap;
+}
+.tgl-dash {
+	align-items: center;
+	background: none;
+	border-bottom: 1px solid var(--l2);
+	border-radius: 0;
+}
+.tgl-group {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 12px;
+}
+.tgl-news {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 8px;
+	border-bottom: 2px solid var(--l2);
+}
+.tgl-news-title { font-size: 1.15em; }
+/* Tags: Grafana's TagList colors (grafana-ui utils/tags.ts TAG_COLORS / TAG_BORDER_COLORS), white text. */
+.tgl-tag {
+	padding: 0 6px;
+	border-radius: 3px;
+	border: 1px solid transparent;
+	color: #fafafa;
+	font-size: 0.9em;
+}
+.tgl-tag-0 { background: #D32D20; border-color: #FF7368; }
+.tgl-tag-1 { background: #1E72B8; border-color: #459EE7; }
+.tgl-tag-2 { background: #B240A2; border-color: #E069CF; }
+.tgl-tag-3 { background: #705DA0; border-color: #9683C6; }
+.tgl-tag-4 { background: #466803; border-color: #6C8E29; }
+.tgl-tag-5 { background: #497A3C; border-color: #76AC68; }
+.tgl-tag-6 { background: #3D71AA; border-color: #6AA4E2; }
+.tgl-tag-7 { background: #B15415; border-color: #E7823D; }
+.tgl-tag-8 { background: #890F02; border-color: #AF3528; }
+.tgl-tag-9 { background: #6E6E6E; border-color: #9B9B9B; }
+.tgl-tag-10 { background: #0A437C; border-color: #3069A2; }
+.tgl-tag-11 { background: #6D1F62; border-color: #934588; }
+.tgl-tag-12 { background: #584477; border-color: #7E6A9D; }
+.tgl-tag-13 { background: #4C7A3F; border-color: #88C477; }
+.tgl-tag-14 { background: #2F4F4F; border-color: #557575; }
+.tgl-tag-15 { background: #BF1B00; border-color: #E54126; }
+.tgl-tag-16 { background: #7662B1; border-color: #A694DD; }
+.tgl-tag-17 { background: #8A2EB8; border-color: #B054DE; }
+.tgl-tag-18 { background: #517A00; border-color: #8FC426; }
+.tgl-tag-19 { background: #000000; border-color: #262626; }
+.tgl-tag-20 { background: #3F6833; border-color: #658E59; }
+.tgl-tag-21 { background: #2F575E; border-color: #557D84; }
+.tgl-tag-22 { background: #99440A; border-color: #BF6A30; }
+.tgl-tag-23 { background: #AE561A; border-color: #FF9B53; }
+.tgl-tag-24 { background: #0E4AB4; border-color: #3470DA; }
+.tgl-tag-25 { background: #58140C; border-color: #7E3A32; }
+.tgl-tag-26 { background: #052B51; border-color: #2B5177; }
+.tgl-tag-27 { background: #511749; border-color: #773D6F; }
+.tgl-tag-28 { background: #3F2B5B; border-color: #655181; }
+
+/* ChartsB panels (lib/panels/heatmap, statetimeline, flamegraph, traces,
+   nodegraph, geomap, canvas; lib/render/svg_*). Grafana's fixed colors
+   (heatmap palettes, flame graph package colors, marker and canvas colors)
+   are literal SVG attributes; theme parts are these classes. */
+
+/* Text whose fill is a literal attribute (flame graph, canvas, map labels):
+   no class fill, so the attribute paints. */
+.tgf-text,
+.tgv-text,
+.tgm-text { stroke: none; font-family: var(--sans); }
+.tgf-text { font-family: var(--mono, monospace); }
+
+/* Node graph: node disc, plain rim, edges and arrow heads, highlight. */
+.tgn-node { fill: var(--page); stroke: none; }
+.tgn-ring { stroke: var(--t3); fill: none; }
+.tgn-edge { stroke: var(--t3); fill: none; }
+.tgn-arrow { fill: var(--t3); stroke: none; }
+.tgn-ring.tgn-hi,
+.tgn-edge.tgn-hi { stroke: var(--warn); }
+.tgn-arrow.tgn-hi { fill: var(--warn); }
+.tgn-swatch { color: var(--t3); }
+
+/* Geomap basemap outline: sea, land and borders. */
+.tgm-sea { fill: var(--l1); stroke: none; }
+.tgm-land { fill: var(--l2); stroke: var(--t4); }

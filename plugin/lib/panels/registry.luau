@@ -15,25 +15,36 @@
 -- expanded); `frames` are the panel's query results through the frame
 -- converters, every refId together.
 
+local Alertlist = require("./alertlist")
+local Annolist = require("./annolist")
 local Assets = require("../render/assets")
 local Barchart = require("./barchart")
 local Candlestick = require("./candlestick")
+local Canvas = require("./canvas")
 local Clock = require("./clock")
 local Common = require("./common")
+local Dashlist = require("./dashlist")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
+local Flamegraph = require("./flamegraph")
 local Frame = require("../frame/types")
 local Gauge = require("./gauge")
+local Geomap = require("./geomap")
+local Heatmap = require("./heatmap")
 local Histogram = require("./histogram")
 local Json = require("./json")
 local Logs = require("./logs")
 local Migrate = require("./migrate")
+local News = require("./news")
+local NodeGraph = require("./nodegraph")
 local Stat = require("./stat")
 local Piechart = require("./piechart")
+local StateTimeline = require("./statetimeline")
 local Table = require("./table")
 local Text = require("./text")
 local Timeseries = require("./timeseries")
 local Transform = require("./transform")
+local Traces = require("./traces")
 local TransportTypes = require("../transport/types")
 local Trend = require("./trend")
 local Values = require("./values")
@@ -199,7 +210,26 @@ for _, m in { TIMESERIES, STAT, GAUGE, BARGAUGE, TABLE, LOGS, TEXT } do
 end
 
 -- Panel modules in their own files (local://PANELS2.md).
-local MODULES: { any } = { Clock, Piechart, Barchart, Histogram, Trend, Xychart, Candlestick }
+local MODULES: { any } = {
+	Clock,
+	Piechart,
+	Barchart,
+	Histogram,
+	Trend,
+	Xychart,
+	Candlestick,
+	Alertlist,
+	Annolist,
+	Dashlist,
+	News,
+	Heatmap,
+	StateTimeline,
+	Flamegraph,
+	Traces,
+	NodeGraph,
+	Geomap,
+	Canvas,
+}
 for _, m in MODULES do
 	M.register(m :: PanelModule)
 end

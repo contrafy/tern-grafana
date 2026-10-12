@@ -23,8 +23,8 @@ local EXPECTED: { [number]: { boolean | string } } = {
 	[10] = { true },
 	[11] = { false, "a row is a layout element, not a panel" },
 	[12] = { true },
-	[13] = { false, "panel type heatmap is not rendered natively" },
-	[14] = { false, "panel type state-timeline is not rendered natively" },
+	[13] = { true },
+	[14] = { true },
 	[15] = { false, "a row is a layout element, not a panel" },
 	[16] = { true },
 	[17] = { true },
@@ -42,6 +42,8 @@ local DATA: { [number]: string } = {
 	[8] = "prom2_range",
 	[9] = "prom_table",
 	[12] = "loki_logs",
+	[13] = "prom_heatmap",
+	[14] = "prom_range",
 	[16] = "prom2_range",
 	[17] = "prom_range",
 }
@@ -78,7 +80,8 @@ for _, version in S.VERSIONS do
 					error("panel " .. id .. ": " .. S.text(failed))
 				end
 				local kind = S.panel(version, id).type
-				expect(assets[key] ~= nil or next(assets) ~= nil).toBe(kind == "timeseries" or kind == "gauge")
+				local svg = kind == "timeseries" or kind == "gauge" or kind == "heatmap" or kind == "state-timeline"
+				expect(assets[key] ~= nil or next(assets) ~= nil).toBe(svg)
 			end
 		end)
 

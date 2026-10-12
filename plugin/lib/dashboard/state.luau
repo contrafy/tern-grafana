@@ -567,6 +567,7 @@ local function advanceRequests(
 	local list = Registry.requests(inst.panel.json, {
 		time = { from_ms = range.from_ms, to_ms = range.to_ms },
 		dashboard_uid = d.uid,
+		datasources = if s.settings.status == "loading" then nil else s.settings.datasources,
 	}, env)
 	if #list == 0 then
 		ps.extra, ps.extra_sig = nil, nil

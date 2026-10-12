@@ -50,7 +50,10 @@ M.GRAFANA = "-- Grafana --"
 -- Default `maxLines` for Loki log queries (Grafana's datasource default).
 M.LOKI_MAX_LINES = 1000
 
-export type Datasource = { uid: string, type: string, name: string, is_default: boolean }
+-- manage_alerts: the data source manages alert rules (Grafana's
+-- isDataSourceManagingAlerts: jsonData.manageAlerts, else the
+-- defaultDatasourceManageAlertsUiToggle of Grafana 12, else true).
+export type Datasource = { uid: string, type: string, name: string, is_default: boolean, manage_alerts: boolean? }
 
 export type DsRef = { uid: string, type: string }
 
@@ -353,6 +356,7 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 	end
 	local map = Env.value(env, doc.datasources)
 	local defaultName = str(env, doc.defaultDatasource)
+	local manageDefault = Env.value(env, doc.defaultDatasourceManageAlertsUiToggle)
 	if type(map) ~= "table" then
 		return out
 	end
@@ -362,11 +366,17 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 		end
 		local uid, typ = str(env, ds.uid), str(env, ds.type)
 		if uid and typ then
+			local jsonData = Env.value(env, ds.jsonData)
+			local manage = if type(jsonData) == "table" then Env.value(env, jsonData.manageAlerts) else nil
+			if type(manage) ~= "boolean" then
+				manage = if type(manageDefault) == "boolean" then manageDefault else true
+			end
 			table.insert(out, {
 				uid = uid,
 				type = typ,
 				name = str(env, ds.name) or name,
 				is_default = Env.value(env, ds.isDefault) == true or name == defaultName,
+				manage_alerts = manage,
 			})
 		end
 	end

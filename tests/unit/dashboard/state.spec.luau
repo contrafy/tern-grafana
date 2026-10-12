@@ -11,6 +11,7 @@ local Repeat = require("../../../plugin/lib/dashboard/repeat")
 local S = require("./support")
 local Scheme = require("../../../plugin/lib/links/scheme")
 local State = require("../../../plugin/lib/dashboard/state")
+local Tbl = require("../../../plugin/lib/tbl")
 local View = require("../../../plugin/lib/dashboard/view")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
@@ -55,6 +56,44 @@ local function fixtureFor(version: string, uid: string, e: any): string?
 	return nil
 end
 
+-- tern-panels with panels 13 (the heatmap) and 14 (the state timeline)
+-- replaced by clones of the heatmap on a symlog y bucket scale: every
+-- other tern-panels panel is native, and a symlog heatmap stays on the
+-- ladder ("heatmap symlog y scale is not drawn natively"), so the PNG and
+-- browser rungs keep two real subjects (renders go out one at a time).
+local function panelsDashboard(path: string): string
+	local doc = S.doc(path)
+	local heatmap: any = nil
+	local function find(list: any)
+		for _, p in list do
+			if p.id == 13 then
+				heatmap = p
+			elseif type(p.panels) == "table" then
+				find(p.panels)
+			end
+		end
+	end
+	find(doc.dashboard.panels)
+	assert(heatmap, "tern-panels has no panel 13")
+	local function patch(list: any)
+		for i, p in list do
+			if p.id == 13 or p.id == 14 then
+				local clone = Tbl.copy(heatmap)
+				local options = Tbl.copy(heatmap.options)
+				options.rowsFrame = { layout = "auto", yBucketScale = { type = "symlog" } }
+				clone.options = options
+				clone.id = p.id
+				clone.gridPos = p.gridPos
+				list[i] = clone
+			elseif type(p.panels) == "table" then
+				patch(p.panels)
+			end
+		end
+	end
+	patch(doc.dashboard.panels)
+	return json.encode(doc)
+end
+
 -- Applies effects, answering loading requests from fixtures right away and
 -- keeping panel queries and renders pending for the test to answer.
 local function apply(h: Harness, version: string, uid: string, effects: { any })
@@ -64,8 +103,10 @@ local function apply(h: Harness, version: string, uid: string, effects: { any })
 		elseif e.kind == "http" then
 			local path = fixtureFor(version, uid, e)
 			if path then
-				local _, more =
-					State.update(h.s, { kind = "http_done", tag = e.tag, response = S.response(path) }, h.env)
+				local response = if uid == "tern-panels" and string.match(e.tag, "^dash/")
+					then S.body(200, panelsDashboard(path))
+					else S.response(path)
+				local _, more = State.update(h.s, { kind = "http_done", tag = e.tag, response = response }, h.env)
 				apply(h, version, uid, more)
 			else
 				h.pending[e.tag] = e
