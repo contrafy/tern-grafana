@@ -14,9 +14,15 @@
 -- Grafana's calculateInterval with the target's or panel's min interval, and
 -- becomes `$__interval`/`$__interval_ms`. `$__rate_interval` is left to
 -- Grafana's backend, which knows the datasource's scrape interval.
+--
+-- Exemplars: time series panels ask Prometheus range targets for exemplars
+-- when config `query.exemplars` is on (and never when it is off, whatever the
+-- target says); the exemplar frames come back apart from the series frames.
 
 local Env = require("../env")
 local Frame = require("../frame/types")
+local FrameGrafana = require("../frame/grafana")
+local FrameProm = require("../frame/prom")
 local GrafanaSource = require("../source/grafana")
 local Interpolate = require("./interpolate")
 local Response = require("../source/response")
@@ -54,6 +60,8 @@ export type Context = {
 	dashboard_title: string?,
 	org_id: number?,
 	user_login: string?,
+	-- Config query.exemplars.
+	exemplars: boolean?,
 }
 
 export type PanelQuery = {
@@ -68,6 +76,8 @@ export type PanelData = {
 	-- "A: parse error ..." per failed target.
 	errors: { string },
 	warnings: { string },
+	-- Exemplars of time series targets, sorted by time.
+	exemplars: { FrameProm.Exemplar }?,
 }
 
 local function str(env: Env, v: any): string?
@@ -205,6 +215,7 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 	local maxPoints = if type(mdp) == "number" and mdp > 0 then mdp else ctx.max_points
 	local panelMin = minInterval(str(env, panel.interval), ctx.scope)
 	local range_ms = math.max(1, ctx.to_ms - ctx.from_ms)
+	local timeseries = str(env, panel.type) == "timeseries"
 	local queries: { { [string]: any } } = {}
 	local refIds: { string } = {}
 	local smallest: number? = nil
@@ -258,6 +269,9 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 		elseif ref.type == "loki" and q.maxLines == nil then
 			q.maxLines = M.LOKI_MAX_LINES
 		end
+		if ref.type == "prometheus" and ctx.exemplars ~= nil then
+			q.exemplar = ctx.exemplars == true and timeseries and q.range == true and q.instant ~= true
+		end
 		table.insert(queries, q)
 		table.insert(refIds, refId)
 	end
@@ -284,9 +298,15 @@ function M.parse(response: TransportTypes.Response, pq: PanelQuery, env: Env): (
 		end
 		if res.ok then
 			local ok = res :: any
-			for _, f in ok.frames do
+			local frames, exemplars = FrameGrafana.splitExemplars(ok.frames)
+			for _, f in frames do
 				f.refId = f.refId or refId
 				table.insert(data.frames, f)
+			end
+			if #exemplars > 0 then
+				local list = data.exemplars or {}
+				table.move(exemplars, 1, #exemplars, #list + 1, list)
+				data.exemplars = list
 			end
 			for _, w in ok.warnings do
 				table.insert(data.warnings, w)
@@ -294,6 +314,9 @@ function M.parse(response: TransportTypes.Response, pq: PanelQuery, env: Env): (
 		else
 			table.insert(data.errors, refId .. ": " .. (res :: any).error.message)
 		end
+	end
+	if data.exemplars then
+		FrameProm.sortExemplars(data.exemplars :: { FrameProm.Exemplar })
 	end
 	return data, nil
 end

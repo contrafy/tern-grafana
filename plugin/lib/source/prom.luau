@@ -21,6 +21,7 @@ export type MetadataResult = { ok: true, metadata: { [string]: Metadata } } | { 
 export type Flavor = "prometheus" | "thanos" | "mimir" | "cortex" | "victoriametrics"
 export type HealthResult = { ok: true, version: string, flavor: Flavor } | { ok: false, error: QueryError }
 export type ListOptions = { match: { string }?, from_ms: number?, to_ms: number? }
+export type ExemplarsResult = { ok: true, exemplars: { FrameProm.Exemplar } } | { ok: false, error: QueryError }
 
 local M = {}
 
@@ -62,6 +63,16 @@ end
 
 function M.instantRequest(base: string, q: { expr: string, time_ms: number }): Request
 	return post(base .. "/api/v1/query", { { "query", q.expr }, { "time", M.seconds(q.time_ms) } })
+end
+
+-- Exemplars of every series selector in `expr` over the range (Prometheus
+-- evaluates the selectors, not the expression).
+function M.exemplarsRequest(base: string, q: { expr: string, from_ms: number, to_ms: number }): Request
+	return post(base .. "/api/v1/query_exemplars", {
+		{ "query", q.expr },
+		{ "start", M.seconds(q.from_ms) },
+		{ "end", M.seconds(q.to_ms) },
+	})
 end
 
 local function listQuery(opts: ListOptions?): { { string } }
@@ -130,6 +141,14 @@ function M.parseQuery(response: Response, env: Env): Frame.QueryResult
 		return { ok = false, error = err }
 	end
 	return FrameProm.result(doc, env)
+end
+
+function M.parseExemplars(response: Response, env: Env): ExemplarsResult
+	local doc, err = success(response, env, "query_exemplars")
+	if err then
+		return { ok = false, error = err }
+	end
+	return { ok = true, exemplars = FrameProm.exemplars(doc, env) }
 end
 
 function M.parseList(response: Response, env: Env): ListResult

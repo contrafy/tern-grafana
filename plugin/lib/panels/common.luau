@@ -26,6 +26,10 @@ export type Options = {
 	interpolate: ((string) -> string)?,
 	-- Logs: override the panel's showLabels (the block's labels toggle).
 	show_labels: boolean?,
+	-- Time series: exemplar markers (lib/frame/prom Exemplar) and the
+	-- selected one's index into the chart's drawn exemplars.
+	exemplars: { any }?,
+	exemplar: number?,
 }
 
 local M = {}

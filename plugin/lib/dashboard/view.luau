@@ -24,12 +24,13 @@ type State = State.State
 
 local M = {}
 
-M.HINT =
-	"arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh  a auto  l labels  o browser  p pin  / search"
+M.HINT = "arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh  a auto  l labels  L logs  S sync  "
+	.. "o browser  p pin  I investigate  / search"
 -- Text lines per Grafana grid row (30 px rows, 8 px margins, about 15 px lines).
 M.LINES_PER_ROW = 2.5
 
-M.SOLO_HINT = "left/right cursor  1-9 [ ] - + range  r refresh  l labels  o browser  y copy URL"
+M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
+	.. "o browser  y copy URL  I investigate"
 
 local function title(s: State, inst: Repeat.Instance): string
 	local t = inst.panel.title
@@ -72,6 +73,7 @@ local function nativeBody(
 		return muted("Loading", "loading")
 	end
 	local cursor = if single then s.cursor else nil
+	local exemplar = if single then s.exemplar else nil
 	local labels = s.labels[inst.key]
 	-- Text panels interpolate variables into their content.
 	local signature = Variables.signature(s.vars, s.range)
@@ -80,6 +82,7 @@ local function nativeBody(
 		memo
 		and memo.data == data
 		and memo.cursor == cursor
+		and memo.exemplar == exemplar
 		and memo.single == single
 		and memo.labels == labels
 		and memo.signature == signature
@@ -98,6 +101,8 @@ local function nativeBody(
 	local ok, node, own = pcall(Registry.view, panelJson, data.frames, env, {
 		key = inst.key,
 		cursor = cursor,
+		exemplars = data.exemplars,
+		exemplar = exemplar,
 		from_ms = if r then r.from_ms else nil,
 		to_ms = if r then r.to_ms else nil,
 		show_labels = labels,
@@ -123,6 +128,7 @@ local function nativeBody(
 	s.memo[inst.key] = {
 		data = data,
 		cursor = cursor,
+		exemplar = exemplar,
 		single = single,
 		labels = labels,
 		signature = signature,
@@ -294,6 +300,9 @@ local function header(s: State): Node
 	end
 	if s.context then
 		table.insert(spans, ui.span("  " .. (s.context :: string), "muted"))
+	end
+	if s.sync.on then
+		table.insert(spans, ui.span("  synced", "accent"))
 	end
 	local children: { Node } = { ui.text(spans, { key = "title" }) }
 	local chips = varChips(s)

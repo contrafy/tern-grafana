@@ -55,6 +55,16 @@ local function traceId(v: string): boolean
 	return #v <= 32 and string.match(v, "^%x+$") ~= nil
 end
 
+local function spanId(v: string): boolean
+	return #v <= 16 and string.match(v, "^%x+$") ~= nil
+end
+
+-- An Investigate handoff key (lib/investigate/handoff.luau): lower-case
+-- hex and dashes only, so it can never smuggle a path or a prompt.
+local function nonce(v: string): boolean
+	return #v >= 8 and #v <= 40 and string.match(v, "^[%x%-]+$") ~= nil and string.lower(v) == v
+end
+
 local function opsView(v: string): boolean
 	return v == "targets" or v == "rules" or v == "cardinality" or v == "info"
 end
@@ -65,6 +75,21 @@ end
 
 local function queryMode(v: string): boolean
 	return v == "graph" or v == "table"
+end
+
+-- Epoch milliseconds (13 digits until the year 2286).
+local function epochMs(v: string): boolean
+	return #v >= 12 and #v <= 15 and string.match(v, "^%d+$") ~= nil
+end
+
+-- A Kubernetes namespace or object name.
+local function objectName(v: string): boolean
+	return #v <= 253 and string.match(v, "^[%w][%w_.%-]*$") ~= nil
+end
+
+-- A directory's last path segment.
+local function dirName(v: string): boolean
+	return #v > 0 and #v <= 255 and string.find(v, "[/%z\1-\31\127]") == nil
 end
 
 -- The authority of an http(s) URL with no userinfo, whitespace or controls.
@@ -110,9 +135,24 @@ local ACTIONS: { [string]: Spec } = {
 	alerts = spec({}, false, { rule = uid, filter = text, view = alertsView }),
 	silence = spec({}, false, { id = uid, matchers = text }),
 	logs = spec({}, false, withTime({ expr = text, ds = uid })),
-	trace = spec({ "id" }, false, { id = traceId, ds = uid }),
+	-- Without `id` the block opens on TraceQL search (`q`, `from`/`to`).
+	trace = spec({}, false, withTime({ id = traceId, ds = uid, q = text, span = spanId })),
 	ops = spec({}, false, { view = opsView }),
 	settings = spec({}, false, {}),
+	-- Investigate (G4): `id` names a kv handoff record; the link carries nothing else.
+	investigate = { params = { id = nonce }, required = { "id" }, vars = false },
+	-- Deploy annotation approval (G1): `id` names a pending draft held in host
+	-- memory; without it the block lists the remembered decisions.
+	annotate = spec({}, false, { id = uid }),
+	-- Impact watch (G2): command start/finish (epoch ms) and what it named.
+	impact = spec({ "start", "finish" }, false, {
+		start = epochMs,
+		finish = epochMs,
+		kind = uid,
+		ns = objectName,
+		svc = objectName,
+		dir = dirName,
+	}),
 	browse = { params = { url = httpUrl }, required = { "url" }, vars = false },
 }
 

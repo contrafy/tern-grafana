@@ -34,7 +34,7 @@ All published ports bind to `127.0.0.1`.
 | loki | `grafana/loki:3.7.8` | 3100 | Volume API enabled. |
 | tempo | `grafana/tempo:2.10.8` | 3200 | OTLP gRPC/HTTP internal (4317/4318); metrics generator on. |
 | node-exporter | `quay.io/prometheus/node-exporter:v1.12.1` | internal | Scrape target. |
-| loggen | `quay.io/curl/curl:8.22.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s. |
+| loggen | `quay.io/curl/curl:8.22.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s, plus one line per recent Tempo trace every 10 s. |
 | tracegen-frontend, tracegen-payments | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.162.0` | none | OTLP traces; payments spans carry error status. |
 | logcli | `grafana/logcli:3.7.8` | none | Profile `tools`; only used by `capture` via `docker compose run`. |
 
@@ -65,7 +65,13 @@ promtool and amtool run from the prometheus and alertmanager images (`docker com
   Alertmanager resolves alerts whose `endsAt` passed. `up` seeds library panel `tern-lib-up` and two
   annotations tagged `tern-seed`.
 - Loki: job `loggen`, labels `app` (checkout, payments, frontend), `env`, `level` (debug, info, warn,
-  error); bodies are logfmt, JSON and access-log shaped.
+  error); bodies are logfmt, JSON and access-log shaped. Their `trace_id` values are random and do
+  not exist in Tempo.
+- Loki, correlated with Tempo: every 10 s loggen searches Tempo for traces from the last 2 minutes
+  (the 5 most recent, plus up to 2 from `payments`) and pushes one line per trace, each trace once, to
+  `{job="tracegen", service_name="<root service>", level="info"|"error"}`: `level=info msg="handled
+  request" trace_id=<id> service=<svc>`. Payments traces get `level=error`. Every `trace_id` here
+  resolves in Tempo (`/api/traces/<id>`), and Grafana's Loki derived field links it to the trace.
 - Tempo: services `frontend` and `payments` (error status), 3 and 2 child spans.
 
 ### Server behavior the fixtures pin down

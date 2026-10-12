@@ -3,6 +3,7 @@
 -- The config is read on the window's machine to learn Grafana base URLs and
 -- contexts; Tern has no stat, so the parsed config is cached by file content.
 
+local Investigate = require("./investigate_window")
 local Route = require("./lib/links/route")
 local Validate = require("./lib/config/validate")
 local Types = require("./lib/config/types")
@@ -46,6 +47,15 @@ function M.register(t: any)
 		end,
 	}
 	t.route.link(function(link: any, cx: any): any
+		-- Investigate handoffs read kv and may start an agent: their own handler.
+		if Investigate.claims(link.url) then
+			local okInv, answer = pcall(Investigate.handle, link, cx, t)
+			if not okInv then
+				cx:toast("error", "Tern Grafana could not open the investigation", tostring(answer))
+				return { handled = true }
+			end
+			return answer
+		end
 		local ok, decision, message = pcall(function()
 			return Route.decide(link.url, loadConfig(t), Route.CAPABILITIES, codec)
 		end)

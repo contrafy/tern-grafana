@@ -148,4 +148,41 @@ describe("context selection", function()
 	end)
 end)
 
+-- On a host listed in `hosts`, the machine's context must win over the
+-- global default, but never over a context the user named, and a host
+-- default naming a missing context must not hijack routing.
+describe("default precedence", function()
+	local THREE = config([[{"default_context": "b", "contexts": {
+		"a": {"prometheus": {"url": "http://a"}},
+		"b": {"prometheus": {"url": "http://b"}},
+		"c": {"prometheus": {"url": "http://c"}}}}]])
+
+	it("an explicit context beats the host default", function()
+		local r = Route.route(THREE, "a", "metrics", "c")
+		expect(r and r.context).toBe("a")
+	end)
+
+	it("the host default beats default_context", function()
+		local r = Route.route(THREE, nil, "metrics", "c")
+		expect(r and r.context).toBe("c")
+		expect(Route.defaultContext(THREE, "c")).toBe("c")
+	end)
+
+	it("default_context applies without a host default or with an unknown one", function()
+		expect(Route.defaultContext(THREE, nil)).toBe("b")
+		expect(Route.defaultContext(THREE, "gone")).toBe("b")
+		local r = Route.route(THREE, nil, "metrics")
+		expect(r and r.context).toBe("b")
+	end)
+
+	it("a single context is the default when nothing else names one", function()
+		local one: any = table.clone(config('{"contexts": {"solo": {"prometheus": {"url": "http://s"}}}}'))
+		one.default_context = nil
+		expect(Route.defaultContext(one, nil)).toBe("solo")
+		local two = config([[{"contexts": {
+			"a": {"prometheus": {"url": "http://a"}}, "b": {"prometheus": {"url": "http://b"}}}}]])
+		expect(Route.defaultContext(two, nil)).toBeNil()
+	end)
+end)
+
 return nil

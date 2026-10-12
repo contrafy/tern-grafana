@@ -27,8 +27,11 @@ The block remembers its dashboard, range, variables and expanded panel across Te
 | --- | --- | --- |
 | arrows | move focus to the panel in that direction | left/right move the cursor |
 | `tab`, `shift+tab` | next / previous panel in reading order | |
-| `enter` | expand the focused panel (again or `escape` to go back) | |
+| `enter` | expand the focused panel (again or `escape` to go back); with an exemplar selected, open its trace | with an exemplar selected, open its trace |
 | left/right while expanded | move the keyboard cursor; the legend shows values at it (`shift` moves 10 points) | same |
+| `x` while expanded | select the exemplar nearest the cursor of a time series panel; again, the next nearest (`escape` drops it) | same |
+| `L` | open the Logs block for the focused panel's series over the same range | same |
+| `S` | sync the time range and cursor with other synced blocks on or off | same |
 | `1` ... `9` | last 5m, 15m, 1h, 3h, 6h, 12h, 24h, 2d, 7d | same |
 | `[` `]` | shift the range back / forward by half its span | same |
 | `-` `+` | zoom out / in | same |
@@ -113,6 +116,25 @@ Panels in collapsed rows are not queried until the row is expanded.
 The range starts at the dashboard's own (`time` in its JSON) unless the link names one. Auto-refresh follows the
 dashboard's `refresh` interval but never runs more often than `dashboard.min_refresh` (default 30 s); `a` pauses it.
 A refresh re-runs every panel query and re-renders PNG panels. Times are shown and computed in UTC.
+
+With `S` the block joins the shared time range (header shows `synced`, saved with the block): range keys publish
+the range, cursor moves the cursor, and every 2 seconds the block adopts a newer range or cursor another synced
+Query, Dashboard, Panel, Logs or Trace block published; a new range re-runs the panel queries. See
+[query.md](query.md#shared-time) for the record and its rules.
+
+## Exemplars and jumps
+
+Time series panels ask their Prometheus range targets for exemplars (`exemplar: true` in `/api/ds/query`) while
+config `query.exemplars` is on (the default), whatever the dashboard JSON says; every other panel and every target
+with `query.exemplars` off asks for none. Exemplars are drawn as diamonds in the panel's chart (at most 200, thinned
+evenly over time) and never count as a series. In the expanded panel (or the Panel block), `x` selects the exemplar
+nearest the cursor and moves the cursor onto it; under the legend the panel shows its time, value, trace id and
+labels, and `enter` opens its trace in the Trace block (`trace_id`, `traceID`, `traceId` or
+`query.exemplar_trace_label`).
+
+`L` opens `tern-grafana://logs` with the focused panel's range and a LogQL selector from the labels all its series
+share (with an exemplar selected, its labels), kept to `logs.correlate_labels`; the details are in
+[query.md](query.md#jumps-to-logs-and-traces).
 
 ## Configuration
 

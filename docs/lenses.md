@@ -175,7 +175,13 @@ column while the Level column shows them (the cell tooltip keeps all labels). Th
 entry count reaches `--limit`. Metric queries render like `promtool query` (lib/lens/series.luau): spark grid with
 Graph/Table chips, a table for vectors, one number for a scalar. Rows past 50 behind Show all (up to 500).
 
-**Actions.** Click a log line to copy it. No "Open in Logs block" yet; it arrives with the logs block (M5).
+**Actions.** Click a log line to copy it. **Open in Logs block** opens the same query in the
+[Logs block](logs.md) of the context that serves `--addr`: a context whose `loki` endpoint is that URL, or one
+whose Grafana proxies a datasource there (`<grafana>/api/datasources/proxy/uid/<uid>`, which also picks that
+datasource; the numeric-id form uses the context's Loki datasource). The range is `--from`/`--to` (RFC 3339) as
+absolute times, else the last `--since` (default 1h) ending at `--to` or now. Without `--addr` (logcli then reads
+`LOKI_ADDR` or its default, which the lens cannot see) or with an `--addr` no context serves, a muted note says so
+instead of the action.
 
 **Raw fallbacks.** `--tail`/`--follow`, `instant-query`, `labels`, `series` and other commands (not claimed or not
 rendered), help, unknown `--output`, an unquoted query split into several words, lines that are not logcli output,

@@ -7,6 +7,8 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-12
+
 ### Added
 
 - Contexts and auth: one config file describing Grafana and direct Prometheus,
@@ -56,6 +58,39 @@ versions may break).
 - Lenses: `promtool check rules|config` and `promtool test rules`; `curl` against
   `/api/v1/query*` and `/api/ds/query`; `amtool alert` and `amtool silence`;
   `logcli query`.
+- Logs block ("Grafana: Logs"): LogQL against Loki directly or through Grafana,
+  with label, value and pipeline suggestions, colored levels, volume bars per
+  level, a polling tail, and label, metadata and parsed-field chips that filter
+  the query. Grafana Explore links on a Loki datasource open it. `logs` config
+  section: `default_range`, `limit`, `tail_interval`, `volume`.
+- Trace block ("Grafana: Trace"): a Tempo trace as a waterfall with per-service
+  colors, error spans, the critical path, folding and span detail (attributes,
+  events, links, resource), tolerant of missing parents, clock skew and duplicate
+  spans; TraceQL search with tag and value chips. Tempo directly or through
+  Grafana. `trace` config section: `search_limit`, `range`.
+- Deploy annotations: finished deploy commands (helm, kubectl, terraform, tofu,
+  argocd, flux, or your own patterns) post a Grafana annotation after you approve
+  it per context (Always, Once or Never). Off until `annotations.enabled`.
+- Deploy impact watch: a card beside the terminal comparing configured or guessed
+  signals before and after a deploy. Off until `impact.enabled`.
+- Carly: functions to run PromQL, list alerts, find dashboards and query logs, and
+  a firing-alerts summary in Carly's request context.
+- Investigate: open an agent on an alert with its labels, query, recent values and
+  runbook in a prompt you preview first. `investigate` config section: `range`.
+- Personal PromQL threshold watches (`watches`) polled in the background, shown in
+  the status line and as toasts.
+- Per-host default contexts (`hosts`): map hostnames or globs to the context used
+  on that machine.
+- Exemplars on Query graphs and dashboard time series: `x` selects the nearest,
+  `enter` opens its trace. `query` config keys `exemplars` and
+  `exemplar_trace_label`.
+- Jumps between signals: metrics to logs (`L` in the Query block and dashboard
+  panels), logs to metrics (`M`), logs to trace (`T` or a line's `trace` chip)
+  and a span to its logs (`L`). Config keys `logs.correlate_labels`,
+  `logs.trace_id_pattern` and `trace.logs_query`.
+- Shared time range and cursor (`S`) across Query, Dashboard, Panel, Logs and
+  Trace search blocks.
+- `logcli query` lens: open the same query in the Logs block.
 - Project scaffold: `plugin.toml` at the repository root, sources under `plugin/`,
   pinned repo-local tooling (`make bootstrap`), formatting, lint, typecheck and
   unit test runner (`make check`), CI.
@@ -64,3 +99,6 @@ versions may break).
 - Docker dev stack in `dev/` (Grafana 11 and 12, Prometheus 2.53 and 3,
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
+
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/contrafy/tern-grafana/releases/tag/v0.1.0

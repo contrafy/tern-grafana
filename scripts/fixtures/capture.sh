@@ -102,9 +102,14 @@ use() {
 	mkdir -p "$DIR"
 }
 
+# EXTRA_HEADER (one "Name: value" line, empty by default) is sent with the next requests too.
+EXTRA_HEADER=
 auth_conf() {
 	if [ -n "$TOKEN_FILE" ]; then
 		printf 'header = "Authorization: Bearer %s"\n' "$(cat "$TOKEN_FILE")"
+	fi
+	if [ -n "$EXTRA_HEADER" ]; then
+		printf 'header = "%s"\n' "$EXTRA_HEADER"
 	fi
 }
 
@@ -296,6 +301,8 @@ capture_prometheus() {
 	get query_range_down_target "/api/v1/query_range?query=$(enc 'up{job=~"down|node"}')&$rng"
 	get query_range_error_resolution "/api/v1/query_range?query=up&start=$((END - 7 * 86400))&end=$END&step=1"
 	get labels "/api/v1/labels?start=$START&end=$END"
+	get labels_match_http_requests "/api/v1/labels?match%5B%5D=prometheus_http_requests_total&start=$START&end=$END"
+	get query_range_http_rate "/api/v1/query_range?query=$(enc 'sum(rate(prometheus_http_requests_total[5m]))')&start=$((END - 1800))&end=$END&step=15"
 	get label_values_job "/api/v1/label/job/values?start=$START&end=$END"
 	get label_values_name "/api/v1/label/__name__/values?start=$START&end=$END"
 	get series "/api/v1/series?match%5B%5D=up&start=$START&end=$END"
@@ -517,6 +524,10 @@ get query_range_streams "/loki/api/v1/query_range?query=$(enc '{job="loggen"}')&
 get query_range_streams_forward "/loki/api/v1/query_range?query=$(enc '{app="payments"}')&limit=20&direction=forward&$lr"
 get query_range_streams_json "/loki/api/v1/query_range?query=$(enc '{app="payments", level="warn"} | json')&limit=20&$lr"
 get query_range_streams_logfmt "/loki/api/v1/query_range?query=$(enc '{app="checkout"} | logfmt | duration_ms > 400')&limit=20&$lr"
+# Categorized labels: data.encodingFlags plus a third element {structuredMetadata, parsed} per entry.
+EXTRA_HEADER='X-Loki-Response-Encoding-Flags: categorize-labels'
+get query_range_streams_categorized "/loki/api/v1/query_range?query=$(enc '{app="checkout"} | logfmt')&limit=20&$lr"
+EXTRA_HEADER=
 get query_range_matrix "/loki/api/v1/query_range?query=$(enc 'sum by (level) (count_over_time({job="loggen"}[1m]))')&step=60&$lr"
 get query_vector "/loki/api/v1/query?query=$(enc 'sum by (app) (count_over_time({job="loggen"}[5m]))')&time=$NS_END"
 get query_error "/loki/api/v1/query_range?query=$(enc '{job="loggen"')&$lr"

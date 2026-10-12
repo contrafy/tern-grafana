@@ -34,6 +34,11 @@ M.KEYS = table.freeze({
 	{ "h", "Query history" },
 	{ "y", "Copy the query" },
 	{ "o", "Open in Grafana Explore" },
+	{ "x", "Select the next exemplar nearest the cursor (esc clears)" },
+	{ "enter", "Open the selected exemplar's trace" },
+	{ "L", "Open logs for the series (or the exemplar's series)" },
+	{ "S", "Sync the time range and cursor with other synced blocks" },
+	{ "I", "Investigate with an agent (preview first)" },
 	{ "?", "This help" },
 	{ "q  esc", "Close" },
 })
@@ -69,10 +74,23 @@ local function header(s: State): Node
 	if s.refresh_ms then
 		table.insert(children, ui.badge("auto " .. Step.formatDuration(s.refresh_ms), "info", { key = "auto" }))
 	end
+	if s.sync.on then
+		table.insert(children, ui.badge("synced", "accent", { key = "sync" }))
+	end
+	local chart = s.chart
+	local exemplars = if chart and s.mode == "graph" then chart.layout.exemplars else nil
+	if exemplars and #exemplars > 0 then
+		local more = chart and chart.layout.exemplars_dropped or 0
+		local text = string.format("%d exemplar%s", #exemplars, if #exemplars == 1 then "" else "s")
+		if more > 0 then
+			text ..= string.format(" (%d more not drawn)", more)
+		end
+		table.insert(children, ui.muted(text, { key = "ex" }))
+	end
 	if s.status == "loading" then
 		table.insert(children, { k = "spinner", p = { key = "spin" } })
 	end
-	local warnings = #s.warnings + #s.notices
+	local warnings = #s.warnings + #s.notices + (if s.exemplars_error then 1 else 0)
 	if warnings > 0 then
 		table.insert(
 			children,
@@ -136,6 +154,9 @@ local function warnings(s: State): Node?
 	for i, w in s.warnings do
 		table.insert(lines, ui.text({ ui.span(w, "warning") }, { key = "w" .. i }))
 	end
+	if s.exemplars_error then
+		table.insert(lines, ui.text({ ui.span(s.exemplars_error :: string, "warning") }, { key = "ex" }))
+	end
 	if #lines == 0 then
 		return nil
 	end
@@ -173,7 +194,13 @@ local function body(s: State): (Node, Assets.Assets?)
 		if chart == nil then
 			return ui.muted("No data", { key = "empty" }), nil
 		end
-		return ChartView.view(chart, { key = "chart", cursor = s.cursor_t, alt = "PromQL result chart" })
+		return ChartView.view(chart, {
+			key = "chart",
+			cursor = s.cursor_t,
+			exemplar = s.exemplar,
+			trace_label = s.options.exemplar_trace_label,
+			alt = "PromQL result chart",
+		})
 	end
 	return Table.view(s.frames :: any, { key = "table" }), nil
 end

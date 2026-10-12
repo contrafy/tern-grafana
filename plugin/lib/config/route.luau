@@ -53,8 +53,25 @@ local function unroutable(message: string): (Route?, RouteError?)
 	return nil, { kind = "unroutable", message = message }
 end
 
-function M.route(config: Config, context_name: string?, signal: Signal): (Route?, RouteError?)
-	local name = context_name or config.default_context
+-- The context used when none is named: the host default (config `hosts`,
+-- matched against this machine's hostname by lib/hosts) when it names a
+-- defined context, then default_context, then the only context.
+function M.defaultContext(config: Config, host_default: string?): string?
+	if host_default and config.contexts[host_default] then
+		return host_default
+	end
+	if config.default_context then
+		return config.default_context
+	end
+	local only = next(config.contexts)
+	if only ~= nil and next(config.contexts, only) == nil then
+		return only
+	end
+	return nil
+end
+
+function M.route(config: Config, context_name: string?, signal: Signal, host_default: string?): (Route?, RouteError?)
+	local name = context_name or M.defaultContext(config, host_default)
 	if name == nil then
 		return nil,
 			{

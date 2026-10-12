@@ -203,5 +203,8 @@ query results beyond small summaries.
 
 Toasts come from the window half (its timers receive a `cx`) or from a live block's `cx`; host timers have no `cx`.
 The status segment reads the kv summary (well under the 4 ms formatter budget) and a window timer calls
-`tern.chrome.refresh()` only when the summary changed. Host `command_finished` carries `line`, `pane`, `status` and
-`took_ms` but no `cwd`, so the host pairs it with the `cwd` from `command_started` per pane.
+`tern.chrome.refresh()` only when the summary changed. Tern keeps one status formatter per plugin (a second
+`tern.chrome.status` registration replaces the first), so `plugin/alerts_window.luau` owns the formatter and appends
+every other feature's segments (watches today); new segments must be appended there, and its change signature must
+cover them. Host `command_finished` carries `line`, `pane`, `status` and `took_ms` but no `cwd`, so the host pairs
+it with the `cwd` from `command_started` per pane.

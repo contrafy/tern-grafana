@@ -1,8 +1,11 @@
 --!strict
 -- Builds the Env pure code receives instead of the `tern` global. Cheap: no
--- I/O (the config is ConfigHost's cached copy), so it is made per call.
+-- I/O (the config is ConfigHost's cached copy), so it is made per call. The
+-- config carries this host's default context (config `hosts`, hosts_host), so
+-- every reader of default_context honors it.
 
 local ConfigHost = require("./config_host")
+local HostsHost = require("./hosts_host")
 local Env = require("./lib/env")
 
 local M = {}
@@ -21,7 +24,7 @@ function M.nowMs(): number
 end
 
 function M.make(cx: BlockCx?): Env.Env
-	local config = ConfigHost.current()
+	local config = HostsHost.apply((ConfigHost.current()))
 	return {
 		now_ms = M.nowMs(),
 		cols = if cx then cx.cols else nil,

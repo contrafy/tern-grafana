@@ -32,7 +32,7 @@ treated as absent.
 | `version` | number | `1` | Schema version. Only `1` exists. |
 | `default_context` | string | the only context, if there is exactly one | Context used when none is chosen. Must name a context in `contexts`. |
 | `contexts` | object | required | Context name to context. At least one. |
-| `query`, `dashboard`, `alerts`, `annotations`, `impact`, `watches`, `hosts` | object | none | Feature sections. Each is documented below by the release that adds it; until then they are accepted and kept as written. |
+| `query`, `dashboard`, `alerts`, `logs`, `trace`, `investigate`, `annotations`, `impact`, `watches`, `hosts` | object (`watches`: list) | none | Feature sections, each documented below. |
 
 Context names may contain letters, digits, `.`, `_` and `-`.
 
@@ -185,7 +185,9 @@ Defaults for the [Query block](query.md), in the `query` section:
 "query": {
   "default_range": "now-1h",
   "max_points": 600,
-  "refresh": "30s"
+  "refresh": "30s",
+  "exemplars": true,
+  "exemplar_trace_label": "trace_id"
 }
 ```
 
@@ -194,6 +196,8 @@ Defaults for the [Query block](query.md), in the `query` section:
 | `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
 | `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern reports every block as 80x24, so this cannot be derived from the pane size. |
 | `refresh` | string | `"30s"` | Auto-refresh interval used by the `a` toggle, a duration of at least `5s`. |
+| `exemplars` | boolean | `true` | Fetch and draw exemplars with range queries, in the Query block and in dashboard time series panels. |
+| `exemplar_trace_label` | string | none | Exemplar label holding the trace id, tried before `trace_id`, `traceID` and `traceId`. A label name (letters, digits, `_`; not starting with a digit). |
 
 Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default instead
 of breaking the block.
@@ -241,6 +245,174 @@ Settings for the [alerts inbox, status segment and toasts](alerts.md), in the `a
 | `toast_severities` | list of strings | `["critical", "error", "warning"]` | Severities that toast: any of `critical`, `error`, `warning`, `info` and `none` (alerts without a severity), case-insensitive. An unknown severity is reported and the default list is used. |
 
 Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
+
+## Logs
+
+Defaults for the [Logs block](logs.md), in the `logs` section:
+
+```json
+"logs": {
+  "default_range": "now-1h",
+  "limit": 500,
+  "tail_interval": "2s",
+  "volume": true,
+  "correlate_labels": ["job", "namespace", "pod", "container", "service", "service_name", "app", "instance"],
+  "trace_id_pattern": "trace_?id[\"']?\\s*[=:]\\s*[\"']?([0-9a-fA-F]{16,32})\\b"
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
+| `limit` | number | `500` | Most lines a query (and the tail buffer) holds, a whole number from 1 to 5000. |
+| `tail_interval` | string | `"2s"` | Tail polling interval, a duration from `1s` to `1m`. |
+| `volume` | boolean | `true` | Show the volume bars above the lines. |
+| `correlate_labels` | list of strings | `["job", "namespace", "pod", "container", "service", "service_name", "app", "instance"]` | Labels a jump between logs and metrics carries over (`M` in the Logs block, `L` in the Query block and dashboard panels), in this order. Each a valid label name; at least one. |
+| `trace_id_pattern` | string | the pattern above | Regular expression (RE2 syntax, case-insensitive) finding a trace id in a line's text; its first group is the id, or the whole match without a group. Applies after the trace id fields. Must compile. |
+
+Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
+
+## Trace
+
+Settings for the [trace block](traces.md), in the `trace` section:
+
+```json
+"trace": {
+  "search_limit": 20,
+  "range": "now-1h",
+  "logs_query": "{service_name=\"${service}\"} |= \"${traceId}\""
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `search_limit` | number | `20` | Traces one TraceQL search returns, a whole number from 1 to 1000. |
+| `range` | string | `"now-1h"` | Start of the search range (the end is `now`). A relative Grafana time. |
+| `logs_query` | string | `{service_name="${service}"} \|= "${traceId}"` | LogQL that `L` on a span opens in the Logs block. `${service}`, `${traceId}` and `${spanId}` are replaced by the span's service, the trace id and the span id; any other `${...}` is a problem. Must not be blank. |
+
+Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
+
+## Investigate
+
+Settings for [Investigate](investigate.md), in the `investigate` section:
+
+```json
+"investigate": { "range": "1h" }
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `range` | string | `"1h"` | How far back the alert preview fetches recent values of the alert's query, a duration from `1s` to `7d`. |
+
+Unknown keys and bad values are reported as problems; a bad value falls back to its default.
+
+## Annotations
+
+[Deploy annotations](annotations.md), in the `annotations` section. Off until `enabled` is `true`:
+
+```json
+"annotations": {
+  "enabled": true,
+  "on": "success",
+  "patterns": ["helm upgrade", "kubectl apply", "terraform apply"],
+  "tags": ["tern", "deploy"],
+  "context": "prod",
+  "dashboard_uid": "abc123",
+  "panel_id": 2
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Annotate finished commands that match `patterns`. A bad value keeps the feature off. |
+| `on` | string | `"success"` | `"success"`: only commands that exit 0; `"always"`: any exit status. |
+| `patterns` | list of strings | `helm upgrade`, `helm install`, `kubectl apply`, `kubectl rollout restart\|undo`, `kubectl set image`, `terraform apply`, `tofu apply`, `argocd app sync`, `flux reconcile` | Commands that count, at most 64 non-empty strings; see [Which commands count](annotations.md#which-commands-count). |
+| `tags` | list of strings | `["tern", "deploy"]` | Tags on every annotation, at most 16 non-empty strings. |
+| `context` | string | the default context | Context to annotate. Must name a context in `contexts`. |
+| `dashboard_uid` | string | none | Attach annotations to this dashboard (letters, digits, `_`, `-`; at most 128 characters). Without it they are organization-wide. |
+| `panel_id` | number | none | Attach to this panel, a positive whole number. Needs `dashboard_uid`. |
+
+Unknown keys and bad values are reported as problems; a bad value falls back to its default.
+
+## Impact
+
+The [impact watch](annotations.md#impact-watch) after a deploy, in the `impact` section. Off until `enabled` is
+`true`; triggered by the `annotations.patterns` commands:
+
+```json
+"impact": {
+  "enabled": true,
+  "on": "success",
+  "window": "15m",
+  "context": "prod",
+  "signals": {
+    "prod": [
+      { "name": "errors", "expr": "sum(rate(http_requests_total{service=\"{{service}}\",code=~\"5..\"}[5m]))", "unit": "reqps", "bad": "up" }
+    ]
+  }
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Start an impact watch after a matching command. |
+| `on` | string | `"success"` | `"success"` or `"always"`, as for annotations. |
+| `window` | string | `"15m"` | Length of the before and the after window, a duration from `1m` to `6h`. |
+| `context` | string | the default context | Context to query. Must name a context in `contexts`. |
+| `signals` | list, or object | none | Signals to compare: one list for every context, or an object mapping a context name (or `"*"` for the rest) to its list. At most 12 per list. |
+
+Each signal:
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | required | Short label. |
+| `expr` | string | required | PromQL. May use the placeholders `{{namespace}}`, `{{service}}` and `{{cwd_basename}}`; any other placeholder is an error. |
+| `unit` | string | none | Grafana unit id, such as `s` or `percentunit`. |
+| `bad` | string | `"up"` | Which direction is a regression: `"up"`, `"down"` or `"none"`. |
+
+A signal with a problem is skipped and reported; the others still apply.
+
+## Watches
+
+Personal [threshold watches](watches.md), in the `watches` list:
+
+```json
+"watches": [
+  { "name": "disk low", "context": "prod", "expr": "min(node_filesystem_avail_bytes / node_filesystem_size_bytes)", "op": "<", "threshold": 0.1, "for": "5m", "severity": "critical", "interval": "60s" }
+]
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `name` | string | required | Unique name, 1 to 64 characters. |
+| `context` | string | the default context at poll time | Must name a context in `contexts`. |
+| `expr` | string | required | PromQL expression, at most 8192 characters. |
+| `op` | string | required | One of `>`, `>=`, `<`, `<=`, `==`, `!=`. |
+| `threshold` | number | required | A finite number. |
+| `for` | string | `"0s"` | How long the condition must hold before the watch fires, a duration. |
+| `severity` | string | `"warning"` | `critical`, `error`, `warning` or `info`, case-insensitive. |
+| `interval` | string | `"60s"` | Time between evaluations, a duration of at least `15s`. |
+
+A watch with a problem is skipped and reported; the others still apply. A repeated name is skipped. At most 32
+watches are polled.
+
+## Hosts
+
+[Per-host default contexts](hosts.md), in the `hosts` section: an object mapping a hostname or glob to a context
+name.
+
+```json
+"hosts": {
+  "laptop": "lab",
+  "web-*": "prod"
+}
+```
+
+Keys compare case-insensitively against the machine's full hostname and its first label. `*` matches any run of
+characters, `?` exactly one. An exact name beats every glob; among globs the longest wins. Each key is at most 253
+characters and at most 256 entries are read. An entry with an empty key, a value that is not a defined context name,
+or a key repeating another in a different case is skipped and reported. The match takes the place of
+`default_context`; a context named explicitly still wins.
 
 ## Examples
 

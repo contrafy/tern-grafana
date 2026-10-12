@@ -546,4 +546,172 @@ describe("Query block suggestions", function()
 	end)
 end)
 
+describe("Query block exemplars", function()
+	local function directReady(version: string): (any, any)
+		local s, effects, env = open(RANGE)
+		local ex = S.find(S.all(effects, "http"), "http")
+		expect(ex.tag).toBe("q:1")
+		done(s, env, "q:1", "prometheus/" .. version .. "/query_range_multi.json")
+		done(s, env, "e:1", "prometheus/" .. version .. "/query_exemplars.json")
+		return s, env
+	end
+
+	for _, version in S.PROMETHEUS do
+		it("asks Prometheus " .. version .. " for exemplars of a range query and draws them", function()
+			local _, effects = open(RANGE)
+			local reqs = S.all(effects, "http")
+			expect(#reqs).toBe(2)
+			expect(reqs[2].tag).toBe("e:1")
+			expect(reqs[2].request.path).toBe("/api/v1/query_exemplars")
+			expect(form(reqs[2]).query).toBe(RANGE.expr)
+			local s = directReady(version)
+			expect(#s.chart.layout.exemplars > 0).toBe(true)
+			expect(#s.chart.layout.exemplars <= 200).toBe(true)
+		end)
+	end
+
+	it("keeps exemplars that arrive before the query answer", function()
+		local s, _, env = open(RANGE)
+		done(s, env, "e:1", "prometheus/3.15.0/query_exemplars.json")
+		done(s, env, "q:1", "prometheus/3.15.0/query_range_multi.json")
+		expect(#s.chart.layout.exemplars > 0).toBe(true)
+	end)
+
+	it("sends no exemplar request for table mode or with query.exemplars off", function()
+		local _, table_ = open({ context = "lab", expr = "up", mode = "table", from = S.WINDOW })
+		expect(#S.all(table_, "http")).toBe(1)
+		local _, off = open(RANGE, S.env(S.config(nil, { exemplars = false })))
+		expect(#S.all(off, "http")).toBe(1)
+	end)
+
+	for _, version in S.GRAFANA do
+		it("asks Grafana " .. version .. " for exemplars in the same query and splits them from the series", function()
+			local s, effects, env = open({ context = "graf", expr = "histogram_quantile(0.95, x)", from = S.WINDOW })
+			local reqs = S.all(effects, "http")
+			expect(#reqs).toBe(1)
+			expect(reqs[1].request.body).toContain('"exemplar":true')
+			done(s, env, "q:1", "grafana/" .. version .. "/ds_query_prom_exemplars.json")
+			expect(#s.chart.layout.series).toBe(2)
+			-- 120 recorded; the few just before the window are not drawn.
+			expect(#s.chart.layout.exemplars > 100).toBe(true)
+		end)
+	end
+
+	it("x cycles exemplars nearest the cursor and enter opens the trace", function()
+		local s, env = directReady("3.15.0")
+		local layout = s.chart.layout
+		press(s, env, "x")
+		local first = layout.exemplars[s.exemplar]
+		expect(s.cursor_t).toBe(first.time_ms)
+		-- Nothing is closer to the range end than the first pick.
+		for _, e in layout.exemplars do
+			expect(math.abs(e.time_ms - layout.t_to) >= math.abs(first.time_ms - layout.t_to)).toBe(true)
+		end
+		local before = s.exemplar
+		press(s, env, "x")
+		expect(s.exemplar ~= before).toBe(true)
+		local effects = press(s, env, "enter")
+		local opened = S.find(effects, "open")
+		local l = Scheme.decode(opened.target) :: any
+		expect(l.action).toBe("trace")
+		expect(l.params.context).toBe("lab")
+		expect(l.params.id).toBe(string.lower(layout.exemplars[s.exemplar].labels.traceID))
+		-- escape clears the selection before it closes the block.
+		local esc = press(s, env, "escape")
+		expect(s.exemplar).toBeNil()
+		expect(S.find(esc, "exit")).toBeNil()
+	end)
+
+	it("a cursor move drops the exemplar selection", function()
+		local s, env = directReady("3.15.0")
+		press(s, env, "x")
+		press(s, env, "left")
+		expect(s.exemplar).toBeNil()
+	end)
+end)
+
+describe("Query block logs jump", function()
+	it("L opens logs on the labels every series shares, kept to the correlation labels, over the range", function()
+		local s, _, env = open(RANGE)
+		done(s, env, "q:1", "prometheus/3.15.0/query_range_multi.json")
+		local opened = S.find(press(s, env, "L"), "open")
+		local l = Scheme.decode(opened.target) :: any
+		expect(l.action).toBe("logs")
+		expect(l.params.expr).toBe('{job="node",instance="node-exporter:9100"}')
+		expect(l.params.from).toBe(S.WINDOW)
+		expect(l.params.to).toBe("now")
+		expect(l.params.context).toBe("lab")
+	end)
+
+	it("honors logs.correlate_labels", function()
+		local cfg = S.config()
+		cfg.logs = { correlate_labels = { "instance" } }
+		local s, _, env = open(RANGE, S.env(cfg))
+		done(s, env, "q:1", "prometheus/3.15.0/query_range_multi.json")
+		local l = Scheme.decode(S.find(press(s, env, "L"), "open").target) :: any
+		expect(l.params.expr).toBe('{instance="node-exporter:9100"}')
+	end)
+
+	it("says so when nothing ran yet", function()
+		local s, _, env = open({ context = "lab" })
+		press(s, env, "escape")
+		local effects = press(s, env, "L")
+		expect(S.find(effects, "open")).toBeNil()
+		expect(S.find(effects, "toast") ~= nil).toBe(true)
+	end)
+end)
+
+describe("Query block time sync", function()
+	it("S turns sync on, publishes its range when nobody shares one, and persists", function()
+		local s, _, env = open(RANGE)
+		local effects = press(s, env, "S")
+		expect(S.find(effects, "timer").tag).toBe("sync:1")
+		S.applyKv(env, effects)
+		expect(env.kv["tern-grafana.time.shared"].from).toBe(S.WINDOW)
+		expect(State.save(s).sync).toBe(true)
+		local r, restored = State.init({}, State.save(s), env)
+		expect(r.sync.on).toBe(true)
+		expect(S.find(restored, "timer").tag).toBe("sync:0")
+		press(s, env, "S")
+		expect(State.save(s).sync).toBeNil()
+	end)
+
+	it("propagates a range change to another synced block on its next poll", function()
+		local env = S.env(CFG)
+		local a = open(RANGE, env)
+		local b = open(RANGE, env)
+		S.applyKv(env, (press(a, env, "S")))
+		S.applyKv(env, (press(b, env, "S")))
+		S.applyKv(env, (press(a, env, "3")))
+		local _, fx = State.update(b, { kind = "tick", tag = "sync:" .. b.sync.gen }, env)
+		expect(b.from).toBe("now-1h")
+		expect(S.find(fx, "http").tag).toBe("q:" .. b.gen)
+		expect(S.find(fx, "timer").tag).toBe("sync:" .. b.sync.gen)
+		-- a does not re-query on its own echo.
+		local gen = a.gen
+		State.update(a, { kind = "tick", tag = "sync:" .. a.sync.gen }, env)
+		expect(a.gen).toBe(gen)
+	end)
+
+	it("moves a synced chart's cursor overlay without a new query", function()
+		local env = S.env(CFG)
+		local a = open(RANGE, env)
+		local b = open(RANGE, env)
+		done(a, env, "q:1", "prometheus/3.15.0/query_range_multi.json")
+		done(b, env, "q:1", "prometheus/3.15.0/query_range_multi.json")
+		S.applyKv(env, (press(a, env, "S")))
+		S.applyKv(env, (press(b, env, "S")))
+		S.applyKv(env, (press(a, env, "left")))
+		local gen = b.gen
+		State.update(b, { kind = "tick", tag = "sync:" .. b.sync.gen }, env)
+		expect(b.cursor_t).toBe(a.cursor_t)
+		expect(b.gen).toBe(gen)
+	end)
+
+	it("writes nothing to kv while sync is off", function()
+		local s, _, env = open(RANGE)
+		expect(S.find(press(s, env, "3"), "kv_set")).toBeNil()
+	end)
+end)
+
 return nil

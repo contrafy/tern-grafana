@@ -13,7 +13,9 @@
 --   by-value modes (thresholds, continuous) paint the whole series in the
 --   tone of its `seriesBy` value (getFieldSeriesColor);
 -- - options.legend: showLegend, displayMode list|table|hidden, calcs (any
---   lib/panels/reduce reducer, formatted with the series' own config).
+--   lib/panels/reduce reducer, formatted with the series' own config);
+-- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
+--   read out under the legend.
 -- Per-series stacking and per-series units (a second y axis) are reported
 -- as unsupported: one SVG has one stack and one axis.
 
@@ -224,6 +226,9 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		table.insert((out :: Frame).fields, FieldConfig.bake(item))
 		table.insert(visible, item)
 	end
+	if opts.exemplars and #opts.exemplars > 0 then
+		render.exemplars = opts.exemplars
+	end
 	if #visible > 0 then
 		local first = visible[1].config
 		render.unit = render.unit or first.unit
@@ -252,6 +257,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		key = opts.key,
 		alt = if title and title ~= "" then title else "Time series chart",
 		cursor = opts.cursor,
+		exemplar = opts.exemplar,
 		show_legend = showLegend and opts.cursor ~= nil,
 		legend = { mode = if mode == "table" then "table" else "list", offset_min = opts.offset_min },
 	})

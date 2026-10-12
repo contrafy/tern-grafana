@@ -14,16 +14,22 @@
 -- Block `init` only fetches: opening panes and other one-shot effects follow
 -- user events, because Tern re-runs init on restore and plugin reloads.
 
+local Cursor = require("../render/cursor")
 local DashConfig = require("./config")
 local Effect = require("../effect")
 local Env = require("../env")
+local FrameProm = require("../frame/prom")
 local GrafanaSource = require("../source/grafana")
 local GrafanaUrl = require("../links/grafana_url")
+local Handoff = require("../investigate/handoff")
 local Interpolate = require("./interpolate")
+local Jumps = require("../query/jumps")
+local InvestigateSubject = require("../investigate/subject")
 local Ladder = require("./ladder")
 local Layout = require("./layout")
 local Model = require("./model")
 local Queries = require("./queries")
+local QueryOptions = require("../query/options")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
 local RenderPng = require("./render_png")
@@ -31,6 +37,8 @@ local Repeat = require("./repeat")
 local Route = require("../config/route")
 local Scheme = require("../links/scheme")
 local Search = require("./search")
+local Shared = require("../time/shared")
+local SvgTimeseries = require("../render/svg_timeseries")
 local TimeRange = require("../query/timerange")
 local Variables = require("./variables")
 
@@ -146,9 +154,20 @@ export type State = {
 	labels: { [string]: boolean },
 	-- View memo (lib/dashboard/view.luau): rendered native panels by key.
 	memo: { [string]: any },
+	-- Selected exemplar of the focused time series (single view): index
+	-- into SvgTimeseries.drawnExemplars of its data, and the cursor time `x`
+	-- cycling began at.
+	exemplar: number?,
+	ex_anchor: number?,
+	-- Config query.exemplars and query.exemplar_trace_label.
+	exemplars_on: boolean,
+	trace_label: string?,
+	-- Shared time range and cursor (key S).
+	sync: Shared.Sync,
 }
 
 local function newState(env: Env): State
+	local queryOptions = QueryOptions.read(if env.config then env.config.query else nil)
 	return {
 		solo = nil,
 		context = nil,
@@ -194,6 +213,11 @@ local function newState(env: Env): State
 		labels = {},
 		card_ids = {},
 		memo = {},
+		exemplar = nil,
+		ex_anchor = nil,
+		exemplars_on = queryOptions.exemplars,
+		trace_label = queryOptions.exemplar_trace_label,
+		sync = Shared.new("dashboard", env.now_ms, false),
 	}
 end
 
@@ -429,6 +453,7 @@ local function queryContext(s: State, scope: Interpolate.Scope, env: Env): Queri
 		dashboard_title = if d then d.title else nil,
 		org_id = orgId(s),
 		user_login = s.user.login,
+		exemplars = s.exemplars_on,
 	}
 end
 
@@ -722,6 +747,10 @@ local function onQuery(s: State, key: string, response: any, env: Env)
 		return
 	end
 	ps.data = data
+	if key == s.focus then
+		-- The selection indexes the old answer's exemplars.
+		s.exemplar, s.ex_anchor = nil, nil
+	end
 	ps.error = nil
 	ps.status = if #data.frames == 0 and #data.errors > 0 then "error" else "ready"
 	if ps.status == "error" then
@@ -883,6 +912,11 @@ end
 function M.initWith(args: { string }, saved: any, env: Env, solo: boolean): (State, { Effect })
 	local s = newState(env)
 	local effects: { Effect } = {}
+	if type(saved) == "table" and saved.sync == true then
+		s.sync.on = true
+		-- The first poll adopts what the other blocks share.
+		table.insert(effects, Shared.timer(s.sync))
+	end
 	local raw = if type(saved) == "table" and type(saved.link) == "string" then saved.link else args[1]
 	if raw and raw ~= "" then
 		local l, err = Scheme.decode(raw)
@@ -930,10 +964,58 @@ local function refresh(s: State, env: Env, effects: { Effect })
 	advance(s, env, true, effects)
 end
 
+-- Publishes the range and cursor when sync is on.
+local function share(s: State, env: Env, effects: { Effect })
+	local d = s.dashboard
+	local from = s.from or (if d then d.time.from else nil)
+	local to = s.to or (if d then d.time.to else nil)
+	if from == nil or to == nil then
+		return
+	end
+	local e = Shared.share(s.sync, { from = from :: string, to = to :: string }, s.cursor, env)
+	if e then
+		table.insert(effects, e)
+	end
+end
+
 local function setRange(s: State, from: string, to: string, env: Env, effects: { Effect })
 	s.from, s.to = from, to
 	s.cursor = nil
+	s.exemplar, s.ex_anchor = nil, nil
 	refresh(s, env, effects)
+	share(s, env, effects)
+end
+
+-- Applies a range and cursor another synced block shared: panels re-query
+-- only when the range changed.
+local function adoptShared(s: State, env: Env, r: Shared.Range, cursor: number?, effects: { Effect })
+	if r.from ~= s.from or r.to ~= s.to then
+		s.from, s.to = r.from, r.to
+		s.exemplar, s.ex_anchor = nil, nil
+		refresh(s, env, effects)
+	end
+	if cursor ~= s.cursor then
+		s.cursor = cursor
+		s.exemplar, s.ex_anchor = nil, nil
+	end
+end
+
+local function toggleSync(s: State, env: Env, effects: { Effect })
+	local t = Shared.toggle(s.sync)
+	if t == nil then
+		return
+	end
+	table.insert(effects, t)
+	local d = s.dashboard
+	local from = s.from or (if d then d.time.from else "now-6h")
+	local to = s.to or (if d then d.time.to else "now")
+	local r, cursor, e = Shared.join(s.sync, { from = from, to = to }, s.cursor, env)
+	if r then
+		adoptShared(s, env, r, cursor, effects)
+	end
+	if e then
+		table.insert(effects, e)
+	end
 end
 
 local function selectVariable(s: State, name: string, values: { string }, env: Env, effects: { Effect })
@@ -1227,6 +1309,7 @@ local function moveCursor(s: State, dir: number, big: boolean): boolean
 		idx = math.clamp(idx + dir * (if big then 10 else 1), 1, #times)
 	end
 	s.cursor = times[idx]
+	s.exemplar, s.ex_anchor = nil, nil
 	return true
 end
 
@@ -1254,6 +1337,131 @@ local function toggleLabels(s: State): boolean
 	return true
 end
 
+-- Starts an Investigate preview (G4) for the focused panel with its
+-- interpolated queries and the values it shows; nothing is sent before the
+-- user presses Send there.
+local function investigate(s: State, env: Env, effects: { Effect }): boolean
+	local d = s.dashboard
+	local inst = if s.focus then Repeat.find(s.sections, s.focus :: string) else nil
+	if d == nil or inst == nil then
+		return false
+	end
+	local scope = M.panelScope(s, inst)
+	local pq = Queries.build(inst.panel.json, queryContext(s, scope, env), env)
+	local queries: { InvestigateSubject.Query } = {}
+	if pq then
+		for _, q in pq.queries do
+			local text = if type(q.expr) == "string" then q.expr elseif type(q.query) == "string" then q.query else nil
+			if text and text ~= "" then
+				local ds = if type(q.datasource) == "table" then q.datasource.type else nil
+				table.insert(queries, {
+					ref = if type(q.refId) == "string" then q.refId else nil,
+					expr = text,
+					datasource = if type(ds) == "string" then ds else nil,
+				})
+			end
+		end
+	end
+	local r = s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
+	local ps = s.panels[inst.key]
+	local subject = InvestigateSubject.fromPanel({
+		context = s.context,
+		dashboard = d.title,
+		uid = s.uid,
+		panel_id = inst.panel.id,
+		title = Interpolate.replace(inst.panel.title, scope),
+		type = inst.panel.type,
+		queries = queries,
+		range = { from = s.from or d.time.from, to = s.to or d.time.to, from_ms = r.from_ms, to_ms = r.to_ms },
+		vars = M.instanceVars(s, inst),
+		frames = if ps and ps.data then (ps.data :: Queries.PanelData).frames else nil,
+	}, env.config, env.encode)
+	for _, e in Handoff.start(subject, env) do
+		table.insert(effects, e)
+	end
+	return true
+end
+
+-- The exemplars the focused time series panel draws (the same list and
+-- order as its chart's layout.exemplars).
+function M.focusedExemplars(s: State): { FrameProm.Exemplar }
+	local inst = if s.focus then Repeat.find(s.sections, s.focus :: string) else nil
+	local ps = if s.focus then s.panels[s.focus :: string] else nil
+	local data = if ps then ps.data else nil
+	local r = s.range
+	if inst == nil or inst.panel.type ~= "timeseries" or data == nil or data.exemplars == nil or r == nil then
+		return {}
+	end
+	return (SvgTimeseries.drawnExemplars(data.exemplars :: { FrameProm.Exemplar }, r.from_ms, r.to_ms))
+end
+
+function M.selectedExemplar(s: State): FrameProm.Exemplar?
+	return if s.exemplar then M.focusedExemplars(s)[s.exemplar :: number] else nil
+end
+
+-- `x` in the single-panel view: the next exemplar nearest the cursor; the
+-- cursor follows it.
+local function cycleExemplar(s: State, env: Env, effects: { Effect }): boolean
+	local list = M.focusedExemplars(s)
+	local r = s.range
+	if #list == 0 or r == nil then
+		local text = if s.exemplars_on then "No exemplars in this panel" else "Exemplars are off (query.exemplars)"
+		table.insert(effects, { kind = "toast", level = "info", text = text })
+		return true
+	end
+	local layout: any = { exemplars = list }
+	local anchor = if s.exemplar and s.ex_anchor then s.ex_anchor else (s.cursor or r.to_ms)
+	local idx = Cursor.nextExemplar(layout, anchor, s.exemplar) :: number
+	s.exemplar, s.ex_anchor = idx, anchor
+	s.cursor = list[idx].time_ms
+	share(s, env, effects)
+	return true
+end
+
+local function openTrace(s: State, effects: { Effect })
+	local e = M.selectedExemplar(s)
+	if e == nil then
+		return
+	end
+	local target, err = Jumps.traceLink(s.context, e, s.trace_label)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open the trace" })
+	end
+end
+
+-- `L`: logs for the focused panel's series (the selected exemplar's series
+-- when one is selected, else the labels all its series share) over the
+-- dashboard's range.
+local function openLogs(s: State, env: Env, effects: { Effect })
+	local ps = if s.focus then s.panels[s.focus :: string] else nil
+	local data = if ps then ps.data else nil
+	if data == nil then
+		table.insert(effects, { kind = "toast", level = "info", text = "Focus a panel with data: L opens its logs" })
+		return
+	end
+	local labels: { [string]: string }
+	local e = M.selectedExemplar(s)
+	if e then
+		labels = table.clone(e.series)
+		for k, v in e.labels do
+			labels[k] = labels[k] or v
+		end
+	else
+		labels = Jumps.commonLabels((data :: Queries.PanelData).frames)
+	end
+	local d = s.dashboard
+	local from = s.from or (if d then d.time.from else "now-6h")
+	local to = s.to or (if d then d.time.to else "now")
+	local target, err = Jumps.logsLink(s.context, labels, Jumps.correlateLabels(env.config), from, to)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open logs" })
+	end
+end
+
 local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): boolean
 	local name = key.name
 	local ch = key.text or ""
@@ -1273,7 +1481,11 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 	local dir: Layout.Direction? = DIRS[name]
 	if dir then
 		if singleView and (dir == "left" or dir == "right") then
-			return moveCursor(s, if dir == "left" then -1 else 1, key.shift)
+			local moved = moveCursor(s, if dir == "left" then -1 else 1, key.shift)
+			if moved then
+				share(s, env, effects)
+			end
+			return moved
 		end
 		if singleView or s.focus == nil then
 			return false
@@ -1293,16 +1505,23 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		idx = (idx - 1 + (if key.shift then -1 else 1)) % #s.order + 1
 		s.focus = s.order[idx]
 		return true
+	elseif (name == "enter" or name == "return") and s.exemplar and singleView then
+		openTrace(s, effects)
+		return true
 	elseif name == "enter" and not s.solo then
 		if s.focus == nil then
 			return false
 		end
 		s.expanded = not s.expanded
 		s.cursor = nil
+		s.exemplar, s.ex_anchor = nil, nil
 		advance(s, env, false, effects)
 		return true
 	elseif name == "escape" then
-		if s.expanded then
+		if s.exemplar then
+			s.exemplar, s.ex_anchor = nil, nil
+			return true
+		elseif s.expanded then
 			s.expanded = false
 			s.cursor = nil
 			advance(s, env, false, effects)
@@ -1345,8 +1564,18 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 			table.insert(effects, { kind = "toast", level = "info", text = "Copied the Grafana URL" })
 		end
 		return url ~= nil
+	elseif ch == "I" then
+		return investigate(s, env, effects)
 	elseif ch == "l" then
 		return toggleLabels(s)
+	elseif ch == "x" and singleView then
+		return cycleExemplar(s, env, effects)
+	elseif ch == "L" then
+		openLogs(s, env, effects)
+		return true
+	elseif ch == "S" then
+		toggleSync(s, env, effects)
+		return true
 	elseif ch == "p" and not s.solo then
 		pin(s, effects)
 		return #effects > 0
@@ -1517,6 +1746,14 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			advance(s, env, false, effects)
 			return s, effects
 		end
+		if Shared.isTick(s.sync, msg.tag) then
+			local r, cursor = Shared.poll(s.sync, env)
+			if r then
+				adoptShared(s, env, r, cursor, effects)
+			end
+			table.insert(effects, Shared.timer(s.sync))
+			return s, effects
+		end
 		if msg.tag == tag("refresh", s.gen, s.timer_gen) and s.auto then
 			refresh(s, env, effects)
 			armRefresh(s, effects)
@@ -1552,7 +1789,10 @@ function M.save(s: State): any
 		return nil
 	end
 	local encoded = validLink(l)
-	return if encoded then { link = encoded } else nil
+	if encoded == nil then
+		return nil
+	end
+	return { link = encoded, sync = if s.sync.on then true else nil }
 end
 
 return M

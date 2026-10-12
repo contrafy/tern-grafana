@@ -25,9 +25,11 @@ M.CAPABILITIES = table.freeze({
 	panel = true,
 	alerts = true,
 	silence = true,
-	logs = false,
-	trace = false,
+	logs = true,
+	trace = true,
 	ops = true,
+	annotate = true,
+	impact = true,
 	settings = true,
 })
 

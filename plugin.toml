@@ -13,11 +13,19 @@ styles = [
 	"plugin/panels.css",
 	"plugin/alerts.css",
 	"plugin/ops.css",
+	"plugin/logs.css",
+	"plugin/annotations.css",
+	"plugin/trace.css",
 ]
 
 [[blocks]]
 id = "query"
 title = "Tern Grafana Query"
+icon = "chart"
+
+[[blocks]]
+id = "trace"
+title = "Grafana Trace"
 icon = "chart"
 
 [[blocks]]
@@ -48,6 +56,26 @@ icon = "flame"
 [[blocks]]
 id = "ops"
 title = "Grafana Ops"
+icon = "chart"
+
+[[blocks]]
+id = "logs"
+title = "Grafana Logs"
+icon = "list"
+
+[[blocks]]
+id = "investigate"
+title = "Grafana Investigate"
+icon = "flame"
+
+[[blocks]]
+id = "annotate"
+title = "Grafana Deploy Annotation"
+icon = "flame"
+
+[[blocks]]
+id = "impact"
+title = "Grafana Deploy Impact"
 icon = "chart"
 
 [[lenses]]

@@ -3,10 +3,14 @@
 -- Prometheus-compatible server; "datasource" goes through Grafana: queries
 -- by /api/ds/query (so Grafana applies its datasource settings, auth and
 -- step rules) and labels, values, metadata and buildinfo by the datasource
--- proxy, which relays the Prometheus API unchanged.
+-- proxy, which relays the Prometheus API unchanged. Exemplars of a range
+-- query come in Grafana's answer (`exemplar: true`) or, direct, from
+-- /api/v1/query_exemplars.
 
 local Env = require("../env")
 local Frame = require("../frame/types")
+local FrameGrafana = require("../frame/grafana")
+local FrameProm = require("../frame/prom")
 local Grafana = require("./grafana")
 local Prom = require("./prom")
 local Route = require("../config/route")
@@ -27,12 +31,17 @@ export type RangeQuery = {
 	ref_id: string?,
 	format: Format?,
 	legend: string?,
+	-- Ask for exemplars too. Through Grafana they come back in the same
+	-- answer; a direct endpoint needs exemplarsRequest as well.
+	exemplars: boolean?,
 }
 export type InstantQuery = { expr: string, time_ms: number, ref_id: string?, format: Format?, legend: string? }
 export type ListOptions = Prom.ListOptions
 export type ListResult = Prom.ListResult
 export type MetadataResult = Prom.MetadataResult
 export type HealthResult = Prom.HealthResult
+export type Exemplar = FrameProm.Exemplar
+export type ExemplarsResult = Prom.ExemplarsResult
 
 local M = {}
 
@@ -66,18 +75,42 @@ function M.rangeRequest(route: Route, q: RangeQuery): Request
 	if not viaGrafana(route) then
 		return Prom.rangeRequest("", q)
 	end
-	return Grafana.promQueryRequest({
-		{
-			ref_id = q.ref_id or M.DEFAULT_REF,
-			uid = route.datasource_uid :: string,
-			expr = q.expr,
-			instant = false,
-			interval_ms = q.step_ms,
-			max_points = q.max_points or M.DEFAULT_MAX_POINTS,
-			format = q.format,
-			legend = q.legend,
-		},
-	}, q.from_ms, q.to_ms)
+	local target = Grafana.promTarget({
+		ref_id = q.ref_id or M.DEFAULT_REF,
+		uid = route.datasource_uid :: string,
+		expr = q.expr,
+		instant = false,
+		interval_ms = q.step_ms,
+		max_points = q.max_points or M.DEFAULT_MAX_POINTS,
+		format = q.format,
+		legend = q.legend,
+	})
+	if q.exemplars then
+		target.exemplar = true
+	end
+	return {
+		method = "POST",
+		path = Grafana.DS_QUERY_PATH,
+		headers = { ["Content-Type"] = "application/json" },
+		body = Grafana.encode({
+			queries = { target },
+			from = string.format("%d", q.from_ms),
+			to = string.format("%d", q.to_ms),
+		}),
+	}
+end
+
+-- The separate exemplars request a direct endpoint needs for a range query;
+-- nil through Grafana, which answers them with the query (rangeRequest).
+function M.exemplarsRequest(route: Route, q: RangeQuery): Request?
+	if viaGrafana(route) then
+		return nil
+	end
+	return Prom.exemplarsRequest("", q)
+end
+
+function M.parseExemplars(_route: Route, response: Response, env: Env): ExemplarsResult
+	return Prom.parseExemplars(response, env)
 end
 
 function M.instantRequest(route: Route, q: InstantQuery): Request
@@ -98,14 +131,27 @@ function M.instantRequest(route: Route, q: InstantQuery): Request
 	}, q.time_ms - M.INSTANT_LOOKBACK_MS, q.time_ms)
 end
 
--- The query's result. `kind` is informational: the body says what it holds.
-function M.parse(route: Route, response: Response, env: Env, _kind: "range" | "instant"): Frame.QueryResult
+-- The query's result. Exemplar frames Grafana sent are left out (they are
+-- not series); parseWithExemplars returns them. `kind` is informational:
+-- the body says what it holds.
+function M.parse(route: Route, response: Response, env: Env, kind: "range" | "instant"): Frame.QueryResult
+	return (M.parseWithExemplars(route, response, env, kind))
+end
+
+-- parse, and the exemplars Grafana answered a query sent with
+-- `exemplars = true` with (a direct endpoint's come from exemplarsRequest).
+function M.parseWithExemplars(
+	route: Route,
+	response: Response,
+	env: Env,
+	_kind: "range" | "instant"
+): (Frame.QueryResult, { Exemplar })
 	if not viaGrafana(route) then
-		return Prom.parseQuery(response, env)
+		return Prom.parseQuery(response, env), {}
 	end
 	local parsed = Grafana.parseDsQuery(response, env)
 	if not parsed.ok then
-		return { ok = false, error = parsed.error }
+		return { ok = false, error = parsed.error }, {}
 	end
 	local results = parsed.results
 	local result: Frame.QueryResult? = results[M.DEFAULT_REF]
@@ -117,7 +163,15 @@ function M.parse(route: Route, response: Response, env: Env, _kind: "range" | "i
 		table.sort(refs)
 		result = if refs[1] then results[refs[1]] else nil
 	end
-	return result or { ok = true, frames = {}, warnings = {} }
+	if result == nil then
+		return { ok = true, frames = {}, warnings = {} }, {}
+	end
+	if not result.ok then
+		return result, {}
+	end
+	local ok = result :: any
+	local frames, exemplars = FrameGrafana.splitExemplars(ok.frames)
+	return { ok = true, frames = frames, warnings = ok.warnings }, exemplars
 end
 
 function M.labelsRequest(route: Route, opts: ListOptions?): Request

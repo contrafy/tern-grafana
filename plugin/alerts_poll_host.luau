@@ -45,7 +45,7 @@ local function run()
 		return
 	end
 	pcall(ConfigHost.load)
-	local config = ConfigHost.current()
+	local config = EnvHost.make(nil).config
 	local ok, jobs, poll_s, toastSeverities = pcall(Poll.jobs, config)
 	if not ok then
 		warn("plan", jobs)

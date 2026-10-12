@@ -8,8 +8,16 @@ type Command = { id: string, title: string, icon: string, block: string }
 local COMMANDS: { Command } = {
 	{ id = "query", title = "Grafana: Query", icon = "chart", block = "tern-grafana.query" },
 	{ id = "dashboard", title = "Grafana: Dashboard", icon = "chart", block = "tern-grafana.dashboard" },
+	{ id = "logs", title = "Grafana: Logs", icon = "list", block = "tern-grafana.logs" },
+	{ id = "traces", title = "Grafana: Traces", icon = "chart", block = "tern-grafana.trace" },
 	{ id = "silences", title = "Grafana: Silences", icon = "flame", block = "tern-grafana.silence" },
 	{ id = "ops", title = "Grafana: Ops", icon = "chart", block = "tern-grafana.ops" },
+	{
+		id = "annotations",
+		title = "Grafana: Deploy annotation decisions",
+		icon = "flame",
+		block = "tern-grafana.annotate",
+	},
 	{ id = "settings", title = "Grafana: Settings", icon = "sliders", block = "tern-grafana.settings" },
 }
 

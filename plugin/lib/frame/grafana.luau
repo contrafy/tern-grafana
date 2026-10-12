@@ -9,6 +9,7 @@
 
 local Env = require("../env")
 local Frame = require("./types")
+local FrameProm = require("./prom")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -257,6 +258,67 @@ function M.parseResults(doc: any, env: Env): { [string]: Frame.QueryResult }
 		end
 	end
 	return out
+end
+
+-- Grafana's Prometheus datasource answers a query sent with `exemplar: true`
+-- with one extra frame named "exemplar" (meta.custom.resultType "exemplar"):
+-- Time and Value columns, then one string column per label of the
+-- exemplar and of its series. It is not a series to plot.
+function M.isExemplarFrame(f: Frame): boolean
+	local custom = if f.meta then f.meta.custom else nil
+	return (custom ~= nil and custom.resultType == "exemplar") or f.name == "exemplar"
+end
+
+-- The rows of an exemplar frame, sorted by time.
+function M.exemplars(f: Frame): { FrameProm.Exemplar }
+	local out: { FrameProm.Exemplar } = {}
+	local timeField = Frame.timeField(f)
+	local valueField: Field? = nil
+	local stringFields: { Field } = {}
+	for _, field in f.fields do
+		if field.type == "number" and valueField == nil then
+			valueField = field
+		elseif field.type == "string" then
+			table.insert(stringFields, field)
+		end
+	end
+	if timeField == nil or valueField == nil then
+		return out
+	end
+	local values = (valueField :: Field).values
+	for i, t in timeField.values do
+		local v = Frame.finite(values[i])
+		if type(t) ~= "number" or v == nil then
+			continue
+		end
+		local lbls: { [string]: string } = {}
+		for _, field in stringFields do
+			local s = field.values[i]
+			if type(s) == "string" and s ~= "" then
+				lbls[field.name] = s
+			end
+		end
+		table.insert(out, { time_ms = t, value = v, labels = lbls, series = {} })
+	end
+	FrameProm.sortExemplars(out)
+	return out
+end
+
+-- `frames` without exemplar frames, and the exemplars those held.
+function M.splitExemplars(frames: { Frame }): ({ Frame }, { FrameProm.Exemplar })
+	local kept: { Frame } = {}
+	local exemplars: { FrameProm.Exemplar } = {}
+	for _, f in frames do
+		if M.isExemplarFrame(f) then
+			for _, e in M.exemplars(f) do
+				table.insert(exemplars, e)
+			end
+		else
+			table.insert(kept, f)
+		end
+	end
+	FrameProm.sortExemplars(exemplars)
+	return kept, exemplars
 end
 
 return M
