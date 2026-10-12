@@ -155,7 +155,9 @@ describe("invalid edits", function()
 		local form = Model.editForm(lab(), "lab", "prometheus", json.encode)
 		form = edit(form, "auth.type", "bearer")
 		local byField = problemsOn(form, lab())
-		expect(byField["auth.source"]).toEqual({ "bearer auth needs one of token_cmd, token_env, token_file" })
+		expect(byField["auth.source"]).toEqual({
+			"bearer auth needs one of token_keychain, token_env, token_cmd or token_file",
+		})
 	end)
 
 	it("reports an unparsable command at its JSON path without validating", function()

@@ -13,7 +13,7 @@ local M = {}
 
 M.ENDPOINTS = table.freeze({ "grafana", "prometheus", "alertmanager", "loki", "tempo" })
 M.AUTH_TYPES = table.freeze({ "none", "bearer", "basic" })
-M.SOURCES = table.freeze({ "cmd", "env", "file" })
+M.SOURCES = table.freeze({ "keychain", "env", "cmd", "file" })
 M.DATASOURCE_KEYS = table.freeze({ "prometheus", "loki", "tempo", "alertmanager" })
 M.MASK = "********"
 
@@ -410,9 +410,10 @@ local function sourceField(form: Form): string
 end
 
 local REFERENCE_HINT: { [string]: string } = {
-	cmd = 'program and arguments, e.g. op read op://vault/item/token (or a JSON array ["op", "read", "..."])',
-	env = "environment variable of the Tern process, e.g. GRAFANA_TOKEN",
+	cmd = 'password manager command, e.g. op read op://vault/item/token (or a JSON array ["op", "read", "..."])',
+	env = "environment variable, e.g. GRAFANA_TOKEN (read from your login shell when Tern does not have it)",
 	file = "absolute path or ~/..., a private file (chmod 600)",
+	keychain = "OS keychain item (service tern-grafana), e.g. lab/grafana; Update token on a grafana endpoint stores it",
 }
 
 -- The form's fields, in display order, for its current values.
@@ -925,6 +926,17 @@ function M.applyForm(raw: Raw?, form: Form, decode: (string) -> any): (Raw?, { P
 	return out, {}
 end
 
+-- The document with `endpoint` of `context` set to `ep`, creating the
+-- context when it does not exist.
+function M.putEndpoint(raw: Raw?, context: string, endpoint: string, ep: Raw): Raw
+	local out, contexts = withContexts(raw)
+	local ctx = contexts[context]
+	local copy: Raw = if isTable(ctx) then Tbl.copy(ctx) else {}
+	copy[endpoint] = ep
+	contexts[context] = copy
+	return out
+end
+
 function M.removeEndpoint(raw: Raw?, context: string, endpoint: string): Raw
 	local out, contexts = withContexts(raw)
 	local ctx = contexts[context]
@@ -984,9 +996,10 @@ M.TEMPLATES = table.freeze({
 	},
 	{
 		id = "cloud",
-		title = "Grafana Cloud",
-		description = "A Grafana Cloud stack with a service account token, and direct Prometheus with basic auth "
-			.. "(instance id and an access policy token from 1Password). Replace the URLs and item paths.",
+		title = "Grafana Cloud (manual)",
+		description = "A Grafana Cloud stack whose service account token lives in the OS keychain as cloud/grafana. "
+			.. "Replace the URL, then select the grafana endpoint and use Update token to store the token. "
+			.. "Connect Grafana does all of this for you.",
 		raw = {
 			version = 1,
 			default_context = "cloud",
@@ -994,19 +1007,11 @@ M.TEMPLATES = table.freeze({
 				cloud = {
 					grafana = {
 						url = "https://example.grafana.net",
-						auth = {
-							type = "bearer",
-							token_cmd = { "op", "read", "op://Work/Grafana Cloud/service-account-token" },
-						},
-						datasources = { prometheus = "grafanacloud-prom", loki = "grafanacloud-logs" },
-					},
-					prometheus = {
-						url = "https://prometheus-prod-13-prod-us-east-0.grafana.net",
-						path_prefix = "/api/prom",
-						auth = {
-							type = "basic",
-							username = "123456",
-							password_cmd = { "op", "read", "op://Work/Grafana Cloud/access-policy-token" },
+						auth = { type = "bearer", token_keychain = "cloud/grafana" },
+						datasources = {
+							prometheus = "grafanacloud-prom",
+							loki = "grafanacloud-logs",
+							tempo = "grafanacloud-traces",
 						},
 					},
 				},
