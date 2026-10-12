@@ -27,7 +27,7 @@ if ! command -v "$tern_bin" >/dev/null 2>&1; then
 	echo "e2e: SKIPPED: \`$tern_bin\` is not installed; the e2e suite drives a real Tern window."
 	exit 0
 fi
-for tool in jq docker curl; do
+for tool in jq docker curl bash; do
 	command -v "$tool" >/dev/null 2>&1 || {
 		echo "e2e: $tool is required" >&2
 		exit 2
@@ -78,17 +78,67 @@ need() {
 
 artifacts="$repo/.sandbox/e2e"
 
+# Every process of the sandbox: the window, its daemon (and the panes' tools),
+# stray `tern ctl` calls. All carry the sandbox path in their argv.
+sandbox_pids() {
+	pgrep -f -- "$E2E_SB/" 2>/dev/null || true
+}
+
+gone() { # gone PID...: none of them is alive
+	for p in "$@"; do
+		kill -0 "$p" 2>/dev/null && return 1
+	done
+	return 0
+}
+
+# terminate SECS PID...: TERM, wait up to SECS seconds, then KILL.
+terminate() {
+	secs=$1
+	shift
+	[ $# -gt 0 ] || return 0
+	kill "$@" 2>/dev/null
+	n=0
+	while ! gone "$@" && [ $n -lt $((secs * 4)) ]; do
+		sleep 0.25
+		n=$((n + 1))
+	done
+	gone "$@" || kill -9 "$@" 2>/dev/null
+}
+
+# with_timeout SECS CMD...: CMD, killed after SECS seconds (`ctl quit` can
+# hang on a window that does not quit). Neither holds our output.
+with_timeout() {
+	secs=$1
+	shift
+	"$@" </dev/null >/dev/null 2>&1 &
+	cmd_pid=$!
+	(
+		sleep "$secs"
+		kill "$cmd_pid" 2>/dev/null
+	) </dev/null >/dev/null 2>&1 &
+	watch_pid=$!
+	wait "$cmd_pid" 2>/dev/null
+	kill "$watch_pid" 2>/dev/null
+}
+
+# Stop the sandbox without relying on the window quitting: ask it to quit,
+# then end the window first (it respawns a killed daemon), then everything
+# else still on the sandbox. Never touches processes of other sandboxes.
+teardown() {
+	[ -n "$(sandbox_pids)" ] || return 0
+	with_timeout 5 sh "$E2E_DEV" ctl quit
+	# shellcheck disable=SC2046 # pid lists
+	terminate 5 $(pgrep -f -- "tern --control $E2E_SB/ctl.sock" 2>/dev/null)
+	# shellcheck disable=SC2046
+	terminate 5 $(sandbox_pids)
+	left=$(sandbox_pids)
+	[ -z "$left" ] || echo "e2e: processes still running in $E2E_SB: $left" >&2
+}
+
 cleanup() {
 	if [ "$keep" = 0 ]; then
-		dev stop >/dev/null 2>&1
-		i=0
-		while [ -n "${window_pid:-}" ] && kill -0 "$window_pid" 2>/dev/null && [ $i -lt 40 ]; do
-			sleep 0.25
-			i=$((i + 1))
-		done
-		[ -n "${window_pid:-}" ] && kill "$window_pid" 2>/dev/null
-		sleep 0.5
-		dev clean >/dev/null 2>&1 || { sleep 1 && rm -rf "$E2E_SB"; }
+		teardown
+		rm -rf "$E2E_SB" 2>/dev/null || { sleep 1 && rm -rf "$E2E_SB"; }
 	else
 		echo "e2e: window kept running (TG_TERN_SANDBOX=$E2E_SB sh scripts/dev-tern.sh stop)"
 	fi
@@ -111,7 +161,8 @@ snapshot() {
 	fi
 }
 
-dev clean >/dev/null 2>&1
+teardown
+rm -rf "$E2E_SB"
 mkdir -p "$E2E_SB" "$artifacts"
 rm -rf "${artifacts:?}"/*
 snapshot "$E2E_SB/pkg" || need "cannot snapshot the package"
@@ -121,10 +172,14 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 start=$(date +%s)
-dev start >"$E2E_SB/window.out" 2>&1 &
-window_pid=$!
+# The window (and the daemon it spawns) must not inherit our output or any
+# other descriptor of the caller, or `make e2e | tail` waits for them: start it
+# with only stdin/stdout/stderr open, its output in the artifacts.
+# shellcheck disable=SC2016 # expanded by the inner bash
+bash -c 'for fd in $(ls /dev/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done; exec "$@"' \
+	_ sh "$E2E_DEV" start </dev/null >"$artifacts/window.out" 2>&1 &
 E2E_WAIT=30 wait_for "the sandbox window" ctl ready || {
-	cat "$E2E_SB/window.out" >&2
+	cat "$artifacts/window.out" >&2
 	exit 1
 }
 dev link "$E2E_SB/pkg" >/dev/null 2>&1 || need "cannot link the plugin"

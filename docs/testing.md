@@ -92,11 +92,16 @@ then `ctl ...` (any `tern ctl` command: `tree SEL`, `key K`, `type "..."`, `clic
    the sandbox, so saving files while it runs does not reload the plugin under test.
 6. Runs `tests/e2e/scenarios/*.sh`, each in a subshell after closing every pane but the shell, prints one line per
    scenario with its time, then checks the logs for style sheet errors and lenses that fell back to raw on an
-   error. Stops the window and deletes the sandbox (`--keep` or `E2E_KEEP=1` leaves it running).
+   error. Tears the sandbox down and deletes it (`--keep` or `E2E_KEEP=1` leaves it running). Teardown does not
+   rely on the window quitting (`tern ctl quit` can hang, and the window respawns a killed daemon): it asks it to
+   quit for 5 s, then ends the window, then every other process whose command line names the sandbox (daemon,
+   stray `tern ctl`), TERM then KILL. The same teardown runs first, so a run left over from before is cleaned up.
+   The window starts with only stdin, stdout and stderr open (output in `.sandbox/e2e/window.out`), so neither it
+   nor its daemon keeps a caller's pipe open: `make e2e | tail` exits when the run ends.
 
 `E2E_ONLY=<glob>` (or `--only`) runs matching scenarios, for example `E2E_ONLY='*dash*' make e2e`. Each scenario
 takes at least one screenshot into `.sandbox/e2e/<scenario>/`; a failing one also leaves `fail.png` and `tree.json`
-there, and the daemon and window logs go to `.sandbox/e2e/`.
+there, and the daemon and window logs are copied to `.sandbox/e2e/`.
 
 Scenarios assert on the element tree (`tern ctl tree`, `plugins expect`), never on screenshots alone. Every scenario
 is independent of the others and of their order, and leaves nothing behind:
