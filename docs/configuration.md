@@ -185,7 +185,9 @@ Defaults for the [Query block](query.md), in the `query` section:
 "query": {
   "default_range": "now-1h",
   "max_points": 600,
-  "refresh": "30s"
+  "refresh": "30s",
+  "exemplars": true,
+  "exemplar_trace_label": "trace_id"
 }
 ```
 
@@ -194,6 +196,8 @@ Defaults for the [Query block](query.md), in the `query` section:
 | `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
 | `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern reports every block as 80x24, so this cannot be derived from the pane size. |
 | `refresh` | string | `"30s"` | Auto-refresh interval used by the `a` toggle, a duration of at least `5s`. |
+| `exemplars` | boolean | `true` | Fetch and draw exemplars with range queries, in the Query block and in dashboard time series panels. |
+| `exemplar_trace_label` | string | none | Exemplar label holding the trace id, tried before `trace_id`, `traceID` and `traceId`. A label name (letters, digits, `_`; not starting with a digit). |
 
 Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default instead
 of breaking the block.
@@ -251,7 +255,9 @@ Defaults for the [Logs block](logs.md), in the `logs` section:
   "default_range": "now-1h",
   "limit": 500,
   "tail_interval": "2s",
-  "volume": true
+  "volume": true,
+  "correlate_labels": ["job", "namespace", "pod", "container", "service", "service_name", "app", "instance"],
+  "trace_id_pattern": "trace_?id[\"']?\\s*[=:]\\s*[\"']?([0-9a-fA-F]{16,32})\\b"
 }
 ```
 
@@ -261,6 +267,8 @@ Defaults for the [Logs block](logs.md), in the `logs` section:
 | `limit` | number | `500` | Most lines a query (and the tail buffer) holds, a whole number from 1 to 5000. |
 | `tail_interval` | string | `"2s"` | Tail polling interval, a duration from `1s` to `1m`. |
 | `volume` | boolean | `true` | Show the volume bars above the lines. |
+| `correlate_labels` | list of strings | `["job", "namespace", "pod", "container", "service", "service_name", "app", "instance"]` | Labels a jump between logs and metrics carries over (`M` in the Logs block, `L` in the Query block and dashboard panels), in this order. Each a valid label name; at least one. |
+| `trace_id_pattern` | string | the pattern above | Regular expression (RE2 syntax, case-insensitive) finding a trace id in a line's text; its first group is the id, or the whole match without a group. Applies after the trace id fields. Must compile. |
 
 Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
 
@@ -271,7 +279,8 @@ Settings for the [trace block](traces.md), in the `trace` section:
 ```json
 "trace": {
   "search_limit": 20,
-  "range": "now-1h"
+  "range": "now-1h",
+  "logs_query": "{service_name=\"${service}\"} |= \"${traceId}\""
 }
 ```
 
@@ -279,6 +288,7 @@ Settings for the [trace block](traces.md), in the `trace` section:
 | --- | --- | --- | --- |
 | `search_limit` | number | `20` | Traces one TraceQL search returns, a whole number from 1 to 1000. |
 | `range` | string | `"now-1h"` | Start of the search range (the end is `now`). A relative Grafana time. |
+| `logs_query` | string | `{service_name="${service}"} \|= "${traceId}"` | LogQL that `L` on a span opens in the Logs block. `${service}`, `${traceId}` and `${spanId}` are replaced by the span's service, the trace id and the span id; any other `${...}` is a problem. Must not be blank. |
 
 Unknown keys and bad values in this section are reported as problems; a bad value falls back to its default.
 

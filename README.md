@@ -188,6 +188,32 @@ tern-grafana://trace?context=lab&q=%7Bstatus%3Derror%7D&from=now-6h
 
 Details: [Trace block](docs/traces.md).
 
+## Correlation
+
+Metrics, logs and traces link to each other in the same context and range:
+
+- **Exemplars.** Range queries in the Query block and dashboard time series
+  draw exemplars as diamonds. `x` selects the nearest one and shows its trace
+  id and labels; `enter` opens the trace.
+- **Jumps.** `L` in the Query block or a dashboard panel opens the matching
+  logs; `M` in the Logs block opens metrics for the line's labels; `T` (or a
+  line's `trace` chip) opens the line's trace; `L` on a span opens its logs.
+- **Shared time.** `S` syncs the range and cursor across Query, Dashboard,
+  Panel, Logs and Trace search blocks.
+
+| Exemplars | Exemplar to trace |
+| --- | --- |
+| ![Exemplars drawn on a latency graph](docs/screenshots/exemplars.png) | ![Exemplar opened in the trace block](docs/screenshots/exemplar-trace.png) |
+
+| Shared time range and cursor | Trace chips on log lines |
+| --- | --- |
+| ![Two synced Query blocks](docs/screenshots/shared-time.png) | ![Log lines with trace chips](docs/screenshots/logs-trace-chip.png) |
+
+![A span's logs opened from the trace block](docs/screenshots/trace-span-logs.png)
+
+Details: [exemplars](docs/query.md#exemplars), [shared time](docs/query.md#shared-time),
+[logs jumps](docs/logs.md), [trace logs](docs/traces.md#trace-tab).
+
 ## Ops
 
 **Grafana: Ops** shows a Prometheus server's own health, directly or through
@@ -422,9 +448,9 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | Loki logs: LogQL suggestions, level colors, volume bars, tail | done |
 | Label, metadata and parsed-field chips that filter the query | done |
 | Tempo trace waterfall and TraceQL search | done |
-| Exemplars to traces | planned |
-| Jump between logs and metrics | planned |
-| Shared time range and cursor across blocks | planned |
+| Exemplars to traces | done |
+| Jump between logs, metrics and traces | done |
+| Shared time range and cursor across blocks | done |
 | **Ops** | |
 | Targets, cardinality, build/runtime/config/flags; direct or via Grafana | done |
 | **Command lenses** | |
@@ -443,7 +469,7 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | Tern on macOS | done |
 | Tern on Linux | planned |
 | Remote SSH hosts | planned |
-| Tagged release v0.1.0 | planned |
+| First tagged release, v0.1.0 | done |
 
 | Backend | Query | Dashboards | Alerts | Silences | Ops | Logs | Traces | Lenses |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
