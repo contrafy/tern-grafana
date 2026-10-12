@@ -42,6 +42,9 @@ Trace data frame; both read the same.
   kind, status and message, start offset, duration, self time (time not covered by any child), its own time on the
   critical path, clock-skew shift, instrumentation scope, attributes, events (offset, name, attributes), links (a
   click opens the linked trace in a new block) and resource attributes (folded).
+- `L` opens the selected span's logs in the Logs block, in the same context: `trace.logs_query` with the span's
+  service, the trace id (32 hex digits) and the span id filled in (default
+  `{service_name="<service>"} |= "<trace id>"`), over the trace's start to end widened by one minute on each side.
 
 How imperfect traces are shown:
 
@@ -71,6 +74,12 @@ last selector of the query (or starts `{ ... }`) and searches.
 `enter` opens the selected trace in this block's Trace tab; `o` opens it in a new block. Range keys work as in the
 Query block. Nothing refreshes on a timer.
 
+`S` turns the shared time range on or off for the search range (a `synced` chip in the header; click it to turn
+sync off). While synced, range keys publish the range to the kv record `tern-grafana.time.shared`, and every 2
+seconds the block takes a range another synced block (Query, Dashboard, Logs) published: the Search tab searches
+it at once, the Trace tab on the next visit to Search. Turning sync on takes the range other blocks already share;
+with none, the block publishes its own. Sync is saved with the block.
+
 ## Keys
 
 | Key | Trace tab | Search tab |
@@ -86,6 +95,8 @@ Query block. Nothing refreshes on a timer.
 | `o` | | open the trace in a new block |
 | `e` / `E` | next / previous error span | |
 | `p` | parent span | |
+| `L` | logs of the span's service with the trace id | |
+| `S` | shared time range on or off | shared time range on or off |
 | `/` (`i`) | type a trace id | edit the TraceQL query |
 | `1`-`9`, `[` `]`, `-` `+` | | range: quick ranges, shift, zoom |
 | `y` / `Y` | copy span id / trace id | |
@@ -101,11 +112,13 @@ Optional `trace` section (see [configuration.md](configuration.md)):
 |---|---|---|---|
 | `search_limit` | integer 1-1000 | `20` | Traces one search returns |
 | `range` | relative time string | `"now-1h"` | Start of the search range; it ends at `now` |
+| `logs_query` | string | `{service_name="${service}"} \|= "${traceId}"` | LogQL that `L` opens. `${service}`, `${traceId}` and `${spanId}` are replaced by the span's service, the trace id and the span id, escaped for a double-quoted LogQL string; any other `${...}` is a config problem. |
 
 ```json
-{ "trace": { "search_limit": 50, "range": "now-6h" } }
+{ "trace": { "search_limit": 50, "range": "now-6h", "logs_query": "{app=\"${service}\"} | json | trace_id = \"${traceId}\"" } }
 ```
 
 A bad value falls back to its default and the block shows the problem.
 
-Saved state (the block's restore data) holds the context, tab, trace id, query and range: never span data.
+Saved state (the block's restore data) holds the context, tab, trace id, query, range and whether sync is on: never
+span data.

@@ -4,6 +4,7 @@
 -- checked here; a bad value falls back to its default and is reported as a
 -- problem rather than breaking the block.
 
+local Correlate = require("./correlate")
 local Range = require("../time/range")
 local Step = require("../time/step")
 local Types = require("../config/types")
@@ -19,6 +20,11 @@ export type Options = {
 	tail_ms: number,
 	-- Show the volume bars above the lines.
 	volume: boolean,
+	-- Labels a jump to metrics (or from metrics to logs) carries over.
+	correlate_labels: { string },
+	-- Regular expression (RE2 subset, case-insensitive) finding a trace id in
+	-- a line's text; group 1 is the id. Compiled by Correlate.traceMatcher.
+	trace_id_pattern: string,
 }
 
 local M = {}
@@ -32,10 +38,24 @@ M.TAIL_MS = 2000
 M.MIN_TAIL_MS = 1000
 M.MAX_TAIL_MS = 60000
 
-local KEYS: { [string]: boolean } = { default_range = true, limit = true, tail_interval = true, volume = true }
+local KEYS: { [string]: boolean } = {
+	default_range = true,
+	limit = true,
+	tail_interval = true,
+	volume = true,
+	correlate_labels = true,
+	trace_id_pattern = true,
+}
 
 function M.defaults(): Options
-	return { default_range = M.DEFAULT_RANGE, limit = M.LIMIT, tail_ms = M.TAIL_MS, volume = true }
+	return {
+		default_range = M.DEFAULT_RANGE,
+		limit = M.LIMIT,
+		tail_ms = M.TAIL_MS,
+		volume = true,
+		correlate_labels = table.clone(Correlate.DEFAULT_LABELS),
+		trace_id_pattern = Correlate.DEFAULT_TRACE_PATTERN,
+	}
 end
 
 -- Options from the decoded section (nil when absent) and what was wrong with it.
@@ -97,6 +117,39 @@ function M.read(section: any): (Options, { Problem })
 			bad("volume", "must be true or false")
 		else
 			o.volume = volume
+		end
+	end
+
+	local labels = section.correlate_labels
+	if labels ~= nil then
+		local list: { string } = {}
+		local ok = type(labels) == "table" and #labels > 0
+		if ok then
+			for _, name in labels do
+				if type(name) ~= "string" or not Correlate.validName(name) then
+					ok = false
+					break
+				end
+				table.insert(list, name)
+			end
+		end
+		if ok then
+			o.correlate_labels = list
+		else
+			bad("correlate_labels", 'must be a non-empty list of label names, like ["job", "namespace"]')
+		end
+	end
+
+	local pattern = section.trace_id_pattern
+	if pattern ~= nil then
+		local matcher: Correlate.TraceMatcher?, err: string? = nil, "must be a non-empty string"
+		if type(pattern) == "string" and pattern ~= "" then
+			matcher, err = Correlate.traceMatcher(pattern)
+		end
+		if matcher then
+			o.trace_id_pattern = pattern
+		else
+			bad("trace_id_pattern", "must be a regular expression (" .. tostring(err) .. ")")
 		end
 	end
 	return o, problems

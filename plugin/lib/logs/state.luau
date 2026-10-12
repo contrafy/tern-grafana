@@ -15,6 +15,7 @@
 -- - Label and value suggestions are fetched lazily per context and cached
 --   for TTL_MS.
 
+local Correlate = require("./correlate")
 local Edit = require("../query/edit")
 local Effect = require("../effect")
 local Env = require("../env")
@@ -30,6 +31,7 @@ local Route = require("../config/route")
 local Scheme = require("../links/scheme")
 local Step = require("../time/step")
 local Svg = require("../render/svg_timeseries")
+local Shared = require("../time/shared")
 local Tail = require("./tail")
 local TimeRange = require("../query/timerange")
 local Volume = require("./volume")
@@ -106,6 +108,12 @@ export type State = {
 	pending: { [string]: { context: string, key: string, route: RouteT } },
 	seq: number,
 	overlay: "help"?,
+	-- Trace id per line id (lines that name one), see Correlate.traceId.
+	trace_ids: { [string]: string },
+	-- Shared time range (lib/time/shared.luau), key `S`.
+	sync: Shared.Sync,
+	-- `logs.trace_id_pattern`, compiled.
+	trace_matcher: Correlate.TraceMatcher,
 }
 
 local M = {}
@@ -177,6 +185,7 @@ end
 local function clearResult(s: State)
 	s.lines, s.frames, s.chart, s.volume = {}, nil, nil, nil
 	s.sel, s.detail, s.field_sel = nil, nil, 1
+	s.trace_ids = {}
 	s.warnings = {}
 end
 
@@ -304,6 +313,7 @@ local function finish(s: State, env: Env, response: any)
 		end
 	end
 	s.sel = indexOf(s.lines, keep)
+	M.indexTraceIds(s)
 	if indexOf(s.lines, s.detail) == nil then
 		s.detail = nil
 	end
@@ -397,6 +407,7 @@ local function pollDone(s: State, env: Env, response: any)
 	s.lines = merged
 	s.tail_added += added
 	s.sel = indexOf(s.lines, keep)
+	M.indexTraceIds(s)
 	if indexOf(s.lines, s.detail) == nil then
 		s.detail = nil
 	end
@@ -422,6 +433,45 @@ local function setTail(s: State, env: Env, on: boolean, effects: { Effect })
 		poll(s, env, effects)
 	end
 	armTail(s, effects)
+end
+
+-- Shared time -----------------------------------------------------------------------
+
+-- Publishes the block's range when sync is on.
+local function shareRange(s: State, env: Env, effects: { Effect })
+	local e = Shared.share(s.sync, { from = s.from, to = s.to }, nil, env)
+	if e then
+		table.insert(effects, e)
+	end
+end
+
+-- Takes a range another block shared: tail follows now, so an absolute
+-- range stops it.
+local function adoptRange(s: State, r: Shared.Range?, env: Env, effects: { Effect })
+	if r == nil or (r.from == s.from and r.to == s.to) then
+		return
+	end
+	if (Range.resolve(r.from, r.to, { now_ms = env.now_ms })) == nil then
+		return
+	end
+	s.from, s.to = r.from, r.to
+	if s.tail and r.to ~= "now" then
+		setTail(s, env, false, effects)
+	end
+	run(s, env, effects)
+end
+
+local function toggleSync(s: State, env: Env, effects: { Effect })
+	local timer = Shared.toggle(s.sync)
+	if timer == nil then
+		return
+	end
+	table.insert(effects, timer)
+	local r, _, e = Shared.join(s.sync, { from = s.from, to = s.to }, nil, env)
+	if e then
+		table.insert(effects, e)
+	end
+	adoptRange(s, r, env, effects)
 end
 
 -- Suggestions -------------------------------------------------------------------------
@@ -693,6 +743,91 @@ function M.exploreLink(s: State, env: Env): (string?, string?)
 	return Scheme.encode(browse), nil
 end
 
+-- Jumps --------------------------------------------------------------------------------
+
+-- Finds the trace id of every line not looked at yet ("" when it names
+-- none); ids of lines no longer shown are dropped.
+function M.indexTraceIds(s: State)
+	local ids: { [string]: string } = {}
+	local matcher = s.trace_matcher
+	for _, l in s.lines do
+		ids[l.id] = s.trace_ids[l.id] or Correlate.traceId(l.line, l.metadata, l.parsed, l.labels, matcher) or ""
+	end
+	s.trace_ids = ids
+end
+
+function M.traceIdOf(s: State, line: Line): string?
+	local id = s.trace_ids[line.id]
+	return if id and id ~= "" then id else nil
+end
+
+-- `tern-grafana://trace?context=..&id=..` for a line's trace id.
+function M.traceLink(s: State, line: Line): string?
+	local id = M.traceIdOf(s, line)
+	if id == nil then
+		return nil
+	end
+	local params: { [string]: string } = { id = id :: string }
+	if s.context then
+		params.context = s.context
+	end
+	local l: Scheme.Link = { action = "trace", params = params, vars = {} }
+	if Scheme.validate(l) == nil then
+		return nil
+	end
+	return Scheme.encode(l)
+end
+
+-- `tern-grafana://query?...` with the series selector the selected line's
+-- stream labels (the query's own selector when no line is selected) share
+-- with `logs.correlate_labels`, over the same range. The Query block then
+-- suggests the metrics that carry those labels.
+function M.metricsLink(s: State): (string?, string?)
+	local line = if s.sel then s.lines[s.sel :: number] else nil
+	local labels = if line then line.labels else Correlate.selectorLabels(s.expr)
+	local selector = Correlate.selector(labels, s.options.correlate_labels)
+	if selector == nil then
+		return nil,
+			string.format(
+				"No %s label in common with logs.correlate_labels (%s)",
+				if line then "stream" else "selector",
+				table.concat(s.options.correlate_labels, ", ")
+			)
+	end
+	local params: { [string]: string } = { expr = selector :: string, from = s.from, to = s.to }
+	if s.context then
+		params.context = s.context
+	end
+	local l: Scheme.Link = { action = "query", params = params, vars = {} }
+	local ok, err = Scheme.validate(l)
+	if ok == nil then
+		return nil, if err then err.message else "invalid query link"
+	end
+	return Scheme.encode(l), nil
+end
+
+local function openTrace(s: State, line: Line?, effects: { Effect }): boolean
+	if line == nil then
+		return false
+	end
+	local target = M.traceLink(s, line :: Line)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		table.insert(effects, { kind = "toast", level = "info", text = "This line names no trace id" })
+	end
+	return true
+end
+
+local function openMetrics(s: State, effects: { Effect })
+	local target, err = M.metricsLink(s)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		table.insert(effects, { kind = "toast", level = "warn", text = err or "Cannot open metrics" })
+	end
+end
+
 -- Init ---------------------------------------------------------------------------------
 
 local function decodeLink(raw: any): (Scheme.Link?, string?)
@@ -764,6 +899,9 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		pending = {},
 		seq = 0,
 		overlay = nil,
+		trace_ids = {},
+		sync = Shared.new("logs", env.now_ms, savedTable.sync == true),
+		trace_matcher = (Correlate.traceMatcher(options.trace_id_pattern) or Correlate.traceMatcher(nil)) :: any,
 	}
 	local effects: { Effect } = {}
 	if cfg and context and cfg.contexts[context] == nil then
@@ -778,6 +916,9 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 			s.status = "error"
 			s.failure = { kind = "config", message = NO_CONFIG }
 		end
+	end
+	if s.sync.on then
+		table.insert(effects, Shared.timer(s.sync))
 	end
 	return s, effects
 end
@@ -963,6 +1104,9 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 	elseif ch == "t" then
 		setTail(s, env, not s.tail, effects)
 		return true
+	elseif ch == "S" then
+		toggleSync(s, env, effects)
+		return true
 	elseif ch == "v" then
 		toggleVolume(s, env, effects)
 		return true
@@ -993,6 +1137,11 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 		table.insert(effects, { kind = "copy", text = s.expr })
 		table.insert(effects, { kind = "toast", level = "info", text = "Copied the query" })
 		return true
+	elseif ch == "M" then
+		openMetrics(s, effects)
+		return true
+	elseif ch == "T" then
+		return openTrace(s, if s.sel then s.lines[s.sel :: number] else nil, effects)
 	elseif ch == "o" then
 		local target, err = M.exploreLink(s, env)
 		if target then
@@ -1013,6 +1162,7 @@ local function commandKey(s: State, key: Key, env: Env, effects: { Effect }): bo
 	if s.tail and to ~= "now" then
 		setTail(s, env, false, effects)
 	end
+	shareRange(s, env, effects)
 	run(s, env, effects)
 	return true
 end
@@ -1040,6 +1190,8 @@ end
 local function action(s: State, name: string, arg: string?, env: Env, effects: { Effect })
 	if name == "tail" then
 		setTail(s, env, not s.tail, effects)
+	elseif name == "sync" then
+		toggleSync(s, env, effects)
 	elseif name == "volume" then
 		toggleVolume(s, env, effects)
 	elseif name == "row" then
@@ -1060,6 +1212,9 @@ local function action(s: State, name: string, arg: string?, env: Env, effects: {
 		local n = tonumber(arg) :: number
 		s.field_sel = n
 		fieldFilter(s, env, n, name == "exc", effects)
+	elseif name == "trace" and arg then
+		local n = indexOf(s.lines, arg)
+		openTrace(s, if n then s.lines[n] else nil, effects)
 	elseif name == "lvl" and arg then
 		levelFilter(s, env, arg, effects)
 	end
@@ -1122,6 +1277,10 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 		if msg.tag == M.TAIL_TAG .. s.tail_gen and s.tail then
 			poll(s, env, effects)
 			armTail(s, effects)
+		elseif Shared.isTick(s.sync, msg.tag) then
+			local r = Shared.poll(s.sync, env)
+			adoptRange(s, r, env, effects)
+			table.insert(effects, Shared.timer(s.sync))
 		end
 	elseif msg.kind == "event" then
 		event(s, msg.ev, env, effects)
@@ -1148,7 +1307,7 @@ function M.title(s: State): string?
 end
 
 function M.save(s: State): any
-	return { link = M.link(s), volume = s.show_volume }
+	return { link = M.link(s), volume = s.show_volume, sync = s.sync.on }
 end
 
 return M

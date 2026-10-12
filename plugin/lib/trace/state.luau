@@ -5,6 +5,7 @@
 -- `{}`) over `from`/`to`; `span` selects a span once the trace loads.
 -- Rendering lives in ./view.
 
+local Correlate = require("../logs/correlate")
 local Edit = require("../query/edit")
 local Effect = require("../effect")
 local Env = require("../env")
@@ -14,6 +15,7 @@ local Range = require("../time/range")
 local Route = require("../config/route")
 local Scheme = require("../links/scheme")
 local Settings = require("./settings")
+local Shared = require("../time/shared")
 local Tempo = require("../source/tempo")
 local Timerange = require("../query/timerange")
 local TraceTypes = require("./types")
@@ -72,6 +74,10 @@ export type State = {
 	editing: ("id" | "q")?,
 	line: Edit.Line,
 	note: string?,
+	-- `trace.logs_query`: the LogQL a span's `L` opens.
+	logs_query: string,
+	-- Shared time range of the search tab (lib/time/shared.luau), key `S`.
+	sync: Shared.Sync,
 }
 
 local M = {}
@@ -283,6 +289,8 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		editing = nil,
 		line = { text = "", cursor = 0 },
 		note = nil,
+		logs_query = settings.logs_query,
+		sync = Shared.new("trace", env.now_ms, savedT.sync == true),
 	}
 	-- Tern restores a block by re-running init with its first args and the
 	-- last saved state, so what the user moved on to (saved) wins over the
@@ -310,6 +318,9 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 	end
 	local effects: { Effect } = {}
 	connect(s, env, effects)
+	if s.sync.on then
+		table.insert(effects, Shared.timer(s.sync))
+	end
 	return s, effects
 end
 
@@ -708,7 +719,80 @@ local function setRange(s: State, from: string?, to: string?, env: Env, effects:
 		return false
 	end
 	s.from, s.to = from, to
+	local e = Shared.share(s.sync, { from = from, to = to }, nil, env)
+	if e then
+		table.insert(effects, e)
+	end
 	runSearch(s, env, effects)
+	return true
+end
+
+-- Takes a range another synced block shared: the search tab searches it
+-- now, the trace tab on its next visit.
+local function adoptRange(s: State, r: Shared.Range?, env: Env, effects: { Effect })
+	if r == nil or (r.from == s.from and r.to == s.to) then
+		return
+	end
+	if (Range.resolve(r.from, r.to, { now_ms = env.now_ms })) == nil then
+		return
+	end
+	s.from, s.to = r.from, r.to
+	if s.tab == "search" then
+		runSearch(s, env, effects)
+	else
+		s.hits = nil
+	end
+end
+
+local function toggleSync(s: State, env: Env, effects: { Effect })
+	local timer = Shared.toggle(s.sync)
+	if timer == nil then
+		return
+	end
+	table.insert(effects, timer)
+	local r, _, e = Shared.join(s.sync, { from = s.from, to = s.to }, nil, env)
+	if e then
+		table.insert(effects, e)
+	end
+	adoptRange(s, r, env, effects)
+end
+
+-- `tern-grafana://logs?...` for a span: `trace.logs_query` with the span's
+-- service, the trace id and the span id, over the trace +/- a minute.
+function M.logsLink(s: State, span: Span): (string?, string?)
+	local t = s.trace
+	if t == nil then
+		return nil, "No trace loaded."
+	end
+	local expr = Correlate.logsQuery(s.logs_query, {
+		service = span.raw.service,
+		traceId = t.trace_id,
+		spanId = span.raw.span_id,
+	})
+	local from, to = Correlate.window(t.start_ms, t.duration_ns / 1e6)
+	local params: { [string]: string } = { expr = expr, from = string.format("%d", from), to = string.format("%d", to) }
+	if s.context then
+		params.context = s.context
+	end
+	local link: Scheme.Link = { action = "logs", params = params, vars = {} }
+	local ok, err = Scheme.validate(link)
+	if ok == nil then
+		return nil, if err then err.message else "invalid logs link"
+	end
+	return Scheme.encode(link), nil
+end
+
+local function openLogs(s: State, effects: { Effect }): boolean
+	local span = M.selected(s)
+	if span == nil then
+		return false
+	end
+	local target, err = M.logsLink(s, span)
+	if target then
+		table.insert(effects, { kind = "open", target = target })
+	else
+		s.note = "Cannot open logs: " .. tostring(err)
+	end
 	return true
 end
 
@@ -760,6 +844,8 @@ local function traceKey(s: State, key: any, effects: { Effect }): boolean
 		copy(s, "span", effects)
 	elseif text == "Y" then
 		copy(s, "trace", effects)
+	elseif text == "L" then
+		return openLogs(s, effects)
 	elseif name == "escape" then
 		if not s.detail then
 			return false
@@ -813,6 +899,9 @@ local function normalKey(s: State, key: any, env: Env, effects: { Effect }): boo
 	elseif text == "C" then
 		cycleContext(s, env, -1, effects)
 		return true
+	elseif text == "S" then
+		toggleSync(s, env, effects)
+		return true
 	end
 	if s.tab == "trace" then
 		return traceKey(s, key, effects)
@@ -853,6 +942,8 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 		startEdit(s, if s.tab == "trace" then "id" else "q", effects)
 	elseif act == "reload" then
 		reload(s, env, effects)
+	elseif act == "sync" then
+		toggleSync(s, env, effects)
 	elseif act == "error" then
 		nextError(s, 1, effects)
 	elseif act == "link" and value then
@@ -875,6 +966,11 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 	elseif msg.kind == "key" then
 		local _, list = M.key(s, msg.key, env)
 		return s, list
+	elseif msg.kind == "tick" then
+		if Shared.isTick(s.sync, msg.tag) then
+			adoptRange(s, Shared.poll(s.sync, env), env, effects)
+			table.insert(effects, Shared.timer(s.sync))
+		end
 	elseif msg.kind == "event" then
 		local ev: any = msg.ev
 		if ev.ev == "action" and type(ev.act) == "string" then
@@ -905,6 +1001,7 @@ function M.save(s: State): any
 		q = s.q,
 		from = s.from,
 		to = s.to,
+		sync = s.sync.on,
 	}
 end
 

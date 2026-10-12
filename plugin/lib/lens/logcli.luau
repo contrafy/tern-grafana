@@ -13,14 +13,24 @@
 -- line alone; metadata and errors go through Go's `log` package, so they
 -- carry its `YYYY/MM/DD HH:MM:SS ` prefix.
 --
--- There is no "Open in Logs block" action until the logs block exists (M5).
+-- "Open in Logs block" opens the same query and range in the Logs block of
+-- the configured context whose Loki (or Grafana Loki datasource proxy) is
+-- logcli's --addr.
 
+local ConfigTypes = require("../config/types")
 local EnvModule = require("../env")
+local GrafanaUrl = require("../links/grafana_url")
 local Grid = require("../render/grid")
 local LensTypes = require("./types")
 local Promtool = require("./promtool_query")
+local Range = require("../time/range")
+local Scheme = require("../links/scheme")
 local SeriesView = require("./series")
+local Step = require("../time/step")
+local TimeRange = require("../query/timerange")
 local ui = require("../ui")
+
+type Config = ConfigTypes.Config
 
 type Env = EnvModule.Env
 type Node = ui.Node
@@ -788,8 +798,123 @@ local function headSpans(inv: Invocation, result: Result): { ui.SpanLike }
 	return { ui.span("logcli query", "strong"), ui.span("  " .. count, "muted") }
 end
 
+-- Logs block ---------------------------------------------------------------------------
+
+local function samePlace(a: GrafanaUrl.ParsedUrl, b: GrafanaUrl.ParsedUrl): boolean
+	return a.scheme == b.scheme and a.authority == b.authority
+end
+
+local function trimSlash(path: string): string
+	return (string.gsub(path, "/+$", ""))
+end
+
+local function sortedContexts(cfg: Config): { string }
+	local names: { string } = {}
+	for name in cfg.contexts do
+		table.insert(names, name)
+	end
+	table.sort(names)
+	return names
+end
+
+-- The configured context serving logcli's --addr: one whose Loki endpoint is
+-- that URL, else one whose Grafana proxies a datasource there
+-- (`<grafana>/api/datasources/proxy/uid/<uid>`, whose uid is returned too,
+-- or the numeric-id form).
+function M.contextFor(addr: string?, cfg: Config?): (string?, string?)
+	if addr == nil or cfg == nil then
+		return nil, nil
+	end
+	local target = GrafanaUrl.parse(addr)
+	if target == nil then
+		return nil, nil
+	end
+	local path = trimSlash(target.path)
+	local names = sortedContexts(cfg)
+	for _, name in names do
+		local loki = cfg.contexts[name].loki
+		local base = if loki then GrafanaUrl.parse(loki.url .. loki.path_prefix) else nil
+		if base and samePlace(base, target) and trimSlash(base.path) == path then
+			return name, nil
+		end
+	end
+	for _, name in names do
+		local g = cfg.contexts[name].grafana
+		local base = if g then GrafanaUrl.parse(g.url .. g.path_prefix) else nil
+		if base and samePlace(base, target) then
+			local prefix = string.gsub(trimSlash(base.path), "%p", "%%%0")
+			local uid = string.match(path, "^" .. prefix .. "/api/datasources/proxy/uid/([%w_%-]+)$")
+			if uid then
+				return name, uid
+			end
+			if string.match(path, "^" .. prefix .. "/api/datasources/proxy/%d+$") then
+				return name, nil
+			end
+		end
+	end
+	return nil, nil
+end
+
+-- logcli's range as Logs block times: --from/--to (RFC 3339) as epoch ms,
+-- else the last --since (default 1h) ending now.
+function M.linkRange(inv: Invocation): (string, string)
+	local to = "now"
+	if inv.to then
+		local ms = Range.parse(inv.to :: string, true, { now_ms = 0 })
+		if ms then
+			to = string.format("%d", ms)
+		end
+	end
+	if inv.from then
+		local ms = Range.parse(inv.from :: string, false, { now_ms = 0 })
+		if ms then
+			return string.format("%d", ms), to
+		end
+	end
+	local since = Step.parseDuration(inv.since or "1h") or 3600000
+	local from = TimeRange.liveFrom(math.max(1000, since))
+	if to == "now" then
+		return from, to
+	end
+	-- --since counts back from --to.
+	return string.format("%d", (tonumber(to) :: number) - since), to
+end
+
+-- `tern-grafana://logs?...` for the run, nil when no configured context
+-- serves its --addr (or the query is too long for a link).
+function M.logsLink(inv: Invocation, cfg: Config?): string?
+	local context, ds = M.contextFor(inv.addr, cfg)
+	if context == nil or inv.expr == nil then
+		return nil
+	end
+	local from, to = M.linkRange(inv)
+	local params: { [string]: string } =
+		{ context = context :: string, expr = inv.expr :: string, from = from, to = to }
+	if ds then
+		params.ds = ds
+	end
+	local link: Scheme.Link = { action = "logs", params = params, vars = {} }
+	return if Scheme.validate(link) then Scheme.encode(link) else nil
+end
+
+local function logsTools(inv: Invocation, cfg: Config?): Node
+	local link = M.logsLink(inv, cfg)
+	if link then
+		return ui.row({
+			ui.badge("Open in Logs block", "neutral", {
+				actions = { click = "logs" },
+				title = "The same query and range in the Logs block",
+			}),
+		}, { key = "logs" })
+	end
+	local why = if inv.addr
+		then "No configured context serves this Loki; add it as a context to open the query in the Logs block"
+		else "Loki comes from LOKI_ADDR or the default; pass --addr of a configured context to open the Logs block"
+	return ui.muted(why, { key = "logs" })
+end
+
 -- The native view for a finished capture, or nil for raw.
-function M.render(inv: Invocation, result: Result, vs: ViewState): Node?
+function M.render(inv: Invocation, result: Result, vs: ViewState, cfg: Config?): Node?
 	local kind = result.kind
 	if inv.verb == nil or kind == "unreadable" then
 		return nil
@@ -803,6 +928,7 @@ function M.render(inv: Invocation, result: Result, vs: ViewState): Node?
 		ui.text({ ui.span(inv.expr or "", "code") }, { key = "expr", actions = { click = "copy" }, title = "Copy" })
 	)
 	table.insert(children, ui.kv(summaryItems(inv, result)))
+	table.insert(children, logsTools(inv, cfg))
 	for _, e in result.errors do
 		table.insert(children, ui.text({ ui.span(e.message, "error") }))
 	end
@@ -901,12 +1027,21 @@ function M.view(state: State, env: Env): Node?
 	if state.invocation.verb == nil or state.overflow or state.status == nil then
 		return nil
 	end
-	return M.render(state.invocation, resultOf(state, env), state.view)
+	return M.render(state.invocation, resultOf(state, env), state.view, env.config)
 end
 
-function M.event(state: State, ev: LensTypes.Event, _env: Env): { Effect }
-	if ev.ev == "action" and ev.act == "v" then
+function M.event(state: State, ev: LensTypes.Event, env: Env): { Effect }
+	if ev.ev ~= "action" then
+		return {}
+	end
+	if ev.act == "v" then
 		state.view = SeriesView.decodeView(ev.value or "")
+	elseif ev.act == "logs" and state.invocation.verb then
+		local link = M.logsLink(state.invocation, env.config)
+		if link then
+			return { { kind = "open", target = link } }
+		end
+		return { { kind = "toast", level = "error", text = "No configured context serves this Loki" } }
 	end
 	return {}
 end

@@ -310,6 +310,7 @@ describe("trace block: config and saved state", function()
 			q = "{}",
 			from = "now-1h",
 			to = "now",
+			sync = false,
 		})
 		saved.trace_id = "beef"
 		local restored, effects = State.init(link({ context = "lab", id = TRACE }), saved, ENV)
@@ -324,21 +325,29 @@ describe("trace block: config and saved state", function()
 
 	it("reads the trace section with defaults and problems", function()
 		local cfg = config([[{"default_context": "lab", "contexts": {"lab": {"tempo": {"url": "http://t:3200"}}},
-			"trace": {"search_limit": 50, "range": "now-6h"}}]])
+			"trace": {"search_limit": 50, "range": "now-6h", "logs_query": "{app=\"${service}\"} |= \"${spanId}\""}}]])
 		local settings, problems = Settings.read(cfg)
-		expect(settings).toEqual({ search_limit = 50, range = "now-6h" })
+		expect(settings).toEqual({
+			search_limit = 50,
+			range = "now-6h",
+			logs_query = '{app="${service}"} |= "${spanId}"',
+		})
 		expect(#problems).toBe(0)
 		local bad = config([[{"default_context": "lab", "contexts": {"lab": {"tempo": {"url": "http://t:3200"}}},
-			"trace": {"search_limit": 0, "range": "yesterday", "colour": 1}}]])
+			"trace": {"search_limit": 0, "range": "yesterday", "colour": 1, "logs_query": "{a=\"${trace}\"}"}}]])
 		settings, problems = Settings.read(bad)
-		expect(settings).toEqual({ search_limit = Settings.DEFAULT_LIMIT, range = Settings.DEFAULT_RANGE })
-		expect(#problems).toBe(3)
+		expect(settings).toEqual({
+			search_limit = Settings.DEFAULT_LIMIT,
+			range = Settings.DEFAULT_RANGE,
+			logs_query = '{service_name="${service}"} |= "${traceId}"',
+		})
+		expect(#problems).toBe(4)
 		local s = State.init(
 			{},
 			nil,
 			{ now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null, config = bad } :: any
 		)
-		expect(#s.config_problems).toBe(3)
+		expect(#s.config_problems).toBe(4)
 	end)
 end)
 

@@ -39,7 +39,8 @@ Links never carry credentials.
   the lines with its count; clicking a chip filters the query to that level (again removes the filter).
 - **Lines:** time (with milliseconds), level, the stream labels that differ between the lines shown (labels shared
   by every line are left out), and the line. The left edge is colored by level: critical accent, error red,
-  warning yellow, info green, debug and trace gray-blue, unknown muted.
+  warning yellow, info green, debug and trace gray-blue, unknown muted. A line that names a trace id ends with a
+  `trace` chip (see [Jumps](#jumps)).
 - **Detail** (enter, or click a line): the whole line wrapped, then its chips in three groups:
   - **Labels:** the stream (indexed) labels;
   - **Structured metadata:** for example Loki's `detected_level`;
@@ -70,6 +71,28 @@ while two streams logging the same text in the same instant both show. New lines
 stays selected; past `logs.limit` lines the oldest drop. The volume bars refresh at most every 10 seconds while
 tailing. Changing the range to an absolute one stops the tail.
 
+## Jumps
+
+- **Trace** (`T`, or the `trace` chip on a line): opens the trace block (`tern-grafana://trace?context=..&id=..`)
+  on the line's trace id, in the same context. The id is the first of: a structured metadata field, then a parsed
+  field (or, when the source does not categorize labels, a stream label) named `trace_id`, `traceID`, `traceId`,
+  `traceid` or `trace.id`; then a match of `logs.trace_id_pattern` in the line text. The default pattern reads
+  `trace_id=<hex>` (as the dev stack's log generator writes it, and as Grafana's Loki derived field matches it),
+  `"traceId":"<hex>"` and `TraceID: <hex>`. Only 16 to 32 hex digits count as a trace id.
+- **Metrics** (`M`): opens the Query block on a series selector built from the selected line's stream labels kept
+  to `logs.correlate_labels` (with no line selected, the equality matchers of the query's stream selector), over
+  the same range: `{job="loggen",service_name="payments",app="payments"}`. Pick a metric from the Query block's
+  suggestions; the selector itself lists every series with those labels. Nothing in common shows a warning naming
+  the labels looked for.
+
+## Shared time range
+
+`S` turns sync on or off (a `synced` badge in the header; click it to turn sync off). While synced, every range
+change (`1`..`9`, `[`, `]`, `-`, `+`) is published to the kv record `tern-grafana.time.shared`, and every 2 seconds
+the block reads it and takes a range another synced block (Query, Dashboard, Logs, Trace search) published,
+running the query again. Turning sync on takes the range other blocks already share; with none, the block publishes
+its own. An absolute shared range stops the tail. Sync is saved with the block.
+
 ## Keys
 
 In the input:
@@ -93,6 +116,9 @@ Elsewhere:
 | left, right | Select a chip in the open detail |
 | `f`, `x` | Filter for / filter out the selected chip |
 | `t` | Tail on or off |
+| `T` | Open the selected line's trace |
+| `M` | Open the Query block on the line's correlation labels |
+| `S` | Shared time range on or off |
 | `v` | Volume bars on or off |
 | `[`, `]` | Shift the range back or forward by half its span |
 | `-`, `+` | Zoom out or in |
@@ -113,7 +139,9 @@ Defaults for the Logs block, in the `logs` section of the config file:
   "default_range": "now-1h",
   "limit": 500,
   "tail_interval": "2s",
-  "volume": true
+  "volume": true,
+  "correlate_labels": ["job", "namespace", "pod", "container", "service", "service_name", "app", "instance"],
+  "trace_id_pattern": "trace_?id[\"']?\\s*[=:]\\s*[\"']?([0-9a-fA-F]{16,32})\\b"
 }
 ```
 
@@ -123,11 +151,13 @@ Defaults for the Logs block, in the `logs` section of the config file:
 | `limit` | number | `500` | Most lines a query returns and the tail keeps, a whole number from 1 to 5000. |
 | `tail_interval` | string | `"2s"` | Tail polling interval, a duration from `1s` to `1m`. |
 | `volume` | boolean | `true` | Show the volume bars when the block opens (`v` toggles them; the choice is saved with the block). |
+| `correlate_labels` | array of strings | `["job", "namespace", "pod", "container", "service", "service_name", "app", "instance"]` | Labels a jump between logs and metrics carries over (`M` here, `L` in the Query block and dashboard panels), in this order. Each a valid label name; at least one. |
+| `trace_id_pattern` | string | see above | Regular expression (RE2 syntax, case-insensitive) finding a trace id in a line's text; its first group is the id, or the whole match without a group. Applies after the trace id fields. |
 
 Unknown keys and bad values in this section are reported in the block as warnings; a bad value falls back to its
 default instead of breaking the block.
 
 ## Saved state
 
-The block saves the link of what it shows (context, query, range, datasource) and the volume toggle. It never
-saves log lines; the tail is off after a restore.
+The block saves the link of what it shows (context, query, range, datasource), the volume toggle and whether sync
+is on. It never saves log lines; the tail is off after a restore.

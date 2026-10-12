@@ -1,11 +1,12 @@
 --!strict
--- The Logs block's view: a header (context, range, tail, line count,
--- status, warnings), the LogQL input with its suggestions, the volume bars
--- with level chips, and the log lines as native text rows (newest first,
--- level tone on the left edge, then the labels that tell streams apart). The
--- selected line's detail lists its stream labels, structured metadata and
--- parsed fields as chips: click (or `f`) filters for the value, the minus
--- chip (or `x`) filters it out. A metric LogQL query shows a chart instead.
+-- The Logs block's view: a header (context, range, synced badge, tail, line
+-- count, status, warnings), the LogQL input with its suggestions, the volume
+-- bars with level chips, and the log lines as native text rows (newest
+-- first, level tone on the left edge, then the labels that tell streams
+-- apart, and a "trace" chip on lines that name a trace id). The selected
+-- line's detail lists its stream labels, structured metadata and parsed
+-- fields as chips: click (or `f`) filters for the value, the minus chip (or
+-- `x`) filters it out. A metric LogQL query shows a chart instead.
 
 local Assets = require("../render/assets")
 local ChartView = require("../render/chart_view")
@@ -32,6 +33,9 @@ M.KEYS = table.freeze({
 	{ "enter  space", "Open or close the line's detail" },
 	{ "left  right", "Select a chip in the detail" },
 	{ "f  x", "Filter for / filter out the selected chip" },
+	{ "T", "Open the selected line's trace (lines with a trace chip)" },
+	{ "M", "Metrics: the Query block with the line's correlation labels as a selector" },
+	{ "S", "Sync the time range with other synced blocks on or off" },
 	{ "t", "Tail on or off (polls every logs.tail_interval)" },
 	{ "v", "Volume bars on or off" },
 	{ "[  ]", "Shift the range back or forward by half its span" },
@@ -82,6 +86,17 @@ local function header(s: State): Node
 		ui.badge(s.context or "no context", "accent", { key = "ctx" }),
 		ui.text({ ui.span(Range.describe(s.from, s.to), "strong") }, { key = "range" }),
 	}
+	if s.sync.on then
+		table.insert(
+			children,
+			ui.badge("synced", "info", {
+				key = "sync",
+				actions = { click = "sync" },
+				class = "tg-lg-chip",
+				title = "Time range shared with other synced blocks (S)",
+			})
+		)
+	end
 	if s.tail then
 		table.insert(
 			children,
@@ -370,7 +385,23 @@ local function lines(s: State): Node
 		end
 		local open = s.detail == l.id
 		local class = "tg-lg-row tg-lg-" .. LogsPanel.tone(l.level) .. (if s.sel == i then " is-sel" else "")
-		local children: { Node } = { ui.text(spans, { key = "t", truncate = "end" }) }
+		local children: { Node }
+		if State.traceIdOf(s, l) then
+			children = {
+				ui.row({
+					ui.text(spans, { key = "t", truncate = "end", grow = 1, basis = 0 }),
+					ui.badge("trace", "accent", {
+						key = "tr",
+						class = "tg-lg-chip",
+						shrink = 0,
+						actions = { click = "trace=" .. l.id },
+						title = "Open this line's trace (T)",
+					}),
+				}, { key = "tl", gap = "xs", align = "center" }),
+			}
+		else
+			children = { ui.text(spans, { key = "t", truncate = "end" }) }
+		end
 		if open then
 			table.insert(children, detail(s, l))
 		end

@@ -7,7 +7,9 @@
 -- card naming the real cause. Anything it cannot read stays raw (view nil).
 local Fixtures = require("../../lib/fixtures")
 local Logcli = require("../../../plugin/lib/lens/logcli")
+local Scheme = require("../../../plugin/lib/links/scheme")
 local Support = require("./support")
+local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -432,6 +434,95 @@ describe("logcli lens: lifecycle", function()
 		Logcli.event(state, { ev = "action", act = "v", value = "all:1" }, env())
 		local all = Logcli.view(state, env())
 		expect(#findAll(all, withAction("copy"))).toBe(61)
+	end)
+end)
+
+local LAB = (function(): any
+	local c, problems = Validate.parseFile(
+		[[{"contexts": {
+		"lab": {"loki": {"url": "http://localhost:3100"}},
+		"graf": {"grafana": {"url": "http://localhost:3000"}},
+		"sub": {"grafana": {"url": "https://ops.example.com", "path_prefix": "/grafana"}}}}]],
+		json.decode
+	)
+	assert(c, problems[1] and Validate.format(problems[1]))
+	return c
+end)()
+
+local function logsParams(target: string): { [string]: string }
+	local link, err = Scheme.decode(target)
+	assert(link, err and err.message)
+	expect(link.action).toBe("logs")
+	return link.params
+end
+
+describe("logcli lens: Open in Logs block", function()
+	it("opens the same query and range in the context whose Loki is --addr", function()
+		local c = capture("query")
+		local args = table.clone(c.args)
+		table.insert(args, 1, "--addr=http://localhost:3100/")
+		local state = lensFor({ name = c.name, args = args, lines = c.lines, status = 0 })
+		local view = Logcli.view(state, env(LAB))
+		expect(#findAll(view, withAction("logs"))).toBe(1)
+		local effects = Logcli.event(state, { ev = "action", act = "logs" }, env(LAB))
+		expect(effects[1].kind).toBe("open")
+		local p = logsParams((effects[1] :: any).target)
+		expect(p.context).toBe("lab")
+		expect(p.expr).toBe(SELECTOR)
+		expect(p.from).toBe("now-10m")
+		expect(p.to).toBe("now")
+		expect(p.ds).toBeNil()
+	end)
+
+	it("maps a Grafana datasource proxy --addr to the Grafana context and that datasource", function()
+		expect((Logcli.contextFor("http://localhost:3000/api/datasources/proxy/uid/loki", LAB))).toBe("graf")
+		local ctx, uid = Logcli.contextFor("https://ops.example.com/grafana/api/datasources/proxy/uid/lk-1/", LAB)
+		expect(ctx).toBe("sub")
+		expect(uid).toBe("lk-1")
+		local idCtx, noUid = Logcli.contextFor("http://localhost:3000/api/datasources/proxy/7", LAB)
+		expect(idCtx).toBe("graf")
+		expect(noUid).toBeNil()
+		expect((Logcli.contextFor("http://localhost:3000/api/datasources", LAB))).toBeNil()
+		expect((Logcli.contextFor("http://loki:3100", LAB))).toBeNil()
+		local inv = Logcli.parseArgs(
+			"logcli",
+			{ "--addr=http://user:pw@localhost:3000/api/datasources/proxy/uid/loki", "query", SELECTOR }
+		)
+		local p = logsParams(Logcli.logsLink(inv, LAB) :: string)
+		expect(p.context).toBe("graf")
+		expect(p.ds).toBe("loki")
+	end)
+
+	it("carries --from/--to as epoch ms and --since back from --to", function()
+		local inv = Logcli.parseArgs("logcli", {
+			"query",
+			"--from=2026-10-12T10:00:00Z",
+			"--to=2026-10-12T11:00:00Z",
+			SELECTOR,
+		})
+		local from, to = Logcli.linkRange(inv)
+		expect(from).toBe("1791799200000")
+		expect(to).toBe("1791802800000")
+		inv = Logcli.parseArgs("logcli", { "query", "--since=30m", "--to=2026-10-12T11:00:00Z", SELECTOR })
+		from, to = Logcli.linkRange(inv)
+		expect(from).toBe("1791801000000")
+		expect(to).toBe("1791802800000")
+		inv = Logcli.parseArgs("logcli", { "query", SELECTOR })
+		expect((Logcli.linkRange(inv))).toBe("now-1h")
+	end)
+
+	it("says why there is no action when no context serves the Loki", function()
+		local c = capture("query")
+		local state = lensFor(c)
+		local view = Logcli.view(state, env(LAB))
+		expect(#findAll(view, withAction("logs"))).toBe(0)
+		expect(textOf(view)).toContain("LOKI_ADDR")
+		local args = table.clone(c.args)
+		table.insert(args, 1, "--addr=http://loki.example.com:3100")
+		local other = lensFor({ name = c.name, args = args, lines = c.lines, status = 0 })
+		expect(textOf(Logcli.view(other, env(LAB)))).toContain("No configured context serves this Loki")
+		local effects = Logcli.event(other, { ev = "action", act = "logs" }, env(LAB))
+		expect(effects[1].kind).toBe("toast")
 	end)
 end)
 

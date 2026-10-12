@@ -59,6 +59,9 @@ local function header(s: State): Node
 	end
 	table.insert(items, chip("Trace", "tab=trace", "ttrace", if s.tab == "trace" then "info" else "neutral"))
 	table.insert(items, chip("Search", "tab=search", "tsearch", if s.tab == "search" then "info" else "neutral"))
+	if s.sync.on then
+		table.insert(items, chip("synced", "sync", "sync", "info"))
+	end
 	local spans: { SpanLike } = {}
 	local route = s.route
 	if route then
@@ -492,8 +495,8 @@ local function searchTab(s: State, env: Env.Env): { Node }
 end
 
 local HINTS: { [string]: string } = {
-	trace = "j/k move  h/l fold  space fold  enter detail  e/E errors  p parent  / id  y/Y copy  tab search  r reload  c context",
-	search = "j/k move  enter open  o new block  / TraceQL  1-9 range  [ ] shift  -/+ zoom  tab trace  r search  c context",
+	trace = "j/k move  h/l fold  space fold  enter detail  e/E errors  p parent  L logs  / id  y/Y copy  S sync  tab search  r reload  c context",
+	search = "j/k move  enter open  o new block  / TraceQL  1-9 range  [ ] shift  -/+ zoom  S sync  tab trace  r search  c context",
 }
 
 function M.view(s: State, env: Env.Env): Effect.View

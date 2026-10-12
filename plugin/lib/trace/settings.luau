@@ -2,6 +2,7 @@
 -- The `trace` section of the config file (docs/traces.md). A bad value falls
 -- back to its default with a problem that names the path.
 
+local Correlate = require("../logs/correlate")
 local Range = require("../time/range")
 local Types = require("../config/types")
 
@@ -13,6 +14,8 @@ export type Settings = {
 	search_limit: number,
 	-- Start of the search range (its end is "now").
 	range: string,
+	-- LogQL for a span's logs (key `L`): `${service}`, `${traceId}`, `${spanId}`.
+	logs_query: string,
 }
 
 local M = {}
@@ -27,7 +30,8 @@ end
 
 function M.read(config: Config?): (Settings, { Problem })
 	local problems: { Problem } = {}
-	local settings: Settings = { search_limit = M.DEFAULT_LIMIT, range = M.DEFAULT_RANGE }
+	local settings: Settings =
+		{ search_limit = M.DEFAULT_LIMIT, range = M.DEFAULT_RANGE, logs_query = Correlate.DEFAULT_LOGS_QUERY }
 	local raw = if config then config.trace else nil
 	if raw == nil then
 		return settings, problems
@@ -37,8 +41,8 @@ function M.read(config: Config?): (Settings, { Problem })
 		return settings, problems
 	end
 	for key in raw do
-		if key ~= "search_limit" and key ~= "range" then
-			problem(problems, tostring(key), "unknown key (known: range, search_limit)")
+		if key ~= "search_limit" and key ~= "range" and key ~= "logs_query" then
+			problem(problems, tostring(key), "unknown key (known: logs_query, range, search_limit)")
 		end
 	end
 	local limit = raw.search_limit
@@ -59,6 +63,23 @@ function M.read(config: Config?): (Settings, { Problem })
 			problem(problems, "range", 'must be a relative Grafana time such as "now-1h"')
 		else
 			settings.range = range
+		end
+	end
+	local template = raw.logs_query
+	if template ~= nil then
+		if type(template) ~= "string" or string.match(template, "^%s*$") then
+			problem(problems, "logs_query", "must be a LogQL query template")
+		else
+			local unknown = Correlate.unknownVars(template)
+			if #unknown > 0 then
+				problem(
+					problems,
+					"logs_query",
+					string.format("unknown variable ${%s} (known: ${service}, ${traceId}, ${spanId})", unknown[1])
+				)
+			else
+				settings.logs_query = template
+			end
 		end
 	end
 	return settings, problems
