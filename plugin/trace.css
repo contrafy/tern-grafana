@@ -1,0 +1,122 @@
+/* Tern Grafana trace block (lib/trace/view.luau). Class names are prefixed `tg-tr-`. */
+
+.tg-tr-head {
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--t4);
+}
+
+.tg-tr-chip {
+	cursor: pointer;
+}
+
+.tg-tr-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 14px;
+}
+
+.tg-tr-svc {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.tg-tr-sw {
+	display: inline-block;
+	width: 0.9em;
+	height: 0.9em;
+	border-radius: 2px;
+}
+
+.tg-tr-errtext {
+	color: var(--bad);
+}
+
+.tg-tr-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.tg-tr-row.is-sel {
+	background: color-mix(in oklab, var(--accent) 16%, transparent);
+}
+
+.tg-tr-axis {
+	cursor: default;
+	color: var(--t3);
+	border-bottom: 1px solid var(--t4);
+}
+
+.tg-tr-name {
+	overflow: hidden;
+	min-width: 0;
+}
+
+.tg-tr-dur {
+	text-align: right;
+	color: var(--t3);
+}
+
+.tg-tr-dur.is-crit {
+	color: var(--t1);
+}
+
+.tg-tr-track {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	align-self: stretch;
+}
+
+.tg-tr-tick {
+	overflow: hidden;
+	white-space: nowrap;
+	border-left: 1px solid var(--t4);
+	padding-left: 3px;
+}
+
+.tg-tr-bar {
+	height: 0.8em;
+	min-width: 2px;
+	border-radius: 2px;
+}
+
+.tg-tr-bar.tg-tr-err {
+	box-shadow: inset 0 0 0 2px var(--bad);
+}
+
+.tg-tr-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 2px 0 8px 16px;
+	padding-left: 8px;
+	border-left: 2px solid var(--accent);
+	cursor: default;
+}
+
+.tg-tr-hit {
+	padding: 0 4px;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.tg-tr-hit.is-sel {
+	background: color-mix(in oklab, var(--accent) 16%, transparent);
+}
+
+/* Service colors: Grafana's classic palette, as the chart series classes. */
+.tg-tr-c1 { background: #7eb26d; }
+.tg-tr-c2 { background: #eab839; }
+.tg-tr-c3 { background: #6ed0e0; }
+.tg-tr-c4 { background: #ef843c; }
+.tg-tr-c5 { background: #e24d42; }
+.tg-tr-c6 { background: #1f78c1; }
+.tg-tr-c7 { background: #ba43a9; }
+.tg-tr-c8 { background: #705da0; }
+.tg-tr-c9 { background: #508642; }
+.tg-tr-c10 { background: #cca300; }
