@@ -92,10 +92,11 @@ then `ctl ...` (any `tern ctl` command: `tree SEL`, `key K`, `type "..."`, `clic
    the sandbox, so saving files while it runs does not reload the plugin under test.
 6. Runs `tests/e2e/scenarios/*.sh`, each in a subshell after closing every pane but the shell, prints one line per
    scenario with its time, then checks the logs for style sheet errors and lenses that fell back to raw on an
-   error. Tears the sandbox down and deletes it (`--keep` or `E2E_KEEP=1` leaves it running). Teardown does not
-   rely on the window quitting (`tern ctl quit` can hang, and the window respawns a killed daemon): it asks it to
-   quit for 5 s, then ends the window, then every other process whose command line names the sandbox (daemon,
-   stray `tern ctl`), TERM then KILL. The same teardown runs first, so a run left over from before is cleaned up.
+   error. Then `dev-tern.sh clean` tears the sandbox down and deletes it (`--keep` or `E2E_KEEP=1` leaves it
+   running); the same `clean` runs first, so a run left over from before is cleaned up. `dev-tern.sh stop` and
+   `clean` do not rely on the window quitting (`tern ctl quit` can hang, and the window restarts a killed daemon):
+   they ask it to quit for at most 5 s, then end the window, then every other process whose command line names
+   the sandbox (daemon, stray `tern ctl`), TERM then KILL after 5 s, and report survivors.
    The window starts with only stdin, stdout and stderr open (output in `.sandbox/e2e/window.out`), so neither it
    nor its daemon keeps a caller's pipe open: `make e2e | tail` exits when the run ends.
 

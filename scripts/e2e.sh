@@ -78,67 +78,11 @@ need() {
 
 artifacts="$repo/.sandbox/e2e"
 
-# Every process of the sandbox: the window, its daemon (and the panes' tools),
-# stray `tern ctl` calls. All carry the sandbox path in their argv.
-sandbox_pids() {
-	pgrep -f -- "$E2E_SB/" 2>/dev/null || true
-}
-
-gone() { # gone PID...: none of them is alive
-	for p in "$@"; do
-		kill -0 "$p" 2>/dev/null && return 1
-	done
-	return 0
-}
-
-# terminate SECS PID...: TERM, wait up to SECS seconds, then KILL.
-terminate() {
-	secs=$1
-	shift
-	[ $# -gt 0 ] || return 0
-	kill "$@" 2>/dev/null
-	n=0
-	while ! gone "$@" && [ $n -lt $((secs * 4)) ]; do
-		sleep 0.25
-		n=$((n + 1))
-	done
-	gone "$@" || kill -9 "$@" 2>/dev/null
-}
-
-# with_timeout SECS CMD...: CMD, killed after SECS seconds (`ctl quit` can
-# hang on a window that does not quit). Neither holds our output.
-with_timeout() {
-	secs=$1
-	shift
-	"$@" </dev/null >/dev/null 2>&1 &
-	cmd_pid=$!
-	(
-		sleep "$secs"
-		kill "$cmd_pid" 2>/dev/null
-	) </dev/null >/dev/null 2>&1 &
-	watch_pid=$!
-	wait "$cmd_pid" 2>/dev/null
-	kill "$watch_pid" 2>/dev/null
-}
-
-# Stop the sandbox without relying on the window quitting: ask it to quit,
-# then end the window first (it respawns a killed daemon), then everything
-# else still on the sandbox. Never touches processes of other sandboxes.
-teardown() {
-	[ -n "$(sandbox_pids)" ] || return 0
-	with_timeout 5 sh "$E2E_DEV" ctl quit
-	# shellcheck disable=SC2046 # pid lists
-	terminate 5 $(pgrep -f -- "tern --control $E2E_SB/ctl.sock" 2>/dev/null)
-	# shellcheck disable=SC2046
-	terminate 5 $(sandbox_pids)
-	left=$(sandbox_pids)
-	[ -z "$left" ] || echo "e2e: processes still running in $E2E_SB: $left" >&2
-}
-
+# `dev-tern.sh clean` stops the sandbox with a bounded teardown (it does not
+# rely on the window quitting) and deletes it.
 cleanup() {
 	if [ "$keep" = 0 ]; then
-		teardown
-		rm -rf "$E2E_SB" 2>/dev/null || { sleep 1 && rm -rf "$E2E_SB"; }
+		dev clean >/dev/null
 	else
 		echo "e2e: window kept running (TG_TERN_SANDBOX=$E2E_SB sh scripts/dev-tern.sh stop)"
 	fi
@@ -161,8 +105,7 @@ snapshot() {
 	fi
 }
 
-teardown
-rm -rf "$E2E_SB"
+dev clean >/dev/null
 mkdir -p "$E2E_SB" "$artifacts"
 rm -rf "${artifacts:?}"/*
 snapshot "$E2E_SB/pkg" || need "cannot snapshot the package"
