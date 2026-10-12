@@ -234,7 +234,7 @@ function M.promql(args: { any }, env: Env): (Plan?, string?)
 			from = Compact.iso(if kind == "range" then win.from_ms else win.to_ms),
 			to = Compact.iso(win.to_ms),
 			step = if kind == "range" then Step.formatDuration(step) else nil,
-			warnings = (result :: any).warnings or {},
+			warnings = Compact.asArray(e, (result :: any).warnings or {}),
 			omitted = omitted,
 			series = series,
 		}
@@ -329,7 +329,7 @@ function M.alerts(args: { any }, env: Env): (Plan?, string?)
 			local out: { [string]: any } = {
 				context = context,
 				counts = counts,
-				warnings = result.warnings,
+				warnings = Compact.asArray(e, result.warnings),
 				omitted = #shown - #list,
 				alerts = list,
 			}
@@ -379,7 +379,7 @@ function M.find_dashboard(args: { any }, env: Env): (Plan?, string?)
 				uid = h.uid,
 				title = Compact.clip(h.title, 200),
 				folder = h.folder,
-				tags = h.tags,
+				tags = Compact.asArray(e, h.tags),
 				url = M.grafanaPage(e.config, context :: string, l, e.encode),
 				link = link,
 			})
@@ -436,7 +436,7 @@ function M.logs(args: { any }, env: Env): (Plan?, string?)
 			kind = res.kind,
 			from = Compact.iso(w.from_ms),
 			to = Compact.iso(w.to_ms),
-			warnings = res.warnings or {},
+			warnings = Compact.asArray(e, res.warnings or {}),
 			omitted = 0,
 		}
 		if res.kind ~= "streams" then
@@ -467,7 +467,7 @@ function M.logs(args: { any }, env: Env): (Plan?, string?)
 				s = s,
 			})
 		end
-		out.streams = streams
+		out.streams = Compact.asArray(e, streams)
 		out.lines = lines
 		return Compact.fit(out, "lines", e), nil
 	end),

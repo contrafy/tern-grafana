@@ -127,34 +127,29 @@ function M.isInternal(name: string): boolean
 	return INTERNAL_ANNOTATIONS[name] == true or (string.sub(name, 1, 2) == "__" and string.sub(name, -2) == "__")
 end
 
--- FNV-1a 64-bit over 16-bit limbs (Luau numbers are doubles).
-local OFFSET = { 0x2325, 0x8422, 0x9ce4, 0xcbf2 } -- 14695981039346656037
-local PRIME = { 0x01b3, 0x0000, 0x0100, 0x0000 } -- 1099511628211
+-- FNV-1a 64-bit over four 16-bit limbs (Luau numbers are doubles), held in
+-- locals: no allocation per byte, since every Prometheus-format alert is
+-- hashed, in the window too (Carly's alerts export). The prime is
+-- 1099511628211 = 0x100000001b3, limbs { 0x01b3, 0, 0x0100, 0 }, so the
+-- product mod 2^64 is unrolled to its nonzero terms; each stays below 2^26.
+type Hash = { number }
 
-local function mulPrime(h: { number })
-	local r = { 0, 0, 0, 0 }
-	for i = 1, 4 do
-		local carry = 0
-		for j = 1, 5 - i do
-			local cur = r[i + j - 1] + h[i] * PRIME[j] + carry
-			r[i + j - 1] = cur % 65536
-			carry = cur // 65536
-		end
+-- Hashes `s` followed by Alertmanager's 255 separator byte into `h`.
+local function addField(h: Hash, s: string)
+	local h0, h1, h2, h3 = h[1], h[2], h[3], h[4]
+	local n = #s
+	for i = 1, n + 1 do
+		h0 = bit32.bxor(h0, if i <= n then string.byte(s, i) else 255)
+		local c = h0 * 0x01b3
+		local r0 = c % 65536
+		c = h1 * 0x01b3 + c // 65536
+		local r1 = c % 65536
+		c = h2 * 0x01b3 + h0 * 0x0100 + c // 65536
+		local r2 = c % 65536
+		c = h3 * 0x01b3 + h1 * 0x0100 + c // 65536
+		h0, h1, h2, h3 = r0, r1, r2, c % 65536
 	end
-	for i = 1, 4 do
-		h[i] = r[i]
-	end
-end
-
-local function addByte(h: { number }, b: number)
-	h[1] = bit32.bxor(h[1], b)
-	mulPrime(h)
-end
-
-local function addString(h: { number }, s: string)
-	for i = 1, #s do
-		addByte(h, string.byte(s, i))
-	end
+	h[1], h[2], h[3], h[4] = h0, h1, h2, h3
 end
 
 -- Alertmanager's `model.LabelSet.Fingerprint()`, as %016x.
@@ -168,12 +163,11 @@ function M.fingerprint(labels: { [string]: string }): string
 		return "cbf29ce484222325"
 	end
 	table.sort(names)
-	local h = Tbl.copy(OFFSET)
+	-- The offset basis 14695981039346656037, low limb first.
+	local h: Hash = { 0x2325, 0x8422, 0x9ce4, 0xcbf2 }
 	for _, name in names do
-		addString(h, name)
-		addByte(h, 255)
-		addString(h, labels[name])
-		addByte(h, 255)
+		addField(h, name)
+		addField(h, labels[name])
 	end
 	return string.format("%04x%04x%04x%04x", h[4], h[3], h[2], h[1])
 end

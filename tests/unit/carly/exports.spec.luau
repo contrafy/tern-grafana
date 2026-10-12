@@ -36,7 +36,14 @@ local CFG = config([[{"default_context": "lab", "contexts": {
 
 local MARKS = { "TENANTMARK", "CMDMARK", "USERMARK", "PWENVMARK", "FILEMARK", "TOKENENVMARK" }
 
-local env: any = { now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null, config = CFG }
+local env: any = {
+	now_ms = NOW,
+	decode = json.decode,
+	encode = json.encode,
+	null = json.null,
+	array = json.array,
+	config = CFG,
+}
 
 local function ok(path: string): any
 	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
@@ -147,6 +154,8 @@ describe("promql", function()
 		expect(out.kind).toBe("instant")
 		expect(out.step).toBeNil()
 		expect(#out.series > 0).toBe(true)
+		-- No warnings must still read as a list, matching the declared signature.
+		expect((string.find(json.encode(out), '"warnings":[]', 1, true)) ~= nil).toBe(true)
 	end)
 
 	it("passes the server's query error through", function()
@@ -260,6 +269,22 @@ describe("find_dashboard", function()
 		expect(d.link).toBe("tern-grafana://dashboard?context=graf&uid=" .. d.uid)
 		expect(string.sub(d.url, 1, #"http://g:3000/sub/d/")).toBe("http://g:3000/sub/d/")
 		assertNoSecrets(plan("find_dashboard", { "tern" }).finish({ q = ok("grafana/12.4.12/search.json") }, env))
+	end)
+
+	-- Grafana sends `"tags": []` for most dashboards; Carly's signature says
+	-- `tags: {string}`, so an empty list must not encode as an object.
+	it("answers an untagged dashboard's tags as an empty JSON array", function()
+		local body = string.gsub(Fixtures.read("grafana/12.4.12/search.json"), '"tags":%[[^%]]*%]', '"tags":[]')
+		local out = assert(finish(plan("find_dashboard", { "tern", "graf" }), {
+			status = 200,
+			headers = {},
+			body = body,
+			timed_out = false,
+		}))
+		expect(#out.dashboards > 0).toBe(true)
+		local text = json.encode(out)
+		expect((string.find(text, '"tags":{}', 1, true))).toBeNil()
+		expect((string.find(text, '"tags":[]', 1, true)) ~= nil).toBe(true)
 	end)
 end)
 
