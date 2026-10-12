@@ -72,14 +72,23 @@ function M.regions(view: View): Regions
 	return { main = view :: Node }
 end
 
+-- The first line of a raised error without a "runtime error: " prefix: Tern's
+-- errors may carry a Lua stack traceback, which belongs in the log, not in a
+-- block.
+function M.firstLine(err: any): string
+	local line = string.match(tostring(err), "^%s*([^\r\n]*)") or ""
+	line = string.gsub(line, "^runtime error: ", "")
+	return if line == "" then "unknown error" else line
+end
+
 -- What a block shows when its machine raised: the block stays alive and says
--- what failed instead of disappearing.
+-- what failed instead of disappearing. block_runner logs the whole error.
 function M.errorView(name: string, what: string, err: any): Regions
-	local message = tostring(err)
 	return {
 		main = ui.col({
 			ui.text({ ui.span(string.format("%s failed in %s", name, what), "error") }),
-			ui.muted(message),
+			ui.muted(M.firstLine(err)),
+			ui.muted("Details are in Tern's log (tern-grafana entries)."),
 		}),
 	}
 end

@@ -8,8 +8,9 @@ $XDG_CONFIG_HOME/tern-grafana/config.json
 
 or, when `XDG_CONFIG_HOME` is unset, `~/.config/tern-grafana/config.json`.
 
-The file never contains secrets. It describes where each token or password comes from (a command, an environment
-variable or a file), and the plugin resolves it on demand. Any literal `token` or `password` field is rejected.
+The file never contains secrets. It describes where each token or password comes from (the system keychain, an
+environment variable, a command or a file), and the plugin resolves it on demand. Any literal `token` or `password`
+field is rejected.
 
 ## Validation
 
@@ -18,7 +19,7 @@ is reported at once with the JSON path of the offending field and how to fix it,
 
 ```
 contexts.lab.prometheus.url: must be an http(s) URL, got "localhost:9090"
-contexts.lab.grafana.auth.token: secrets cannot be written in the config file; use token_cmd, token_env or token_file
+contexts.lab.grafana.auth.token: secrets cannot be written in the config file; use token_keychain, token_env, token_cmd or token_file
 contexts.lab.promethues: unknown field; expected one of alertmanager, grafana, loki, prometheus, tempo
 ```
 
@@ -94,49 +95,87 @@ The `grafana` endpoint also accepts:
 
 ```json
 { "type": "none" }
-{ "type": "bearer", "token_cmd": ["..."] }
-{ "type": "basic", "username": "...", "password_cmd": ["..."] }
+{ "type": "bearer", "token_keychain": "cloud/grafana" }
+{ "type": "basic", "username": "...", "password_keychain": "cloud/prometheus" }
 ```
 
-A bearer token comes from exactly one of `token_cmd`, `token_env` or `token_file`; a basic password from exactly one
-of `password_cmd`, `password_env` or `password_file`. The basic `username` is not a secret and is written as is
-(it may not contain `:`).
+A bearer token comes from exactly one source: `token_keychain`, `token_env`, `token_cmd` or `token_file`. A basic
+password likewise comes from `password_keychain`, `password_env`, `password_cmd` or `password_file`. The basic
+`username` is not a secret and is written as is (it may not contain `:`).
+
+For Grafana (and Grafana Cloud) you rarely write `auth` by hand: open **Grafana: Settings** and choose
+**Connect Grafana**. It asks for the stack URL and a service account token, tests them, stores the token in the
+keychain and writes the context for you. **Update token** replaces a stored token.
+
+### Keychain (recommended)
+
+```json
+"auth": { "type": "bearer", "token_keychain": "cloud/grafana" }
+```
+
+The token is kept by the operating system's password store, not in a file:
+
+- macOS: the login keychain, through `/usr/bin/security`. You can see the item in Keychain Access as
+  "Tern Grafana (cloud/grafana)".
+- Linux: the Secret Service (GNOME Keyring, KWallet), through `secret-tool` (package `libsecret-tools` or
+  `libsecret`). It needs a running, unlocked keyring.
+
+Every item belongs to the service `tern-grafana`; the value of `token_keychain` is the item name (the account). Names
+use letters, digits, `.`, `_`, `-` and `/`, start with a letter or digit, and are at most 128 characters. The
+Settings flow names items `<context>/<endpoint>`, for example `cloud/grafana`.
+
+To store or replace a token yourself instead of using Settings (`-w` with no value prompts for it, so the token is
+not saved in your shell history):
+
+```sh
+security add-generic-password -U -s tern-grafana -a cloud/grafana -w            # macOS
+secret-tool store --label="Tern Grafana (cloud/grafana)" service tern-grafana account cloud/grafana   # Linux
+```
+
+### Environment variable
+
+```json
+"auth": { "type": "bearer", "token_env": "GRAFANA_TOKEN" }
+```
+
+The plugin reads the variable from Tern's own environment first. When it is not set there, it asks your login shell
+once (`$SHELL -l -i -c`, 5 second limit, printing only that variable) and remembers the answer until the config is
+reloaded. This matters on macOS: Tern opened from the Dock or Finder does not inherit variables you `export` in
+`~/.zshrc` or `~/.bash_profile`. If neither has it, the error says so; either export it in your shell profile, run
+`launchctl setenv GRAFANA_TOKEN <token>` and restart Tern (macOS), or switch to the keychain.
+
+Use a different variable name per context when you have several stacks (`GRAFANA_TOKEN_PROD`,
+`GRAFANA_TOKEN_DEV`).
+
+### Advanced: password managers and files
 
 | Source | Value | Behavior |
 | --- | --- | --- |
-| `*_cmd` | array of strings | Runs the program directly (no shell) and uses its standard output. Allowed 30 s, so a password manager can prompt to unlock. A non-zero exit fails without showing the command's output, since it may contain the secret; run the command in a terminal to see why. |
-| `*_env` | variable name | Reads the variable from the environment of the Tern process, not from your shell. Set it where Tern is started (login environment, launchd, systemd unit). |
+| `*_cmd` | array of strings | Runs the program directly (no shell) and uses its standard output. Allowed 30 s, so a password manager can prompt to unlock. A non-zero exit fails with the exit code only, never the command's output, since it may contain the secret; run the command in a terminal to see why. The program must be installed and on Tern's `PATH` (or written as an absolute path). |
 | `*_file` | absolute path or `~/...` | Reads the file, at most 64 KiB. Keep it private: `chmod 600`. |
 
 In every case trailing line breaks are removed; other whitespace is kept. The result must be a single line: output
 with several lines or control characters is rejected.
 
-### Examples
-
-1Password CLI:
+1Password CLI. `op` is 1Password's command-line tool (install it and turn on "Integrate with 1Password CLI" in the
+1Password app). `op read` prints one field of one item; its argument is a secret reference of the form
+`op://<vault>/<item>/<field>`, which you can copy from the item in 1Password ("Copy Secret Reference"):
 
 ```json
 "auth": { "type": "bearer", "token_cmd": ["op", "read", "op://Private/Grafana lab/credential"] }
 ```
 
-macOS Keychain (store it once with
-`security add-generic-password -a tern-grafana -s grafana-lab -w`):
-
-```json
-"auth": { "type": "bearer", "token_cmd": ["security", "find-generic-password", "-a", "tern-grafana", "-s", "grafana-lab", "-w"] }
-```
-
-`pass` (the password store). `pass show` prints the whole entry; when the entry has more than the password line, keep
-only the first line:
+`pass` (the standard Unix password store). `pass show` prints the whole entry; when the entry has more than the
+password line, keep only the first line:
 
 ```json
 "auth": { "type": "bearer", "token_cmd": ["sh", "-c", "pass show grafana/lab | head -n 1"] }
 ```
 
-Environment variable:
+HashiCorp Vault (`vault kv get -field` prints just the field; you must be logged in):
 
 ```json
-"auth": { "type": "bearer", "token_env": "GRAFANA_TOKEN" }
+"auth": { "type": "bearer", "token_cmd": ["vault", "kv", "get", "-field=token", "secret/grafana/lab"] }
 ```
 
 File:
@@ -145,13 +184,28 @@ File:
 "auth": { "type": "basic", "username": "admin", "password_file": "~/.config/tern-grafana/lab.password" }
 ```
 
+### When a credential cannot be read
+
+Requests fail with one line that says what is wrong and what to do, for example:
+
+```
+No token stored for cloud in the macOS keychain; open Grafana: Settings and use Connect or Update token
+Environment variable GRAFANA_TOKEN (token_env) is not set; Tern opened from the Dock does not see shell exports ...
+token_cmd runs `op`, but the 1Password CLI (op) is not installed or not on Tern's PATH; install it ...
+```
+
+The same line appears in blocks and in Carly's answers. Details for bug reports go to Tern's log; neither ever
+contains the secret or a command's output.
+
 ### How secrets are handled
 
-- Resolved only when a request needs one, in the host half of the plugin.
+- Resolved only when a request needs one, in the plugin's host half (and in the window half for Carly answers).
 - Kept in memory for 5 minutes per context and endpoint, then resolved again. A `401` response drops the cached
-  value immediately, so a rotated token is picked up on the next request.
-- Never written to disk, Tern's key-value store, logs, block arguments, saved block state or URLs.
-- When the curl transport is used, credentials reach curl on its standard input, never on its command line.
+  value immediately, so a rotated token is picked up on the next request; storing a token from Settings does too.
+- Never written to disk by the plugin (only the keychain stores it), nor to Tern's key-value store, logs, block
+  arguments, saved block state or URLs.
+- Never on a command line: storing a token sends it to `security` or `secret-tool` on standard input, and when the
+  curl transport is used, credentials reach curl on its standard input.
 
 ## TLS
 
@@ -441,8 +495,11 @@ or a key repeating another in a different case is skipped and reported. The matc
 
 ### Grafana Cloud
 
-Use a Grafana service account token for the stack. Direct Prometheus and Loki access uses basic auth: the username is
-the instance (user) ID shown on the stack's details page, the password a Cloud access policy token.
+Use a Grafana service account token for the stack (in Grafana: Administration > Users and access > Service accounts;
+Viewer to read, Editor for silences and annotations). **Grafana: Settings > Connect Grafana** writes the `grafana`
+part below and stores the token as keychain item `cloud/grafana`. Direct Prometheus and Loki access uses basic auth:
+the username is the instance (user) ID shown on the stack's details page, the password a Cloud access policy token
+(store it with the `security` or `secret-tool` command under [Keychain](#keychain-recommended)).
 
 ```json
 {
@@ -450,7 +507,7 @@ the instance (user) ID shown on the stack's details page, the password a Cloud a
     "cloud": {
       "grafana": {
         "url": "https://example.grafana.net",
-        "auth": { "type": "bearer", "token_cmd": ["op", "read", "op://Work/Grafana Cloud/service-account-token"] },
+        "auth": { "type": "bearer", "token_keychain": "cloud/grafana" },
         "datasources": { "prometheus": "grafanacloud-prom", "loki": "grafanacloud-logs" }
       },
       "prometheus": {
@@ -459,7 +516,7 @@ the instance (user) ID shown on the stack's details page, the password a Cloud a
         "auth": {
           "type": "basic",
           "username": "123456",
-          "password_cmd": ["op", "read", "op://Work/Grafana Cloud/access-policy-token"]
+          "password_keychain": "cloud/prometheus"
         }
       }
     }

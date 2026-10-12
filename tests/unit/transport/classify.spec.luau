@@ -81,21 +81,28 @@ describe("transport failures (status 0)", function()
 end)
 
 describe("auth statuses", function()
-	it("maps 401 to auth with Grafana's message", function()
+	local UNAUTHORIZED = "the server rejected the token or password (wrong, expired or revoked); "
+		.. "store a new one: open Grafana: Settings and use Update token"
+	local FORBIDDEN = "the credential works but its role lacks this permission; "
+		.. "give the service account a higher role (Editor for silences and annotations)"
+
+	it("maps 401 to auth with Grafana's message and how to replace the token", function()
 		local body =
 			'{"extra":null,"message":"Invalid API key","messageId":"api-key.invalid","statusCode":401,"traceID":""}'
 		expect(classify(response(401, body))).toEqual({
 			kind = "auth",
 			status = 401,
-			message = "authentication failed (HTTP 401): Invalid API key",
+			message = "authentication failed (HTTP 401): Invalid API key; " .. UNAUTHORIZED,
+			hint = UNAUTHORIZED,
 		})
 	end)
 
-	it("maps 403 to auth, distinct from a missing credential", function()
+	it("maps 403 to auth, distinct from a missing credential, and points at the role", function()
 		expect(classify(response(403, '{"message":"Permission denied"}'))).toEqual({
 			kind = "auth",
 			status = 403,
-			message = "permission denied (HTTP 403): Permission denied",
+			message = "permission denied (HTTP 403): Permission denied; " .. FORBIDDEN,
+			hint = FORBIDDEN,
 		})
 	end)
 
@@ -103,7 +110,8 @@ describe("auth statuses", function()
 		expect(classify(response(401))).toEqual({
 			kind = "auth",
 			status = 401,
-			message = "authentication failed (HTTP 401)",
+			message = "authentication failed (HTTP 401); " .. UNAUTHORIZED,
+			hint = UNAUTHORIZED,
 		})
 	end)
 end)

@@ -308,6 +308,13 @@ end)
 
 describe("auth", function()
 	it("accepts each bearer source", function()
+		local keychain =
+			withGrafana('{"url": "http://g", "auth": {"type": "bearer", "token_keychain": "cloud/grafana"}}')
+		expect(keychain.contexts.lab.grafana.auth.token).toEqual({
+			from = "keychain",
+			field = "token_keychain",
+			item = "cloud/grafana",
+		})
 		local env = withGrafana('{"url": "http://g", "auth": {"type": "bearer", "token_env": "GRAFANA_TOKEN"}}')
 		expect(env.contexts.lab.grafana.auth.token).toEqual({
 			from = "env",
@@ -320,6 +327,30 @@ describe("auth", function()
 			field = "token_file",
 			path = "~/.config/g/token",
 		})
+	end)
+
+	it("accepts a basic password from the keychain", function()
+		local cfg = withGrafana([[{"url": "http://g", "auth": {"type": "basic", "username": "123456",
+			"password_keychain": "cloud/prometheus"}}]])
+		expect(cfg.contexts.lab.grafana.auth).toEqual({
+			type = "basic",
+			username = "123456",
+			password = { from = "keychain", field = "password_keychain", item = "cloud/prometheus" },
+		})
+	end)
+
+	it("rejects keychain item names that are not plain words, since they reach argv and security -i", function()
+		for _, bad in { '""', '"/cloud"', '"a b"', '"a\\"b"', "42", '"' .. string.rep("a", 129) .. '"' } do
+			expect(
+				select(
+					2,
+					withGrafana('{"url": "http://g", "auth": {"type": "bearer", "token_keychain": ' .. bad .. "}}")
+				)
+			).toEqual({
+				"contexts.lab.grafana.auth.token_keychain: must be a keychain item name such as cloud/grafana "
+					.. "(letters, digits, '.', '_', '-', '/'; starting with a letter or digit; at most 128 characters)",
+			})
+		end
 	end)
 
 	it("accepts basic auth with a password source", function()
@@ -340,8 +371,8 @@ describe("auth", function()
 		local cfg, problems = withGrafana('{"url": "http://g", "auth": {"type": "bearer", "token": "glsa_abc"}}')
 		expect(cfg).toBeNil()
 		expect(problems).toEqual({
-			"contexts.lab.grafana.auth.token: secrets cannot be written in the config file; use token_cmd, token_env or token_file",
-			"contexts.lab.grafana.auth: bearer auth needs one of token_cmd, token_env, token_file",
+			"contexts.lab.grafana.auth.token: secrets cannot be written in the config file; use token_keychain, token_env, token_cmd or token_file",
+			"contexts.lab.grafana.auth: bearer auth needs one of token_keychain, token_env, token_cmd or token_file",
 		})
 	end)
 
@@ -349,16 +380,16 @@ describe("auth", function()
 		local _, problems =
 			withGrafana('{"url": "http://g", "auth": {"type": "basic", "username": "u", "password": "p"}}')
 		expect(problems).toEqual({
-			"contexts.lab.grafana.auth.password: secrets cannot be written in the config file; use password_cmd, password_env or password_file",
-			"contexts.lab.grafana.auth: basic auth needs one of password_cmd, password_env, password_file",
+			"contexts.lab.grafana.auth.password: secrets cannot be written in the config file; use password_keychain, password_env, password_cmd or password_file",
+			"contexts.lab.grafana.auth: basic auth needs one of password_keychain, password_env, password_cmd or password_file",
 		})
 	end)
 
 	it("rejects literal secrets placed directly on the endpoint", function()
 		local _, problems = withGrafana('{"url": "http://g", "token": "glsa_abc", "password": "p"}')
 		expect(problems).toEqual({
-			"contexts.lab.grafana.password: secrets cannot be written in the config file; set auth with password_cmd, password_env or password_file",
-			"contexts.lab.grafana.token: secrets cannot be written in the config file; set auth with token_cmd, token_env or token_file",
+			"contexts.lab.grafana.password: secrets cannot be written in the config file; set auth with password_keychain, password_env, password_cmd or password_file",
+			"contexts.lab.grafana.token: secrets cannot be written in the config file; set auth with token_keychain, token_env, token_cmd or token_file",
 		})
 	end)
 
@@ -373,10 +404,12 @@ describe("auth", function()
 		expect(
 			select(
 				2,
-				withGrafana('{"url": "http://g", "auth": {"type": "bearer", "token_env": "A", "token_file": "/t"}}')
+				withGrafana(
+					'{"url": "http://g", "auth": {"type": "bearer", "token_keychain": "a/b", "token_file": "/t"}}'
+				)
 			)
 		).toEqual({
-			"contexts.lab.grafana.auth: set only one of token_cmd, token_env, token_file",
+			"contexts.lab.grafana.auth: set only one of token_keychain, token_env, token_cmd, token_file",
 		})
 	end)
 
@@ -390,7 +423,7 @@ describe("auth", function()
 				withGrafana('{"url": "http://g", "auth": {"type": "bearer", "token_env": "A", "password_env": "B"}}')
 			)
 		).toEqual({
-			'contexts.lab.grafana.auth.password_env: not used by auth type "bearer"; expected one of token_cmd, token_env, token_file, type',
+			'contexts.lab.grafana.auth.password_env: not used by auth type "bearer"; expected one of token_cmd, token_env, token_file, token_keychain, type',
 		})
 	end)
 

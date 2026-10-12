@@ -124,6 +124,7 @@ local function http(run: Run, e: any)
 		end
 	end)
 	if not ok then
+		warn(run, "http", err)
 		-- transport_host never raises by design; keep the machine waiting no longer.
 		deliver(run, {
 			kind = "http_done",
@@ -133,7 +134,7 @@ local function http(run: Run, e: any)
 				headers = {},
 				body = "",
 				timed_out = false,
-				failure = { kind = "network", message = "request could not be sent: " .. tostring(err) },
+				failure = { kind = "network", message = "request could not be sent: " .. Effect.firstLine(err) },
 			},
 		})
 	end

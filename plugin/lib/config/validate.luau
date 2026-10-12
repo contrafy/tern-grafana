@@ -4,6 +4,7 @@
 -- problem names its JSON path and says how to fix it; none echoes a value that
 -- could be a secret.
 
+local Keychain = require("../auth/keychain")
 local Types = require("./types")
 local Tbl = require("../tbl")
 
@@ -136,14 +137,27 @@ local function checkUrl(problems: Problems, path: string, v: any): string?
 	return (string.gsub(v, "/+$", ""))
 end
 
-local SOURCE_KINDS: { { suffix: string, from: "cmd" | "env" | "file" } } = {
-	{ suffix = "_cmd", from = "cmd" },
+-- In the order docs and messages list them: keychain first, advanced last.
+local SOURCE_KINDS: { { suffix: string, from: "keychain" | "env" | "cmd" | "file" } } = {
+	{ suffix = "_keychain", from = "keychain" },
 	{ suffix = "_env", from = "env" },
+	{ suffix = "_cmd", from = "cmd" },
 	{ suffix = "_file", from = "file" },
 }
 
 local function sourceFields(base: string): { string }
-	return { base .. "_cmd", base .. "_env", base .. "_file" }
+	local out: { string } = {}
+	for _, kind in SOURCE_KINDS do
+		table.insert(out, base .. kind.suffix)
+	end
+	return out
+end
+
+-- "token_keychain, token_env, token_cmd or token_file"
+local function sourceChoice(base: string): string
+	local fields = sourceFields(base)
+	local last = table.remove(fields)
+	return table.concat(fields, ", ") .. " or " .. (last :: string)
 end
 
 local function checkSource(problems: Problems, path: string, base: string, raw: { [string]: any }): SecretSource?
@@ -157,7 +171,18 @@ local function checkSource(problems: Problems, path: string, base: string, raw: 
 		end
 		present += 1
 		local p = join(path, field)
-		if kind.from == "cmd" then
+		if kind.from == "keychain" then
+			if Keychain.validItem(v) then
+				table.insert(found, { from = "keychain", field = field, item = v })
+			else
+				add(
+					problems,
+					p,
+					"must be a keychain item name such as cloud/grafana (letters, digits, '.', '_', '-', '/'; "
+						.. "starting with a letter or digit; at most 128 characters)"
+				)
+			end
+		elseif kind.from == "cmd" then
 			local ok = isNonEmptyArray(v)
 			if ok then
 				for _, arg in v do
@@ -189,9 +214,8 @@ local function checkSource(problems: Problems, path: string, base: string, raw: 
 			end
 		end
 	end
-	local names = table.concat(sourceFields(base), ", ")
 	if present > 1 then
-		add(problems, path, "set only one of " .. names)
+		add(problems, path, "set only one of " .. table.concat(sourceFields(base), ", "))
 		return nil
 	end
 	return found[1]
@@ -199,8 +223,8 @@ end
 
 local AUTH_FIELDS: { [string]: { string } } = {
 	none = { "type" },
-	bearer = { "type", "token_cmd", "token_env", "token_file" },
-	basic = { "type", "username", "password_cmd", "password_env", "password_file" },
+	bearer = { "type", table.unpack(sourceFields("token")) },
+	basic = { "type", "username", table.unpack(sourceFields("password")) },
 }
 
 local function checkAuth(problems: Problems, path: string, raw: any): Auth?
@@ -222,12 +246,7 @@ local function checkAuth(problems: Problems, path: string, raw: any): Auth?
 			add(
 				problems,
 				join(path, key),
-				string.format(
-					"secrets cannot be written in the config file; use %s_cmd, %s_env or %s_file",
-					literal,
-					literal,
-					literal
-				)
+				"secrets cannot be written in the config file; use " .. sourceChoice(literal)
 			)
 		elseif not allowedSet[key] then
 			add(
@@ -260,7 +279,7 @@ local function checkAuth(problems: Problems, path: string, raw: any): Auth?
 	end
 	local source = checkSource(problems, path, base, raw)
 	if not present then
-		add(problems, path, string.format("%s auth needs one of %s", kind, table.concat(sourceFields(base), ", ")))
+		add(problems, path, string.format("%s auth needs one of %s", kind, sourceChoice(base)))
 	end
 	if #problems ~= before or not source then
 		return nil
@@ -400,16 +419,7 @@ local function checkEndpoint(problems: Problems, path: string, name: string, raw
 		local p = join(path, key)
 		local literal = LITERAL_SECRETS[key]
 		if literal then
-			add(
-				problems,
-				p,
-				string.format(
-					"secrets cannot be written in the config file; set auth with %s_cmd, %s_env or %s_file",
-					literal,
-					literal,
-					literal
-				)
-			)
+			add(problems, p, "secrets cannot be written in the config file; set auth with " .. sourceChoice(literal))
 		elseif not allowed[key] then
 			unknownField(problems, p, allowedList)
 		elseif key == "url" then

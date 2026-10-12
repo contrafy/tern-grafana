@@ -11,6 +11,13 @@ local M = {}
 
 local MAX_DETAIL = 300
 
+-- What to do about a rejected credential; also embedded in the message,
+-- since most views show only that.
+local UNAUTHORIZED = "the server rejected the token or password (wrong, expired or revoked); "
+	.. "store a new one: open Grafana: Settings and use Update token"
+local FORBIDDEN = "the credential works but its role lacks this permission; "
+	.. "give the service account a higher role (Editor for silences and annotations)"
+
 local function clip(s: string): string
 	if #s > MAX_DETAIL then
 		return string.sub(s, 1, MAX_DETAIL) .. "..."
@@ -104,10 +111,15 @@ function M.classify(response: Response, decode: (string) -> any): QueryError?
 	end
 	local d = detail(response.body, decode)
 	local suffix = if d then ": " .. clip(d) else ""
-	if status == 401 then
-		return { kind = "auth", status = status, message = "authentication failed (HTTP 401)" .. suffix }
-	elseif status == 403 then
-		return { kind = "auth", status = status, message = "permission denied (HTTP 403)" .. suffix }
+	if status == 401 or status == 403 then
+		local hint = if status == 401 then UNAUTHORIZED else FORBIDDEN
+		local what = if status == 401 then "authentication failed" else "permission denied"
+		return {
+			kind = "auth",
+			status = status,
+			message = string.format("%s (HTTP %d)%s; %s", what, status, suffix, hint),
+			hint = hint,
+		}
 	end
 	return { kind = "http", status = status, message = string.format("HTTP %d%s", status, suffix) }
 end
