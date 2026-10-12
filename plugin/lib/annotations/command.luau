@@ -10,10 +10,12 @@
 -- values skipped) must equal a pattern such as "helm upgrade" or
 -- "kubectl rollout restart|undo" (`|` separates alternatives of one word).
 --
--- Redaction: values of flags, assignments and `k=v` lists whose name looks
--- like a credential, `Authorization:`-style header values and URL passwords
--- become `***`. Only a redacted line ever leaves this module for display or
--- an annotation.
+-- Redaction: in every simple command of the line, values of flags,
+-- assignments, `k=v` lists and URL query parameters whose name looks like a
+-- credential, secret-looking header values (`Authorization:`, `X-Api-Key:`),
+-- URL userinfo and the password of `-u user:pass` become `***`. It errs
+-- towards hiding too much. Only a redacted line ever leaves this module for
+-- display or an annotation.
 
 local M = {}
 
@@ -471,12 +473,18 @@ end
 
 -- Redaction -------------------------------------------------------------------------
 
+-- Substrings that mark a flag, variable, key or header name as holding a
+-- credential. Deliberately broad: a wrongly hidden value costs a `***` in an
+-- annotation, a missed one posts a secret where every org Viewer reads it.
 local SECRET_WORDS = {
-	"password",
-	"passwd",
-	"passphrase",
+	"pass", -- password, passwd, passphrase, db.pass
+	"pwd",
 	"token",
 	"secret",
+	"auth", -- authorization, auth-token, oauth
+	"bearer",
+	"cookie",
+	"signature",
 	"apikey",
 	"api-key",
 	"api_key",
@@ -496,41 +504,145 @@ function M.isSecretName(name: string): boolean
 			return true
 		end
 	end
-	-- FOO_KEY=, db.key=: a bare `key` suffix (not `keyring`, `key-file`).
-	return string.match(lower, "[_.%-]key$") ~= nil or lower == "key"
+	-- FOO_KEY=, --key, db.key=, ?sig= (Azure SAS): a bare `key`/`sig` suffix
+	-- (a flag like `--keyring` or `--key-file` names a path, not a secret).
+	return string.match(lower, "[_.%-]key$") ~= nil
+		or string.match(lower, "[_.%-]sig$") ~= nil
+		or lower == "key"
+		or lower == "sig"
 end
 
--- `a=1,b.password=2` -> `a=1,b.password=***`; nil when nothing changed.
+-- Keys of `k=v` lists (helm `--set` paths, query parameters, env
+-- assignments) and header names: `key` anywhere also counts (`X-Api-Key`,
+-- `sshKeyData`), since these name a value, never a path flag.
+local function isSecretKey(name: string): boolean
+	return M.isSecretName(name) or string.find(string.lower(name), "key", 1, true) ~= nil
+end
+
+-- Flags whose value is `user[:password]` (curl, wget, helm): only the
+-- password part is hidden, so `sudo -u root` and `kubectl --user admin` stay.
+local USER_FLAGS: { [string]: boolean } = {
+	["-u"] = true,
+	["-U"] = true,
+	["--user"] = true,
+	["--proxy-user"] = true,
+}
+
+-- `admin:s3cret` -> `admin:***`; nil without a password part.
+local function redactUserPass(v: string): string?
+	local colon = string.find(v, ":", 1, true)
+	return if colon then string.sub(v, 1, colon) .. M.REDACTED else nil
+end
+
+local PAIR_SEPARATORS = "[,&?;#]"
+
+-- `a=1,b.password=2` -> `a=1,b.password=***`; query strings too
+-- (`https://h/x?a=1&token=abc` -> `...&token=***`). A part without `=` right
+-- after a hidden value is taken as the rest of that value (`db.pass=a,b`)
+-- and hidden with it. Nil when nothing changed.
 local function redactPairs(v: string): string?
 	local changed = false
-	local parts: { string } = {}
-	for part in string.gmatch(v .. ",", "([^,]*),") do
+	local parts: { { text: string, sep: string } } = {}
+	local hiding = false
+	local pos = 1
+	while true do
+		local s = string.find(v, PAIR_SEPARATORS, pos)
+		local part = string.sub(v, pos, (s or #v + 1) - 1)
+		local sep = if s then string.sub(v, s :: number, s :: number) else ""
 		local k = string.match(part, "^([^=]+)=")
-		if k and M.isSecretName(k) then
-			table.insert(parts, k .. "=" .. M.REDACTED)
+		if k and isSecretKey(k) then
+			table.insert(parts, { text = k .. "=" .. M.REDACTED, sep = sep })
+			changed = true
+			hiding = true
+		elseif k == nil and hiding and part ~= "" then
+			parts[#parts].sep = sep
+		else
+			table.insert(parts, { text = part :: string, sep = sep })
+			hiding = false
+		end
+		if s == nil then
+			break
+		end
+		pos = (s :: number) + 1
+	end
+	if not changed then
+		return nil
+	end
+	local out: { string } = {}
+	for _, p in parts do
+		table.insert(out, p.text)
+		table.insert(out, p.sep)
+	end
+	return table.concat(out)
+end
+
+-- Userinfo of every URL in `v`: `https://u:p@ss@host` -> `https://u:***@host`
+-- (the authority ends at the LAST `@` before the query, so an `@` in the
+-- password cannot leak its tail); `https://ghp_x@github.com` ->
+-- `https://***@github.com`. `host/pkg@1.2` (no `:`) is a path, not userinfo.
+local function redactUserinfo(v: string): string?
+	local changed = false
+	local out: { string } = {}
+	local pos = 1
+	while true do
+		local _, e = string.find(v, "://", pos, true)
+		if e == nil then
+			break
+		end
+		local from = (e :: number) + 1
+		local limit = (string.find(v, "[?#%s,]", from) or #v + 1) - 1
+		local at: number? = nil
+		local i = from
+		while true do
+			local f = string.find(v, "@", i, true)
+			if f == nil or f > limit then
+				break
+			end
+			at = f
+			i = f + 1
+		end
+		local info = if at then string.sub(v, from, at - 1) else ""
+		local colon = string.find(info, ":", 1, true)
+		if at and info ~= "" and (colon or not string.find(info, "/", 1, true)) then
+			table.insert(out, string.sub(v, pos, from - 1))
+			if colon then
+				table.insert(out, string.sub(info, 1, colon))
+			end
+			table.insert(out, M.REDACTED)
+			pos = at :: number
 			changed = true
 		else
-			table.insert(parts, part)
+			table.insert(out, string.sub(v, pos, limit))
+			pos = limit + 1
 		end
 	end
-	return if changed then table.concat(parts, ",") else nil
-end
-
-local function redactUrl(v: string): string?
-	local pre, user, post = string.match(v, "^(.-://)([^/@:]*):[^/@]*@(.*)$")
-	if pre then
-		return (pre :: string) .. (user :: string) .. ":" .. M.REDACTED .. "@" .. (post :: string)
+	if not changed then
+		return nil
 	end
-	return nil
+	table.insert(out, string.sub(v, pos))
+	return table.concat(out)
 end
 
--- `Authorization: Bearer x` (one quoted word) -> `Authorization: ***`.
+local HEADER_NAME = "^([%w%-_]+):"
+
+-- `Proxy-Authorization: Basic x` (one quoted word) -> `Proxy-Authorization: ***`.
 local function redactHeader(v: string): string?
-	local name = string.match(v, "^([%w%-_]+):")
-	if name and (string.lower(name) == "authorization" or string.lower(name) == "cookie" or M.isSecretName(name)) then
+	local name = string.match(v, HEADER_NAME)
+	if name and isSecretKey(name) and string.match(v, "^[^:]*:%s*$") == nil then
 		return name .. ": " .. M.REDACTED
 	end
 	return nil
+end
+
+-- A header, URL, `k=v` list or query string with its secrets hidden.
+local function redactValue(v: string): string?
+	local header = redactHeader(v)
+	if header then
+		return header
+	end
+	local out = redactUserinfo(v) or v
+	out = redactPairs(out) or out
+	return if out ~= v then out else nil
 end
 
 -- The redacted value of one word, or nil when it needs none.
@@ -540,10 +652,37 @@ local function redactWord(w: string): string?
 		if M.isSecretName(flag) then
 			return flag .. "=" .. M.REDACTED
 		end
-		local inner = redactPairs(value :: string) or redactUrl(value :: string)
+		local inner = (if USER_FLAGS[flag] then redactUserPass(value :: string) else nil)
+			or redactValue(value :: string)
 		return if inner then flag .. "=" .. inner else nil
 	end
-	return redactPairs(w) or redactUrl(w) or redactHeader(w)
+	-- `-uadmin:s3cret`: curl's glued short user flag.
+	local short, glued = string.match(w, "^(%-[uU])(.+)$")
+	if short then
+		local inner = redactUserPass(glued :: string)
+		if inner then
+			return (short :: string) .. inner
+		end
+	end
+	return redactValue(w)
+end
+
+-- What the word after `w` is: "all" (a credential), "user" (`user:pass`) or
+-- nil. `Bearer`/`Basic` and a bare `Authorization:` (unquoted header) hide the
+-- next word, so `-H Authorization: Bearer x` loses both following words.
+local function nextKind(w: string): string?
+	if isFlag(w) and not string.find(w, "=", 1, true) then
+		if USER_FLAGS[w] then
+			return "user"
+		end
+		return if M.isSecretName(w) then "all" else nil
+	end
+	local lower = string.lower(w)
+	if lower == "bearer" or lower == "basic" then
+		return "all"
+	end
+	local name = string.match(w, "^([%w%-_]+):%s*$")
+	return if name and isSecretKey(name) then "all" else nil
 end
 
 local SAFE_WORD = "^[%w%%+,./:=@_%-%*]+$"
@@ -555,32 +694,32 @@ local function quote(w: string): string
 	return "'" .. string.gsub(w, "'", "'\\''") .. "'"
 end
 
--- `line` with secret-looking values replaced by `***`. Only redacted words
--- change (re-quoted); everything else stays exactly as typed.
+-- `line` with secret-looking values replaced by `***`, in every simple
+-- command of a compound line. Only redacted words change (re-quoted);
+-- everything else stays exactly as typed.
 function M.redact(line: string): string
 	local tokens = M.tokenize(line)
 	local changed: { Token } = {}
-	local secretNext = false
+	local pending: string? = nil
 	for _, t in tokens do
 		if t.op then
-			secretNext = false
+			pending = nil
 			continue
 		end
-		if secretNext and not isFlag(t.text) then
-			t.text = M.REDACTED
-			table.insert(changed, t)
-			secretNext = false
-			continue
-		end
-		secretNext = false
-		if isFlag(t.text) and not string.find(t.text, "=", 1, true) then
-			secretNext = M.isSecretName(t.text)
+		local word = t.text
+		local r: string?
+		if pending == "all" then
+			r = M.REDACTED
+		elseif pending == "user" then
+			r = redactUserPass(word) or redactWord(word)
 		else
-			local r = redactWord(t.text)
-			if r then
-				t.text = r
-				table.insert(changed, t)
-			end
+			r = redactWord(word)
+		end
+		-- A hidden word can itself be a secret flag (`--password-stdin --token x`).
+		pending = nextKind(word)
+		if r then
+			t.text = r
+			table.insert(changed, t)
 		end
 	end
 	if #changed == 0 then

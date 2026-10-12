@@ -71,14 +71,20 @@ create annotations (Editor or a service account with `annotations:create`).
 
 ### Redaction
 
-Before the line is shown or posted, values that look like credentials become `***`:
+Before the line is shown or posted, values that look like credentials become `***`, in every command of a compound
+line (`a && b`, `a; b`, `a | b`). The rules err towards hiding too much:
 
-- values of flags whose name contains `password`, `passwd`, `passphrase`, `token`, `secret`, `apikey`/`api-key`/
-  `api_key`, `credential`, `private-key`, `access-key`, or ends in `-key`/`_key` (`--password x`,
-  `--auth-token=x`);
-- assignments and `key=value` lists with such a key (`GH_TOKEN=...`, `AWS_SECRET_ACCESS_KEY=...`,
-  `--set image.tag=2,db.password=...`, `-var 'db_password=...'`);
-- passwords in URLs (`oci://user:***@registry/...`) and `Authorization:`/`Cookie:` header values.
+- values of flags whose name contains `pass` (`password`, `passwd`, `passphrase`), `pwd`, `token`, `secret`, `auth`,
+  `bearer`, `cookie`, `signature`, `apikey`/`api-key`/`api_key`, `credential`, `private-key`, `access-key`, or
+  ends in `-key`/`_key` (`--password x`, `--auth-token=x`, `--oauth2-bearer x`, `--token-file x`);
+- assignments, `key=value` lists and URL query parameters whose key matches the same words or contains `key`
+  (`GH_TOKEN=...`, `AWS_SECRET_ACCESS_KEY=...`, `--set image.tag=2,db.pass=...`, `-var 'db_password=...'`,
+  `https://h/x?a=1&token=...`, `?sig=...`, `-d 'user=a&password=...'`);
+- URL userinfo (`oci://user:***@registry/...`, `https://***@github.com/...`; an `@` inside the password is hidden
+  with it);
+- the password of `-u`/`--user`/`--proxy-user user:pass` (`curl -u admin:***`);
+- header values whose name matches those words or contains `key` (`Authorization:`, `Proxy-Authorization:`,
+  `Cookie:`, `X-Api-Key:`), and the word after `Bearer`/`Basic`.
 
 Only the redacted words change; the rest of the line stays as typed. Redaction is a safety net, not a guarantee: a
 secret passed positionally or through an unusual flag name is not recognized, so prefer env files and secret
