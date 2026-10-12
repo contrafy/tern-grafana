@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+	<channel>
+		<title>Tern Grafana dev feed</title>
+		<link>https://github.com/contrafy/tern-grafana</link>
+		<description>Static RSS feed for the news panel in the tern-all-panels fixture dashboard.</description>
+		<language>en</language>
+		<item>
+			<title>Checkout latency back to normal</title>
+			<link>https://example.com/status/checkout-latency</link>
+			<guid isPermaLink="false">tern-news-3</guid>
+			<pubDate>Tue, 07 Jul 2026 09:30:00 GMT</pubDate>
+			<description><![CDATA[<p>p95 latency for <b>checkout</b> dropped below 400 ms after the cache rollout.</p>]]></description>
+			<media:content url="https://example.com/img/checkout.png" medium="image"/>
+		</item>
+		<item>
+			<title>Payments error budget at 80 percent</title>
+			<link>https://example.com/status/payments-budget</link>
+			<guid isPermaLink="false">tern-news-2</guid>
+			<pubDate>Mon, 06 Jul 2026 16:05:00 GMT</pubDate>
+			<description>Payments spans keep failing with error status; see the TernGrafanaAlwaysFiring alert.</description>
+		</item>
+		<item>
+			<title>Maintenance window completed</title>
+			<link>https://example.com/status/maintenance</link>
+			<guid isPermaLink="false">tern-news-1</guid>
+			<pubDate>Fri, 03 Jul 2026 22:00:00 GMT</pubDate>
+			<description>Organization-wide maintenance finished on schedule.</description>
+		</item>
+	</channel>
+</rss>

@@ -152,6 +152,15 @@ seed() {
 		token_api "$g" POST /api/annotations \
 			"{\"time\":$r0,\"timeEnd\":$r1,\"tags\":[\"tern-seed\",\"maintenance\"],\"text\":\"Maintenance window (organization-wide region annotation)\"}" >/dev/null
 	fi
+	# tern-all-panels: one panel annotation for the annotation list, and a star for the dashboard list
+	# (stars belong to the service account, which is who `starred=true` searches answer for).
+	seeded=$(token_api "$g" GET '/api/annotations?dashboardUID=tern-all-panels&tags=tern-seed&limit=10' | jq 'length')
+	if [ "$seeded" = 0 ]; then
+		t2=$((($(date +%s) - 10 * 60) * 1000))
+		token_api "$g" POST /api/annotations \
+			"{\"dashboardUID\":\"tern-all-panels\",\"panelId\":1,\"time\":$t2,\"tags\":[\"tern-seed\",\"incident\"],\"text\":\"CPU spike on checkout\"}" >/dev/null
+	fi
+	token_api "$g" POST /api/user/stars/dashboard/uid/tern-all-panels >/dev/null 2>&1 || true
 }
 
 cmd_up() {
@@ -279,7 +288,8 @@ cmd_smoke() {
 	for g in $GRAFANAS; do
 		smoke_check "$g firing alert" json_ok /api/prometheus/grafana/api/v1/alerts \
 			'[.data.alerts[] | select(.state == "Alerting")] | length >= 1' "$g"
-		smoke_check "$g provisioned dashboards" json_ok '/api/search?query=Tern&type=dash-db' 'length >= 3' "$g"
+		smoke_check "$g provisioned dashboards" json_ok '/api/search?query=Tern&type=dash-db' 'length >= 4' "$g"
+		smoke_check "$g clock panel plugin" json_ok /api/plugins/grafana-clock-panel/settings '.info.version == "2.1.8"' "$g"
 	done
 	smoke_check "prometheus3 exemplars" json_ok \
 		'http://127.0.0.1:9090/api/v1/query_exemplars?query=traces_spanmetrics_latency_bucket' '.data | length >= 1'

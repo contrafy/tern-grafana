@@ -22,11 +22,12 @@ groups:
           runbook_url: https://example.com/runbooks/target-down
       - alert: TernPending
         expr: vector(1)
-        for: 24h
+        # A year, so a stack that runs for days still has a pending alert for `capture` to record.
+        for: 8760h
         labels:
           severity: info
         annotations:
-          summary: Stays pending for a day
+          summary: Stays pending for a year
       - alert: TernInactive
         expr: vector(0) > 1
         labels:

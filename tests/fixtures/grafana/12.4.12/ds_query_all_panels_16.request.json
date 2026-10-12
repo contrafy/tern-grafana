@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"{job=\"loggen\", app=\"checkout\"}","queryType":"range","editorMode":"code","intervalMs":30000,"maxDataPoints":100}],"from":"1791840833000","to":"1791844433000"}

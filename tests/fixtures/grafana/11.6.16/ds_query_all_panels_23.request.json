@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (le) (increase(traces_spanmetrics_latency_bucket[$__rate_interval]))","range":true,"instant":false,"editorMode":"code","legendFormat":"{{le}}","format":"heatmap","intervalMs":10000,"maxDataPoints":960}],"from":"1791840833000","to":"1791844433000"}

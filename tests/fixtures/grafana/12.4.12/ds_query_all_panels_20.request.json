@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"rpm,power,torque\n1000,22,190\n1500,35,210\n2000,51,240\n2500,64,245\n3000,75,238\n3500,82,224\n4000,86,205","intervalMs":10000,"maxDataPoints":480}],"from":"1791840833000","to":"1791844433000"}

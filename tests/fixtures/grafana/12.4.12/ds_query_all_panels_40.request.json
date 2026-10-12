@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"deadline,milestone\n2099-06-30T12:00:00Z,release 9\n2098-01-01T00:00:00Z,code freeze\n2020-01-01T00:00:00Z,kickoff","intervalMs":10000,"maxDataPoints":320}],"from":"1791840833000","to":"1791844433000"}

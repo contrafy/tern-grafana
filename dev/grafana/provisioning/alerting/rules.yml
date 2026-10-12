@@ -105,7 +105,7 @@ groups:
                     params: [0]
         noDataState: NoData
         execErrState: Error
-        for: 24h
+        for: 8760h
         isPaused: false
         labels:
           severity: info

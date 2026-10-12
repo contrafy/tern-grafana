@@ -25,7 +25,7 @@ All published ports bind to `127.0.0.1`.
 
 | Service | Image (pinned) | Host port | Notes |
 | --- | --- | --- | --- |
-| grafana12 | `grafana/grafana:12.4.12` | 3000 | Uses the image renderer. |
+| grafana12 | `grafana/grafana:12.4.12` | 3000 | Uses the image renderer. Feature toggle `newGauge` on (the 12.4 gauge: shape, segments, sparkline, effects). |
 | grafana11 | `grafana/grafana:11.6.16` | 3011 | Deliberately without a renderer, so the "no renderer" path is real. |
 | renderer | `grafana/grafana-image-renderer:v5.12.6` | internal 8081 | Grafana 12 only. |
 | prometheus3 | `quay.io/prometheus/prometheus:v3.15.0` | 9090 | Exemplar storage, remote-write receiver. |
@@ -40,6 +40,10 @@ All published ports bind to `127.0.0.1`.
 
 promtool and amtool run from the prometheus and alertmanager images (`docker compose run --entrypoint`).
 
+Both Grafanas install `grafana-clock-panel` 2.1.8 at container start (`GF_INSTALL_PLUGINS`, so the
+first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
+`/public/tern-news/feed.xml` for the news panel (no extra container, no CORS).
+
 ### What the data looks like
 
 - Prometheus (both): scrapes itself, node-exporter, alertmanager, loki and tempo (not Grafana: its
@@ -47,7 +51,7 @@ promtool and amtool run from the prometheus and alertmanager images (`docker com
   job `down` (`node-exporter:9999`, a closed port: always `up == 0`). Rules (`dev/prometheus/rules/`):
   three recording rules; `tern:broken:many_to_many` (`broken.yml`), which loads but fails every evaluation (health
   `err`); alerts `TernAlwaysFiring` (firing), `TernTargetDown` (firing for the down target after 30 s),
-  `TernPending` (`for: 24h`, stays pending), `TernInactive` (never fires).
+  `TernPending` (`for: 8760h`, stays pending even on a stack that runs for days), `TernInactive` (never fires).
 - Exemplars: Tempo's metrics generator turns the generated traces into `traces_spanmetrics_*` and
   `traces_service_graph_*` series and remote-writes them with exemplars (label `traceID`, real trace ids)
   to both Prometheus servers.
@@ -58,12 +62,30 @@ promtool and amtool run from the prometheus and alertmanager images (`docker com
   annotation query), `tern-variables` (datasource, chained `label_values` queries, `metrics()`,
   `query_result()`, custom multi-value with All, constant, interval, textbox, a repeated panel and a
   repeated row) and `tern-observability` (exemplars, Loki logs and metrics, Tempo search and trace).
+  Datasource `testdata` (TestData) gives deterministic frames.
   Folder `Tern Alerts` holds Grafana-managed rules: `TernGrafanaAlwaysFiring` (firing, linked to
   `tern-panels` panel 2), `TernGrafanaTargetDown` (firing), `TernGrafanaPending` (pending),
   `TernGrafanaNormal` (normal). The default policy routes to contact point `dev-alertmanager`, the
   external Alertmanager, with a 1 m repeat interval: Grafana only re-sends on repeat, and the external
-  Alertmanager resolves alerts whose `endsAt` passed. `up` seeds library panel `tern-lib-up` and two
-  annotations tagged `tern-seed`.
+  Alertmanager resolves alerts whose `endsAt` passed. `up` seeds library panel `tern-lib-up`, two
+  annotations tagged `tern-seed`, a third on `tern-all-panels` panel 1, and stars `tern-all-panels`
+  for the service account.
+- Dashboard `tern-all-panels` (`dev/grafana/dashboards/tern-all-panels.json`): one panel per core panel
+  type plus the clock panel, with the configuration variants the native renderers must honor. Panel ids:
+
+  | Ids | Panels |
+  | --- | --- |
+  | 1-4 | timeseries: description + links; `timeFrom` 30m + `timeShift` 1h; hidden `timeFrom` 2h + `maxDataPoints` 50 + `interval` 2m; `transparent` |
+  | 5-6 | stat; stat with `noValue` on an empty result |
+  | 7-10 | gauge on data; gauges with no targets and `noValue` "6" / "0" (12.4 options, neutral outside the range in 9); 12.4 segmented gauge with sparkline |
+  | 11-12 | bargauge; bargauge with `noValue` |
+  | 13-14 | table (links, cell coloring, organize transform); table with `noValue` (TestData `no_data_points`) |
+  | 15-21 | text, logs (Loki), piechart, barchart, histogram, trend, xychart |
+  | 22-25 | candlestick (OHLC + volume from Prometheus), heatmap (buckets), state-timeline, status-history |
+  | 26-28 | flamegraph (TestData CSV nested set), traces (Tempo trace id from textbox variable `trace_id`), nodeGraph (CSV `nodes`/`edges` refIds) |
+  | 29-34 | alertlist, annolist, dashlist, news, geomap, canvas |
+  | 35-36 | legacy `graph` and `singlestat` (Grafana migrates them to timeseries/stat on load) |
+  | 37-41 | clock: time 24 h Berlin; countdown to 2099-12-31 (input); countup since 2020-01-01; countdown from a query (`minFuture`); custom 12 h format, New York |
 - Loki: job `loggen`, labels `app` (checkout, payments, frontend), `env`, `level` (debug, info, warn,
   error); bodies are logfmt, JSON and access-log shaped. Their `trace_id` values are random and do
   not exist in Tempo.
@@ -89,6 +111,13 @@ Observed on the pinned versions; the plugin must handle these, and the fixtures 
 - Tempo exemplars carry the trace id in label `traceID`.
 - `/api/v1/parse_query` exists on Prometheus 3 and is 404 on 2.53.
 - Prometheus rule evaluation errors keep `health: "err"` with the message in `lastError`.
+- TestData's `node_graph`, `trace`, `flame_graph` and `raw_frame` scenarios run in the browser only:
+  `/api/ds/query` answers 500 for them. `tern-all-panels` uses `csv_content`, `random_walk` and
+  `no_data_points`, which the backend serves, and real Tempo for the traces panel.
+- A panel with an empty Prometheus/Loki expression (or no targets) sends no query; Grafana still
+  draws it from `fieldConfig.defaults.noValue`.
+- The Grafana 12 renderer leaves the traces panel loading (blank PNG) although the trace query
+  succeeds; every other `tern-all-panels` panel renders.
 - logcli 3.7.x reports an empty version string (`logcli --version`); its fixture directory uses the
   pinned image tag.
 
@@ -133,6 +162,19 @@ for the same reason. Check by hand with `grep -ri 'glsa_\|authorization\|bearer 
 
 Specs read fixtures through `tests/lib/fixtures.luau` (`Fixtures.read(path)`, `Fixtures.list(prefix)`,
 `Fixtures.has(path)`) after `make fixtures`.
+
+### tern-all-panels fixtures
+
+Per Grafana version, next to the generic ones: `dashboard_tern_all_panels.json`,
+`frontend_settings_all_panels.json` (TestData, clock panel, and `newGauge` on 12),
+`plugin_clock_panel.json`, `ds_query_all_panels_<panelId>.json` with its `.request.json` for every
+panel that queries, `search_starred`, `search_recent`, `search_tag`, `search_query_tag`,
+`annotations_annolist`, `annotations_annolist_dashboard`, `annotations_annolist_range`,
+`alertlist_rules` and `news_feed.xml`. The request bodies come from `scripts/fixtures/panel_query.jq`,
+which builds what Grafana's frontend sends: dashboard range with the panel's `timeFrom`/`timeShift`
+applied as absolute epoch-ms strings, `maxDataPoints` from the panel or its width (gridPos.w * 80 px),
+`intervalMs` from Grafana's `calculateInterval` with the panel `interval` or the datasource minimum
+as the low limit, and `${trace_id}` set to a real Tempo trace.
 
 ### Adding a fixture
 

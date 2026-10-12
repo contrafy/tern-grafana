@@ -1,0 +1,1 @@
+{"results":{"A":{"status":200,"frames":[{"schema":{"refId":"A","fields":[{"name":"deadline","type":"string","typeInfo":{"frame":"string","nullable":true}},{"name":"milestone","type":"string","typeInfo":{"frame":"string","nullable":true}}]},"data":{"values":[["2099-06-30T12:00:00Z","2098-01-01T00:00:00Z","2020-01-01T00:00:00Z"],["release 9","code freeze","kickoff"]]}}]}}}

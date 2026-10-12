@@ -1,0 +1,1 @@
+{"results":{"A":{"status":200,"frames":[{"schema":{"refId":"A","fields":[{"name":"service","type":"string","typeInfo":{"frame":"string","nullable":true}},{"name":"requests","type":"number","typeInfo":{"frame":"int64","nullable":true}}]},"data":{"values":[["checkout","payments","frontend","search"],[120,45,310,75]]}}]}}}

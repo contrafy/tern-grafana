@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"region,lat,lon,requests\nfrankfurt,50.11,8.68,310\nvirginia,38.95,-77.45,120\nsingapore,1.35,103.82,45\nsao-paulo,-23.55,-46.63,75","intervalMs":5000,"maxDataPoints":960}],"from":"1791840833000","to":"1791844433000"}

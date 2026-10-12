@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"random_walk","seed":7,"seriesCount":2,"min":0,"max":100,"startValue":50,"intervalMs":2000,"maxDataPoints":960}],"from":"1791839033000","to":"1791840833000"}

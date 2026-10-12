@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (job) (up{job=\"tern-no-such-job\"})","range":false,"instant":true,"editorMode":"code","legendFormat":"{{job}}","intervalMs":10000,"maxDataPoints":480}],"from":"1791840833000","to":"1791844433000"}

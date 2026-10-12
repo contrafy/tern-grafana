@@ -13,6 +13,10 @@ x-grafana-env: &grafana-env
   GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
   GF_NEWS_NEWS_FEED_ENABLED: "false"
   GF_PLUGINS_PREINSTALL_DISABLED: "true"
+  # grafana-clock-panel, pinned, installed by the image's run.sh at container start (needs network on
+  # first start). Grafana 12's run.sh only honors GF_INSTALL_PLUGINS with _FORCE; 11 ignores _FORCE.
+  GF_INSTALL_PLUGINS: grafana-clock-panel 2.1.8
+  GF_INSTALL_PLUGINS_FORCE: "true"
   GF_LOG_LEVEL: warn
   GF_UNIFIED_ALERTING_ENABLED: "true"
   GF_UNIFIED_ALERTING_MIN_INTERVAL: 10s
@@ -27,9 +31,13 @@ services:
       GF_SERVER_ROOT_URL: http://127.0.0.1:3000/
       GF_RENDERING_SERVER_URL: http://renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana12:3000/
-    volumes:
+      # The 12.4 gauge (shape, segments, sparkline, effects) is behind this public-preview toggle.
+      GF_FEATURE_TOGGLES_ENABLE: newGauge
+    volumes: &grafana-volumes
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana-dashboards:ro
+      # Static RSS feed for the news panel, served same-origin at /public/tern-news/feed.xml.
+      - ./grafana/news:/usr/share/grafana/public/tern-news:ro
     healthcheck: &grafana-health
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 5s
@@ -43,9 +51,7 @@ services:
     environment:
       <<: *grafana-env
       GF_SERVER_ROOT_URL: http://127.0.0.1:3011/
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana-dashboards:ro
+    volumes: *grafana-volumes
     healthcheck: *grafana-health
 
   renderer:
