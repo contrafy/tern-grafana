@@ -1,0 +1,39 @@
+/* Tern Grafana logs block (lib/logs/view.luau). Class names are prefixed `tg-lg-`. */
+
+.tg-lg-row {
+	cursor: pointer;
+	padding: 0 6px;
+	border-left: 2px solid transparent;
+	border-radius: 2px;
+}
+
+.tg-lg-row.tg-lg-accent { border-left-color: var(--accent); }
+.tg-lg-row.tg-lg-error { border-left-color: var(--bad); }
+.tg-lg-row.tg-lg-warning { border-left-color: var(--warn); }
+.tg-lg-row.tg-lg-success { border-left-color: var(--ok); }
+.tg-lg-row.tg-lg-info { border-left-color: var(--t3); }
+.tg-lg-row.tg-lg-muted { border-left-color: var(--t4); }
+
+.tg-lg-row:hover {
+	background: color-mix(in oklab, var(--accent) 7%, transparent);
+}
+
+.tg-lg-row.is-sel {
+	background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.tg-lg-detail {
+	margin: 2px 0 6px 12px;
+	padding-left: 8px;
+	border-left: 1px solid var(--t4);
+	cursor: default;
+}
+
+.tg-lg-chip {
+	cursor: pointer;
+}
+
+.tg-lg-volume {
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--t4);
+}
