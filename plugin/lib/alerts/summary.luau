@@ -6,6 +6,7 @@
 -- never labels, annotations, URLs, server messages or credentials.
 
 local Normalize = require("./normalize")
+local Tbl = require("../tbl")
 
 type Alert = Normalize.Alert
 type Severity = Normalize.Severity
@@ -126,7 +127,7 @@ end
 -- A failed poll keeps the last counts (an outage must not read as "all
 -- clear") and records only the error kind.
 function M.failed(prev: Summary?, kind: ErrorKind, now_ms: number): Summary
-	local s: Summary = if prev then table.clone(prev :: Summary) else M.empty(now_ms)
+	local s: Summary = if prev then Tbl.copy(prev :: Summary) else M.empty(now_ms)
 	s.error = kind
 	s.updated_ms = now_ms
 	return s

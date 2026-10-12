@@ -14,6 +14,7 @@ local Legend = require("./legend")
 local Range = require("../time/range")
 local SvgTimeseries = require("./svg_timeseries")
 local ui = require("../ui")
+local Tbl = require("../tbl")
 
 type Node = ui.Node
 
@@ -120,7 +121,7 @@ function M.view(result: SvgTimeseries.Result, opts: Options?): (Node, Assets.Ass
 	}
 	local children: { Node } = { image }
 	if o.show_legend ~= false then
-		local lo: Legend.Options = if o.legend then table.clone(o.legend) else {}
+		local lo: Legend.Options = if o.legend then Tbl.copy(o.legend) else {}
 		lo.cursor = cursor
 		lo.key = lo.key or (key .. ".legend")
 		table.insert(children, Legend.view(layout, lo))

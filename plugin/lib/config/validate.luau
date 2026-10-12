@@ -5,6 +5,7 @@
 -- could be a secret.
 
 local Types = require("./types")
+local Tbl = require("../tbl")
 
 type Config = Types.Config
 type Context = Types.Context
@@ -72,7 +73,7 @@ local function sortedKeys(t: { [any]: any }): { string }
 end
 
 local function sortedList(list: { string }): string
-	local copy = table.clone(list)
+	local copy = Tbl.copy(list)
 	table.sort(copy)
 	return table.concat(copy, ", ")
 end
@@ -167,7 +168,7 @@ local function checkSource(problems: Problems, path: string, base: string, raw: 
 				end
 			end
 			if ok then
-				table.insert(found, { from = "cmd", field = field, argv = table.clone(v) })
+				table.insert(found, { from = "cmd", field = field, argv = Tbl.copy(v) })
 			else
 				add(
 					problems,
@@ -378,7 +379,7 @@ local function checkEndpoint(problems: Problems, path: string, name: string, raw
 	end
 	local before = #problems
 	local isGrafana = name == "grafana"
-	local allowedList = table.clone(ENDPOINT_FIELDS)
+	local allowedList = Tbl.copy(ENDPOINT_FIELDS)
 	if isGrafana then
 		table.move(GRAFANA_FIELDS, 1, #GRAFANA_FIELDS, #allowedList + 1, allowedList)
 	end
@@ -497,7 +498,7 @@ function M.validate(raw: any): (Config?, { Problem })
 		return nil, problems
 	end
 
-	local topAllowed = table.clone(TOP_FIELDS)
+	local topAllowed = Tbl.copy(TOP_FIELDS)
 	table.move(FEATURE_SECTIONS, 1, #FEATURE_SECTIONS, #topAllowed + 1, topAllowed)
 	local topSet = set(topAllowed)
 	for _, key in sortedKeys(raw) do

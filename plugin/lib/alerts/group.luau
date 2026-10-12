@@ -5,6 +5,7 @@
 
 local Normalize = require("./normalize")
 local Regex = require("../regex")
+local Tbl = require("../tbl")
 
 type Alert = Normalize.Alert
 type State = Normalize.State
@@ -220,7 +221,7 @@ function M.before(a: Alert, b: Alert): boolean
 end
 
 function M.sort(alerts: { Alert }): { Alert }
-	local out = table.clone(alerts)
+	local out = Tbl.copy(alerts)
 	table.sort(out, M.before)
 	return out
 end

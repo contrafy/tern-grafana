@@ -32,6 +32,7 @@ function M.make(cx: BlockCx?): Env.Env
 		decode = tern.json.decode,
 		encode = tern.json.encode,
 		null = tern.json.null,
+		array = tern.json.array,
 		config = config,
 		kv_get = kvGet,
 	}

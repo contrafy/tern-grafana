@@ -15,6 +15,7 @@ local Env = require("../env")
 local Response = require("../source/response")
 local Scheme = require("../links/scheme")
 local TransportTypes = require("../transport/types")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type QueryError = TransportTypes.QueryError
@@ -306,7 +307,7 @@ function M.applyLibrary(d: Dashboard, uid: string, model: { [string]: any }?, en
 				p.type = "library"
 				continue
 			end
-			local merged: { [string]: any } = table.clone(model)
+			local merged: { [string]: any } = Tbl.copy(model)
 			merged.id = p.json.id
 			merged.gridPos = p.json.gridPos
 			merged.libraryPanel = p.json.libraryPanel

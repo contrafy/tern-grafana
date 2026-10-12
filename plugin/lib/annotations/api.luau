@@ -9,6 +9,7 @@ local Env = require("../env")
 local Pairing = require("./pairing")
 local Settings = require("./settings")
 local TransportTypes = require("../transport/types")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Request = TransportTypes.Request
@@ -146,7 +147,7 @@ function M.body(d: Draft): { [string]: any }
 	local body: { [string]: any } = {
 		time = d.time_ms,
 		timeEnd = d.time_end_ms,
-		tags = table.clone(d.tags),
+		tags = Tbl.copy(d.tags),
 		text = d.text,
 	}
 	if d.dashboard_uid then

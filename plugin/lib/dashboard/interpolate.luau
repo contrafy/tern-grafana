@@ -12,6 +12,8 @@
 -- datasources format multi-value variables as escaped regex alternations),
 -- else Grafana's `glob`.
 
+local Tbl = require("../tbl")
+
 local M = {}
 
 export type Var = {
@@ -447,7 +449,7 @@ end
 
 -- `a` overlaid with `b` (b wins).
 function M.merge(a: Scope, b: Scope): Scope
-	local out: Scope = table.clone(a)
+	local out: Scope = Tbl.copy(a)
 	for k, v in b do
 		out[k] = v
 	end

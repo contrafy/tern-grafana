@@ -7,6 +7,7 @@
 -- 4 ms chrome formatter budget.
 
 local Poll = require("./poll")
+local Tbl = require("../tbl")
 
 export type Segment = { text: string, icon: string?, tone: string?, command: string? }
 
@@ -116,7 +117,7 @@ function M.append(first: { Segment }?, second: { Segment }?): { Segment }?
 	if second == nil or #second == 0 then
 		return first
 	end
-	local out: { Segment } = if first then table.clone(first) else {}
+	local out: { Segment } = if first then Tbl.copy(first) else {}
 	for _, s in second do
 		table.insert(out, s)
 	end

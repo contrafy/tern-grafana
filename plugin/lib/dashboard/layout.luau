@@ -7,6 +7,8 @@
 -- to a tall time series stays stacked. Empty grid space becomes a gap node so
 -- a panel at x=12 stays on the right half.
 
+local Tbl = require("../tbl")
+
 local M = {}
 
 export type GridPos = { x: number, y: number, w: number, h: number }
@@ -26,7 +28,7 @@ type Group = { lo: number, hi: number, items: { Item } }
 
 -- Groups items whose [lo, hi) intervals overlap, in increasing order.
 local function groups(items: { Item }, lo: (Item) -> number, size: (Item) -> number): { Group }
-	local sorted = table.clone(items)
+	local sorted = Tbl.copy(items)
 	table.sort(sorted, function(a, b)
 		if lo(a) ~= lo(b) then
 			return lo(a) < lo(b)
@@ -69,7 +71,7 @@ local function bands(items: { Item }, x0: number, x1: number, depth: number): { 
 	local bs = groups(items, y, h)
 	if #bs == 1 and depth > 0 and #groups(items, x, w) == 1 then
 		-- Neither direction splits (overlapping panels): plain reading order.
-		local flat = table.clone(items)
+		local flat = Tbl.copy(items)
 		table.sort(flat, function(a, b)
 			if a.grid.y ~= b.grid.y then
 				return a.grid.y < b.grid.y

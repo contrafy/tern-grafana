@@ -2,7 +2,12 @@
 -- Test-only JSON codec mimicking `tern.json`, so pure modules can be fed the
 -- same tables they get in Tern:
 --   * object members whose value is null are dropped;
---   * arrays decode to plain sequences (Tern's array tag is not observable here);
+--   * arrays come back array-tagged with a protected metatable, exactly as in
+--     Tern 0.7.0 (getmetatable returns false; table.clone, table.freeze and
+--     setmetatable raise "protected metatable"), so code that copies decoded
+--     data the unsafe way fails here too;
+--   * `encode` writes a tagged empty table as `[]` and an untagged one as `{}`,
+--     like Tern (copying a decoded empty array loses its tag);
 --   * null array items and a top-level null decode to the `null` sentinel
 --     (stands in for `tern.json.null`; pass it to modules under test as their
 --     injected null);
@@ -11,6 +16,18 @@
 -- object keys so encoded output is stable across runs.
 
 local null = table.freeze({})
+
+local ARRAY_MT = table.freeze({ __metatable = false })
+local tagged: { [any]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
+local function array<T>(t: T?): T
+	local value: any = t or {}
+	if not tagged[value] then
+		setmetatable(value, ARRAY_MT)
+		tagged[value] = true
+	end
+	return value
+end
 
 local function decodeError(text: string, pos: number, what: string): never
 	local near = string.sub(text, pos, pos + 15)
@@ -83,7 +100,7 @@ end
 local parseValue: (text: string, pos: number) -> (any, number)
 
 local function parseArray(text: string, pos: number): ({ any }, number)
-	local result = {}
+	local result = array({})
 	local i = skipWhitespace(text, pos + 1)
 	if string.sub(text, i, i) == "]" then
 		return result, i + 1
@@ -189,6 +206,9 @@ local function encodeString(s: string): string
 end
 
 local function isArray(t: { [any]: any }): boolean
+	if tagged[t] then
+		return true
+	end
 	local n = 0
 	for k in t do
 		if type(k) ~= "number" then
@@ -245,4 +265,5 @@ return {
 	decode = decode,
 	encode = encode,
 	null = null,
+	array = array,
 }

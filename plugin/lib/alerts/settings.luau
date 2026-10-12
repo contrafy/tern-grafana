@@ -5,6 +5,7 @@
 -- the path, so one typo never silences the inbox or the status segment.
 
 local Types = require("../config/types")
+local Tbl = require("../tbl")
 
 type Config = Types.Config
 type Problem = Types.Problem
@@ -58,7 +59,7 @@ function M.read(config: Config?): (Settings, { Problem })
 		poll_s = M.DEFAULT_POLL_S,
 		contexts = {},
 		toasts = false,
-		toast_severities = table.clone(M.DEFAULT_TOAST_SEVERITIES),
+		toast_severities = Tbl.copy(M.DEFAULT_TOAST_SEVERITIES),
 	}
 	local default = if config then config.default_context else nil
 	if default then

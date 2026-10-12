@@ -25,6 +25,7 @@ local Layout = require("./layout")
 local Lttb = require("../time/lttb")
 local Series = require("./series")
 local Thresholds = require("../units/thresholds")
+local Tbl = require("../tbl")
 
 type Frame = Frame.Frame
 type Layout = Layout.Layout
@@ -374,7 +375,7 @@ local function thresholdShapes(out: { string }, g: Geometry, opts: Options)
 	end
 	local layout = g.layout
 	local percent = spec.mode == "percentage"
-	local steps = table.clone(spec.steps)
+	local steps = Tbl.copy(spec.steps)
 	local function at(step: Thresholds.Step): number
 		local v = step.value
 		if type(v) ~= "number" then
@@ -635,7 +636,7 @@ local function bucketBars(list: { Series.Series }, tFrom: number, tTo: number, s
 				table.insert(values, v)
 			end
 		end
-		local copy = table.clone(s)
+		local copy = Tbl.copy(s)
 		copy.times, copy.values = times, values
 		out[i] = copy
 	end

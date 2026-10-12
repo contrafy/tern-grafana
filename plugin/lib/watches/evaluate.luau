@@ -12,6 +12,7 @@
 
 local Frame = require("../frame/types")
 local Settings = require("./settings")
+local Tbl = require("../tbl")
 
 type Watch = Settings.Watch
 type Op = Settings.Op
@@ -151,7 +152,7 @@ function M.step(prev: State?, watch: Watch, obs: Observation, now_ms: number): S
 	local p: State? = if prev and prev.def == watch.def then prev else nil
 	if obs.error then
 		if p then
-			local carried = table.clone(p)
+			local carried = Tbl.copy(p)
 			carried.eval_ms = now_ms
 			carried.error = obs.error
 			return carried

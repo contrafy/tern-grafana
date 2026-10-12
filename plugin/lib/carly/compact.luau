@@ -165,15 +165,32 @@ function M.clip(s: string, max: number): string
 	return string.sub(s, 1, math.max(0, max - 3)) .. "..."
 end
 
+export type Codec = {
+	encode: (any) -> string,
+	-- tern.json.array in Tern: tags a list so an empty one still encodes as `[]`.
+	array: (<T>(T) -> T)?,
+}
+
+-- An untagged list (getmetatable nil) tagged as a JSON array; tagged or foreign tables pass through.
+local function asArray(codec: Codec, list: any): any
+	if codec.array and type(list) == "table" and getmetatable(list) == nil then
+		return codec.array(list)
+	end
+	return list
+end
+
 -- Drops items from the end of `result[list]` until `encode(result)` fits
 -- `max_bytes` (default MAX_BYTES), adding the number dropped to
--- `result.omitted`. Returns the result (changed in place).
-function M.fit(result: { [string]: any }, list: string, encode: (any) -> string, max_bytes: number?): { [string]: any }
+-- `result.omitted`. The list is tagged as a JSON array so an empty answer
+-- reads `[]`. Returns the result (changed in place).
+function M.fit(result: { [string]: any }, list: string, codec: Codec, max_bytes: number?): { [string]: any }
+	local encode = codec.encode
 	local limit = max_bytes or M.MAX_BYTES
 	local items = result[list]
 	if type(items) ~= "table" then
 		return result
 	end
+	result[list] = asArray(codec, items)
 	if #encode(result) <= limit then
 		return result
 	end
@@ -183,7 +200,7 @@ function M.fit(result: { [string]: any }, list: string, encode: (any) -> string,
 	for i, item in items do
 		sizes[i] = #encode(item) + 1
 	end
-	result[list] = {}
+	result[list] = asArray(codec, {})
 	local base = #encode(result) + 32
 	local keep = 0
 	local total = base
@@ -195,7 +212,7 @@ function M.fit(result: { [string]: any }, list: string, encode: (any) -> string,
 		keep = i
 	end
 	local dropped = #items - keep
-	local kept = table.create(keep)
+	local kept = asArray(codec, table.create(keep))
 	for i = 1, keep do
 		kept[i] = items[i]
 	end

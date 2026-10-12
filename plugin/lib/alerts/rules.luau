@@ -15,6 +15,7 @@ local Normalize = require("./normalize")
 local Route = require("../config/route")
 local Scheme = require("../links/scheme")
 local TransportTypes = require("../transport/types")
+local Tbl = require("../tbl")
 
 type Config = ConfigTypes.Config
 type Env = Env.Env
@@ -157,7 +158,7 @@ end
 -- `alertname`, the rule name), words its name, group, query, health and status.
 function M.accept(filter: Group.Filter, rule: Rule): boolean
 	if #filter.matchers > 0 then
-		local labels = table.clone(rule.labels)
+		local labels = Tbl.copy(rule.labels)
 		labels.alertname = labels.alertname or rule.name
 		for _, m in filter.matchers do
 			if not Group.matches(m, labels) then

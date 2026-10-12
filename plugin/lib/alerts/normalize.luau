@@ -12,6 +12,7 @@
 
 local Env = require("../env")
 local Range = require("../time/range")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 
@@ -167,7 +168,7 @@ function M.fingerprint(labels: { [string]: string }): string
 		return "cbf29ce484222325"
 	end
 	table.sort(names)
-	local h = table.clone(OFFSET)
+	local h = Tbl.copy(OFFSET)
 	for _, name in names do
 		addString(h, name)
 		addByte(h, 255)
@@ -495,7 +496,7 @@ end
 -- Firing alerts from the rule side are dropped: the Alertmanager copy
 -- carries silences and inhibitions.
 function M.merge(alertmanager: { Alert }, rules: { Alert }): { Alert }
-	local out = table.clone(alertmanager)
+	local out = Tbl.copy(alertmanager)
 	local seen: { [string]: boolean } = {}
 	for _, a in alertmanager do
 		seen[a.fingerprint] = true

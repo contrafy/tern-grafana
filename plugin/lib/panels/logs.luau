@@ -22,6 +22,7 @@ local Json = require("./json")
 local Range = require("../time/range")
 local Regex = require("../regex")
 local ui = require("../ui")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -175,7 +176,7 @@ function M.dedup(rows: { Row }, strategy: string): { Row }
 		if prevKey ~= nil and k == prevKey then
 			out[#out].duplicates += 1
 		else
-			local copy = table.clone(r)
+			local copy = Tbl.copy(r)
 			copy.duplicates = 0
 			table.insert(out, copy)
 			prevKey = k
@@ -230,7 +231,7 @@ function M.rows(panel: any, frames: { Frame }, env: Env): { Row }
 		end)
 		for j, v in bodyField.values do
 			local line = if type(v) == "string" then v elseif Frame.isNull(v) then "" else tostring(v)
-			local labels = table.clone(bodyField.labels or {})
+			local labels = Tbl.copy(bodyField.labels or {})
 			if labelsField then
 				for k, x in labelsOf(env, labelsField.values[j]) do
 					labels[k] = x
@@ -279,7 +280,7 @@ function M.commonLabels(rows: { Row }): { [string]: string }
 	if #rows == 0 then
 		return {}
 	end
-	local common = table.clone(rows[1].labels)
+	local common = Tbl.copy(rows[1].labels)
 	for i = 2, #rows do
 		for k, v in common do
 			if rows[i].labels[k] ~= v then

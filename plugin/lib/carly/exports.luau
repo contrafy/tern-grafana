@@ -238,7 +238,7 @@ function M.promql(args: { any }, env: Env): (Plan?, string?)
 			omitted = omitted,
 			series = series,
 		}
-		return Compact.fit(out, "series", e.encode), nil
+		return Compact.fit(out, "series", e), nil
 	end),
 		nil
 end
@@ -333,7 +333,7 @@ function M.alerts(args: { any }, env: Env): (Plan?, string?)
 				omitted = #shown - #list,
 				alerts = list,
 			}
-			return Compact.fit(out, "alerts", e.encode), nil
+			return Compact.fit(out, "alerts", e), nil
 		end,
 	},
 		nil
@@ -390,7 +390,7 @@ function M.find_dashboard(args: { any }, env: Env): (Plan?, string?)
 			omitted = #hits - #list,
 			dashboards = list,
 		}
-		return Compact.fit(out, "dashboards", e.encode), nil
+		return Compact.fit(out, "dashboards", e), nil
 	end),
 		nil
 end
@@ -443,7 +443,7 @@ function M.logs(args: { any }, env: Env): (Plan?, string?)
 			local series, omitted = Compact.series(res.frames)
 			out.series = series
 			out.omitted = omitted
-			return Compact.fit(out, "series", e.encode), nil
+			return Compact.fit(out, "series", e), nil
 		end
 		local streams: { string } = {}
 		local index: { [string]: number } = {}
@@ -469,7 +469,7 @@ function M.logs(args: { any }, env: Env): (Plan?, string?)
 		end
 		out.streams = streams
 		out.lines = lines
-		return Compact.fit(out, "lines", e.encode), nil
+		return Compact.fit(out, "lines", e), nil
 	end),
 		nil
 end

@@ -17,6 +17,7 @@ local Repeat = require("./repeat")
 local State = require("./state")
 local Variables = require("./variables")
 local ui = require("../ui")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Node = ui.Node
@@ -94,7 +95,7 @@ local function nativeBody(
 		end
 		return memo.node
 	end
-	local panelJson = table.clone(inst.panel.json)
+	local panelJson = Tbl.copy(inst.panel.json)
 	panelJson.title = title(s, inst)
 	local r = s.range
 	local scope = State.panelScope(s, inst)

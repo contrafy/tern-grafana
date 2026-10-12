@@ -35,6 +35,7 @@ local Shared = require("../time/shared")
 local Tail = require("./tail")
 local TimeRange = require("../query/timerange")
 local Volume = require("./volume")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -381,7 +382,7 @@ local function poll(s: State, env: Env, effects: { Effect })
 	s.tail_inflight = true
 	table.insert(effects, { kind = "http", tag = M.POLL_TAG .. s.gen, route = r.route, request = request })
 	if s.show_volume and not s.volume_loading and env.now_ms - (s.volume_at_ms or 0) >= M.VOLUME_TAIL_MS then
-		local live: Run = table.clone(r)
+		local live: Run = Tbl.copy(r)
 		live.from_ms, live.to_ms = range.from_ms, range.to_ms
 		volumeRequest(s, env, live, effects)
 	end
@@ -1016,7 +1017,7 @@ local function toggleVolume(s: State, env: Env, effects: { Effect })
 	local r = s.ran
 	if s.show_volume and r and not r.metric then
 		local range = resolve(s, env)
-		local live: Run = table.clone(r)
+		local live: Run = Tbl.copy(r)
 		if range then
 			live.from_ms, live.to_ms = range.from_ms, range.to_ms
 		end

@@ -11,6 +11,7 @@ local LogsOptions = require("../logs/options")
 local Scheme = require("../links/scheme")
 local Series = require("../render/series")
 local ConfigTypes = require("../config/types")
+local Tbl = require("../tbl")
 
 type Frame = Frame.Frame
 type Labels = { [string]: string }
@@ -28,7 +29,7 @@ function M.commonLabels(frames: { Frame }): Labels
 	local common: Labels? = nil
 	for _, s in Series.extract(frames) do
 		if common == nil then
-			common = table.clone(s.labels)
+			common = Tbl.copy(s.labels)
 		else
 			for k, v in common :: Labels do
 				if s.labels[k] ~= v then

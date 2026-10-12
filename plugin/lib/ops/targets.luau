@@ -6,6 +6,7 @@
 local Env = require("../env")
 local Group = require("../alerts/group")
 local Range = require("../time/range")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Filter = Group.Filter
@@ -161,7 +162,7 @@ end
 -- and `health`).
 function M.accept(filter: Filter, t: Target): boolean
 	if #filter.matchers > 0 then
-		local labels = table.clone(t.labels)
+		local labels = Tbl.copy(t.labels)
 		labels.health = t.health
 		if labels.job == nil then
 			labels.job = t.pool

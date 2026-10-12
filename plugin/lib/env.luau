@@ -13,6 +13,8 @@ export type Env = {
 	encode: (any) -> string,
 	-- tern.json.null in Tern; the test codec's sentinel in specs.
 	null: any,
+	-- tern.json.array in Tern: tags a fresh list so an empty one encodes as `[]`.
+	array: (<T>(T) -> T)?,
 	config: ConfigTypes.Config?,
 	-- tern.kv.get in Tern; nil in specs that need no kv.
 	kv_get: ((key: string) -> any)?,

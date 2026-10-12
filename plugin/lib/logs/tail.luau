@@ -7,6 +7,7 @@
 -- kept once.
 
 local FrameLoki = require("../frame/loki")
+local Tbl = require("../tbl")
 
 type Line = FrameLoki.Line
 
@@ -48,7 +49,7 @@ function M.merge(lines: { Line }, incoming: { Line }, limit: number): ({ Line },
 	if #fresh == 0 then
 		return lines, 0
 	end
-	local merged = table.clone(fresh)
+	local merged = Tbl.copy(fresh)
 	table.move(lines, 1, #lines, #merged + 1, merged)
 	FrameLoki.sort(merged)
 	if #merged > limit then

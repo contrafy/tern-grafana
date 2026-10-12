@@ -15,6 +15,7 @@ local Scheme = require("../links/scheme")
 local Targets = require("./targets")
 local Tsdb = require("./tsdb")
 local TransportTypes = require("../transport/types")
+local Tbl = require("../tbl")
 
 type Effect = Effect.Effect
 type Msg = Effect.Msg
@@ -287,7 +288,7 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		rows = {},
 		sel = 1,
 		detail = nil,
-		open_lists = table.clone(DEFAULT_OPEN_LISTS),
+		open_lists = Tbl.copy(DEFAULT_OPEN_LISTS),
 		card_rows = {},
 		card_sel = 1,
 		note = nil,

@@ -12,6 +12,7 @@ local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
+local JSON_ENV = { encode = json.encode, array = json.array }
 
 local NOW = 1791577898000
 
@@ -203,16 +204,21 @@ describe("compaction", function()
 	it("cuts any answer to the byte budget and says how much was cut", function()
 		local series, omitted = Compact.series(frames(200), { max_series = 200 })
 		expect(omitted).toBe(0)
-		local out = Compact.fit({ omitted = omitted, series = series }, "series", json.encode)
+		local out = Compact.fit({ omitted = omitted, series = series }, "series", JSON_ENV)
 		expect(#json.encode(out) <= Compact.MAX_BYTES).toBe(true)
 		expect(out.omitted > 0).toBe(true)
 		expect(#out.series + out.omitted).toBe(200)
 	end)
 
 	it("leaves an answer that fits unchanged", function()
-		local out = Compact.fit({ series = { { name = "a" } } }, "series", json.encode)
+		local out = Compact.fit({ series = { { name = "a" } } }, "series", JSON_ENV)
 		expect(out.omitted).toBeNil()
 		expect(#out.series).toBe(1)
+	end)
+
+	it("answers an empty list as a JSON array, so Carly reads no results instead of an object", function()
+		local out = Compact.fit({ series = {} }, "series", JSON_ENV)
+		expect(json.encode(out)).toBe('{"series":[]}')
 	end)
 
 	it("skips NaN and infinities: they are not JSON values Carly can take", function()

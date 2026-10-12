@@ -41,6 +41,7 @@ local Shared = require("../time/shared")
 local SvgTimeseries = require("../render/svg_timeseries")
 local TimeRange = require("../query/timerange")
 local Variables = require("./variables")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -398,7 +399,7 @@ function M.instanceVars(s: State, inst: Repeat.Instance?): { [string]: { string 
 	local vars = Variables.urlValues(s.vars)
 	if inst then
 		for name, v in inst.scoped do
-			vars[name] = table.clone(v.values)
+			vars[name] = Tbl.copy(v.values)
 		end
 	end
 	return vars
@@ -830,7 +831,7 @@ function M.grafanaUrl(s: State, env: Env): string?
 	if base == nil or l == nil then
 		return nil
 	end
-	local page = table.clone(l)
+	local page = Tbl.copy(l)
 	page.action = "dashboard"
 	return GrafanaUrl.build(page, base, env.encode)
 end
@@ -1084,7 +1085,7 @@ local function openVarPicker(s: State, name: string)
 		name = name,
 		query = if v.kind == "textbox" then (v.values[1] or "") else "",
 		selected = v.values[1],
-		chosen = if v.multi then table.clone(v.values) else nil,
+		chosen = if v.multi then Tbl.copy(v.values) else nil,
 	}
 end
 
@@ -1444,7 +1445,7 @@ local function openLogs(s: State, env: Env, effects: { Effect })
 	local labels: { [string]: string }
 	local e = M.selectedExemplar(s)
 	if e then
-		labels = table.clone(e.series)
+		labels = Tbl.copy(e.series)
 		for k, v in e.labels do
 			labels[k] = labels[k] or v
 		end

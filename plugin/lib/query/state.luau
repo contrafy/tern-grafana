@@ -37,6 +37,7 @@ local Svg = require("../render/svg_timeseries")
 local TimeRange = require("./timerange")
 local Cursor = require("../render/cursor")
 local Edit = require("./edit")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -879,7 +880,7 @@ end
 function M.selectedLabels(s: State): { [string]: string }
 	local e = M.selectedExemplar(s)
 	if e then
-		local out = table.clone(e.series)
+		local out = Tbl.copy(e.series)
 		for k, v in e.labels do
 			out[k] = out[k] or v
 		end

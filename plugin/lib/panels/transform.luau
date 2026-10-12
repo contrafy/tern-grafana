@@ -18,6 +18,7 @@ local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
 local Json = require("./json")
 local Regex = require("../regex")
+local Tbl = require("../tbl")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -217,7 +218,7 @@ local function filterFields(frames: { Frame }, include: FieldMatcher?, exclude: 
 			end
 		end
 		if #fields > 0 then
-			local copy = table.clone(frame)
+			local copy = Tbl.copy(frame)
 			copy.fields = fields
 			table.insert(out, copy)
 		end
@@ -265,7 +266,7 @@ local function organize(frames: { Frame }, options: any, env: Env): { Frame }
 				end
 				return a.at < b.at
 			end)
-			local copy = table.clone(frame)
+			local copy = Tbl.copy(frame)
 			copy.fields = {}
 			for _, k in keyed do
 				table.insert(copy.fields, k.field)
@@ -279,13 +280,13 @@ local function organize(frames: { Frame }, options: any, env: Env): { Frame }
 	if rename and next(rename) ~= nil then
 		local renamed: { Frame } = {}
 		for _, frame in result do
-			local copy = table.clone(frame)
+			local copy = Tbl.copy(frame)
 			copy.fields = {}
 			for _, field in frame.fields do
 				local to = rename[FieldConfig.displayName(field, frame)]
 				if type(to) == "string" and to ~= "" then
-					local f = table.clone(field)
-					local c: Frame.FieldConfig = if f.config then table.clone(f.config) else {}
+					local f = Tbl.copy(field)
+					local c: Frame.FieldConfig = if f.config then Tbl.copy(f.config) else {}
 					c.displayName = to
 					f.config = c
 					table.insert(copy.fields, f)
