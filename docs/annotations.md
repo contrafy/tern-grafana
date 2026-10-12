@@ -2,8 +2,8 @@
 
 Tern Grafana can notice deploy commands you run in a Tern terminal and
 
-- post a Grafana annotation for each one (G1), after you approved it for that context, and
-- open an impact watch beside the terminal that compares a few signals before and after the deploy (G2).
+- post a Grafana annotation for each one, after you approved it for that context, and
+- open an impact watch beside the terminal that compares a few signals before and after the deploy.
 
 Both are off until you turn them on in the config file (`annotations.enabled`, `impact.enabled`).
 

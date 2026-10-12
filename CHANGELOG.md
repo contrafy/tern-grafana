@@ -56,6 +56,29 @@ versions may break).
 - Lenses: `promtool check rules|config` and `promtool test rules`; `curl` against
   `/api/v1/query*` and `/api/ds/query`; `amtool alert` and `amtool silence`;
   `logcli query`.
+- Logs block ("Grafana: Logs"): LogQL against Loki directly or through Grafana,
+  with label, value and pipeline suggestions, colored levels, volume bars per
+  level, a polling tail, and label, metadata and parsed-field chips that filter
+  the query. Grafana Explore links on a Loki datasource open it. `logs` config
+  section: `default_range`, `limit`, `tail_interval`, `volume`.
+- Trace block ("Grafana: Trace"): a Tempo trace as a waterfall with per-service
+  colors, error spans, the critical path, folding and span detail (attributes,
+  events, links, resource), tolerant of missing parents, clock skew and duplicate
+  spans; TraceQL search with tag and value chips. Tempo directly or through
+  Grafana. `trace` config section: `search_limit`, `range`.
+- Deploy annotations: finished deploy commands (helm, kubectl, terraform, tofu,
+  argocd, flux, or your own patterns) post a Grafana annotation after you approve
+  it per context (Always, Once or Never). Off until `annotations.enabled`.
+- Deploy impact watch: a card beside the terminal comparing configured or guessed
+  signals before and after a deploy. Off until `impact.enabled`.
+- Carly: functions to run PromQL, list alerts, find dashboards and query logs, and
+  a firing-alerts summary in Carly's request context.
+- Investigate: open an agent on an alert with its labels, query, recent values and
+  runbook in a prompt you preview first. `investigate` config section: `range`.
+- Personal PromQL threshold watches (`watches`) polled in the background, shown in
+  the status line and as toasts.
+- Per-host default contexts (`hosts`): map hostnames or globs to the context used
+  on that machine.
 - Project scaffold: `plugin.toml` at the repository root, sources under `plugin/`,
   pinned repo-local tooling (`make bootstrap`), formatting, lint, typecheck and
   unit test runner (`make check`), CI.

@@ -157,6 +157,37 @@ tern-grafana://logs?context=lab&expr=%7Bjob%3D%22loggen%22%7D&from=now-15m
 
 Details: [Logs block](docs/logs.md).
 
+## Traces
+
+**Grafana: Trace** shows one Tempo trace as a waterfall and searches traces
+with TraceQL, against Tempo directly or through Grafana's Tempo datasource.
+Spans are indented by depth with bars at their offset, colored per service;
+error spans are red and the critical path is bright. A span's detail lists its
+kind, status, self time, attributes, events, links and resource. Missing
+parents, clock skew and duplicate spans are shown, not hidden. The Search tab
+suggests tags and values as chips that extend the query.
+
+| Waterfall | Span detail |
+| --- | --- |
+| ![Trace waterfall](docs/screenshots/trace-waterfall.png) | ![Span detail under its row](docs/screenshots/trace-detail.png) |
+
+![TraceQL search with tag chips](docs/screenshots/trace-search.png)
+
+```
+tern-grafana://trace?context=lab&q=%7Bstatus%3Derror%7D&from=now-6h
+```
+
+| Keys | |
+| --- | --- |
+| `tab` | switch between Trace and Search |
+| `enter` `o` | span detail or open the trace, open in a new block |
+| `h` `l` `space` | fold, unfold |
+| `e` `E` `p` | next, previous error span, parent |
+| `/` | type a trace id, edit the TraceQL query |
+| `y` `Y` `r` `c` | copy span id, trace id, reload, next context |
+
+Details: [Trace block](docs/traces.md).
+
 ## Ops
 
 **Grafana: Ops** shows a Prometheus server's own health, directly or through
@@ -390,7 +421,7 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | **Logs and traces** | |
 | Loki logs: LogQL suggestions, level colors, volume bars, tail | done |
 | Label, metadata and parsed-field chips that filter the query | done |
-| Tempo trace waterfall and TraceQL search | planned |
+| Tempo trace waterfall and TraceQL search | done |
 | Exemplars to traces | planned |
 | Jump between logs and metrics | planned |
 | Shared time range and cursor across blocks | planned |
@@ -421,7 +452,7 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | Alertmanager | - | - | done | done | - | - | - | done |
 | Grafana-managed alerting | - | - | done | done | - | - | - | - |
 | Loki (direct or via Grafana) | - | done | - | - | - | done | - | done |
-| Tempo (direct or via Grafana) | - | planned | - | - | - | - | planned | - |
+| Tempo (direct or via Grafana) | - | planned | - | - | - | - | done | - |
 
 `-`: not applicable. Prometheus-compatible servers (Thanos, Mimir, Cortex,
 VictoriaMetrics) follow the Prometheus direct row. Lenses: `promtool` and
