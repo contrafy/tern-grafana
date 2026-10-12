@@ -68,7 +68,13 @@ opens one with its rows, grid layout, variables (`v` opens the picker),
 repeats, library panels, time range and auto-refresh. Each panel takes the
 first rung of a ladder that works:
 
-1. drawn natively: time series, stat, gauge, bar gauge, table, text, logs;
+1. drawn natively: every core Grafana panel type (time series, stat, gauge
+   including Grafana 12.4's radial gauge, bar gauge, table, text, logs, pie,
+   bar, histogram, trend, XY, candlestick, heatmap, state timeline, status
+   history, flame graph, traces, node graph, geomap, canvas, alert list,
+   annotation list, dashboard list, news) plus `grafana-clock-panel`, with the
+   panel's `noValue`, time overrides, description and links honored
+   ([details and limits](docs/dashboards.md#native-panels));
 2. a PNG from Grafana's image renderer, when the server has one;
 3. the reason, and `o` to open the panel in a Tern browser pane.
 
@@ -77,6 +83,14 @@ first rung of a ladder that works:
 | ![Dashboard with logs and latency panels](docs/screenshots/dashboard-logs-traces.png) | ![Panel rendered by Grafana's image renderer](docs/screenshots/dashboard-png-fallback.png) |
 
 ![Panel falling back to a browser pane](docs/screenshots/dashboard-browser-fallback.png)
+
+| Charts | Stat, gauges and noValue |
+| --- | --- |
+| ![Bar chart, histogram, trend, XY, candlestick, heatmap and state timelines](docs/screenshots/panels-charts.png) | ![Stat panels, radial gauges including two with no query showing their noValue, and bar gauges](docs/screenshots/panels-gauges-tables.png) |
+
+| Flame graph, node graph and lists | Canvas, legacy graph and clocks |
+| --- | --- |
+| ![Flame graph, node graph, alert list and annotation list](docs/screenshots/panels-flame-nodes-lists.png) | ![Canvas, migrated legacy graph and ticking clock panels](docs/screenshots/panels-canvas-clocks.png) |
 
 `p` pins the focused panel as its own Panel block with the same range keys
 and cursor.
@@ -461,10 +475,10 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | **Dashboards** | |
 | Search and open; grid layout, rows, repeats, library panels | done |
 | Variables with picker; time range, auto-refresh | done |
-| Native time series, stat, gauge, bar gauge, table, text, logs | done |
+| Native rendering of every core panel type and `grafana-clock-panel` | done |
+| Panel `noValue`, time overrides, descriptions, links, transparent | done |
 | Grafana image renderer PNG, then browser pane, per panel | done |
 | Pin a panel as its own block | done |
-| Native heatmap, state timeline and trace panels | planned |
 | **Alerts and silences** | |
 | Inbox: Grafana unified alerting, Alertmanager v2, Prometheus | done |
 | Status-line firing counts; opt-in toasts | done |

@@ -111,7 +111,7 @@ is independent of the others and of their order, and leaves nothing behind:
 | --- | --- |
 | `01-query` | Palette "Grafana: Query", type a query, `enter`: SVG chart and legend; `t`: instant table rows |
 | `02-settings` | Settings block: `valid` badge, both contexts, `t` on lab's prometheus reports its version |
-| `03-dashboard` | Picker lists the three provisioned dashboards; Tern Panels opens with native stat values; the same dashboard on Grafana 11 (clicked URL) shows the heatmap on the browser rung with its reason |
+| `03-dashboard` | Picker lists every provisioned dashboard; Tern Panels opens with native stat values; the e2e-only `tern-ladder` dashboard (a symlog heatmap the plugin does not draw) shows Grafana 12's PNG and, on Grafana 11 (clicked URL), the browser rung with its reason |
 | `04-alerts` | Inbox firing count equals Alertmanager's active alerts, fixture alerts listed, status segment count; `v` rules view with the failing rule |
 | `05-silence` | `s` on an alert opens the prefilled form, `S` the confirmation, `n` cancels; Alertmanager's silences are unchanged |
 | `06-ops` | Targets tab: one down target, its pool first with the scrape error; `u` keeps only it |
@@ -122,9 +122,8 @@ is independent of the others and of their order, and leaves nothing behind:
 | `11-annotations` | Fake `helm upgrade` opens the approve block with the annotation preview; Dismiss posts nothing (checked on Grafana) |
 | `12-links` | A clicked Grafana 12 `/d/` URL opens the Dashboard block with the URL's range; `/d-solo/` opens the Panel block |
 
-Not covered by e2e (unit specs only, or manual): Grafana's image renderer PNG rung (render timing makes it slow and
-flaky), write paths (creating or expiring silences, posting annotations), toasts, the impact watch, Carly exports,
-Investigate (needs an agent), remote hosts and Linux.
+Not covered by e2e (unit specs only, or manual): write paths (creating or expiring silences, posting annotations),
+toasts, the impact watch, Carly exports, Investigate (needs an agent), remote hosts and Linux.
 
 Writing a scenario: source-only shell (`tests/e2e/lib.sh` is already loaded), one block per behavior, wait with
 `bwait BLOCK TEXT [SEL]` or `wait_for DESC CMD...` instead of sleeping, assert with `eq`/`contains`/`has`, and take a

@@ -1,0 +1,45 @@
+{
+  "uid": "tern-ladder",
+  "title": "Tern Ladder",
+  "description": "e2e only (tests/e2e/scenarios/03-dashboard.sh), not used by fixtures: a panel the plugin keeps off the native rung, so Grafana 12 renders it as a PNG and Grafana 11 (no renderer) offers the browser.",
+  "tags": ["tern", "e2e"],
+  "editable": false,
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "",
+  "timezone": "utc",
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "heatmap",
+      "title": "Scrape duration symlog heatmap",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": {
+        "calculate": true,
+        "calculation": {
+          "yBuckets": { "mode": "count", "value": "10", "scale": { "type": "symlog", "log": 2 } }
+        },
+        "yAxis": { "unit": "s", "axisPlacement": "left" },
+        "color": { "mode": "scheme", "scheme": "Oranges", "steps": 64 },
+        "cellGap": 1,
+        "legend": { "show": true },
+        "tooltip": { "mode": "single", "yHistogram": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prom3" },
+          "expr": "scrape_duration_seconds",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    }
+  ]
+}
