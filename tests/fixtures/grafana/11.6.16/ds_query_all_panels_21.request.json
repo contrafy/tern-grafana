@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"load,latency_ms\n10,42\n20,45\n30,51\n40,60\n50,74\n60,95\n70,130\n80,190","intervalMs":10000,"maxDataPoints":480}],"from":"1791840833000","to":"1791844433000"}

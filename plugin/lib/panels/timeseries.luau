@@ -226,6 +226,24 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		table.insert((out :: Frame).fields, FieldConfig.bake(item))
 		table.insert(visible, item)
 	end
+	if #visible == 0 then
+		-- TimeSeriesPanel without graphable fields: PanelDataErrorView.
+		if not Common.hasData(frames) then
+			return Common.noData(panel, env, opts.key), {}
+		end
+		local hasNumber, hasTime = false, false
+		for _, f in frames do
+			for _, field in f.fields do
+				hasNumber = hasNumber or field.type == "number"
+				hasTime = hasTime or field.type == "time"
+			end
+		end
+		local why = if not hasNumber
+			then "Data is missing a number field"
+			elseif not hasTime then "Data is missing a time field"
+			else "Cannot visualize data"
+		return ui.muted(why, { key = opts.key }), {}
+	end
 	if opts.exemplars and #opts.exemplars > 0 then
 		render.exemplars = opts.exemplars
 	end

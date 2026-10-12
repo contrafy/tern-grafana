@@ -3,8 +3,12 @@
 -- variable chips, rows with their panels laid out by gridPos fractions, and
 -- each panel on its ladder rung with the reason it left the native one.
 -- Native panels come from lib/panels/registry; their rendered node and
--- assets are memoized per panel until its data, cursor or size changes, so a
--- focus move does not rebuild every SVG.
+-- assets are memoized per panel until its data, extra answers, live tick,
+-- range, cursor or size changes, so a focus move does not rebuild every SVG.
+-- Panel metadata as Grafana's panel chrome shows it: the time override info
+-- ("Last 1 hour timeshift -1h") in the header, the description behind an
+-- info marker (hover title; in full in the expanded view), panel links as
+-- chips, and transparent panels without card chrome.
 
 local Assets = require("../render/assets")
 local Effect = require("../effect")
@@ -13,6 +17,7 @@ local Interpolate = require("./interpolate")
 local Layout = require("./layout")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
+local RenderPng = require("./render_png")
 local Repeat = require("./repeat")
 local State = require("./state")
 local Variables = require("./variables")
@@ -27,8 +32,21 @@ local M = {}
 
 M.HINT = "arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh  a auto  l labels  L logs  S sync  "
 	.. "o browser  p pin  I investigate  / search"
--- Text lines per Grafana grid row (30 px rows, 8 px margins, about 15 px lines).
-M.LINES_PER_ROW = 2.5
+-- Tern's text line in px: card heights are given in lines.
+M.LINE_PX = 16
+-- Narrowest a panel gets before its band wraps (Grafana stacks panels on narrow screens); small
+-- enough that a wrapped panel still fits a narrow split.
+M.MIN_PANEL_WIDTH = "18ch"
+-- Bases are scaled down this much so a band's gaps fit and it only wraps on a narrow pane;
+-- flex-grow hands the slack back.
+M.BASIS_SLACK = 0.96
+
+-- A panel's Grafana height (gridPos h rows of 30 px with 8 px margins,
+-- lib/dashboard/render_png size) in Tern lines, never above it.
+function M.heightLines(h: number): number
+	local _, px = RenderPng.size(1, h)
+	return math.max(4, math.floor(px / M.LINE_PX))
+end
 
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
 	.. "o browser  y copy URL  I investigate"
@@ -79,6 +97,8 @@ local function nativeBody(
 	-- Text panels interpolate variables into their content.
 	local signature = Variables.signature(s.vars, s.range)
 	local memo = s.memo[inst.key]
+	local pr = if ps.time then ps.time.range else s.range
+	local live = if ps.live_ms then s.live_tick else nil
 	if
 		memo
 		and memo.data == data
@@ -89,6 +109,11 @@ local function nativeBody(
 		and memo.signature == signature
 		and memo.json == inst.panel.json
 		and memo.title == title(s, inst)
+		and memo.extra_gen == ps.extra_gen
+		and memo.live == live
+		and memo.features == s.settings.features
+		and memo.from_ms == (if pr then pr.from_ms else nil)
+		and memo.to_ms == (if pr then pr.to_ms else nil)
 	then
 		for k, a in memo.assets do
 			assets[k] = a
@@ -97,15 +122,22 @@ local function nativeBody(
 	end
 	local panelJson = Tbl.copy(inst.panel.json)
 	panelJson.title = title(s, inst)
-	local r = s.range
 	local scope = State.panelScope(s, inst)
+	local pw, ph = RenderPng.size(if single then 24 else inst.panel.grid.w, inst.panel.grid.h)
+	local d = s.dashboard
 	local ok, node, own = pcall(Registry.view, panelJson, data.frames, env, {
 		key = inst.key,
 		cursor = cursor,
 		exemplars = data.exemplars,
 		exemplar = exemplar,
-		from_ms = if r then r.from_ms else nil,
-		to_ms = if r then r.to_ms else nil,
+		from_ms = if pr then pr.from_ms else nil,
+		to_ms = if pr then pr.to_ms else nil,
+		time = if pr then { from_ms = pr.from_ms, to_ms = pr.to_ms } else nil,
+		size = { w = pw, h = ph },
+		extra = ps.extra,
+		timezone = if d then d.timezone else nil,
+		local_offset_min = env.local_offset_min,
+		features = s.settings.features,
 		show_labels = labels,
 		interpolate = function(text: string): string
 			return Interpolate.replace(text, scope, { format = Interpolate.text })
@@ -135,6 +167,11 @@ local function nativeBody(
 		signature = signature,
 		json = inst.panel.json,
 		title = title(s, inst),
+		extra_gen = ps.extra_gen,
+		live = live,
+		features = s.settings.features,
+		from_ms = if pr then pr.from_ms else nil,
+		to_ms = if pr then pr.to_ms else nil,
 		node = body,
 		assets = ownAssets,
 	}
@@ -184,6 +221,47 @@ local MODE_BADGE: { [string]: { string } } = {
 	browser = { "browser", "neutral" },
 }
 
+-- The panel description (Markdown in Grafana), interpolated.
+local function description(s: State, inst: Repeat.Instance): string?
+	local raw = inst.panel.json.description
+	if type(raw) ~= "string" then
+		return nil
+	end
+	local text =
+		string.match(Interpolate.replace(raw, State.panelScope(s, inst), { format = Interpolate.text }), "^%s*(.-)%s*$")
+	return if text and text ~= "" then text else nil
+end
+
+-- Info marker and link chips above the body; nil when the panel has neither.
+local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolean): Node?
+	local chips: { Node } = {}
+	local desc = description(s, inst)
+	if desc and not single then
+		table.insert(chips, {
+			k = "el",
+			p = { tag = "span", key = "info", class = "tgp2-info", title = desc },
+			c = { ui.text({ ui.span("i", "muted") }) },
+		})
+	end
+	for i, l in State.panelLinks(s, inst, env) do
+		table.insert(chips, {
+			k = "el",
+			p = {
+				tag = "span",
+				key = "l" .. i,
+				class = "tgp2-link",
+				title = l.url,
+				actions = { click = "plink=" .. i .. ":" .. inst.key },
+			},
+			c = { ui.text({ ui.span(l.title, "accent") }) },
+		})
+	end
+	if #chips == 0 then
+		return nil
+	end
+	return ui.row(chips, { key = "meta", gap = "xs", wrap = true })
+end
+
 local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Assets.Assets, single: boolean): Node
 	local ps = s.panels[inst.key]
 	local head: { ui.SpanLike } = { ui.span(title(s, inst), "strong") }
@@ -200,15 +278,41 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	else
 		body = browserBody(inst, ps)
 	end
+	local info = if ps and ps.time then ps.time.info else ""
+	if info ~= "" then
+		table.insert(head, ui.span("  " .. info, "info"))
+	end
 	local badge = if ps then MODE_BADGE[ps.decision.mode] else nil
 	if badge then
 		table.insert(head, ui.span("  " .. badge[1], "muted"))
 	end
-	return ui.card(head, { body }, {
-		key = inst.key,
-		selected = s.focus == inst.key and not single,
-		actions = { click = "focus=" .. inst.key, dblclick = "expand=" .. inst.key },
-	})
+	local children: { Node } = {}
+	local meta = metaRow(s, inst, env, single)
+	if meta then
+		table.insert(children, meta)
+	end
+	local desc = if single then description(s, inst) else nil
+	if desc then
+		table.insert(children, { k = "md", p = { key = "desc", text = desc } })
+	end
+	table.insert(children, body)
+	local actions = { click = "focus=" .. inst.key, dblclick = "expand=" .. inst.key }
+	local selected = s.focus == inst.key and not single
+	if inst.panel.json.transparent == true then
+		-- Grafana's transparent panels have no background or border.
+		table.insert(children, 1, ui.text(head, { key = "head", truncate = "end" }))
+		return {
+			k = "el",
+			p = {
+				tag = "div",
+				key = inst.key,
+				class = if selected then "tgp2-plain tgp2-sel" else "tgp2-plain",
+				actions = actions,
+			},
+			c = children,
+		}
+	end
+	return ui.card(head, children, { key = inst.key, selected = selected, actions = actions })
 end
 
 -- `parent` is the view id of the node this one goes in: Tern names every
@@ -223,14 +327,18 @@ local function layoutNode(
 	parent: string
 ): Node
 	if n.kind == "gap" then
-		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis, grow = 0, shrink = 0 } }
+		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis * M.BASIS_SLACK, grow = 0, shrink = 1 } }
 	elseif n.kind == "panel" then
 		local card = panelCard(s, byKey[n.key], env, assets, false)
 		local p = card.p :: { [string]: any }
-		p.basis, p.grow, p.shrink = n.basis, 0, 1
-		-- Grafana's panel height: a long logs panel or legend is cut here and
+		-- Like Grafana's narrow-screen layout, a band wraps once a panel would get
+		-- narrower than MIN_PANEL_WIDTH, and a wrapped panel takes the full width.
+		p.basis, p.grow, p.shrink = n.basis * M.BASIS_SLACK, 1, 1
+		p.min = { w = M.MIN_PANEL_WIDTH }
+		-- Every panel type is Grafana's panel height: content past it (a
+		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
-		p.max = { h = string.format("%dlines", math.max(4, math.floor(n.h * M.LINES_PER_ROW + 0.5))) }
+		p.max = { h = string.format("%dlines", M.heightLines(n.h)) }
 		s.card_ids[n.key] = parent .. "." .. n.key
 		return card
 	end
@@ -240,11 +348,13 @@ local function layoutNode(
 	for i, c in kids do
 		table.insert(children, layoutNode(c, byKey, s, env, assets, i, parent .. "." .. key))
 	end
-	local props = { key = key, basis = n.basis, grow = if n.kind == "col" then 0 else 1, shrink = 1 }
+	local props: { [string]: any } = { key = key, basis = n.basis * M.BASIS_SLACK, grow = 1, shrink = 1 }
 	if n.kind == "row" then
 		props.align = "start"
+		props.wrap = true
 		return ui.row(children, props)
 	end
+	props.min = { w = M.MIN_PANEL_WIDTH }
 	return ui.col(children, props)
 end
 

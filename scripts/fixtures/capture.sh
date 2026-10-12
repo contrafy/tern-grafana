@@ -116,6 +116,7 @@ auth_conf() {
 ext_for() {
 	case $1 in
 	*json*) printf json ;;
+	*xml*) printf xml ;;
 	image/png*) printf png ;;
 	text/html*) printf html ;;
 	*yaml*) printf yaml ;;
@@ -422,8 +423,41 @@ capture_grafana() {
 	fi
 }
 
+# capture_all_panels: fixtures for dashboard tern-all-panels (one panel per panel type). The dashboard
+# itself is captured with the other provisioned dashboards above.
+capture_all_panels() {
+	dash=$ROOT/dev/grafana/dashboards/tern-all-panels.json
+	# Grafana 12 enables the newGauge feature toggle here (dev/compose.yml); the older
+	# frontend_settings fixture predates it, the TestData datasource and the clock panel.
+	get frontend_settings_all_panels /api/frontend/settings
+	get plugin_clock_panel /api/plugins/grafana-clock-panel/settings
+	# Each panel's /api/ds/query exactly as the frontend builds it (scripts/fixtures/panel_query.jq):
+	# panel time overrides applied, absolute epoch-ms range, intervalMs and maxDataPoints per target.
+	# Panels the frontend sends no query for (no targets, empty expressions) get no fixture.
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_all_panels_$pid" POST /api/ds/query "$body"
+	done
+	# dashlist: starred, recently viewed (the frontend resolves its impressions by uid), tag filter.
+	get search_starred "/api/search?starred=true&limit=10"
+	get search_recent "/api/search?dashboardUIDs=tern-all-panels&dashboardUIDs=tern-panels&limit=10"
+	get search_tag "/api/search?tag=fixtures&type=dash-db&limit=10"
+	get search_query_tag "/api/search?query=$(enc 'Tern')&tag=all-panels&type=dash-db&limit=10"
+	# annolist: by tag, only this dashboard, only in the time range.
+	get annotations_annolist "/api/annotations?tags=tern-seed&limit=10&type=annotation"
+	get annotations_annolist_dashboard "/api/annotations?dashboardUID=tern-all-panels&limit=10&type=annotation"
+	get annotations_annolist_range "/api/annotations?tags=tern-seed&limit=10&type=annotation&from=$(((NOW - 3600) * 1000))&to=$((NOW * 1000))"
+	# alertlist: Grafana-managed rules with their instances.
+	get alertlist_rules "/api/prometheus/grafana/api/v1/rules?limit_alerts=20"
+	# news: the static RSS feed Grafana serves same-origin (dev/grafana/news/feed.xml).
+	req news_feed GET /public/tern-news/feed.xml "" 'application/rss+xml, application/xml, text/xml, */*'
+}
+
 capture_grafana "$G12" "$TOK12"
+capture_all_panels
 capture_grafana "$G11" "$TOK11"
+capture_all_panels
 
 # ---------------------------------------------------------------------------------------------
 # Alertmanager (+ amtool from the same image)

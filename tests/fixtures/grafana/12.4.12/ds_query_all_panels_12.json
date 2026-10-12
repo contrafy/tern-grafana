@@ -1,0 +1,1 @@
+{"results":{"A":{"status":200,"frames":[{"schema":{"refId":"A","meta":{"typeVersion":[0,0],"custom":{"calculatedMinStep":10000},"executedQueryString":"Expr: sum by (job) (up{job=\"tern-no-such-job\"})\nStep: 10s"},"fields":[]},"data":{"values":[]}}]}}}

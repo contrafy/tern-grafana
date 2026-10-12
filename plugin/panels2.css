@@ -1,0 +1,314 @@
+/* Native panels v2 (plugin/lib/panels, lib/render/svg_gauge): radial gauge
+   SVG classes, panel metadata chips and transparent panels. Colors are Tern
+   theme variables, so a theme switch recolors without new SVG blobs. */
+
+/* Radial gauge: strokes (arcs) and fills (text, sparkline area) by tone. */
+.tgg { color: var(--t1); font-family: var(--sans); }
+.tgg-track { stroke: var(--l2); }
+.tgg-s-success { stroke: var(--ok); }
+.tgg-s-error { stroke: var(--bad); }
+.tgg-s-warning { stroke: var(--warn); }
+.tgg-s-info { stroke: var(--accent); }
+.tgg-s-accent,
+.tgg-s-pending { stroke: var(--live); }
+.tgg-s-neutral { stroke: var(--t3); }
+.tgg-s-muted { stroke: var(--t4); }
+.tgg-f-success { fill: var(--ok); }
+.tgg-f-error { fill: var(--bad); }
+.tgg-f-warning { fill: var(--warn); }
+.tgg-f-info { fill: var(--accent); }
+.tgg-f-accent,
+.tgg-f-pending { fill: var(--live); }
+.tgg-f-neutral { fill: var(--t3); }
+.tgg-f-muted { fill: var(--t4); }
+.tgg-text { fill: var(--t1); }
+.tgg-name,
+.tgg-label { fill: var(--t3); }
+.tgg-dot { fill: var(--page); }
+
+/* Panel description marker and panel link chips. */
+.tgp2-info {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.3em;
+	height: 1.3em;
+	border-radius: 50%;
+	border: 1px solid var(--l3);
+	font-style: italic;
+	cursor: help;
+}
+
+.tgp2-link {
+	padding: 0 6px;
+	border-radius: 4px;
+	background: var(--l1);
+	cursor: pointer;
+}
+
+.tgp2-link:hover { background: var(--l2); }
+
+/* Transparent panels: no card background or border, still focusable. */
+.tgp2-plain {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 4px 6px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+}
+
+.tgp2-plain.tgp2-sel { border-color: var(--accent); }
+
+/* grafana-clock-panel (lib/panels/clock.luau, clock-panel 2.1.8 ClockPanel.tsx and Render*.tsx styles). */
+.tgp-clock {
+	display: flex;
+	flex-flow: column wrap;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	align-self: stretch;
+	box-sizing: border-box;
+	min-height: 100%;
+	font-family: var(--sans);
+}
+.tgp-clock.tgp-clock-mono {
+	font-family: var(--mono, monospace);
+}
+.tgp-clock-date,
+.tgp-clock-time,
+.tgp-clock-desc {
+	margin: 0;
+	line-height: 1.2;
+	font-weight: normal;
+}
+.tgp-clock-zone {
+	margin: 0;
+	line-height: 1.4;
+	font-weight: normal;
+}
+/* Like Grafana's headings, a word overflows rather than breaking mid-number. */
+.tgp-clock .sf {
+	overflow-wrap: normal;
+	word-break: normal;
+}
+.tgp-clock .tgp-clock-bold {
+	font-weight: bold;
+}
+/* fontSize snaps to the nearest (Clock.FONT_SIZES). */
+.tgp-clock-fs8 { font-size: 8px; }
+.tgp-clock-fs9 { font-size: 9px; }
+.tgp-clock-fs10 { font-size: 10px; }
+.tgp-clock-fs11 { font-size: 11px; }
+.tgp-clock-fs12 { font-size: 12px; }
+.tgp-clock-fs13 { font-size: 13px; }
+.tgp-clock-fs14 { font-size: 14px; }
+.tgp-clock-fs16 { font-size: 16px; }
+.tgp-clock-fs18 { font-size: 18px; }
+.tgp-clock-fs20 { font-size: 20px; }
+.tgp-clock-fs22 { font-size: 22px; }
+.tgp-clock-fs24 { font-size: 24px; }
+.tgp-clock-fs26 { font-size: 26px; }
+.tgp-clock-fs28 { font-size: 28px; }
+.tgp-clock-fs32 { font-size: 32px; }
+.tgp-clock-fs36 { font-size: 36px; }
+.tgp-clock-fs40 { font-size: 40px; }
+.tgp-clock-fs44 { font-size: 44px; }
+.tgp-clock-fs48 { font-size: 48px; }
+.tgp-clock-fs54 { font-size: 54px; }
+.tgp-clock-fs60 { font-size: 60px; }
+.tgp-clock-fs64 { font-size: 64px; }
+.tgp-clock-fs72 { font-size: 72px; }
+.tgp-clock-fs80 { font-size: 80px; }
+.tgp-clock-fs88 { font-size: 88px; }
+.tgp-clock-fs96 { font-size: 96px; }
+.tgp-clock-fs112 { font-size: 112px; }
+.tgp-clock-fs128 { font-size: 128px; }
+.tgp-clock-fs144 { font-size: 144px; }
+.tgp-clock-fs160 { font-size: 160px; }
+.tgp-clock-fs192 { font-size: 192px; }
+.tgp-clock-fs224 { font-size: 224px; }
+.tgp-clock-fs256 { font-size: 256px; }
+/* bgColor named colors (Grafana dark palette); text uses the theme's text color. */
+.tgp-clock-bg-super-light-red { background: #FFA6B0; }
+.tgp-clock-bg-light-red { background: #FF7383; }
+.tgp-clock-bg-red { background: #F2495C; }
+.tgp-clock-bg-semi-dark-red { background: #E02F44; }
+.tgp-clock-bg-dark-red { background: #C4162A; }
+.tgp-clock-bg-super-light-orange { background: #FFCB7D; }
+.tgp-clock-bg-light-orange { background: #FFB357; }
+.tgp-clock-bg-orange { background: #FF9830; }
+.tgp-clock-bg-semi-dark-orange { background: #FF780A; }
+.tgp-clock-bg-dark-orange { background: #FA6400; }
+.tgp-clock-bg-super-light-yellow { background: #FFF899; }
+.tgp-clock-bg-light-yellow { background: #FFEE52; }
+.tgp-clock-bg-yellow { background: #FADE2A; }
+.tgp-clock-bg-semi-dark-yellow { background: #F2CC0C; }
+.tgp-clock-bg-dark-yellow { background: #E0B400; }
+.tgp-clock-bg-super-light-green { background: #C8F2C2; }
+.tgp-clock-bg-light-green { background: #96D98D; }
+.tgp-clock-bg-green { background: #73BF69; }
+.tgp-clock-bg-semi-dark-green { background: #56A64B; }
+.tgp-clock-bg-dark-green { background: #37872D; }
+.tgp-clock-bg-super-light-blue { background: #C0D8FF; }
+.tgp-clock-bg-light-blue { background: #8AB8FF; }
+.tgp-clock-bg-blue { background: #5794F2; }
+.tgp-clock-bg-semi-dark-blue { background: #3274D9; }
+.tgp-clock-bg-dark-blue { background: #1F60C4; }
+.tgp-clock-bg-super-light-purple { background: #DEB6F2; }
+.tgp-clock-bg-light-purple { background: #CA95E5; }
+.tgp-clock-bg-purple { background: #B877D9; }
+.tgp-clock-bg-semi-dark-purple { background: #A352CC; }
+.tgp-clock-bg-dark-purple { background: #8F3BB8; }
+.tgp-clock-bg-text { background: rgb(204, 204, 220); }
+
+/* Chart value labels (pie slices, bar values): Grafana text.primary. */
+.tgc-text { fill: var(--t1); stroke: none; }
+
+/* List panels: alertlist, annolist, dashlist, news (lib/panels/{alertlist,annolist,dashlist,news}.luau). */
+.tgl-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+.tgl-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: var(--l1);
+	min-width: 0;
+}
+.tgl-item:hover { background: var(--l2); }
+.tgl-col {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+.tgl-grow { flex: 1; min-width: 0; }
+/* Alert rule names: whole words on one line, ellipsized (full name as tooltip). */
+.tgl-name { flex: 1; min-width: 0; overflow: hidden; }
+.tgl-name .sf { overflow-wrap: normal; word-break: normal; white-space: nowrap; }
+.tgl-icon { padding-top: 2px; }
+.tgl-row-head {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	min-width: 0;
+}
+.tgl-instances {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 2px;
+}
+.tgl-instance {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: baseline;
+}
+.tgl-labels,
+.tgl-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.tgl-label {
+	padding: 0 4px;
+	border-radius: 3px;
+	border: 1px solid var(--l3);
+	color: var(--t3);
+	font-size: 0.9em;
+}
+.tgl-anno {
+	align-items: center;
+	flex-wrap: wrap;
+}
+.tgl-dash {
+	align-items: center;
+	background: none;
+	border-bottom: 1px solid var(--l2);
+	border-radius: 0;
+}
+.tgl-group {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 12px;
+}
+.tgl-news {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 8px;
+	border-bottom: 2px solid var(--l2);
+}
+.tgl-news-title { font-size: 1.15em; }
+/* Tags: Grafana's TagList colors (grafana-ui utils/tags.ts TAG_COLORS / TAG_BORDER_COLORS), white text. */
+.tgl-tag {
+	padding: 0 6px;
+	border-radius: 3px;
+	border: 1px solid transparent;
+	color: #fafafa;
+	font-size: 0.9em;
+}
+.tgl-tag-0 { background: #D32D20; border-color: #FF7368; }
+.tgl-tag-1 { background: #1E72B8; border-color: #459EE7; }
+.tgl-tag-2 { background: #B240A2; border-color: #E069CF; }
+.tgl-tag-3 { background: #705DA0; border-color: #9683C6; }
+.tgl-tag-4 { background: #466803; border-color: #6C8E29; }
+.tgl-tag-5 { background: #497A3C; border-color: #76AC68; }
+.tgl-tag-6 { background: #3D71AA; border-color: #6AA4E2; }
+.tgl-tag-7 { background: #B15415; border-color: #E7823D; }
+.tgl-tag-8 { background: #890F02; border-color: #AF3528; }
+.tgl-tag-9 { background: #6E6E6E; border-color: #9B9B9B; }
+.tgl-tag-10 { background: #0A437C; border-color: #3069A2; }
+.tgl-tag-11 { background: #6D1F62; border-color: #934588; }
+.tgl-tag-12 { background: #584477; border-color: #7E6A9D; }
+.tgl-tag-13 { background: #4C7A3F; border-color: #88C477; }
+.tgl-tag-14 { background: #2F4F4F; border-color: #557575; }
+.tgl-tag-15 { background: #BF1B00; border-color: #E54126; }
+.tgl-tag-16 { background: #7662B1; border-color: #A694DD; }
+.tgl-tag-17 { background: #8A2EB8; border-color: #B054DE; }
+.tgl-tag-18 { background: #517A00; border-color: #8FC426; }
+.tgl-tag-19 { background: #000000; border-color: #262626; }
+.tgl-tag-20 { background: #3F6833; border-color: #658E59; }
+.tgl-tag-21 { background: #2F575E; border-color: #557D84; }
+.tgl-tag-22 { background: #99440A; border-color: #BF6A30; }
+.tgl-tag-23 { background: #AE561A; border-color: #FF9B53; }
+.tgl-tag-24 { background: #0E4AB4; border-color: #3470DA; }
+.tgl-tag-25 { background: #58140C; border-color: #7E3A32; }
+.tgl-tag-26 { background: #052B51; border-color: #2B5177; }
+.tgl-tag-27 { background: #511749; border-color: #773D6F; }
+.tgl-tag-28 { background: #3F2B5B; border-color: #655181; }
+
+/* ChartsB panels (lib/panels/heatmap, statetimeline, flamegraph, traces,
+   nodegraph, geomap, canvas; lib/render/svg_*). Grafana's fixed colors
+   (heatmap palettes, flame graph package colors, marker and canvas colors)
+   are literal SVG attributes; theme parts are these classes. */
+
+/* Text whose fill is a literal attribute (flame graph, canvas, map labels):
+   no class fill, so the attribute paints. */
+.tgf-text,
+.tgv-text,
+.tgm-text { stroke: none; font-family: var(--sans); }
+.tgf-text { font-family: var(--mono, monospace); }
+
+/* Node graph: node disc, plain rim, edges and arrow heads, highlight. */
+.tgn-node { fill: var(--page); stroke: none; }
+.tgn-ring { stroke: var(--t3); fill: none; }
+.tgn-edge { stroke: var(--t3); fill: none; }
+.tgn-arrow { fill: var(--t3); stroke: none; }
+.tgn-ring.tgn-hi,
+.tgn-edge.tgn-hi { stroke: var(--warn); }
+.tgn-arrow.tgn-hi { fill: var(--warn); }
+.tgn-swatch { color: var(--t3); }
+
+/* Geomap basemap outline: sea, land and borders. */
+.tgm-sea { fill: var(--l1); stroke: none; }
+.tgm-land { fill: var(--l2); stroke: var(--t4); }

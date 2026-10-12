@@ -7,6 +7,9 @@ local ConfigTypes = require("./config/types")
 export type Env = {
 	-- Wall-clock epoch milliseconds at the time of the call.
 	now_ms: number,
+	-- The viewer's local UTC offset at now_ms, minutes east (DST-aware);
+	-- nil in specs that do not set it (read as UTC).
+	local_offset_min: number?,
 	cols: number?,
 	rows: number?,
 	decode: (string) -> any,

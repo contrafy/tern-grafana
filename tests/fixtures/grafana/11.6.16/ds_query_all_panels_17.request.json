@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"service,requests\ncheckout,120\npayments,45\nfrontend,310\nsearch,75","intervalMs":10000,"maxDataPoints":480}],"from":"1791840833000","to":"1791844433000"}

@@ -7,6 +7,31 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-12
+
+### Added
+
+- Native rendering for every core Grafana panel type: pie chart, bar chart,
+  histogram, trend, XY chart, candlestick, heatmap, state timeline, status
+  history, flame graph, traces, node graph, geomap (markers over an outline
+  basemap), canvas, alert list, annotation list, dashboard list and news, plus
+  legacy graph and singlestat through Grafana's own migration.
+- Native `grafana-clock-panel`: time, countdown and countup, 12/24 hour and
+  custom formats, time zones, descriptions, query-driven countdowns; it ticks
+  every second without re-querying.
+- Grafana 12.4's radial gauge (shape, segments, neutral point, sparkline,
+  threshold markers and labels) drawn as SVG.
+- Panel configuration honored: `noValue` exactly as Grafana applies it (with
+  the gauge's neutral point, a panel with no query shows its configured value),
+  relative time and time shift overrides with Grafana's header badge,
+  descriptions as an info marker, panel links, transparent panels, and every
+  card capped at its Grafana height.
+
+### Changed
+
+- Dashboard bands wrap on narrow panes the way Grafana stacks panels on narrow
+  screens, and gauges scale to the space they get.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added
@@ -152,7 +177,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/contrafy/tern-grafana/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/contrafy/tern-grafana/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/contrafy/tern-grafana/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/contrafy/tern-grafana/releases/tag/v0.1.0

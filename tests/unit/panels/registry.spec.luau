@@ -23,8 +23,8 @@ local EXPECTED: { [number]: { boolean | string } } = {
 	[10] = { true },
 	[11] = { false, "a row is a layout element, not a panel" },
 	[12] = { true },
-	[13] = { false, "heatmap panels are not rendered natively yet" },
-	[14] = { false, "state-timeline panels are not rendered natively yet" },
+	[13] = { true },
+	[14] = { true },
 	[15] = { false, "a row is a layout element, not a panel" },
 	[16] = { true },
 	[17] = { true },
@@ -42,6 +42,8 @@ local DATA: { [number]: string } = {
 	[8] = "prom2_range",
 	[9] = "prom_table",
 	[12] = "loki_logs",
+	[13] = "prom_heatmap",
+	[14] = "prom_range",
 	[16] = "prom2_range",
 	[17] = "prom_range",
 }
@@ -77,18 +79,36 @@ for _, version in S.VERSIONS do
 				if failed then
 					error("panel " .. id .. ": " .. S.text(failed))
 				end
-				local timeseries = S.panel(version, id).type == "timeseries"
-				expect(assets[key] ~= nil).toBe(timeseries)
+				local kind = S.panel(version, id).type
+				local svg = kind == "timeseries" or kind == "gauge" or kind == "heatmap" or kind == "state-timeline"
+				expect(assets[key] ~= nil or next(assets) ~= nil).toBe(svg)
 			end
 		end)
 
+		-- PanelDataErrorView (no frames): the defaults' noValue, else "No data";
+		-- gauges draw their placeholder value (a bar gauge without a title).
 		it("shows No data for panels without frames", function()
-			for _, id in { 5, 7, 8, 9, 12 } do
+			for _, id in { 5, 9, 12 } do
 				local node = Registry.view(S.panel(version, id), {}, env, { key = "k" })
 				expect(S.text(node)).toBe("No data")
 			end
-			local _, assets = Registry.view(S.panel(version, 2), {}, env, { key = "k" })
-			expect(string.find(assets.k.bytes, "No data", 1, true) ~= nil).toBe(true)
+			local bar = S.find((Registry.view(S.panel(version, 8), {}, env, { key = "k" })), function(n)
+				return n.k == "meter"
+			end)
+			expect(bar.p.label[1].t).toBe("No data")
+			local panel = S.clone(S.panel(version, 9))
+			panel.fieldConfig.defaults.noValue = "nothing here"
+			expect(S.text((Registry.view(panel, {}, env, { key = "k" })))).toBe("nothing here")
+			local _, gauge = Registry.view(S.panel(version, 7), {}, env, { key = "k" })
+			expect(string.find(gauge["k.g1"].bytes, "No data", 1, true) ~= nil).toBe(true)
+			expect(S.text((Registry.view(S.panel(version, 2), {}, env, { key = "k" })))).toBe("No data")
+		end)
+
+		-- A stat without data shows the noValue text in the base step's color.
+		it("shows a stat's noValue", function()
+			local panel = S.clone(S.panel(version, 5))
+			panel.fieldConfig.defaults.noValue = "none"
+			expect(S.text((Registry.view(panel, {}, env, { key = "k" })))).toBe("none")
 		end)
 	end)
 end
@@ -100,13 +120,15 @@ describe("registry unsupported reasons", function()
 		return why
 	end
 
-	it("explains unknown and legacy panel types", function()
-		expect(reason({ type = "graph" })).toBe(
-			"the legacy graph panel (Grafana migrates it to time series in the browser) is not rendered natively"
-		)
-		expect(reason({ type = "piechart" })).toBe("panel type piechart is not rendered natively")
+	it("explains unknown panel types and migrates legacy ones", function()
+		expect(reason({ type = "piechart-x" })).toBe("panel type piechart-x is not rendered natively")
 		expect(reason({ title = "x" })).toBe("the panel has no type")
 		expect(reason("nope")).toBe("the panel is not an object")
+		expect(reason({ type = "graph", xaxis = { mode = "histogram" } })).toBe(
+			"graph with xaxis.mode histogram migrates to histogram, not timeseries"
+		)
+		expect((Registry.supports({ type = "graph", lines = true, targets = {} }, env))).toBe(true)
+		expect((Registry.supports({ type = "singlestat", valueName = "avg" }, env))).toBe(true)
 	end)
 
 	it("passes on transformation, field config and reducer reasons", function()

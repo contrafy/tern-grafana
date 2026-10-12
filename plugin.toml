@@ -1,7 +1,7 @@
 schema = 1
 id = "tern-grafana"
 name = "Tern Grafana"
-version = "0.2.0"
+version = "0.3.0"
 description = "Native Grafana and Prometheus views: queries, dashboards, alerts and silences inside Tern."
 icon = "chart"
 host = "plugin/host.luau"
@@ -11,6 +11,7 @@ styles = [
 	"plugin/settings.css",
 	"plugin/dashboard.css",
 	"plugin/panels.css",
+	"plugin/panels2.css",
 	"plugin/alerts.css",
 	"plugin/ops.css",
 	"plugin/logs.css",

@@ -69,3 +69,10 @@ datasources:
         filterByTraceID: true
       tracesToMetrics:
         datasourceUid: prom3
+
+  # Deterministic frames (csv_content, random_walk with seed, node_graph, flame_graph, trace) for the
+  # tern-all-panels dashboard. Core plugin in Grafana 11 and 12.
+  - name: TestData
+    uid: testdata
+    type: grafana-testdata-datasource
+    access: proxy

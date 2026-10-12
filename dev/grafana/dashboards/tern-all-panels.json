@@ -1,0 +1,2804 @@
+{
+  "uid": "tern-all-panels",
+  "title": "Tern All Panels",
+  "description": "One panel per core Grafana panel type plus grafana-clock-panel, for native rendering fixtures.",
+  "tags": [
+    "tern",
+    "fixtures",
+    "all-panels"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "refresh": "30s",
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "links": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "trace_id",
+        "label": "Trace id",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": [],
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Time series: CPU by mode",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "description": "Per-mode CPU seconds rate from node-exporter. Panel with a description and two links.",
+      "links": [
+        {
+          "title": "Tern panels dashboard",
+          "url": "/d/tern-panels/tern-panels"
+        },
+        {
+          "title": "node_cpu_seconds_total docs",
+          "url": "https://prometheus.io/docs/guides/node-exporter/",
+          "targetBlank": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (mode) (rate(node_cpu_seconds_total[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{mode}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Time series: relative time 30m, shifted 1h",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "timeFrom": "30m",
+      "timeShift": "1h",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "random_walk",
+          "seed": 7,
+          "seriesCount": 2,
+          "min": 0,
+          "max": 100,
+          "startValue": 50
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Time series: hidden 2h override, maxDataPoints 50, interval 2m",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "timeFrom": "2h",
+      "hideTimeOverride": true,
+      "maxDataPoints": 50,
+      "interval": "2m",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "random_walk",
+          "seed": 11,
+          "seriesCount": 1,
+          "min": 0,
+          "startValue": 200,
+          "spread": 20
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Time series: transparent",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (code) (rate(prometheus_http_requests_total[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{code}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Stat: targets up",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "description": "Count of scrape targets reporting up == 1.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum(up)",
+          "range": false,
+          "instant": true,
+          "editorMode": "code",
+          "legendFormat": "targets"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Stat: noValue on empty result",
+      "gridPos": {
+        "x": 6,
+        "y": 16,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No targets",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum(up{job=\"tern-no-such-job\"})",
+          "range": false,
+          "instant": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "gauge",
+      "title": "Gauge: CPU utilisation",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval])))",
+          "range": false,
+          "instant": true,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "gauge",
+      "title": "Gauge: no query, noValue 6",
+      "gridPos": {
+        "x": 18,
+        "y": 16,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "6",
+          "min": 0,
+          "max": 16,
+          "decimals": 1,
+          "unit": "none",
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "textMode": "auto",
+        "shape": "gauge",
+        "neutral": 6,
+        "barWidthFactor": 0.5,
+        "barShape": "flat",
+        "segmentCount": 1,
+        "segmentSpacing": 0.3,
+        "sparkline": false,
+        "endpointMarker": "point",
+        "effects": {
+          "gradient": true,
+          "barGlow": false,
+          "centerGlow": false
+        }
+      },
+      "targets": []
+    },
+    {
+      "id": 9,
+      "type": "gauge",
+      "title": "Gauge: no query, noValue 0, neutral outside range",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "min": 0,
+          "max": 1,
+          "decimals": 0,
+          "unit": "none",
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "textMode": "value",
+        "shape": "circle",
+        "barWidthFactor": 0.3,
+        "barShape": "flat",
+        "segmentCount": 20,
+        "segmentSpacing": 0.5,
+        "neutral": 6,
+        "sparkline": false,
+        "endpointMarker": "glow",
+        "effects": {
+          "gradient": false,
+          "barGlow": true,
+          "centerGlow": true
+        }
+      },
+      "targets": []
+    },
+    {
+      "id": 10,
+      "type": "gauge",
+      "title": "Gauge: 12.4 options with sparkline",
+      "gridPos": {
+        "x": 6,
+        "y": 24,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "description": "Grafana 12.4 gauge options: segments, neutral, sparkline, effects. Grafana 11 ignores them.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 0,
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false,
+        "sizing": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "textMode": "auto",
+        "shape": "gauge",
+        "barWidthFactor": 0.4,
+        "barShape": "rounded",
+        "segmentCount": 8,
+        "segmentSpacing": 0.2,
+        "neutral": 50,
+        "sparkline": true,
+        "endpointMarker": "point",
+        "effects": {
+          "gradient": true,
+          "barGlow": true,
+          "centerGlow": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval])))",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "cpu"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Bar gauge: up by job",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 1,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "down",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "maxVizHeight": 300,
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (job) (up)",
+          "range": false,
+          "instant": true,
+          "editorMode": "code",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "bargauge",
+      "title": "Bar gauge: noValue on empty result",
+      "gridPos": {
+        "x": 18,
+        "y": 24,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "displayMode": "lcd",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (job) (up{job=\"tern-no-such-job\"})",
+          "range": false,
+          "instant": true,
+          "editorMode": "code",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Table: targets",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "links": [
+        {
+          "title": "Prometheus targets",
+          "url": "http://127.0.0.1:9090/targets",
+          "targetBlank": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "down",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "job",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "up",
+          "range": false,
+          "instant": true,
+          "editorMode": "code",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Table: noValue on empty result",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Nothing to show",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "no_data_points"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "text",
+      "title": "Text: markdown",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 6,
+        "h": 8
+      },
+      "options": {
+        "mode": "markdown",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## tern-all-panels\n\nOne panel per **core panel type** plus `grafana-clock-panel`.\n\n- TestData for deterministic frames\n- Prometheus, Loki and Tempo for real ones\n\n[Grafana docs](https://grafana.com/docs/grafana/latest/panels-visualizations/)"
+      }
+    },
+    {
+      "id": 16,
+      "type": "logs",
+      "title": "Logs: loggen",
+      "gridPos": {
+        "x": 6,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=\"loggen\", app=\"checkout\"}",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "maxDataPoints": 100
+    },
+    {
+      "id": 17,
+      "type": "piechart",
+      "title": "Pie chart: requests by service",
+      "gridPos": {
+        "x": 18,
+        "y": 40,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": [
+          "percent"
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "service,requests\ncheckout,120\npayments,45\nfrontend,310\nsearch,75"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "barchart",
+      "title": "Bar chart: status codes by service",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "gradientMode": "none"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xField": "service",
+        "stacking": "normal",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "showValue": "auto",
+        "xTickLabelRotation": 0,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "service,2xx,4xx,5xx\ncheckout,120,8,2\npayments,45,3,6\nfrontend,310,21,1\nsearch,75,0,0"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "histogram",
+      "title": "Histogram: latency distribution",
+      "gridPos": {
+        "x": 6,
+        "y": 48,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "bucketCount": 20,
+        "bucketOffset": 0,
+        "combine": false,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "random_walk",
+          "seed": 23,
+          "seriesCount": 1,
+          "min": 0,
+          "max": 500,
+          "startValue": 200,
+          "spread": 40
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "trend",
+      "title": "Trend: power by rpm",
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "watt"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xField": "rpm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "rpm,power,torque\n1000,22,190\n1500,35,210\n2000,51,240\n2500,64,245\n3000,75,238\n3500,82,224\n4000,86,205"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "xychart",
+      "title": "XY chart: latency vs load",
+      "gridPos": {
+        "x": 18,
+        "y": 48,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 6
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mapping": "auto",
+        "series": [
+          {}
+        ],
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "load,latency_ms\n10,42\n20,45\n30,51\n40,60\n50,74\n60,95\n70,130\n80,190"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "candlestick",
+      "title": "Candlestick: Prometheus RSS",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "mode": "candles+volume",
+        "candleStyle": "candles",
+        "colorStrategy": "open-close",
+        "colors": {
+          "up": "green",
+          "down": "red"
+        },
+        "includeAllFields": false,
+        "fields": {
+          "open": "open",
+          "high": "high",
+          "low": "low",
+          "close": "close",
+          "volume": "volume"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "process_resident_memory_bytes{job=\"prometheus\"} offset $__interval",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "open"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "max_over_time(process_resident_memory_bytes{job=\"prometheus\"}[$__interval])",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "high"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "min_over_time(process_resident_memory_bytes{job=\"prometheus\"}[$__interval])",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "low"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "process_resident_memory_bytes{job=\"prometheus\"}",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "close"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum(increase(prometheus_http_requests_total[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "volume"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "heatmap",
+      "title": "Heatmap: span latency",
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Oranges",
+          "fill": "dark-orange",
+          "scale": "exponential",
+          "exponent": 0.5,
+          "steps": 64,
+          "reverse": false
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "unit": "s"
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "legend": {
+          "show": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "yHistogram": false
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-09
+        },
+        "cellValues": {}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (le) (increase(traces_spanmetrics_latency_bucket[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "state-timeline",
+      "title": "State timeline: target health",
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "down",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 70
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "alignValue": "left",
+        "rowHeight": 0.9,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (job) (up)",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "status-history",
+      "title": "Status history: target health",
+      "gridPos": {
+        "x": 12,
+        "y": 64,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "maxDataPoints": 30,
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "down",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 70
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "auto",
+        "rowHeight": 0.9,
+        "colWidth": 0.9,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum by (job) (up)",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "flamegraph",
+      "title": "Flame graph: checkout profile",
+      "gridPos": {
+        "x": 0,
+        "y": 72,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "level,value,self,label\n0,1000,0,total\n1,600,50,checkout\n2,350,350,db.query\n2,200,120,render\n3,80,80,template\n1,400,100,payments\n2,300,300,charge"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "type": "traces",
+      "title": "Traces: Tempo trace by id",
+      "gridPos": {
+        "x": 12,
+        "y": 72,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "description": "Trace id from the trace_id textbox variable.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceId",
+          "query": "${trace_id}"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "type": "nodeGraph",
+      "title": "Node graph: service map",
+      "gridPos": {
+        "x": 0,
+        "y": 80,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__ok"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__errors"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "nodes": {
+          "mainStatUnit": "reqps",
+          "secondaryStatUnit": "ms"
+        },
+        "edges": {
+          "mainStatUnit": "reqps"
+        }
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "id,title,subtitle,mainstat,secondarystat,arc__ok,arc__errors\nfrontend,frontend,web,310,42,0.99,0.01\ncheckout,checkout,api,120,88,0.95,0.05\npayments,payments,api,45,140,0.8,0.2\ndb,postgres,database,160,12,1,0"
+        },
+        {
+          "refId": "edges",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "id,source,target,mainstat\nfe-co,frontend,checkout,120\nco-pay,checkout,payments,45\nco-db,checkout,db,110\npay-db,payments,db,50"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "alertlist",
+      "title": "Alert list: Grafana-managed",
+      "gridPos": {
+        "x": 12,
+        "y": 80,
+        "w": 6,
+        "h": 8
+      },
+      "options": {
+        "viewMode": "list",
+        "groupMode": "default",
+        "groupBy": [],
+        "maxItems": 20,
+        "sortOrder": 1,
+        "dashboardAlerts": false,
+        "alertName": "",
+        "alertInstanceLabelFilter": "",
+        "datasource": "grafana",
+        "showInstances": false,
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "noData": false,
+          "normal": true,
+          "error": true,
+          "recovering": true
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "annolist",
+      "title": "Annotation list: tern-seed",
+      "gridPos": {
+        "x": 18,
+        "y": 80,
+        "w": 6,
+        "h": 8
+      },
+      "options": {
+        "onlyFromThisDashboard": false,
+        "onlyInTimeRange": false,
+        "tags": [
+          "tern-seed"
+        ],
+        "limit": 10,
+        "showUser": true,
+        "showTime": true,
+        "showTags": true,
+        "navigateToPanel": true,
+        "navigateBefore": "10m",
+        "navigateAfter": "10m"
+      }
+    },
+    {
+      "id": 31,
+      "type": "dashlist",
+      "title": "Dashboard list: starred, recent, tag fixtures",
+      "gridPos": {
+        "x": 0,
+        "y": 88,
+        "w": 6,
+        "h": 8
+      },
+      "options": {
+        "showStarred": true,
+        "showRecentlyViewed": true,
+        "showSearch": true,
+        "showHeadings": true,
+        "showFolderNames": true,
+        "includeVars": false,
+        "keepTime": false,
+        "maxItems": 10,
+        "query": "",
+        "tags": [
+          "fixtures"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": "news",
+      "title": "News: local RSS feed",
+      "gridPos": {
+        "x": 6,
+        "y": 88,
+        "w": 6,
+        "h": 8
+      },
+      "options": {
+        "feedUrl": "/public/tern-news/feed.xml",
+        "showImage": true
+      }
+    },
+    {
+      "id": 33,
+      "type": "geomap",
+      "title": "Geomap: regions",
+      "gridPos": {
+        "x": 12,
+        "y": 88,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 250
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "view": {
+          "id": "zero",
+          "lat": 30,
+          "lon": 10,
+          "zoom": 1,
+          "allLayers": true
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": false,
+          "showAttribution": true
+        },
+        "tooltip": {
+          "mode": "details"
+        },
+        "basemap": {
+          "type": "default",
+          "name": "Basemap",
+          "config": {}
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Requests",
+            "tooltip": true,
+            "location": {
+              "mode": "coords",
+              "latitude": "lat",
+              "longitude": "lon"
+            },
+            "config": {
+              "showLegend": true,
+              "style": {
+                "size": {
+                  "field": "requests",
+                  "min": 4,
+                  "max": 20,
+                  "fixed": 5
+                },
+                "color": {
+                  "field": "requests"
+                },
+                "opacity": 0.6,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "text": {
+                  "mode": "field",
+                  "field": "region",
+                  "fixed": ""
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": -14,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "region,lat,lon,requests\nfrankfurt,50.11,8.68,310\nvirginia,38.95,-77.45,120\nsingapore,1.35,103.82,45\nsao-paulo,-23.55,-46.63,75"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "canvas",
+      "title": "Canvas: targets up",
+      "gridPos": {
+        "x": 0,
+        "y": 96,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "showAdvancedTypes": true,
+        "panZoom": false,
+        "infinitePan": false,
+        "root": {
+          "type": "frame",
+          "name": "Element root",
+          "elements": [
+            {
+              "type": "rectangle",
+              "name": "Box",
+              "config": {
+                "text": {
+                  "mode": "fixed",
+                  "fixed": ""
+                },
+                "color": {
+                  "fixed": "#000000"
+                },
+                "size": 16,
+                "align": "center",
+                "valign": "middle"
+              },
+              "background": {
+                "color": {
+                  "fixed": "dark-blue"
+                }
+              },
+              "border": {
+                "color": {
+                  "fixed": "dark-green"
+                },
+                "width": 2
+              },
+              "constraint": {
+                "horizontal": "left",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 10,
+                "top": 10,
+                "width": 260,
+                "height": 140
+              }
+            },
+            {
+              "type": "text",
+              "name": "Label",
+              "config": {
+                "text": {
+                  "mode": "fixed",
+                  "fixed": "Targets up"
+                },
+                "color": {
+                  "fixed": "#ffffff"
+                },
+                "size": 18,
+                "align": "center",
+                "valign": "middle"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "border": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "constraint": {
+                "horizontal": "left",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 20,
+                "top": 20,
+                "width": 240,
+                "height": 30
+              }
+            },
+            {
+              "type": "metric-value",
+              "name": "Value",
+              "config": {
+                "text": {
+                  "mode": "field",
+                  "field": "targets",
+                  "fixed": ""
+                },
+                "color": {
+                  "field": "targets",
+                  "fixed": "#ffffff"
+                },
+                "size": 40,
+                "align": "center",
+                "valign": "middle"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "border": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "constraint": {
+                "horizontal": "left",
+                "vertical": "top"
+              },
+              "placement": {
+                "left": 20,
+                "top": 60,
+                "width": 240,
+                "height": 70
+              }
+            }
+          ],
+          "background": {
+            "color": {
+              "fixed": "transparent"
+            }
+          },
+          "border": {
+            "color": {
+              "fixed": "dark-green"
+            }
+          },
+          "constraint": {
+            "horizontal": "left",
+            "vertical": "top"
+          },
+          "placement": {
+            "left": 0,
+            "top": 0,
+            "width": 100,
+            "height": 100
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum(up)",
+          "range": false,
+          "instant": true,
+          "editorMode": "code",
+          "legendFormat": "targets"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "graph",
+      "title": "Legacy graph: scrape duration",
+      "gridPos": {
+        "x": 12,
+        "y": 96,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "lines": true,
+      "linewidth": 1,
+      "fill": 1,
+      "fillGradient": 0,
+      "bars": false,
+      "points": false,
+      "pointradius": 2,
+      "stack": false,
+      "percentage": false,
+      "steppedLine": false,
+      "nullPointMode": "null",
+      "legend": {
+        "show": true,
+        "values": true,
+        "current": true,
+        "max": true,
+        "avg": false,
+        "min": false,
+        "total": false,
+        "alignAsTable": false,
+        "rightSide": false
+      },
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": [],
+        "buckets": null
+      },
+      "yaxes": [
+        {
+          "format": "s",
+          "label": "scrape",
+          "logBase": 1,
+          "show": true,
+          "min": "0",
+          "max": null
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      },
+      "seriesOverrides": [
+        {
+          "alias": "/alertmanager/",
+          "color": "#F2495C",
+          "linewidth": 2
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "aliasColors": {},
+      "dashLength": 10,
+      "dashes": false,
+      "spaceLength": 10,
+      "renderer": "flot",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "scrape_duration_seconds",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "singlestat",
+      "title": "Legacy singlestat: targets up",
+      "gridPos": {
+        "x": 0,
+        "y": 104,
+        "w": 4,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "format": "none",
+      "valueName": "current",
+      "decimals": 0,
+      "prefix": "",
+      "postfix": " up",
+      "nullPointMode": "connected",
+      "nullText": null,
+      "thresholds": "3,5",
+      "colors": [
+        "#d44a3a",
+        "rgba(237, 129, 40, 0.89)",
+        "#299c46"
+      ],
+      "colorBackground": false,
+      "colorValue": true,
+      "sparkline": {
+        "show": true,
+        "full": false,
+        "lineColor": "rgb(31, 120, 193)",
+        "fillColor": "rgba(31, 118, 189, 0.18)"
+      },
+      "gauge": {
+        "show": false,
+        "minValue": 0,
+        "maxValue": 100,
+        "thresholdMarkers": true,
+        "thresholdLabels": false
+      },
+      "mappingType": 1,
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "none",
+          "value": "0"
+        }
+      ],
+      "rangeMaps": [],
+      "tableColumn": "",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "sum(up)",
+          "range": true,
+          "instant": false,
+          "editorMode": "code"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "grafana-clock-panel",
+      "title": "Clock: time, 24 hour, Berlin",
+      "gridPos": {
+        "x": 4,
+        "y": 104,
+        "w": 4,
+        "h": 8
+      },
+      "options": {
+        "mode": "time",
+        "clockType": "24 hour",
+        "timezone": "Europe/Berlin",
+        "refresh": "sec",
+        "bgColor": "",
+        "fontMono": false,
+        "countdownSettings": {
+          "source": "input",
+          "endCountdownTime": "2099-12-31T23:59:59+00:00",
+          "endText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "countupSettings": {
+          "source": "input",
+          "beginCountupTime": "2020-01-01T00:00:00+00:00",
+          "beginText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "descriptionSettings": {
+          "source": "input",
+          "descriptionText": "Berlin office",
+          "queryField": "",
+          "noValueText": "no description found",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        },
+        "dateSettings": {
+          "showDate": true,
+          "dateFormat": "YYYY-MM-DD",
+          "locale": "",
+          "fontSize": "16px",
+          "fontWeight": "normal"
+        },
+        "timeSettings": {
+          "fontSize": "36px",
+          "fontWeight": "bold"
+        },
+        "timezoneSettings": {
+          "showTimezone": true,
+          "zoneFormat": "offsetAbbv",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        }
+      }
+    },
+    {
+      "id": 38,
+      "type": "grafana-clock-panel",
+      "title": "Clock: countdown to 2100",
+      "gridPos": {
+        "x": 8,
+        "y": 104,
+        "w": 4,
+        "h": 8
+      },
+      "options": {
+        "mode": "countdown",
+        "clockType": "24 hour",
+        "timezone": "",
+        "refresh": "sec",
+        "bgColor": "dark-blue",
+        "fontMono": false,
+        "countdownSettings": {
+          "source": "input",
+          "endCountdownTime": "2099-12-31T23:59:59+00:00",
+          "endText": "Launched",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "countupSettings": {
+          "source": "input",
+          "beginCountupTime": "2020-01-01T00:00:00+00:00",
+          "beginText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "descriptionSettings": {
+          "source": "input",
+          "descriptionText": "Until the 2100 launch",
+          "queryField": "",
+          "noValueText": "no description found",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        },
+        "dateSettings": {
+          "showDate": false,
+          "dateFormat": "YYYY-MM-DD",
+          "locale": "",
+          "fontSize": "20px",
+          "fontWeight": "normal"
+        },
+        "timeSettings": {
+          "fontSize": "28px",
+          "fontWeight": "bold"
+        },
+        "timezoneSettings": {
+          "showTimezone": false,
+          "zoneFormat": "offsetAbbv",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        }
+      }
+    },
+    {
+      "id": 39,
+      "type": "grafana-clock-panel",
+      "title": "Clock: countup since 2020",
+      "gridPos": {
+        "x": 12,
+        "y": 104,
+        "w": 4,
+        "h": 8
+      },
+      "options": {
+        "mode": "countup",
+        "clockType": "24 hour",
+        "timezone": "",
+        "refresh": "sec",
+        "bgColor": "",
+        "fontMono": true,
+        "countdownSettings": {
+          "source": "input",
+          "endCountdownTime": "2099-12-31T23:59:59+00:00",
+          "endText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "countupSettings": {
+          "source": "input",
+          "beginCountupTime": "2020-01-01T00:00:00+00:00",
+          "beginText": "Started",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "descriptionSettings": {
+          "source": "none",
+          "descriptionText": "",
+          "queryField": "",
+          "noValueText": "no description found",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        },
+        "dateSettings": {
+          "showDate": false,
+          "dateFormat": "YYYY-MM-DD",
+          "locale": "",
+          "fontSize": "20px",
+          "fontWeight": "normal"
+        },
+        "timeSettings": {
+          "fontSize": "24px",
+          "fontWeight": "normal"
+        },
+        "timezoneSettings": {
+          "showTimezone": false,
+          "zoneFormat": "offsetAbbv",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "grafana-clock-panel",
+      "title": "Clock: countdown from query",
+      "gridPos": {
+        "x": 16,
+        "y": 104,
+        "w": 4,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "options": {
+        "mode": "countdown",
+        "clockType": "24 hour",
+        "timezone": "",
+        "refresh": "sec",
+        "bgColor": "",
+        "fontMono": false,
+        "countdownSettings": {
+          "source": "query",
+          "endCountdownTime": "2099-12-31T23:59:59+00:00",
+          "endText": "Due",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "minFuture",
+          "queryField": "deadline"
+        },
+        "countupSettings": {
+          "source": "input",
+          "beginCountupTime": "2020-01-01T00:00:00+00:00",
+          "beginText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "descriptionSettings": {
+          "source": "query",
+          "descriptionText": "",
+          "queryField": "milestone",
+          "noValueText": "no description found",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        },
+        "dateSettings": {
+          "showDate": false,
+          "dateFormat": "YYYY-MM-DD",
+          "locale": "",
+          "fontSize": "20px",
+          "fontWeight": "normal"
+        },
+        "timeSettings": {
+          "fontSize": "24px",
+          "fontWeight": "normal"
+        },
+        "timezoneSettings": {
+          "showTimezone": false,
+          "zoneFormat": "offsetAbbv",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "deadline,milestone\n2099-06-30T12:00:00Z,release 9\n2098-01-01T00:00:00Z,code freeze\n2020-01-01T00:00:00Z,kickoff"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "grafana-clock-panel",
+      "title": "Clock: custom 12 hour, New York",
+      "gridPos": {
+        "x": 20,
+        "y": 104,
+        "w": 4,
+        "h": 8
+      },
+      "options": {
+        "mode": "time",
+        "clockType": "custom",
+        "timezone": "America/New_York",
+        "refresh": "sec",
+        "bgColor": "",
+        "fontMono": false,
+        "countdownSettings": {
+          "source": "input",
+          "endCountdownTime": "2099-12-31T23:59:59+00:00",
+          "endText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "countupSettings": {
+          "source": "input",
+          "beginCountupTime": "2020-01-01T00:00:00+00:00",
+          "beginText": "00:00:00",
+          "noValueText": "no value found",
+          "invalidValueText": "invalid value",
+          "queryCalculation": "last",
+          "queryField": ""
+        },
+        "descriptionSettings": {
+          "source": "none",
+          "descriptionText": "",
+          "queryField": "",
+          "noValueText": "no description found",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        },
+        "dateSettings": {
+          "showDate": true,
+          "dateFormat": "dddd, MMMM D",
+          "locale": "en",
+          "fontSize": "20px",
+          "fontWeight": "normal"
+        },
+        "timeSettings": {
+          "fontSize": "28px",
+          "fontWeight": "normal",
+          "customFormat": "hh:mm:ss A"
+        },
+        "timezoneSettings": {
+          "showTimezone": true,
+          "zoneFormat": "name",
+          "fontSize": "12px",
+          "fontWeight": "normal"
+        }
+      }
+    }
+  ]
+}

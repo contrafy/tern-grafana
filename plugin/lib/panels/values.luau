@@ -8,7 +8,10 @@
 -- - `fields`: "" matches number fields, anything else is a byRegexp
 --   pattern on the display name (bare text is anchored, "/re/" is not);
 -- - `limit` (default 25) caps the values.
--- With nothing to show, one "No data" value (or the field's noValue).
+-- With nothing to show, one placeholder (createNoValuesFieldDisplay): the
+-- field defaults' display of no value, so its text is the defaults' noValue
+-- (else "No data"), its color the base threshold step, its numeric 0 (never
+-- the noValue text) and its range the defaults' min/max, each else 0.
 
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
@@ -30,11 +33,13 @@ export type Spark = {
 export type Value = {
 	title: string,
 	display: FieldConfig.Display,
-	-- nil for the "No data" placeholder.
+	-- The placeholder's item carries the field defaults and no values.
 	item: Item?,
 	calc: string?,
 	row: number?,
 	spark: Spark?,
+	-- The no-values placeholder.
+	placeholder: boolean?,
 }
 
 export type Options = {
@@ -194,6 +199,7 @@ function M.values(panel: any, items: { Item }, env: Env, opts: Options?): { Valu
 	end
 	if #out == 0 then
 		local base = FieldConfig.defaults(panel, env)
+		local lo, hi = base.min or 0, base.max or 0
 		local placeholder: Item = {
 			frame = { fields = {} },
 			field = Frame.field("", "other", {}),
@@ -202,14 +208,17 @@ function M.values(panel: any, items: { Item }, env: Env, opts: Options?): { Valu
 			name = "No data",
 			config = base,
 			series_index = 1,
-			range_min = base.min or 0,
-			range_max = base.max or 0,
+			range_min = lo,
+			range_max = hi,
 		}
 		local d = FieldConfig.display(placeholder, nil, disp)
 		if d.text == "" then
 			d.text = "No data"
 		end
-		table.insert(out, { title = "No data", display = d })
+		d.numeric = 0
+		local percent = (0 - lo) / (hi - lo)
+		d.percent = if percent == percent then percent else 0
+		table.insert(out, { title = "No data", display = d, item = placeholder, placeholder = true })
 	end
 	return out
 end

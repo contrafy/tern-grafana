@@ -34,10 +34,21 @@ function M.nowMs(): number
 	return now
 end
 
+-- Minutes east of UTC on this machine now: the UTC wall fields read back as
+-- local time (with the local DST flag) differ from now by the offset.
+function M.localOffsetMin(): number
+	local t = os.time()
+	local utc: any = os.date("!*t", t)
+	local here: any = os.date("*t", t)
+	utc.isdst = here.isdst
+	return math.floor(os.difftime(t, os.time(utc)) / 60 + 0.5)
+end
+
 function M.make(cx: BlockCx?): Env.Env
 	local config = HostsHost.apply((ConfigHost.current()))
 	return {
 		now_ms = M.nowMs(),
+		local_offset_min = M.localOffsetMin(),
 		cols = if cx then cx.cols else nil,
 		rows = if cx then cx.rows else nil,
 		decode = tern.json.decode,
