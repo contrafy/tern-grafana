@@ -117,13 +117,14 @@ services:
       timeout: 3s
       retries: 30
 
-  # Pushes labeled, multi-level log lines to Loki.
+  # Pushes labeled, multi-level log lines to Loki, plus one line per recent Tempo trace (job tracegen).
   loggen:
     image: quay.io/curl/curl:8.22.0
-    depends_on: [loki]
+    depends_on: [loki, tempo]
     entrypoint: ["/bin/sh", "/gen/loggen.sh"]
     environment:
       LOKI_URL: http://loki:3100
+      TEMPO_URL: http://tempo:3200
     volumes:
       - ./generators:/gen:ro
 
