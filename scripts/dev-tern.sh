@@ -25,7 +25,9 @@
 #   shot NAME [DEST]  screenshot the window; prints the PNG path (copied to
 #                     DEST when given)
 #   logs [daemon|window]  print the sandbox log path
-#   stop              quit the sandbox window and its daemon
+#   stop              quit the sandbox window and its daemon, bounded: quit
+#                     (5 s), then TERM/KILL the window, then every process
+#                     naming the sandbox; survivors are reported (exit 1)
 #   clean             stop, then delete the sandbox
 #   env               print the sandbox environment as shell assignments
 
@@ -73,8 +75,58 @@ quoted() {
 	printf '"%s"' "$1"
 }
 
-daemon_pids() {
-	pgrep -f -- "$sb/d.sock" 2>/dev/null || true
+# Every process of the sandbox: the window, its daemon (and its panes' tools
+# run from the sandbox), stray `tern ctl` calls. All name "$sb/" in their argv.
+sandbox_pids() {
+	pgrep -f -- "$sb/" 2>/dev/null || true
+}
+
+gone() { # gone PID...: none of them is alive
+	for p in "$@"; do
+		if kill -0 "$p" 2>/dev/null; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+# terminate SECS PID...: TERM, wait up to SECS seconds, then KILL.
+terminate() {
+	secs=$1
+	shift
+	[ $# -gt 0 ] || return 0
+	kill "$@" 2>/dev/null || true
+	n=0
+	while ! gone "$@" && [ $n -lt $((secs * 4)) ]; do
+		sleep 0.25
+		n=$((n + 1))
+	done
+	gone "$@" || kill -9 "$@" 2>/dev/null || true
+}
+
+# Stop the sandbox without relying on the window quitting: `tern ctl quit`
+# can leave the window running or hang, and the window restarts a killed
+# daemon. So: ask it to quit (5 s at most), end the window, then everything
+# else naming the sandbox; report survivors. Never touches other sandboxes.
+teardown() {
+	[ -n "$(sandbox_pids)" ] || return 0
+	ctl quit </dev/null >/dev/null 2>&1 &
+	quit_pid=$!
+	n=0
+	while ! gone "$quit_pid" && [ $n -lt 20 ]; do
+		sleep 0.25
+		n=$((n + 1))
+	done
+	gone "$quit_pid" || kill "$quit_pid" 2>/dev/null || true
+	# shellcheck disable=SC2046 # pid lists
+	terminate 5 $(pgrep -f -- "tern --control $ctl_sock" 2>/dev/null || true)
+	# shellcheck disable=SC2046
+	terminate 5 $(sandbox_pids)
+	left=$(sandbox_pids)
+	if [ -n "$left" ]; then
+		echo "dev-tern: still running in $sb: $(echo "$left" | tr '\n' ' ')" >&2
+		return 1
+	fi
 }
 
 # A neutral interactive zsh: no user rc files (they may reorder PATH or define
@@ -200,20 +252,10 @@ logs)
 	esac
 	;;
 stop)
-	ctl quit >/dev/null 2>&1 || true
-	i=0
-	while [ -n "$(daemon_pids)" ] && [ $i -lt 20 ]; do
-		sleep 0.25
-		i=$((i + 1))
-	done
-	pids=$(daemon_pids)
-	if [ -n "$pids" ]; then
-		# shellcheck disable=SC2086
-		kill $pids 2>/dev/null || true
-	fi
+	teardown
 	;;
 clean)
-	"$0" stop
+	teardown || true
 	rm -rf "$sb"
 	;;
 env)
@@ -221,7 +263,7 @@ env)
 		"$TERN_CONFIG_DIR" "$TERN_DAEMON_SOCKET" "$STENCIL_LOG_DIR" "$window_log" "$sb/xdg"
 	;;
 *)
-	sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
 	[ -z "$cmd" ] && exit 0
 	exit 2
 	;;
