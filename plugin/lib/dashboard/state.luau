@@ -3,14 +3,18 @@
 -- the panel block (B3, lib/dashboard/panel_state.luau): a pure state machine
 -- run by plugin/block_runner.luau.
 --
--- Loading: the dashboard JSON and Grafana's frontend settings (renderer and
--- datasource catalog) are fetched together; library panels next; then the
--- variables in dependency order, each query variable once everything it
--- references has settled; then every visible panel down its ladder rung:
--- native panels query /api/ds/query (one body per panel), PNG panels ask the
--- image renderer, browser panels wait for the user. Every request carries a
--- tag with a generation, and an answer whose generation is stale is dropped.
---
+-- Loading: the dashboard JSON and Grafana's frontend settings (renderer,
+-- datasource catalog, feature toggles) are fetched together; library panels
+-- next; then the variables in dependency order, each query variable once
+-- everything it references has settled; then every visible panel down its
+-- ladder rung: native panels query /api/ds/query (one body per panel, over
+-- the panel's own time range, lib/dashboard/panel_time) unless their module
+-- needs no query, and send their module's own requests (Grafana API or
+-- external GETs); PNG panels ask the image renderer, browser panels wait
+-- for the user. Live panels (a module `liveMs`, e.g. the clock) share one
+-- timer at the smallest period among the panels shown that redraws them
+-- without querying. Every request carries a tag with a generation, and an
+-- answer whose generation is stale is dropped.
 -- Block `init` only fetches: opening panes and other one-shot effects follow
 -- user events, because Tern re-runs init on restore and plugin reloads.
 
@@ -21,6 +25,7 @@ local Env = require("../env")
 local FrameProm = require("../frame/prom")
 local GrafanaSource = require("../source/grafana")
 local GrafanaUrl = require("../links/grafana_url")
+local Http = require("../transport/http")
 local Handoff = require("../investigate/handoff")
 local Interpolate = require("./interpolate")
 local Jumps = require("../query/jumps")
@@ -29,6 +34,7 @@ local Ladder = require("./ladder")
 local Layout = require("./layout")
 local Model = require("./model")
 local Queries = require("./queries")
+local PanelTime = require("./panel_time")
 local QueryOptions = require("../query/options")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
@@ -68,6 +74,18 @@ export type PanelState = {
 	png: string?,
 	-- PNG cache key the panel wants now.
 	png_want: string?,
+	-- The panel's range after timeFrom/timeShift and its header info.
+	time: PanelTime.Override?,
+	-- Module requests: parsed answers by request tag, the identity of the
+	-- last batch sent, its generation, the request tag of each index, and a
+	-- counter bumped by every answer (view memo).
+	extra: { [string]: any }?,
+	extra_sig: string?,
+	req_gen: number,
+	req_tags: { string },
+	extra_gen: number,
+	-- The module's live redraw period, nil when not live.
+	live_ms: number?,
 }
 
 export type Picker = {
@@ -91,6 +109,8 @@ export type Settings = {
 	status: "loading" | "ready" | "error",
 	renderer: boolean?,
 	datasources: { Queries.Datasource },
+	-- Grafana's frontend feature toggles that are on.
+	features: { [string]: boolean },
 	error: string?,
 }
 
@@ -165,6 +185,10 @@ export type State = {
 	trace_label: string?,
 	-- Shared time range and cursor (key S).
 	sync: Shared.Sync,
+	-- Live redraw timer: its generation, period and tick count.
+	live_gen: number,
+	live_ms: number?,
+	live_tick: number,
 }
 
 local function newState(env: Env): State
@@ -187,7 +211,7 @@ local function newState(env: Env): State
 		vars = {},
 		vars_error = nil,
 		var_gen = 0,
-		settings = { status = "loading", renderer = nil, datasources = {} },
+		settings = { status = "loading", renderer = nil, datasources = {}, features = {} },
 		user = { status = "loading" },
 		cfg = DashConfig.read(env.config),
 		sections = {},
@@ -219,6 +243,9 @@ local function newState(env: Env): State
 		exemplars_on = queryOptions.exemplars,
 		trace_label = queryOptions.exemplar_trace_label,
 		sync = Shared.new("dashboard", env.now_ms, false),
+		live_gen = 0,
+		live_ms = nil,
+		live_tick = 0,
 	}
 end
 
@@ -370,7 +397,14 @@ end
 local function panelState(s: State, key: string): PanelState
 	local ps = s.panels[key]
 	if ps == nil then
-		ps = { status = "idle", decision = { mode = "native" }, gen = 0 }
+		ps = {
+			status = "idle",
+			decision = { mode = "native" },
+			gen = 0,
+			req_gen = 0,
+			req_tags = {},
+			extra_gen = 0,
+		}
 		s.panels[key] = ps
 	end
 	return ps :: PanelState
@@ -441,8 +475,9 @@ local function rememberPng(s: State, key: string, bytes: string)
 	end
 end
 
-local function queryContext(s: State, scope: Interpolate.Scope, env: Env): Queries.Context
-	local r = s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
+-- `range`: the panel's own range (panel_time), else the dashboard's.
+local function queryContext(s: State, scope: Interpolate.Scope, env: Env, range: Range.Range?): Queries.Context
+	local r = range or s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
 	local d = s.dashboard
 	return {
 		scope = scope,
@@ -456,6 +491,131 @@ local function queryContext(s: State, scope: Interpolate.Scope, env: Env): Queri
 		user_login = s.user.login,
 		exemplars = s.exemplars_on,
 	}
+end
+
+-- The panel's time range after its timeFrom/timeShift.
+function M.panelTime(s: State, inst: Repeat.Instance, env: Env): PanelTime.Override
+	local d = s.dashboard
+	local r = s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
+	local parent: PanelTime.Parent = {
+		from = s.from or (if d then d.time.from else "now-6h"),
+		to = s.to or (if d then d.time.to else "now"),
+		range = r,
+	}
+	local scope = M.panelScope(s, inst)
+	return PanelTime.apply(inst.panel.json, parent, { now_ms = env.now_ms }, function(text: string): string
+		return Interpolate.replace(text, scope, { format = Interpolate.text })
+	end)
+end
+
+M.EXTERNAL_TIMEOUT_MS = 10000
+
+-- Where a module request goes: dashboards, annotations and alerts to the
+-- dashboard's Grafana API (Grafana's own panels read it there); external
+-- to the absolute URL in request.path, without credentials.
+local function requestRoute(s: State, signal: string, request: any): (Route?, any)
+	local base = s.route
+	if base == nil then
+		return nil, request
+	end
+	if signal == "external" then
+		local origin, rest = string.match(request.path or "", "^(https?://[^/?#]+)(.*)$")
+		if origin == nil then
+			return nil, request
+		end
+		local r = Tbl.copy(request)
+		r.path = if rest == "" then "/" else rest
+		return {
+			context = base.context,
+			signal = "dashboards",
+			via = "direct",
+			endpoint_name = "grafana",
+			endpoint = {
+				url = origin :: string,
+				auth = { type = "none" },
+				headers = {},
+				path_prefix = "",
+				timeout_ms = M.EXTERNAL_TIMEOUT_MS,
+			},
+		},
+			r
+	end
+	if signal ~= "dashboards" and signal ~= "annotations" and signal ~= "alerts" then
+		return nil, request
+	end
+	return {
+		context = base.context,
+		signal = signal :: any,
+		via = "grafana",
+		endpoint_name = "grafana",
+		endpoint = base.endpoint,
+	},
+		request
+end
+
+-- Sends the module's requests when they changed (or on refresh).
+local function advanceRequests(
+	s: State,
+	inst: Repeat.Instance,
+	ps: PanelState,
+	env: Env,
+	force: boolean,
+	effects: { Effect }
+)
+	local d = s.dashboard :: Model.Dashboard
+	local range = (ps.time :: PanelTime.Override).range
+	local list = Registry.requests(inst.panel.json, {
+		time = { from_ms = range.from_ms, to_ms = range.to_ms },
+		dashboard_uid = d.uid,
+	}, env)
+	if #list == 0 then
+		ps.extra, ps.extra_sig = nil, nil
+		return
+	end
+	local sig = env.encode(list)
+	if not force and sig == ps.extra_sig then
+		return
+	end
+	ps.extra_sig = sig
+	ps.req_gen += 1
+	ps.req_tags = {}
+	ps.extra = ps.extra or {}
+	for i, r in list do
+		ps.req_tags[i] = r.tag
+		local route, request = requestRoute(s, r.signal, r.request)
+		if route == nil then
+			(ps.extra :: any)[r.tag] = { error = "cannot send a " .. tostring(r.signal) .. " request" }
+			continue
+		end
+		table.insert(effects, http(tag("x", s.gen, ps.req_gen, i, inst.key), route :: Route, request))
+	end
+end
+
+M.LIVE_MIN_MS = 250
+
+-- Arms the shared live timer at the smallest period of the live panels
+-- shown (the expanded or pinned panel alone when one is); a changed period
+-- re-arms, an unchanged one keeps the pending tick.
+local function armLive(s: State, env: Env, effects: { Effect })
+	local keys: { string } = if (s.solo or s.expanded) and s.focus then { s.focus :: string } else s.order
+	local period: number? = nil
+	for _, key in keys do
+		local ps = s.panels[key]
+		local ms = if ps and ps.decision.mode == "native" then ps.live_ms else nil
+		if ms then
+			period = math.max(M.LIVE_MIN_MS, if period then math.min(period, ms) else ms)
+		end
+	end
+	if period == s.live_ms then
+		return
+	end
+	s.live_gen += 1
+	s.live_ms = period
+	if period then
+		local p = period :: number
+		-- On the period's boundary, so a seconds clock flips on the second.
+		table.insert(effects, { kind = "timer", tag = tag("live", s.gen, s.live_gen), ms = p - env.now_ms % p })
+	end
 end
 
 -- Recomputes the visible panels and issues the queries and renders they
@@ -515,19 +675,29 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 		local ps = panelState(s, inst.key)
 		local scope = M.panelScope(s, inst)
 		ps.decision = Ladder.decide(inst.panel, M.ladderContext(s, scope), env)
+		-- Every rung shows the time override info in its header.
+		local pt = M.panelTime(s, inst, env)
+		ps.time = pt
 		if ps.decision.mode == "native" then
 			ps.png = nil
-			local qctx = queryContext(s, scope, env)
-			local pq, err = Queries.build(inst.panel.json, qctx, env)
+			ps.live_ms = Registry.liveMs(inst.panel.json, env)
+			advanceRequests(s, inst, ps, env, force, effects)
+			local pq, err = nil, nil
+			local qctx = queryContext(s, scope, env, pt.range)
+			if Registry.queries(inst.panel.json, env) then
+				pq, err = Queries.build(inst.panel.json, qctx, env)
+			end
 			if pq == nil then
 				if err then
 					ps.status, ps.error = "error", err
-				else
+				elseif ps.status ~= "ready" or ps.data == nil or #(ps.data :: Queries.PanelData).frames > 0 then
+					-- Nothing to query: keep one empty answer (the view memo
+					-- keys on its identity).
 					ps.status, ps.data, ps.error = "ready", { frames = {}, errors = {}, warnings = {} }, nil
 				end
 				continue
 			end
-			local signature = env.encode(pq.queries) .. "\31" .. (s.from or "") .. "\31" .. (s.to or "")
+			local signature = env.encode(pq.queries) .. "\31" .. pt.from .. "\31" .. pt.to
 			if force or signature ~= ps.signature then
 				ps.signature = signature
 				ps.gen += 1
@@ -558,6 +728,7 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 			end
 		end
 	end
+	armLive(s, env, effects)
 end
 
 local function advance(s: State, env: Env, force: boolean, effects: { Effect })
@@ -600,9 +771,11 @@ local function startLoad(s: State, effects: { Effect })
 	s.png_tags = {}
 	s.png_errors = {}
 	s.png_wait = false
+	s.live_gen += 1
+	s.live_ms = nil
 	table.insert(effects, http(tag("dash", s.gen), route, Model.request(uid)))
 	if s.settings.status ~= "ready" then
-		s.settings = { status = "loading", renderer = nil, datasources = {} }
+		s.settings = { status = "loading", renderer = nil, datasources = {}, features = {} }
 		table.insert(effects, http(tag("fs", s.gen), route, GrafanaSource.frontendSettingsRequest(route)))
 	end
 	if s.user.status ~= "ready" then
@@ -678,9 +851,16 @@ local function onSettings(s: State, response: any, env: Env, effects: { Effect }
 			status = "ready",
 			renderer = (r :: any).settings.renderer_available == true,
 			datasources = Queries.frontendDatasources(response, env),
+			features = Queries.frontendFeatures(response, env),
 		}
 	else
-		s.settings = { status = "error", renderer = false, datasources = {}, error = (r :: any).error.message }
+		s.settings = {
+			status = "error",
+			renderer = false,
+			datasources = {},
+			features = {},
+			error = (r :: any).error.message,
+		}
 	end
 	advance(s, env, false, effects)
 end
@@ -738,7 +918,8 @@ local function onQuery(s: State, key: string, response: any, env: Env)
 		return
 	end
 	local scope = M.panelScope(s, inst)
-	local pq = Queries.build(inst.panel.json, queryContext(s, scope, env), env)
+	local range = if ps.time then (ps.time :: PanelTime.Override).range else nil
+	local pq = Queries.build(inst.panel.json, queryContext(s, scope, env, range), env)
 	if pq == nil then
 		return
 	end
@@ -757,6 +938,24 @@ local function onQuery(s: State, key: string, response: any, env: Env)
 	if ps.status == "error" then
 		ps.error = table.concat(data.errors, "; ")
 	end
+	s.updated_ms = env.now_ms
+end
+
+-- A module request's answer: tag x/<gen>/<req_gen>/<index>/<panel key>.
+local function onExtra(s: State, parts: { string }, response: any, env: Env)
+	local key = table.concat(parts, "/", 5)
+	local ps = s.panels[key]
+	local inst = Repeat.find(s.sections, key)
+	if ps == nil or inst == nil or tonumber(parts[3] or "") ~= ps.req_gen then
+		return
+	end
+	local name = ps.req_tags[tonumber(parts[4] or "") or 0]
+	if name == nil then
+		return
+	end
+	ps.extra = ps.extra or {}
+	(ps.extra :: any)[name] = Registry.parse(inst.panel.json, name, response, env)
+	ps.extra_gen += 1
 	s.updated_ms = env.now_ms
 end
 
@@ -856,6 +1055,51 @@ local function openPanelInBrowser(s: State, key: string?, effects: { Effect })
 	end
 	spec.width, spec.height, spec.theme = nil, nil, nil
 	table.insert(effects, browse(RenderPng.soloUrl(base, spec)))
+end
+
+export type PanelLink = { title: string, url: string }
+
+-- The panel's links (panel.links) with variables, the time builtins and
+-- `${__url_time_range}` interpolated; a path-only URL is on Grafana.
+function M.panelLinks(s: State, inst: Repeat.Instance, env: Env): { PanelLink }
+	local out: { PanelLink } = {}
+	local links = Env.value(env, inst.panel.json.links)
+	if type(links) ~= "table" then
+		return out
+	end
+	local scope = Interpolate.merge(builtinScope(s), M.panelScope(s, inst))
+	scope = Interpolate.merge(scope, {
+		__url_time_range = Interpolate.value(
+			"from=" .. Http.escape(s.from or "now-6h") .. "&to=" .. Http.escape(s.to or "now")
+		),
+	})
+	local base = M.browserBase(s)
+	for _, l in links do
+		local url = if type(l) == "table" and type(l.url) == "string" then l.url else nil
+		if url == nil or url == "" then
+			continue
+		end
+		local u = Interpolate.replace(url :: string, scope, { format = Interpolate.text })
+		if string.sub(u, 1, 1) == "/" and base then
+			u = base .. u
+		end
+		local t = if type(l.title) == "string" and l.title ~= "" then l.title else u
+		table.insert(out, { title = Interpolate.replace(t, scope, { format = Interpolate.text }), url = u })
+	end
+	return out
+end
+
+-- Opens panel link `<index>:<panel key>` in the browser pane.
+local function openPanelLink(s: State, value: string, env: Env, effects: { Effect })
+	local idx, key = string.match(value, "^(%d+):(.+)$")
+	local inst = if key then Repeat.find(s.sections, key) else nil
+	if inst == nil then
+		return
+	end
+	local link = M.panelLinks(s, inst, env)[tonumber(idx) :: number]
+	if link and string.match(link.url, "^https?://") then
+		table.insert(effects, browse(link.url))
+	end
 end
 
 -- Opens the focused panel as its own panel block.
@@ -1348,7 +1592,9 @@ local function investigate(s: State, env: Env, effects: { Effect }): boolean
 		return false
 	end
 	local scope = M.panelScope(s, inst)
-	local pq = Queries.build(inst.panel.json, queryContext(s, scope, env), env)
+	local fps = s.panels[inst.key]
+	local range = if fps and fps.time then (fps.time :: PanelTime.Override).range else nil
+	local pq = Queries.build(inst.panel.json, queryContext(s, scope, env, range), env)
 	local queries: { InvestigateSubject.Query } = {}
 	if pq then
 		for _, q in pq.queries do
@@ -1680,6 +1926,8 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		openVarPicker(s, value)
 	elseif act == "browser" then
 		openPanelInBrowser(s, value, effects)
+	elseif act == "plink" then
+		openPanelLink(s, value, env, effects)
 	elseif act == "dashboard" then
 		local url = M.grafanaUrl(s, env)
 		if url then
@@ -1738,6 +1986,8 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			if ps and tonumber(parts[3] or "") == ps.gen then
 				onQuery(s, key, msg.response, env)
 			end
+		elseif kind == "x" then
+			onExtra(s, parts, msg.response, env)
 		elseif kind == "png" then
 			onPng(s, msg.tag, msg.response, env, effects)
 		end
@@ -1753,6 +2003,13 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 				adoptShared(s, env, r, cursor, effects)
 			end
 			table.insert(effects, Shared.timer(s.sync))
+			return s, effects
+		end
+		if msg.tag == tag("live", s.gen, s.live_gen) and s.live_ms then
+			-- Views redraw after every update; just keep ticking.
+			s.live_tick += 1
+			local p = s.live_ms :: number
+			table.insert(effects, { kind = "timer", tag = msg.tag, ms = p - env.now_ms % p })
 			return s, effects
 		end
 		if msg.tag == tag("refresh", s.gen, s.timer_gen) and s.auto then

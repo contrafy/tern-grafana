@@ -37,7 +37,11 @@ type Scope = Interpolate.Scope
 
 local M = {}
 
-M.NATIVE_TYPES = table.freeze({ prometheus = true, loki = true })
+-- Datasources whose /api/ds/query answers Tern converts. TestData runs on
+-- Grafana's backend except the scenarios its frontend fakes.
+M.NATIVE_TYPES =
+	table.freeze({ prometheus = true, loki = true, ["grafana-testdata-datasource"] = true, testdata = true })
+M.BROWSER_ONLY_SCENARIOS = table.freeze({ node_graph = true, trace = true, flame_graph = true, raw_frame = true })
 
 M.MIXED = "-- Mixed --"
 M.DASHBOARD = "-- Dashboard --"
@@ -183,6 +187,12 @@ function M.resolve(panel: { [string]: any }, scope: Scope, list: { Datasource },
 		if not M.NATIVE_TYPES[ref.type] then
 			return nil, string.format("%s queries are not run natively", ref.type)
 		end
+		if ref.type == "grafana-testdata-datasource" or ref.type == "testdata" then
+			local scenario = str(env, t.scenarioId) or "random_walk"
+			if M.BROWSER_ONLY_SCENARIOS[scenario] then
+				return nil, string.format("the TestData scenario %s runs in the browser only", scenario)
+			end
+		end
 		table.insert(out, ref)
 	end
 	return out, nil
@@ -221,6 +231,14 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 	local smallest: number? = nil
 	for i, t in ts do
 		local ref = refs[i]
+		-- The datasources' filterQuery: Grafana never sends a Prometheus
+		-- target without an expression, or a Loki one with an empty one.
+		local rawExpr = str(env, t.expr)
+		if
+			(ref.type == "prometheus" and (rawExpr == nil or rawExpr == "")) or (ref.type == "loki" and rawExpr == "")
+		then
+			continue
+		end
 		local q: { [string]: any } = {}
 		for k, v in t do
 			if v ~= env.null then
@@ -274,6 +292,9 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 		end
 		table.insert(queries, q)
 		table.insert(refIds, refId)
+	end
+	if #queries == 0 then
+		return nil, nil
 	end
 	return { queries = queries, ref_ids = refIds, interval_ms = smallest or 0, max_points = maxPoints }, nil
 end
@@ -352,6 +373,21 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 	table.sort(out, function(a, b)
 		return a.name < b.name
 	end)
+	return out
+end
+
+-- Grafana's frontend feature toggles (`featureToggles`), the ones on.
+function M.frontendFeatures(response: TransportTypes.Response, env: Env): { [string]: boolean }
+	local doc = Response.json(response, env, "frontend settings")
+	local out: { [string]: boolean } = {}
+	local map = if type(doc) == "table" then Env.value(env, doc.featureToggles) else nil
+	if type(map) == "table" then
+		for name, on in map do
+			if type(name) == "string" and Env.value(env, on) == true then
+				out[name] = true
+			end
+		end
+	end
 	return out
 end
 

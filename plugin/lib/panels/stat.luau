@@ -90,7 +90,7 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 				item.config.max
 			)
 		end
-		if showChange and v.item then
+		if showChange and v.item and not v.placeholder then
 			local item = v.item :: FieldConfig.Item
 			local pc = Reduce.reduce(item.field.values, "diffperc", item.field.type, item.config.null_mode)
 			if type(pc) == "number" and pc == pc then

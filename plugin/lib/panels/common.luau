@@ -1,12 +1,19 @@
 --!strict
--- Shared panel view pieces: the options every panel view takes, tone ->
--- span token, and the stat sparkline as Tern's native `chart` spark.
+-- Shared panel view pieces: the options every panel view takes, the panel
+-- module interface (one file per panel type, registered in registry.luau),
+-- Grafana's no-data message, tone -> span token, and the stat sparkline as
+-- Tern's native `chart` spark.
 
+local Assets = require("../render/assets")
+local Env = require("../env")
 local Frame = require("../frame/types")
+local Json = require("./json")
 local Lttb = require("../time/lttb")
 local Thresholds = require("../units/thresholds")
+local TransportTypes = require("../transport/types")
 local ui = require("../ui")
 
+type Env = Env.Env
 type Node = ui.Node
 
 export type Options = {
@@ -30,9 +37,77 @@ export type Options = {
 	-- selected one's index into the chart's drawn exemplars.
 	exemplars: { any }?,
 	exemplar: number?,
+	-- Panel size in px from its gridPos (lib/dashboard/render_png size).
+	size: { w: number, h: number }?,
+	-- The panel's query range after its own time overrides (timeFrom,
+	-- timeShift); from_ms/to_ms carry the same range.
+	time: { from_ms: number, to_ms: number }?,
+	-- Parsed answers to the module's `requests`, by tag; a tag is absent
+	-- until its answer arrives.
+	extra: { [string]: any }?,
+	-- The dashboard's timezone as written ("", "browser", "utc", IANA).
+	timezone: string?,
+	-- The viewer's local UTC offset (minutes east) at env.now_ms.
+	local_offset_min: number?,
+	-- Grafana's frontend feature toggles (/api/frontend/settings
+	-- featureToggles), e.g. newGauge.
+	features: { [string]: boolean }?,
+}
+
+-- Context for a module's non-datasource requests.
+export type RequestContext = {
+	time: { from_ms: number, to_ms: number },
+	dashboard_uid: string?,
+}
+
+-- dashboards, alerts and annotations go to the dashboard's Grafana (Grafana's
+-- own panels read its API); external is a plain unauthenticated GET whose
+-- request.path is the absolute http(s) URL.
+export type Signal = "dashboards" | "alerts" | "annotations" | "external"
+
+export type PanelRequest = { tag: string, signal: Signal, request: TransportTypes.Request }
+
+-- One native panel type (local://PANELS2.md). `supports` and `view` are
+-- required; the rest are optional:
+-- - queries: false for panels that need no datasource query (text, clock in
+--   input mode, dashlist); `view` then gets no frames;
+-- - requests/parse: Grafana API or external fetches; parse's result reaches
+--   `view` as opts.extra[tag];
+-- - liveMs: redraw period for live panels (clock), no re-query.
+export type PanelModule = {
+	types: { string },
+	supports: (panel: any, env: Env) -> (boolean, string?),
+	view: (panel: any, frames: { Frame.Frame }, env: Env, opts: Options) -> (Node, Assets.Assets?),
+	queries: ((panel: any) -> boolean)?,
+	requests: ((panel: any, ctx: RequestContext, env: Env) -> { PanelRequest })?,
+	parse: ((panel: any, tag: string, response: TransportTypes.Response, env: Env) -> any)?,
+	liveMs: ((panel: any, env: Env) -> number?)?,
 }
 
 local M = {}
+
+-- Whether any frame holds a value (PanelDataErrorView hasData).
+function M.hasData(frames: { Frame.Frame }): boolean
+	for _, f in frames do
+		for _, field in f.fields do
+			if #field.values > 0 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- PanelDataErrorView's message for a panel without data: the field
+-- defaults' noValue, else "No data".
+function M.noDataText(panel: any, env: Env): string
+	local nv = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "noValue"))
+	return nv or "No data"
+end
+
+function M.noData(panel: any, env: Env, key: string): Node
+	return ui.muted(M.noDataText(panel, env), { key = key })
+end
 
 -- Most bars in a stat sparkline (a spark bar is 4 px wide).
 M.SPARK_POINTS = 60

@@ -11,6 +11,7 @@ styles = [
 	"plugin/settings.css",
 	"plugin/dashboard.css",
 	"plugin/panels.css",
+	"plugin/panels2.css",
 	"plugin/alerts.css",
 	"plugin/ops.css",
 	"plugin/logs.css",
