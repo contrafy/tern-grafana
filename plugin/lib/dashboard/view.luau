@@ -32,8 +32,15 @@ local M = {}
 
 M.HINT = "arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh  a auto  l labels  L logs  S sync  "
 	.. "o browser  p pin  I investigate  / search"
--- Text lines per Grafana grid row (30 px rows, 8 px margins, about 15 px lines).
-M.LINES_PER_ROW = 2.5
+-- Tern's text line in px: card heights are given in lines.
+M.LINE_PX = 16
+
+-- A panel's Grafana height (gridPos h rows of 30 px with 8 px margins,
+-- lib/dashboard/render_png size) in Tern lines, never above it.
+function M.heightLines(h: number): number
+	local _, px = RenderPng.size(1, h)
+	return math.max(4, math.floor(px / M.LINE_PX))
+end
 
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
 	.. "o browser  y copy URL  I investigate"
@@ -319,9 +326,10 @@ local function layoutNode(
 		local card = panelCard(s, byKey[n.key], env, assets, false)
 		local p = card.p :: { [string]: any }
 		p.basis, p.grow, p.shrink = n.basis, 0, 1
-		-- Grafana's panel height: a long logs panel or legend is cut here and
+		-- Every panel type is Grafana's panel height: content past it (a
+		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
-		p.max = { h = string.format("%dlines", math.max(4, math.floor(n.h * M.LINES_PER_ROW + 0.5))) }
+		p.max = { h = string.format("%dlines", M.heightLines(n.h)) }
 		s.card_ids[n.key] = parent .. "." .. n.key
 		return card
 	end

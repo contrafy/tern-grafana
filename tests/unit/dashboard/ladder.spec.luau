@@ -58,13 +58,14 @@ for _, version in S.VERSIONS do
 			local tempoTable = Ladder.decide(assert(Model.findPanel(obs, 4)), ctx, env)
 			if renderer then
 				expect(traces).toEqual({ mode = "png", reason = "traces panels are not drawn natively" })
-				expect(tempoTable).toEqual({ mode = "png", reason = "tempo queries are not run natively" })
+				-- Tempo search results feed a table natively.
+				expect(tempoTable).toEqual({ mode = "native" })
 			else
 				expect(traces).toEqual({
 					mode = "browser",
 					reason = "traces panels are not drawn natively; Grafana has no image renderer",
 				})
-				expect(tempoTable.mode).toBe("browser")
+				expect(tempoTable.mode).toBe("native")
 			end
 		end)
 

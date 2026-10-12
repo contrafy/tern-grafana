@@ -42,6 +42,9 @@ local M = {}
 M.NATIVE_TYPES =
 	table.freeze({ prometheus = true, loki = true, ["grafana-testdata-datasource"] = true, testdata = true })
 M.BROWSER_ONLY_SCENARIOS = table.freeze({ node_graph = true, trace = true, flame_graph = true, raw_frame = true })
+-- Datasources only some panel types can draw: Tempo trace frames by the
+-- traces panel (lib/panels/traces), Tempo search results as a table.
+M.PANEL_DATASOURCES = table.freeze({ tempo = table.freeze({ traces = true, table = true }) })
 
 M.MIXED = "-- Mixed --"
 M.DASHBOARD = "-- Dashboard --"
@@ -187,7 +190,9 @@ function M.resolve(panel: { [string]: any }, scope: Scope, list: { Datasource },
 		if ref.uid == M.MIXED then
 			return nil, "a target has no datasource of its own in a mixed panel"
 		end
-		if not M.NATIVE_TYPES[ref.type] then
+		local panelType = str(env, panel.type) or ""
+		local byPanel = M.PANEL_DATASOURCES[ref.type]
+		if not M.NATIVE_TYPES[ref.type] and not (byPanel and byPanel[panelType]) then
 			return nil, string.format("%s queries are not run natively", ref.type)
 		end
 		if ref.type == "grafana-testdata-datasource" or ref.type == "testdata" then

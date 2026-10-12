@@ -106,8 +106,18 @@ for _, version in S.VERSIONS do
 			expect(text).toContain("Firing for 6m 12s")
 			expect(text).toContain("Pending for 6m 12s")
 			expect(text).toContain("Firing for 5m 42s")
-			-- A normal rule shows no active time.
-			expect(text).toContain("TernGrafanaNormalView alert ruleNormal1 instance")
+			-- A normal rule shows no active time; the rule link sits below.
+			expect(text).toContain("TernGrafanaNormalNormal1 instanceView alert rule")
+			-- The name is one ellipsized line with the full name as tooltip,
+			-- never sharing its row with the link (no mid-word breaks).
+			local name = S.find(node, function(n)
+				return n.p and n.p.class == "tgl-name"
+			end)
+			expect(name.p.title).toBe("TernGrafanaAlwaysFiring")
+			expect(name.c[1].p.truncate).toBe("end")
+			expect(#S.findAll(name, function(n)
+				return n.p and n.p.key == "v"
+			end)).toBe(0)
 		end)
 
 		it("drops rules whose state the state filter excludes", function()

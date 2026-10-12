@@ -748,11 +748,12 @@ end
 local function ruleNode(row: Row, o: Options, now: number, i: number): Node
 	local r = row.rule
 	local link = M.ruleLink(r)
+	-- The name keeps whole words: one line, ellipsized, the full name as the
+	-- tooltip; the rule link gets its own line below the status.
 	local nameSpan: ui.Span = { t = r.name, s = "strong" }
-	local head: { Node } = { el("tgl-grow", "nw", { ui.text({ nameSpan }, { key = "n" }) }) }
-	if link then
-		table.insert(head, ui.text({ { t = "View alert rule", s = "accent", href = link } }, { key = "v" }))
-	end
+	local head: { Node } = {
+		el("tgl-name", "nw", { ui.text({ nameSpan }, { key = "n", truncate = "end" }) }, { title = r.name }),
+	}
 	local status = { ui.span(M.readable(r.state), M.tone(r.state)) }
 	local first = M.firstActiveAt(r)
 	if first and r.state ~= "inactive" then
@@ -768,6 +769,9 @@ local function ruleNode(row: Row, o: Options, now: number, i: number): Node
 		ui.text(status, { key = "st" }),
 		ui.text(countSpans, { key = "ct" }),
 	}
+	if link then
+		table.insert(body, ui.text({ { t = "View alert rule", s = "accent", href = link } }, { key = "v" }))
+	end
 	if o.showInstances and #row.instances > 0 then
 		table.insert(body, instancesNode(row.instances, now, "in"))
 	end

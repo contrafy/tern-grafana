@@ -190,6 +190,9 @@
 	min-width: 0;
 }
 .tgl-grow { flex: 1; min-width: 0; }
+/* Alert rule names: whole words on one line, ellipsized (full name as tooltip). */
+.tgl-name { flex: 1; min-width: 0; overflow: hidden; }
+.tgl-name .sf { overflow-wrap: normal; word-break: normal; white-space: nowrap; }
 .tgl-icon { padding-top: 2px; }
 .tgl-row-head {
 	display: flex;

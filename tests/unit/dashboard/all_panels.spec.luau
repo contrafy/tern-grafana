@@ -44,10 +44,11 @@ local function apply(h: Harness, version: string, effects: { any })
 	end
 end
 
-local function start(version: string): Harness
+local function start(version: string, vars: string?): Harness
 	local env = S.env()
 	env.now_ms = captureNow(version)
-	local s, effects = State.init({ "tern-grafana://dashboard?context=lab&uid=tern-all-panels" }, nil, env)
+	local s, effects =
+		State.init({ "tern-grafana://dashboard?context=lab&uid=tern-all-panels" .. (vars or "") }, nil, env)
 	local h: Harness = { s = s, env = env, pending = {} }
 	apply(h, version, effects)
 	return h
@@ -136,6 +137,61 @@ for _, version in S.VERSIONS do
 			end
 			local view = View.view(h.s, h.env) :: any
 			expect(view.main ~= nil).toBe(true)
+		end)
+
+		-- Grafana gives every panel its gridPos height whatever it shows; in
+		-- the grid every panel type is cut there (a wrapped countdown clock
+		-- never outgrows its row).
+		it("caps every grid panel to its Grafana height", function()
+			local h = start(version)
+			expect(View.heightLines(8)).toBe(18) -- 8 rows: 296 px of 16 px lines
+			local view = View.view(h.s, h.env) :: any
+			local cards = 0
+			local function walk(n: any)
+				local p = n.p
+				if p and type(p.key) == "string" and string.match(p.key, "^p%d+$") then
+					cards += 1
+					expect(p.max and p.max.h).toBe(string.format("%dlines", View.heightLines(8)))
+					return
+				end
+				for _, c in n.c or {} do
+					walk(c)
+				end
+			end
+			walk(view.main)
+			-- Every tern-all-panels panel is 8 rows high.
+			expect(cards).toBe(#h.s.order)
+		end)
+
+		-- Grafana's traces panel draws Tempo trace frames; Tern's traces
+		-- module does too, so the panel queries Tempo through /api/ds/query.
+		it("runs the traces panel's Tempo query natively and draws the waterfall", function()
+			local sent = S.doc(S.grafana(version, "ds_query_all_panels_27.request.json")).queries[1]
+			-- The capture filled the trace_id textbox from the URL.
+			local h = start(version, "&var-trace_id=" .. sent.query)
+			expect(h.s.panels.p27.decision.mode).toBe("native")
+			local q = query(h, 27).queries[1]
+			expect(q.query).toBe(sent.query)
+			expect(q.queryType).toBe("traceId")
+			expect(q.datasource.type).toBe("tempo")
+			for tag in h.pending do
+				if string.match(tag, "^q/%d+/%d+/p27$") then
+					State.update(h.s, {
+						kind = "http_done",
+						tag = tag,
+						response = S.response(S.grafana(version, "ds_query_all_panels_27.json")),
+					}, h.env)
+				end
+			end
+			expect(h.s.panels.p27.status).toBe("ready")
+			-- Expanded, the panel is the waterfall, not an error or no-data line.
+			State.update(h.s, { kind = "event", ev = { ev = "action", act = "expand", value = "p27" } }, h.env)
+			local view = View.view(h.s, h.env) :: any
+			local text = json.encode(view.main)
+			expect((string.find(text, "No data", 1, true))).toBeNil()
+			expect((string.find(text, "failed", 1, true))).toBeNil()
+			-- The trace's root span heads the waterfall.
+			expect(string.find(text, '"t":"payments: "', 1, true) ~= nil).toBe(true)
 		end)
 	end)
 end

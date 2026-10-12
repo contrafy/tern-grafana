@@ -340,7 +340,8 @@ for _, version in S.VERSIONS do
 			expect(card ~= nil and card.k).toBe("card")
 			expect(card.p.key).toBe("p4")
 			-- Grid cards are cut at Grafana's panel height: 8 rows.
-			expect(card.p.max).toEqual({ h = "20lines" })
+			-- Grafana's 8-row panel height (296 px) in 16 px lines.
+			expect(card.p.max).toEqual({ h = "18lines" })
 			-- A key that does not move focus scrolls nothing.
 			local _, none = press(h, version, char("r"))
 			for _, e in none do

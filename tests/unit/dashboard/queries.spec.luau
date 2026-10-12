@@ -150,7 +150,12 @@ for _, version in S.VERSIONS do
 			assert(Model.parseResponse(S.response(S.grafana(version, "dashboard_tern_observability.json")), env))
 
 		it("names the datasource type that keeps a panel off the native rung", function()
-			local refs, err = Queries.resolve(assert(Model.findPanel(obs, 4)).json, {}, datasources, env)
+			-- Tempo answers only the panels that draw its frames: traces and table.
+			local tempoTable = assert(Model.findPanel(obs, 4)).json
+			expect(Queries.resolve(tempoTable, {}, datasources, env) ~= nil).toBe(true)
+			local asTimeseries =
+				{ type = "timeseries", datasource = tempoTable.datasource, targets = tempoTable.targets }
+			local refs, err = Queries.resolve(asTimeseries, {}, datasources, env)
 			expect(refs).toBeNil()
 			expect(err).toBe("tempo queries are not run natively")
 		end)
