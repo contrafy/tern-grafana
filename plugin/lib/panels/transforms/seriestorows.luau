@@ -88,10 +88,9 @@ local function structure(field: Field, name: string): Field
 	copy.name = name
 	copy.values = {}
 	copy.labels = nil
-	local config: { [string]: any } = if field.config then Tbl.copy(field.config) :: any else {}
+	local config: Frame.FieldConfig = if field.config then Tbl.copy(field.config) else {}
 	config.displayName = nil
-	config.displayNameFromDS = nil
-	copy.config = config :: any
+	copy.config = config
 	return copy
 end
 

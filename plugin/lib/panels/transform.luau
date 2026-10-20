@@ -15,8 +15,8 @@
 --    order,rename,filter}.ts) here, and calculateField, joinByField
 --    (seriesToColumns), labelsToFields, merge, convertFieldType, formatTime,
 --    sortBy, filterByValue, extractFields, reduce, rowsToFields,
---    configFromData, groupBy, limit, renameByRegex and seriesToRows in
---    ./transforms.
+--    configFromData, groupBy, groupingToMatrix, limit, prepareTimeSeries,
+--    renameByRegex and seriesToRows in ./transforms.
 -- Anything else, or an option a port cannot honor, is reported by
 -- `unsupported` so the panel falls down the rendering ladder instead of
 -- showing data Grafana would not.
@@ -30,11 +30,13 @@ local FieldConfig = require("./fieldconfig")
 local FilterValue = require("./transforms/filtervalue")
 local Frame = require("../frame/types")
 local GroupBy = require("./transforms/groupby")
+local GroupingToMatrix = require("./transforms/groupingtomatrix")
 local Join = require("./transforms/join")
 local Json = require("./json")
 local Labels = require("./transforms/labels")
 local Limit = require("./transforms/limit")
 local Merge = require("./transforms/merge")
+local PrepareTimeSeries = require("./transforms/preparetimeseries")
 local ReduceT = require("./transforms/reduce")
 local Regex = require("../regex")
 local RenameByRegex = require("./transforms/renamebyregex")
@@ -405,7 +407,9 @@ local TRANSFORMERS: { [string]: Transformer } = {
 	rowsToFields = { unsupported = ConfigMap.rowsToFieldsUnsupported, apply = ConfigMap.rowsToFields },
 	configFromData = { unsupported = ConfigMap.configFromDataUnsupported, apply = ConfigMap.configFromData },
 	groupBy = GroupBy,
+	groupingToMatrix = GroupingToMatrix,
 	limit = Limit,
+	prepareTimeSeries = PrepareTimeSeries,
 	renameByRegex = RenameByRegex,
 	seriesToRows = SeriesToRows,
 }

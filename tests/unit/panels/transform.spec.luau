@@ -105,9 +105,9 @@ describe("transform support", function()
 			{"id": "groupBy", "disabled": true},
 			{"id": "organize", "options": {}},
 			{"id": "reduce", "options": {"reducers": ["max"]}},
-			{"id": "groupingToMatrix", "options": {}}
+			{"id": "partitionByValues", "options": {}}
 		]}]])
-		expect(Transform.unsupported(panel, env)).toBe("transformation groupingToMatrix is not supported")
+		expect(Transform.unsupported(panel, env)).toBe("transformation partitionByValues is not supported")
 		expect(Transform.unsupported({ transformations = { { id = "organize" } } }, env)).toBeNil()
 		local filtered = {
 			transformations = { { id = "organize", filter = { id = "byValue", options = {} } } },
