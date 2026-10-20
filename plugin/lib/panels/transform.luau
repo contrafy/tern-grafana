@@ -14,8 +14,9 @@
 --    transformations/transformers/{organize,filterByName,filterByRefId,
 --    order,rename,filter}.ts) here, and calculateField, joinByField
 --    (seriesToColumns), labelsToFields, merge, convertFieldType, formatTime,
---    sortBy, filterByValue, extractFields, reduce, rowsToFields and
---    configFromData in ./transforms.
+--    sortBy, filterByValue, extractFields, reduce, rowsToFields,
+--    configFromData, groupBy, limit, renameByRegex and seriesToRows in
+--    ./transforms.
 -- Anything else, or an option a port cannot honor, is reported by
 -- `unsupported` so the panel falls down the rendering ladder instead of
 -- showing data Grafana would not.
@@ -28,12 +29,16 @@ local Extract = require("./transforms/extract")
 local FieldConfig = require("./fieldconfig")
 local FilterValue = require("./transforms/filtervalue")
 local Frame = require("../frame/types")
+local GroupBy = require("./transforms/groupby")
 local Join = require("./transforms/join")
 local Json = require("./json")
 local Labels = require("./transforms/labels")
+local Limit = require("./transforms/limit")
 local Merge = require("./transforms/merge")
 local ReduceT = require("./transforms/reduce")
 local Regex = require("../regex")
+local RenameByRegex = require("./transforms/renamebyregex")
+local SeriesToRows = require("./transforms/seriestorows")
 local Shared = require("./transforms/shared")
 local SortBy = require("./transforms/sortby")
 local Tbl = require("../tbl")
@@ -399,6 +404,10 @@ local TRANSFORMERS: { [string]: Transformer } = {
 	reduce = ReduceT,
 	rowsToFields = { unsupported = ConfigMap.rowsToFieldsUnsupported, apply = ConfigMap.rowsToFields },
 	configFromData = { unsupported = ConfigMap.configFromDataUnsupported, apply = ConfigMap.configFromData },
+	groupBy = GroupBy,
+	limit = Limit,
+	renameByRegex = RenameByRegex,
+	seriesToRows = SeriesToRows,
 }
 
 -- The first transformation Tern cannot apply, as a reason, or nil.
