@@ -17,6 +17,7 @@ styles = [
 	"plugin/logs.css",
 	"plugin/annotations.css",
 	"plugin/trace.css",
+	"plugin/irm.css",
 ]
 
 [[blocks]]
@@ -78,6 +79,21 @@ icon = "flame"
 id = "impact"
 title = "Grafana Deploy Impact"
 icon = "chart"
+
+[[blocks]]
+id = "compat"
+title = "Grafana Compatibility"
+icon = "chart"
+
+[[blocks]]
+id = "oncall"
+title = "Grafana On-call"
+icon = "flame"
+
+[[blocks]]
+id = "incidents"
+title = "Grafana Incidents"
+icon = "flame"
 
 [[lenses]]
 id = "promtool-query"

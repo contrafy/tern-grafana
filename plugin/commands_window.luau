@@ -12,6 +12,9 @@ local COMMANDS: { Command } = {
 	{ id = "traces", title = "Grafana: Traces", icon = "chart", block = "tern-grafana.trace" },
 	{ id = "silences", title = "Grafana: Silences", icon = "flame", block = "tern-grafana.silence" },
 	{ id = "ops", title = "Grafana: Ops", icon = "chart", block = "tern-grafana.ops" },
+	{ id = "oncall", title = "Grafana: On-call", icon = "flame", block = "tern-grafana.oncall" },
+	{ id = "incidents", title = "Grafana: Incidents", icon = "flame", block = "tern-grafana.incidents" },
+	{ id = "compat", title = "Grafana: Compatibility", icon = "chart", block = "tern-grafana.compat" },
 	{
 		id = "annotations",
 		title = "Grafana: Deploy annotation decisions",

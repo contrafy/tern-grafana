@@ -7,6 +7,28 @@ versions may break).
 
 ## [Unreleased]
 
+### Added
+
+- Grafana IRM: **Grafana: On-call** (OnCall alert groups with acknowledge,
+  unacknowledge, resolve, unresolve and silence; schedules with who is on call
+  now and next) and **Grafana: Incidents** (open incidents, detail and
+  timeline; declare, change status or severity, add a note). Every write is
+  previewed, attributed to the service account and sent only on confirmation.
+  A status segment (`IRM: you are on call until 22:00, 2 alert groups,
+  1 incident`) from a background poll (`irm.poll_s`, `irm.contexts`,
+  `irm.names`, `irm.user`: your email, to recognize you among on-call users).
+  See docs/irm.md.
+
+- Image-cache economy: Tern keeps every distinct chart image a block sends for
+  the whole session (measured: about 180 MB/h for two auto-refreshing
+  dashboards), so auto-refresh now pauses in background tabs (window module
+  `visibility_window.luau`, kv key `visible_panes`), byte-identical answers
+  are not redrawn, a refreshing panel keeps its picture on its own axis (one
+  image per refresh instead of two), ranges ending at now are drawn on the
+  query interval, and panels behind an expanded one wait until shown. Numbers
+  before and after in docs/performance.md; an upstream issue draft in
+  docs/upstream/stencil-blob-cache.md.
+
 ## [0.3.0] - 2026-10-12
 
 ### Added

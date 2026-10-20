@@ -31,6 +31,8 @@ M.CAPABILITIES = table.freeze({
 	annotate = true,
 	impact = true,
 	settings = true,
+	oncall = true,
+	incidents = true,
 })
 
 export type Capabilities = { [string]: boolean }

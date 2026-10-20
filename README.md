@@ -145,6 +145,24 @@ writes it. Expiring a silence is confirmed the same way.
 
 Details: [Alerts](docs/alerts.md).
 
+## On-call and incidents (Grafana IRM)
+
+**Grafana: On-call** lists a context's open OnCall alert groups (state,
+integration, age, alert count, detail with the latest alerts) and every
+schedule with who is on call now and next. **Grafana: Incidents** lists open
+IRM incidents with severity, status and how long they have been open, and an
+incident's detail with roles and timeline. Both read IRM through the context's
+Grafana endpoint and token; the OnCall host is discovered from the IRM app.
+
+Acknowledge, unacknowledge, resolve, unresolve and silence (with a duration),
+and declaring an incident, changing its status or severity or adding a note,
+are staged first: the confirmation panel says what changes, that incident hooks
+may notify people, and that IRM records the action under the service account.
+Only `y` or **Confirm** sends it. The status line shows `IRM: 2 alert groups,
+1 incident` while something is open.
+
+Details: [Grafana IRM](docs/irm.md).
+
 ## Logs
 
 **Grafana: Logs** runs LogQL against Loki directly or through Grafana's Loki
