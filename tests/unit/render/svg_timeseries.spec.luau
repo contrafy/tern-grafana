@@ -131,12 +131,16 @@ describe("svg_timeseries.render output", function()
 		end
 	end)
 
+	-- Each series is a line plus its points: uPlot shows points (auto) when
+	-- samples are at least two point sizes apart, as 20 samples are here.
 	it("gives series 1..n the palette classes tg-s1..tg-sn", function()
 		local r = Svg.render(many(3, 20))
-		expect(#paths(r.svg, "tg-s1")).toBe(1)
-		expect(#paths(r.svg, "tg-s2")).toBe(1)
-		expect(#paths(r.svg, "tg-s3")).toBe(1)
+		expect(#paths(r.svg, "tg-s1")).toBe(2)
+		expect(#paths(r.svg, "tg-s2")).toBe(2)
+		expect(#paths(r.svg, "tg-s3")).toBe(2)
 		expect(#paths(r.svg, "tg-s4")).toBe(0)
+		expect(#paths(r.svg, "tg-line")).toBe(3)
+		expect(#paths(r.svg, "tg-dots")).toBe(3)
 		expect(#paths(r.svg, "tg-grid")).toBe(1)
 		expect(r.svg).toContain('class="tg-label"')
 		expect(r.layout.series[2].class).toBe("tg-s2")
@@ -175,7 +179,7 @@ describe("svg_timeseries.render output", function()
 		expect(r.dropped).toBe(2)
 		expect(r.layout.dropped).toBe(2)
 		expect(#r.layout.series).toBe(10)
-		expect(#paths(r.svg, "tg-s10")).toBe(1)
+		expect(#paths(r.svg, "tg-s10")).toBe(2)
 		local capped = Svg.render(many(5, 10), { series_cap = 2 })
 		expect(capped.dropped).toBe(3)
 		expect(#capped.layout.series).toBe(2)
@@ -228,12 +232,47 @@ describe("svg_timeseries.render nulls", function()
 end)
 
 describe("svg_timeseries.render scales", function()
-	it("fits the y axis around the full-resolution data on nice bounds", function()
+	-- uPlot 1.6.32 rangeNum as UPlotScaleBuilder configures it (pad 0.1,
+	-- soft 0 in mode 3): 3..97 pads to -6.4..106.4, rounds out to a tenth of
+	-- the span's magnitude (-7..107), and the low end snaps to 0 because the
+	-- padding crossed it. Ticks stay on nice steps inside: the top tick is
+	-- 100, with headroom above it.
+	it("pads the y axis above the data as uPlot's rangeNum does", function()
 		local r = Svg.render({ series(5, function(i)
 			return ({ 3, 97, 40, 12, 55 })[i]
 		end) })
 		expect(r.layout.y_min).toBe(0)
+		expect(r.layout.y_max).toBe(107)
+		local axis = (r.layout.axes :: { any })[1]
+		expect(axis.max).toBe(107)
+		expect(r.svg).toContain(">100<")
+		expect(has(r.svg, ">110<")).toBe(false)
+	end)
+
+	-- rangeNum on flat 0 data (delta 1e-24) snaps both ends to the soft 0,
+	-- and an empty range becomes 0..100: the line lies on the floor.
+	it("puts an all-zero series on the floor of a 0..100 axis", function()
+		local r = Svg.render({ series(5, function()
+			return 0
+		end) })
+		expect(r.layout.y_min).toBe(0)
 		expect(r.layout.y_max).toBe(100)
+		local Layout = require("../../../plugin/lib/render/layout")
+		expect(Layout.yOfValue(r.layout, 0)).toBe(r.layout.plot_bottom)
+	end)
+
+	-- UPlotScaleBuilder: decimals 0 rounds the padded range to whole numbers.
+	-- 1.2..4.2 pads by 0.3 to 0.9..4.5 (a tenth of the span's magnitude).
+	it("rounds the range out to whole numbers with decimals 0", function()
+		local data = { series(3, function(i)
+			return ({ 1.2, 4.2, 3 })[i]
+		end) }
+		local free = Svg.render(data)
+		expect(free.layout.y_min).toBe(0.9)
+		expect(free.layout.y_max).toBe(4.5)
+		local r = Svg.render(data, { decimals = 0 })
+		expect(r.layout.y_min).toBe(0)
+		expect(r.layout.y_max).toBe(5)
 	end)
 
 	it("stacks normal series so the top series reaches the sum", function()
@@ -474,8 +513,9 @@ describe("svg_timeseries.render y scales", function()
 		expect(axes[2].side).toBe("right")
 		expect(r.layout.series[1].axis).toBe(1)
 		expect(r.layout.series[2].axis).toBe(2)
-		-- Each scale fits its own data: 4 MiB is not squeezed onto 0..100.
-		expect(axes[1].max).toBe(100)
+		-- Each scale fits its own data: 4 MiB is not squeezed onto 0..104
+		-- (10..95 padded by 8.5 rounds out to 1..104).
+		expect(axes[1].max).toBe(104)
 		expect(axes[2].max >= 4194304 and axes[2].max < 8388608).toBe(true)
 		expect(anyContains(tickTexts(r.svg, "end"), "%")).toBe(true)
 		expect(anyContains(tickTexts(r.svg, "start"), " MiB")).toBe(true)
@@ -536,19 +576,22 @@ describe("svg_timeseries.render y scales", function()
 		assertTernSafe(r.svg)
 	end)
 
-	-- UPlotScaleBuilder: a soft bound is a value the scale reaches at least.
-	it("widens to soft min/max but never narrows the data's range", function()
+	-- UPlotScaleBuilder: a set soft bound is a mode-1 soft value: the scale
+	-- ends exactly there while the data stay inside it, else uPlot's padded
+	-- range (3..97 pads to -7..107, without the 0 snap a soft bound replaces).
+	it("ends at soft min/max that hold the data, pads past ones that do not", function()
 		local data = { series(5, values({ 3, 97, 40, 12, 55 })) }
 		local function axis(style: Svg.SeriesStyle): any
 			return (render(data, { series = { style } }).layout.axes :: { any })[1]
 		end
 		expect(axis({ soft_max = 200 }).max).toBe(200)
-		expect(axis({ soft_max = 50 }).max).toBe(100)
+		expect(axis({ soft_max = 50 }).max).toBe(107)
 		expect(axis({ soft_min = -50 }).min).toBe(-50)
-		expect(axis({ soft_min = 20 }).min).toBe(0)
+		expect(axis({ soft_min = 20 }).min).toBe(-7)
+		-- Centered zero: -97..97 padded by 19.4 rounds out to -120..120.
 		local centered = axis({ centered_zero = true })
-		expect(centered.min).toBe(-100)
-		expect(centered.max).toBe(100)
+		expect(centered.min).toBe(-120)
+		expect(centered.max).toBe(120)
 	end)
 
 	-- getStackingGroups: the stack key holds the scale and stacking.group.
@@ -701,6 +744,181 @@ describe("svg_timeseries.render transforms", function()
 		local Layout = require("../../../plugin/lib/render/layout")
 		local y = string.format("%.1f", Layout.yOfValue(r.layout, 7))
 		expect(d).toBe(string.format("M%.1f %sL%.1f %s", r.layout.plot_left, y, r.layout.plot_right, y))
+	end)
+end)
+
+-- The `<path>` element (whole tag) of the first path whose class list has
+-- every class given.
+local function tag(svg: string, ...: string): string?
+	local want = { ... }
+	for el in string.gmatch(svg, "<path [^>]*>") do
+		local classes = string.match(el, 'class="([^"]*)"') or ""
+		local ok = true
+		for _, c in want do
+			if not string.find(" " .. classes .. " ", " " .. c .. " ", 1, true) then
+				ok = false
+				break
+			end
+		end
+		if ok then
+			return el
+		end
+	end
+	return nil
+end
+
+-- Each series is drawn with its own GraphFieldConfig
+-- (packages/grafana-ui/src/components/uPlot/config/UPlotSeriesBuilder.ts):
+-- an override that turns one series' fill off and dashes it must not leave
+-- it solid and filled like the others.
+describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", function()
+	local a = series(40, function(i)
+		return 10 + i % 7
+	end)
+	local b = series(40, function(i)
+		return 30 + i % 5
+	end)
+
+	it("draws each series' fill, line width and dash", function()
+		local r = render({ a, b }, {
+			series = {
+				{ fill_opacity = 30, line_width = 1 },
+				{ fill_opacity = 0, line_width = 2, dash = { 10, 10 } },
+			},
+		})
+		expect(tag(r.svg, "tg-s1", "tg-area")).toContain('fill-opacity="0.30"')
+		expect(tag(r.svg, "tg-s2", "tg-area")).toBeNil()
+		local line2 = tag(r.svg, "tg-s2", "tg-line") :: string
+		expect(line2).toContain('stroke-width="3"')
+		expect(line2).toContain('stroke-dasharray="15 15"')
+		expect(line2).toContain('stroke-linecap="butt"')
+		local line1 = tag(r.svg, "tg-s1", "tg-line") :: string
+		expect(line1).toContain('stroke-width="1.5"')
+		expect(has(line1, "dasharray")).toBe(false)
+		-- A dotted line rounds its caps; lineWidth 0 draws no line at all.
+		local dotted = render({ a, b }, {
+			series = { { dash = { 0, 10 }, dot = true } :: Svg.SeriesStyle, { line_width = 0 } :: Svg.SeriesStyle },
+		})
+		expect(tag(dotted.svg, "tg-s1", "tg-line")).toContain('stroke-linecap="round"')
+		expect(tag(dotted.svg, "tg-s2", "tg-line")).toBeNil()
+	end)
+
+	-- uPlot's stepped and spline path builders.
+	it("steps or smooths the line by lineInterpolation", function()
+		local r = render({ a, b }, { series = { { interpolation = "stepAfter" }, { interpolation = "smooth" } } })
+		local step = string.match(tag(r.svg, "tg-s1", "tg-line") :: string, ' d="([^"]*)"') :: string
+		expect(step).toContain("H")
+		expect(has(step, "C")).toBe(false)
+		local smooth = string.match(tag(r.svg, "tg-s2", "tg-line") :: string, ' d="([^"]*)"') :: string
+		expect(smooth).toContain("C")
+		-- stepAfter holds a value to the next sample: the first move is
+		-- horizontal (H), stepBefore's is vertical (V).
+		local before = render({ a }, { series = { { interpolation = "stepBefore" } } })
+		local d = string.match(tag(before.svg, "tg-s1", "tg-line") :: string, ' d="([^"]*)"') :: string
+		expect(string.match(d, "^M[%d%.]+ [%d%.]+(%a)")).toBe("V")
+		expect(string.match(step, "^M[%d%.]+ [%d%.]+(%a)")).toBe("H")
+	end)
+
+	-- showPoints: always and never as set; auto shows points when samples
+	-- are at least two point sizes apart (uPlot seriesPointsShow, space =
+	-- 2 x size), else only lone samples between gaps (Grafana's filter).
+	it("shows points always, never, or by density", function()
+		expect(tag(render({ a }, { series = { { show_points = "never" } } }).svg, "tg-dots")).toBeNil()
+		local always = tag(render(many(1, 2000), { series = { { show_points = "always" } } }).svg, "tg-dots")
+		expect(always).toContain('stroke-width="7.5"')
+		expect(tag(render({ a }, { series = { { show_points = "auto" } } }).svg, "tg-dots") ~= nil).toBe(true)
+		expect(tag(render(many(1, 2000), { series = { {} } }).svg, "tg-dots")).toBeNil()
+		local gappy = series(2000, function(i)
+			return if i == 1000 then 5 elseif i > 990 and i < 1010 then NULL else 1
+		end)
+		local lone = tag(render({ gappy }, { series = { {} } }).svg, "tg-dots") :: string
+		expect(subpaths(string.match(lone, ' d="([^"]*)"') :: string)).toBe(1)
+		local bigger = tag(render({ a }, { series = { { show_points = "always", point_size = 10 } } }).svg, "tg-dots")
+		expect(bigger).toContain('stroke-width="15"')
+	end)
+
+	-- spanNulls true joins every gap; a number joins gaps up to that many
+	-- ms only (Grafana leaves longer ones broken).
+	it("joins gaps by spanNulls, up to a threshold when it is a number", function()
+		local holes = series(30, function(i)
+			if i == 5 then
+				return NULL
+			elseif i >= 15 and i <= 20 then
+				return NULL
+			end
+			return i
+		end)
+		local function runs(style: Svg.SeriesStyle): number
+			local d =
+				string.match(tag(render({ holes }, { series = { style } }).svg, "tg-line") :: string, ' d="([^"]*)"')
+			return subpaths(d :: string)
+		end
+		expect(runs({ span_nulls = false })).toBe(3)
+		expect(runs({ span_nulls = true })).toBe(1)
+		-- One missing sample is a 30 s gap, six are 105 s.
+		expect(runs({ span_nulls = 60000 })).toBe(2)
+	end)
+
+	-- fillBelowTo (TimeSeries/utils.ts): the fill runs down to the other
+	-- series, at 35% when no fillOpacity is set.
+	it("fills down to the fillBelowTo series", function()
+		local r = render({ b, a }, { series = { { fill_below = 2 } :: Svg.SeriesStyle, {} :: Svg.SeriesStyle } })
+		local area = tag(r.svg, "tg-s1", "tg-area") :: string
+		expect(area).toContain('fill-opacity="0.35"')
+		local Layout = require("../../../plugin/lib/render/layout")
+		local zero = Layout.yOfValue(r.layout, 0)
+		for _, y in ys(string.match(area, ' d="([^"]*)"') :: string) do
+			expect(y < zero - 1).toBe(true)
+		end
+		expect(tag(r.svg, "tg-s2", "tg-area")).toBeNil()
+	end)
+
+	-- getOpacityGradientFn: the fill fades to nothing at the plot's bottom.
+	it("fades an opacity-gradient fill through a mask", function()
+		local r = render({ a }, { series = { { fill_opacity = 50, gradient = "opacity" } } })
+		assertTernSafe(r.svg)
+		local area = tag(r.svg, "tg-s1", "tg-area") :: string
+		local id = string.match(area, 'mask="url%(#([^)]+)%)"')
+		assert(id, "masked area")
+		expect(r.svg).toContain('<mask id="' .. id .. '">')
+		expect(r.svg).toContain('stop-opacity="0"')
+		expect(has(render({ a }, { series = { { fill_opacity = 50 } } }).svg, "<mask")).toBe(false)
+	end)
+
+	-- Bars: barWidthFactor of the slot, barAlignment -1/0/1 around the time,
+	-- outlined with the line width, filled by fillOpacity; bars at the plot
+	-- edges are cut to it (uPlot clips the plot).
+	it("sizes and aligns bars per series", function()
+		local five = series(5, function(i)
+			return i
+		end)
+		-- x and width of the third (middle) bar.
+		local function midX(style: Svg.SeriesStyle): (number, number)
+			local r = render({ five }, { series = { style } })
+			local d = string.match(tag(r.svg, "tg-line") :: string, ' d="([^"]*)"') :: string
+			local Layout = require("../../../plugin/lib/render/layout")
+			local top = string.format("%.1f", Layout.yOfValue(r.layout, 3))
+			for bx, y, bw in string.gmatch(d, "M([%d%.]+) [%d%.]+V([%d%.]+)h([%d%.]+)") do
+				if y == top then
+					return tonumber(bx) :: number, tonumber(bw) :: number
+				end
+			end
+			error("no bar for 3")
+		end
+		local cx, cw = midX({ draw = "bars", fill_opacity = 50 })
+		local ax, aw = midX({ draw = "bars", bar_alignment = 1 })
+		local bx = midX({ draw = "bars", bar_alignment = -1 })
+		expect(math.abs(ax - (cx + cw / 2)) < 0.2).toBe(true)
+		expect(math.abs(bx - (cx - cw / 2)) < 0.2).toBe(true)
+		expect(aw).toBe(cw)
+		local _, narrow = midX({ draw = "bars", bar_width_factor = 0.3 })
+		expect(math.abs(narrow - cw / 2) < 0.2).toBe(true)
+		local r = render({ five }, { series = { { draw = "bars" } } })
+		local first = tonumber(string.match(tag(r.svg, "tg-line") :: string, ' d="M([%d%.]+)')) :: number
+		expect(first).toBe(r.layout.plot_left)
+		local filled = render({ five }, { series = { { draw = "bars", fill_opacity = 50 } } })
+		expect(tag(filled.svg, "tg-bar")).toContain('fill-opacity="0.50"')
+		expect(tag(render({ five }, { series = { { draw = "bars" } } }).svg, "tg-bar")).toBeNil()
 	end)
 end)
 return nil

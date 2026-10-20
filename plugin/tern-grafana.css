@@ -2,21 +2,25 @@
 
 /* Chart palette (lib/render/svg_timeseries.luau). Tern resolves no var() in
    SVG attributes and drops inline styles, so series colors are classes. They
-   follow Grafana's classic palette, whose hues stay distinct in light and dark
-   themes (theme variables such as --accent and --ok are too close in some
-   themes). Each class sets stroke and fill for SVG shapes and `color` for
-   HTML (legend swatches); the role classes below switch off the half a shape
-   does not paint, so they must stay after the palette. */
-.tg-s1 { color: #7eb26d; stroke: #7eb26d; fill: #7eb26d; }
-.tg-s2 { color: #eab839; stroke: #eab839; fill: #eab839; }
-.tg-s3 { color: #6ed0e0; stroke: #6ed0e0; fill: #6ed0e0; }
-.tg-s4 { color: #ef843c; stroke: #ef843c; fill: #ef843c; }
-.tg-s5 { color: #e24d42; stroke: #e24d42; fill: #e24d42; }
-.tg-s6 { color: #1f78c1; stroke: #1f78c1; fill: #1f78c1; }
-.tg-s7 { color: #ba43a9; stroke: #ba43a9; fill: #ba43a9; }
-.tg-s8 { color: #705da0; stroke: #705da0; fill: #705da0; }
-.tg-s9 { color: #508642; stroke: #508642; fill: #508642; }
-.tg-s10 { color: #cca300; stroke: #cca300; fill: #cca300; }
+   are the first ten colors of Grafana's classic palette (packages/grafana-data
+   src/themes/createVisualizationColors.ts getClassicPalette: green,
+   semi-dark-yellow, blue, orange, red, purple, dark-green, dark-yellow,
+   dark-blue, dark-orange, in their dark-theme shades), whose hues stay
+   distinct in light and dark themes (theme variables such as --accent and
+   --ok are too close in some themes). Each class sets stroke and fill for
+   SVG shapes and `color` for HTML (legend swatches); the role classes below
+   switch off the half a shape does not paint, so they must stay after the
+   palette. */
+.tg-s1 { color: #73bf69; stroke: #73bf69; fill: #73bf69; }
+.tg-s2 { color: #f2cc0c; stroke: #f2cc0c; fill: #f2cc0c; }
+.tg-s3 { color: #5794f2; stroke: #5794f2; fill: #5794f2; }
+.tg-s4 { color: #ff9830; stroke: #ff9830; fill: #ff9830; }
+.tg-s5 { color: #f2495c; stroke: #f2495c; fill: #f2495c; }
+.tg-s6 { color: #b877d9; stroke: #b877d9; fill: #b877d9; }
+.tg-s7 { color: #37872d; stroke: #37872d; fill: #37872d; }
+.tg-s8 { color: #e0b400; stroke: #e0b400; fill: #e0b400; }
+.tg-s9 { color: #1f60c4; stroke: #1f60c4; fill: #1f60c4; }
+.tg-s10 { color: #fa6400; stroke: #fa6400; fill: #fa6400; }
 
 /* Threshold tones (lib/units/thresholds.luau Tone). */
 .tg-th-success { stroke: var(--ok); fill: var(--ok); }
@@ -30,6 +34,7 @@
 
 /* Shape roles: after the palette and tones so they win the cascade. */
 .tg-line,
+.tg-dots,
 .tg-th { fill: none; }
 .tg-area,
 .tg-bar,

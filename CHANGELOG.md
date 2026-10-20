@@ -25,8 +25,9 @@ versions may break).
 - Panel transformations drawn natively: add field from calculation, join by
   field (and seriesToColumns), labels to fields, merge, convert field type,
   format time, sort by, filter data by values, extract fields, reduce, rows to
-  fields, config from query results, group by, limit, rename by regex and
-  series to rows, ported from Grafana 13 with its own test cases;
+  fields, config from query results, group by, grouping to matrix, limit,
+  prepare time series, rename by regex and series to rows, ported from
+  Grafana 13 with its own test cases;
   transformation options see dashboard variables. See docs/dashboards.md,
   Transformations.
 
@@ -70,6 +71,17 @@ versions may break).
   scale and `stacking.group`, the `negative-Y` and `constant` transforms, and
   `hideFrom.legend`/`hideFrom.tooltip`. Field overrides can match by value
   (`byValue`) in every panel type.
+
+### Changed
+
+- Time series panels draw each series with its own field config (line width,
+  dash and dot styles, step and smooth interpolation, fill opacity and opacity
+  gradient, points, span nulls, fill below another series, bar width and
+  alignment), range value axes as Grafana does (headroom above the data, an
+  all-zero series on the floor of 0..100), and color series in Grafana's
+  palette order. Chart series colors are now the first ten colors of
+  Grafana's classic palette. `gradientMode` hue and by-value scheme stay on
+  the PNG rung with that reason.
 
 ### Fixed
 

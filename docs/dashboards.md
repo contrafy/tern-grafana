@@ -138,7 +138,7 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 
 | Panel type | Native | Limits (otherwise the ladder, with the reason) |
 | --- | --- | --- |
-| timeseries, legacy graph | yes | `scaleDistribution` ordinal; graph `xaxis.mode` series/histogram (Grafana migrates those to other panel types); see Time series axes below |
+| timeseries, legacy graph | yes | `scaleDistribution` ordinal; `gradientMode` hue, and scheme unless the color is fixed; graph `xaxis.mode` series/histogram (Grafana migrates those to other panel types); see Time series axes below |
 | stat, legacy singlestat | yes | reducers Tern cannot compute |
 | gauge | yes | see Gauge below |
 | bargauge | yes | `showUnfilled`, `sizing`/`minViz*`/`maxVizHeight` and the legend are not drawn |
@@ -166,6 +166,15 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   legend and the cursor read-out keep its own values; `constant` draws the series' first value across the range.
   Overrides may match fields by value (`byValue`: a reducer compared with `gt`, `gte`, `lt`, `lte`, `eq` or
   `neq`), in every panel type.
+- **Time series drawing.** Every series is drawn with its own field config, from the defaults and overrides:
+  `drawStyle` (line, bars, points), `lineWidth` (0 hides the line), `lineStyle` dash and dot, `lineInterpolation`
+  (linear, smooth, step before/after), `fillOpacity` with `gradientMode` none or opacity, `showPoints` and
+  `pointSize` (auto shows points when the samples are at least two point sizes apart), `spanNulls` (true, or a gap
+  in ms up to which the line is joined), `fillBelowTo` (the fill runs down to the named series, 35% by default)
+  and the bar options (`barAlignment`, `barWidthFactor`, `barMaxWidth`). Value axes are ranged as Grafana ranges
+  them (uPlot's padded range: headroom above the data, a flat zero series on the floor of 0..100, soft bounds
+  and whole numbers with decimals 0). Series colors follow Grafana's classic palette in Grafana's order: the
+  position counts every number field of the graphable frames, hidden series included.
 - **No data.** A panel whose queries return nothing (or that has no query at all) shows Grafana's no-data text:
   the field defaults' `noValue`, else "No data". Stat, gauge and bar gauge show one placeholder value
   (Grafana's `createNoValuesFieldDisplay`): its text is `noValue`, its color the base threshold step and its
@@ -203,10 +212,11 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   value pairs, delimiter, regex, auto), reduce, rows to fields, config from query results (`configFromData`:
   min, max, unit, decimals, display name, color, thresholds and value mappings from data), group by (every
   reducer; columns named like `Value (mean)`), limit (a number or a variable), rename by regex (`$1`
-  replacements, `/.../g` for every match) and series to rows (also an old table panel's "Time series to rows").
-  Values follow JavaScript as Grafana's code does: in a calculation a null counts as 0 and a gap a join created
-  as NaN. Other transformations (grouping to matrix, partition by values, ...) and filters other than `byRefId`
-  keep the panel on the ladder.
+  replacements, `/.../g` for every match), series to rows (also an old table panel's "Time series to rows"),
+  grouping to matrix (row, column and value fields; empty cells as empty, null, true, false or 0) and prepare
+  time series (multi, long and wide, plus the deprecated many). Values follow JavaScript as Grafana's code does:
+  in a calculation a null counts as 0 and a gap a join created as NaN. Other transformations (partition by
+  values, ...) and filters other than `byRefId` keep the panel on the ladder.
 
 ### Clock panels (grafana-clock-panel)
 

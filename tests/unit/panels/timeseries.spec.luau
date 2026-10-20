@@ -81,7 +81,7 @@ for _, version in S.VERSIONS do
 			local panel = S.clone(S.panel(version, 4))
 			panel.fieldConfig.overrides[1].matcher.options = "user"
 			local node, assets = Timeseries.view(panel, S.refFrames(version, "prom_range", "A"), env, { key = "p" })
-			expect(count(assets.p.bytes, "tgp-fx tgp-accent")).toBe(1)
+			expect(count(assets.p.bytes, "tgp-fx tgp-accent tg-line")).toBe(1)
 			local swatches = S.findAll(node, function(n)
 				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tg-swatch", 1, true) ~= nil
 			end)
@@ -281,5 +281,137 @@ for _, version in S.VERSIONS do
 		end)
 	end)
 end
+
+-- The `<path>` tag of the first path whose class list has every class.
+local function pathTag(svg: string, ...: string): string?
+	local want = { ... }
+	for el in string.gmatch(svg, "<path [^>]*>") do
+		local classes = " " .. (string.match(el, 'class="([^"]*)"') or "") .. " "
+		local ok = true
+		for _, c in want do
+			ok = ok and string.find(classes, " " .. c .. " ", 1, true) ~= nil
+		end
+		if ok then
+			return el
+		end
+	end
+	return nil
+end
+
+for _, version in S.VERSIONS do
+	describe("timeseries per-series draw config on tern-panels, Grafana " .. version, function()
+		-- Panel 2 fills every mode at 10%. An override turning one series'
+		-- fill off, widening and dashing its line (UPlotSeriesBuilder.ts
+		-- lineWidth/lineStyle, getFill) must draw exactly that.
+		it("draws an override's fillOpacity, lineWidth and lineStyle on its series only", function()
+			local panel = S.clone(S.panel(version, 2))
+			panel.fieldConfig.overrides = {
+				{
+					matcher = { id = "byRegexp", options = "/^idle$/" },
+					properties = {
+						{ id = "custom.fillOpacity", value = 0 } :: any,
+						{ id = "custom.lineWidth", value = 2 } :: any,
+						{ id = "custom.lineStyle", value = { fill = "dash", dash = { 10, 10 } } } :: any,
+					},
+				},
+			}
+			local frames = S.refFrames(version, "prom_range", "A")
+			local _, assets = Timeseries.view(panel, frames, env, { key = "p" })
+			local svg = assets.p.bytes
+			expect(count(svg, "tg-area")).toBe(7)
+			local items = require("../../../plugin/lib/panels/fieldconfig").resolve(panel, frames, env)
+			local idleClass: string? = nil
+			for _, item in items do
+				if item.name == "idle" then
+					idleClass = "tg-s" .. tostring(Timeseries.paletteIndexes(frames)[item.field])
+				end
+			end
+			local line = pathTag(svg, idleClass :: string, "tg-line") :: string
+			expect(line).toContain('stroke-width="3"')
+			expect(line).toContain('stroke-dasharray="15 15"')
+			expect(pathTag(svg, idleClass :: string, "tg-area")).toBeNil()
+		end)
+	end)
+end
+
+-- Ladder reasons for what the class-colored SVG cannot draw.
+describe("timeseries gradient modes (UPlotSeriesBuilder.ts getFill)", function()
+	local function panel(mode: string, colorMode: string?): any
+		return {
+			type = "timeseries",
+			fieldConfig = {
+				defaults = { color = { mode = colorMode or "palette-classic" }, custom = { gradientMode = mode } },
+				overrides = {},
+			},
+		}
+	end
+
+	it("draws none and opacity, refuses hue and by-value scheme", function()
+		expect(Timeseries.unsupported(panel("none"), env)).toBeNil()
+		expect(Timeseries.unsupported(panel("opacity"), env)).toBeNil()
+		expect(Timeseries.unsupported(panel("hue"), env)).toBe(
+			"custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
+		)
+		expect(Timeseries.unsupported(panel("scheme"), env)).toBe(
+			"custom.gradientMode scheme (series colored by value) is not drawn natively"
+		)
+		-- Scheme with a fixed color falls through to a plain fill.
+		expect(Timeseries.unsupported(panel("scheme", "fixed"), env)).toBeNil()
+		local over = panel("none")
+		over.fieldConfig.overrides = {
+			{
+				matcher = { id = "byName", options = "a" },
+				properties = { { id = "custom.gradientMode", value = "hue" } },
+			},
+		}
+		expect(Timeseries.unsupported(over, env)).toBe(
+			"override custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
+		)
+	end)
+end)
+
+-- setClassicPaletteIdxs (public/app/plugins/panel/timeseries/utils.ts):
+-- classic palette positions count number fields of graphable frames in
+-- frame order, hidden series included, each frame's first field skipped.
+describe("timeseries palette positions (setClassicPaletteIdxs)", function()
+	local Frame = require("../../../plugin/lib/frame/types")
+	local a = Frame.timeSeries({ s = "a" }, { 0, 1000 }, { 1, 2 })
+	local b = Frame.timeSeries({ s = "b" }, { 0, 1000 }, { 3, 4 })
+	local c = Frame.timeSeries({ s = "c" }, { 0, 1000 }, { 5, 6 })
+	local noTime: Frame.Frame = { fields = { Frame.field("n", "number", { 1 }) } }
+
+	it("counts graphable frames only, in frame order", function()
+		local idx = Timeseries.paletteIndexes({ a, noTime, b, c })
+		expect(idx[a.fields[2]]).toBe(1)
+		expect(idx[b.fields[2]]).toBe(2)
+		expect(idx[c.fields[2]]).toBe(3)
+		expect(idx[noTime.fields[1]]).toBeNil()
+	end)
+
+	-- A hidden series keeps its palette slot, so the others keep their
+	-- colors when it is hidden.
+	it("keeps the colors of the series after a hidden one", function()
+		local panel = {
+			type = "timeseries",
+			fieldConfig = {
+				defaults = { color = { mode = "palette-classic" } },
+				overrides = {
+					{
+						matcher = { id = "byName", options = "a" },
+						properties = {
+							{ id = "custom.hideFrom", value = { viz = true, legend = true, tooltip = true } },
+						},
+					},
+				},
+			},
+			options = { legend = { showLegend = true, displayMode = "list" } },
+		}
+		local _, assets = Timeseries.view(panel, { a, b, c }, env, { key = "p" })
+		local svg = assets.p.bytes
+		expect(pathTag(svg, "tg-s1", "tg-line")).toBeNil()
+		expect(pathTag(svg, "tg-s2", "tg-line") ~= nil).toBe(true)
+		expect(pathTag(svg, "tg-s3", "tg-line") ~= nil).toBe(true)
+	end)
+end)
 
 return nil

@@ -87,6 +87,153 @@ function M.niceScale(lo: number, hi: number, plotPx: number, hardMin: number?, h
 	return { min = lo2, max = hi2, step = step, ticks = ticks }
 end
 
+-- One end of a uPlot range config: padding as a fraction of the data span,
+-- the hard limit, the soft value and its mode (0 off, 1 always, 2 only when
+-- the padded end stays inside it, 3 only when it would go past it).
+export type RangePart = { pad: number, hard: number, soft: number?, mode: number }
+
+local function fixFloat(v: number): number
+	local n = tonumber(string.format("%.14g", v)) :: number
+	return if n == 0 then 0 else n
+end
+
+-- uPlot 1.6.32 (Grafana 11 and 12) src/utils.js _rangeNum: the data range
+-- widened by `pad` of its span at both ends, rounded out to a tenth of the
+-- span's magnitude, then snapped to the soft values and clamped to the
+-- hard limits. A flat 0 widens to 0..100.
+function M.rangeNum(lo: number, hi: number, cmin: RangePart, cmax: RangePart): (number, number)
+	local padMin, padMax = cmin.pad, cmax.pad
+	local hardMin, hardMax = cmin.hard, cmax.hard
+	local softMin = if cmin.soft == nil then math.huge else cmin.soft :: number
+	local softMax = if cmax.soft == nil then -math.huge else cmax.soft :: number
+	local softMinMode, softMaxMode = cmin.mode, cmax.mode
+	local delta = hi - lo
+	local scalarMax = math.max(math.abs(lo), math.abs(hi))
+	local magDelta = math.abs(math.log10(scalarMax) - math.log10(delta))
+	if delta < 1e-24 or magDelta > 10 then
+		delta = 0
+		if lo == 0 or hi == 0 then
+			delta = 1e-24
+			if softMinMode == 2 and softMin ~= math.huge then
+				padMin = 0
+			end
+			if softMaxMode == 2 and softMax ~= -math.huge then
+				padMax = 0
+			end
+		end
+	end
+	local nonZeroDelta = if delta ~= 0 then delta elseif scalarMax ~= 0 then scalarMax else 1e3
+	local base = 10 ^ math.floor(math.log10(nonZeroDelta))
+	local incr = base / 10
+
+	local pMin = nonZeroDelta * (if delta == 0 then (if lo == 0 then 0.1 else 1) else padMin)
+	local newMin = fixFloat(math.floor(fixFloat((lo - pMin) / incr)) * incr)
+	local sMin = if lo >= softMin
+			and (
+				softMinMode == 1
+				or (softMinMode == 3 and newMin <= softMin)
+				or (softMinMode == 2 and newMin >= softMin)
+			)
+		then softMin
+		else math.huge
+	local minLim = math.max(hardMin, if newMin < sMin and lo >= sMin then sMin else math.min(sMin, newMin))
+
+	local pMax = nonZeroDelta * (if delta == 0 then (if hi == 0 then 0.1 else 1) else padMax)
+	local newMax = fixFloat(math.ceil(fixFloat((hi + pMax) / incr)) * incr)
+	local sMax = if hi <= softMax
+			and (
+				softMaxMode == 1
+				or (softMaxMode == 3 and newMax >= softMax)
+				or (softMaxMode == 2 and newMax <= softMax)
+			)
+		then softMax
+		else -math.huge
+	local maxLim = math.min(hardMax, if newMax > sMax and hi <= sMax then sMax else math.max(sMax, newMax))
+
+	if minLim == maxLim and minLim == 0 then
+		maxLim = 100
+	end
+	return minLim, maxLim
+end
+
+export type LinearRange = {
+	hard_min: number?,
+	hard_max: number?,
+	soft_min: number?,
+	soft_max: number?,
+	centered_zero: boolean?,
+	percent: boolean?,
+	decimals: number?,
+}
+
+-- A linear scale's range as Grafana configures uPlot
+-- (packages/grafana-ui/src/components/uPlot/config/UPlotScaleBuilder.ts):
+-- pad 0.1 at both ends, soft 0 in mode 3 unless a soft bound is set (then
+-- mode 1), percent stacks soft 0..1, centered zero first, hard bounds kept
+-- exactly, whole numbers with decimals 0, and 0..100 when nothing is left.
+-- `lo`/`hi` nil (no data) read as 0.
+function M.linearRange(lo: number?, hi: number?, r: LinearRange): (number, number)
+	local softMin, softMax = r.soft_min, r.soft_max
+	local hardMin, hardMax = r.hard_min, r.hard_max
+	if r.percent then
+		if hardMin == nil and softMin == nil then
+			softMin = 0
+		end
+		if hardMax == nil and softMax == nil then
+			softMax = 1
+		end
+	end
+	local dataMin, dataMax = lo or 0, hi or 0
+	if r.centered_zero then
+		local m = math.max(math.abs(dataMin), math.abs(dataMax))
+		if m == 0 then
+			m = 80
+		end
+		dataMin, dataMax = -m, m
+	end
+	local hardMinOnly = softMin == nil and hardMin ~= nil
+	local hardMaxOnly = softMax == nil and hardMax ~= nil
+	local a, b = M.rangeNum(
+		if hardMinOnly then hardMin :: number else dataMin,
+		if hardMaxOnly then hardMax :: number else dataMax,
+		{ pad = 0.1, hard = hardMin or -math.huge, soft = softMin or 0, mode = if softMin == nil then 3 else 1 },
+		{ pad = 0.1, hard = hardMax or math.huge, soft = softMax or 0, mode = if softMax == nil then 3 else 1 }
+	)
+	if r.decimals == 0 then
+		a, b = math.floor(a + 1e-9), math.ceil(b - 1e-9)
+	end
+	if hardMinOnly then
+		a = hardMin :: number
+	end
+	if hardMaxOnly then
+		b = hardMax :: number
+	end
+	if a == b and a ~= 0 then
+		if a < 0 then
+			a, b = a * 2, 0
+		else
+			a, b = 0, b * 2
+		end
+	end
+	if a >= b then
+		a, b = 0, 100
+	end
+	return a, b
+end
+
+-- uPlot axis splits on a fixed range: the smallest nice increment (1, 2,
+-- 2.5, 5 x 10^n) whose ticks are at least the y spacing apart, at its
+-- multiples inside min..max.
+function M.rangeScale(min: number, max: number, plotPx: number): Scale
+	local space = if plotPx <= 150 then M.Y_SPACE_SMALL else M.Y_SPACE
+	local step = M.niceStep(max - min, plotPx / space)
+	local ticks: { number } = {}
+	for i = math.ceil(min / step - 1e-9), math.floor(max / step + 1e-9) do
+		table.insert(ticks, clean(i * step))
+	end
+	return { min = min, max = max, step = step, ticks = ticks }
+end
+
 -- UPlotScaleBuilder: a log base is 2 or 10, anything else falls back to 10.
 function M.logBase(base: number?): number
 	return if base == 2 then 2 else 10
