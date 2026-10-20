@@ -283,6 +283,8 @@ capture_prometheus() {
 	get walreplay /api/v1/status/walreplay
 	get query_vector "/api/v1/query?query=up&time=$END"
 	get query_scalar "/api/v1/query?query=$(enc 'scalar(sum(up))')&time=$END"
+	# A fractional sample: Grafana's query_result() text carries it as Prometheus wrote it.
+	get query_vector_fraction "/api/v1/query?query=$(enc 'vector(time())')&time=$END.125"
 	get query_string "/api/v1/query?query=$(enc '"tern"')&time=$END"
 	get query_matrix "/api/v1/query?query=$(enc 'up{job="node"}[1m]')&time=$END"
 	get query_empty "/api/v1/query?query=tern_nonexistent_metric&time=$END"
@@ -365,6 +367,8 @@ capture_grafana() {
 
 	ds_query ds_query_prom_range '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (mode) (rate(node_cpu_seconds_total[1m]))","legendFormat":"{{mode}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200},{"refId":"B","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum(up)","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_instant '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"up","range":false,"instant":true,"intervalMs":15000,"maxDataPoints":200}]'
+	# query_result(1 - $flag) with flag = 1: a scalar answer (resultType "scalar").
+	ds_query ds_query_prom_scalar '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"1 - 1","range":false,"instant":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_table '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"up","format":"table","range":false,"instant":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_exemplars '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"histogram_quantile(0.95, sum by (le, service) (rate(traces_spanmetrics_latency_bucket[1m])))","legendFormat":"{{service}}","range":true,"instant":false,"exemplar":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_heatmap '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (le) (increase(traces_spanmetrics_latency_bucket[1m]))","format":"heatmap","legendFormat":"{{le}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
