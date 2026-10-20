@@ -152,4 +152,53 @@ describe("Axis.timeTicks", function()
 	end)
 end)
 
+-- Log and symlog scales (UPlotScaleBuilder.ts: distr 3 with rangeLog and
+-- whole magnitudes, distr 4 asinh with rangeAsinh; log base 2 or 10, else 10).
+describe("Axis log and symlog scales", function()
+	it("spans whole powers of the base and snaps hard bounds outward to powers", function()
+		local s = Axis.logScale(3, 700, 270, 10)
+		expect(s.min).toBe(1)
+		expect(s.max).toBe(1000)
+		expect(s.ticks).toEqual({ 1, 10, 100, 1000 })
+		-- 2x and 5x once a decade leaves room for them.
+		expect(Axis.logScale(3, 700, 400, 10).ticks).toEqual({ 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000 })
+		local hard = Axis.logScale(3, 700, 270, 10, 30, 5000)
+		expect(hard.min).toBe(10)
+		expect(hard.max).toBe(10000)
+		local two = Axis.logScale(3, 100, 270, 2)
+		expect(two.min).toBe(2)
+		expect(two.max).toBe(128)
+		expect(two.ticks).toEqual({ 2, 4, 8, 16, 32, 64, 128 })
+		expect(Axis.logBase(3)).toBe(10)
+	end)
+
+	it("thins decades to the axis spacing on short plots", function()
+		local s = Axis.logScale(1, 1e10, 160, 10)
+		expect(s.ticks).toEqual({ 1, 100, 10000, 1000000, 100000000, 10000000000 })
+	end)
+
+	it("places log values by their logarithm and refuses non-positive ones", function()
+		local s = Axis.logScale(1, 1000, 270, 10)
+		expect(Axis.position(s, 1)).toBe(0)
+		expect(math.abs((Axis.position(s, 10) :: number) - 1 / 3) < 1e-9).toBe(true)
+		expect(Axis.position(s, 0)).toBeNil()
+	end)
+
+	it("grows symlog bounds to signed powers and ticks outward from zero", function()
+		local s = Axis.symlogScale(-700, 30, 270, 10, 1)
+		expect(s.min).toBe(-1000)
+		expect(s.max).toBe(100)
+		expect(table.find(s.ticks, 0) ~= nil).toBe(true)
+		expect(s.ticks[1]).toBe(-1000)
+		expect(s.ticks[#s.ticks]).toBe(100)
+		expect(Axis.position(s, -1000)).toBe(0)
+		expect(Axis.position(s, 100)).toBe(1)
+		-- Inside the linear threshold the scale is nearly linear.
+		local p1 = Axis.position(s, 0.5) :: number
+		local p0 = Axis.position(s, 0) :: number
+		local pm = Axis.position(s, -0.5) :: number
+		expect(math.abs((p1 - p0) - (p0 - pm)) < 1e-9).toBe(true)
+	end)
+end)
+
 return nil

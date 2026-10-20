@@ -4,7 +4,8 @@
 -- fieldOverrides.ts applyFieldOverrides), field display names
 -- (field/fieldState.ts calculateFieldDisplayName), override matchers
 -- (transformations/matchers/nameMatcher.ts, fieldTypeMatcher.ts,
--- refIdMatcher.ts) and the display processor that turns one value into
+-- refIdMatcher.ts, fieldValueMatcher.ts with compareValues.ts) and the
+-- display processor that turns one value into
 -- text and a color (field/displayProcessor.ts, field/scale.ts,
 -- field/fieldColor.ts).
 --
@@ -302,7 +303,74 @@ local MATCHERS: { [string]: boolean } = {
 	byType = true,
 	byNames = true,
 	byRegexpOrNames = true,
+	byValue = true,
 }
+
+-- JS `${v}` for the values a reducer or a matcher option holds.
+local function jsString(v: any): string
+	if v == nil then
+		return "null"
+	elseif type(v) == "number" then
+		if v ~= v then
+			return "NaN"
+		elseif v == math.huge then
+			return "Infinity"
+		elseif v == -math.huge then
+			return "-Infinity"
+		elseif v == math.floor(v) and math.abs(v) < 1e21 then
+			return string.format("%d", v)
+		end
+	end
+	return tostring(v)
+end
+
+-- JS relational comparison: strings compare as strings, anything else as
+-- numbers (a non-numeric string or "null" is NaN, so never ordered).
+local function jsNumber(v: any): number
+	if type(v) == "number" then
+		return v
+	elseif type(v) == "boolean" then
+		return if v then 1 else 0
+	elseif type(v) == "string" then
+		local s = string.match(v, "^%s*(.-)%s*$") or ""
+		if s == "" then
+			return 0
+		end
+		return tonumber(s) or 0 / 0
+	end
+	return 0 / 0
+end
+
+-- compareValues (transformations/matchers/compareValues.ts): a missing side
+-- reads as "null", and gte/lte against it become equality.
+function M.compareValues(left: any, op: string, right: any): boolean
+	if left == nil or right == nil then
+		left = if left == nil then "null" else left
+		right = if right == nil then "null" else right
+		if op == "gte" or op == "lte" then
+			op = "eq"
+		end
+	end
+	if op == "eq" then
+		return jsString(left) == jsString(right)
+	elseif op == "neq" then
+		return jsString(left) ~= jsString(right)
+	end
+	local a: any, b: any = left, right
+	if type(a) ~= "string" or type(b) ~= "string" then
+		a, b = jsNumber(a), jsNumber(b)
+	end
+	if op == "gt" then
+		return a > b
+	elseif op == "gte" then
+		return a >= b
+	elseif op == "lt" then
+		return a < b
+	elseif op == "lte" then
+		return a <= b
+	end
+	return false
+end
 
 local function regexMatcher(pattern: string?): Matcher
 	local re = if pattern and pattern ~= "" then Regex.parseJs(pattern) else nil
@@ -386,23 +454,49 @@ local function matcherFor(env: Env, raw: any): Matcher?
 		return function(field: Field, frame: Frame, frames: { Frame }): boolean
 			return byNames(field, frame, frames) or byRegex(field, frame, frames)
 		end
+	elseif id == "byValue" then
+		-- fieldValueMatcher.ts: the field reduced by `reducer`, compared to
+		-- `value` with `op` (eq when unset); allIsNull/allIsZero match on
+		-- their own truth. Fields of every type are reduced, as in Grafana.
+		local o = Json.obj(env, options)
+		local reducer = Json.str(env, o.reducer)
+		if reducer == nil or reducer == "" then
+			return function(): boolean
+				return false
+			end
+		end
+		local r = reducer :: string
+		local op = Json.str(env, o.op) or "eq"
+		local value: any = if o.value == env.null then nil else o.value
+		local boolean = r == "allIsNull" or r == "allIsZero"
+		return function(field: Field): boolean
+			local left = Reduce.reduce(field.values, r, field.type)
+			if boolean then
+				return left == true
+			end
+			return M.compareValues(left, op, value)
+		end
 	end
 	return nil
 end
 
 M.matcherFor = matcherFor
 
+-- Panel types whose renderer honors custom.transform (negative-Y, constant)
+-- and log/symlog scaleDistribution (lib/render/svg_timeseries).
+local GRAPH_NATIVE: { [string]: boolean } = { timeseries = true }
+
 -- Properties that change what a panel means and that the native renderers
 -- cannot honor; any of them sends the panel down the ladder.
-local function unsupportedProperty(env: Env, id: string, value: any): string?
+local function unsupportedProperty(env: Env, id: string, value: any, graph: boolean): string?
 	if id == "custom.transform" then
 		local s = Json.str(env, value)
-		if s == "negative-Y" or s == "constant" then
+		if not graph and (s == "negative-Y" or s == "constant") then
 			return "custom.transform " .. s
 		end
 	elseif id == "custom.scaleDistribution" then
 		local kind = Json.str(env, Json.path(env, value, "type"))
-		if kind and kind ~= "linear" then
+		if kind and kind ~= "linear" and not (graph and (kind == "log" or kind == "symlog")) then
 			return "custom.scaleDistribution " .. kind
 		end
 	end
@@ -411,10 +505,11 @@ end
 
 -- Why the panel's field config cannot be rendered natively, or nil.
 function M.unsupported(panel: any, env: Env): string?
+	local graph = GRAPH_NATIVE[Json.str(env, Json.path(env, panel, "type")) or ""] == true
 	local defaults = Json.obj(env, Json.path(env, panel, "fieldConfig", "defaults"))
 	local custom = Json.obj(env, defaults.custom)
 	for _, key in { "transform", "scaleDistribution" } do
-		local why = unsupportedProperty(env, "custom." .. key, custom[key])
+		local why = unsupportedProperty(env, "custom." .. key, custom[key], graph)
 		if why then
 			return "field config " .. why .. " is not supported"
 		end
@@ -425,9 +520,15 @@ function M.unsupported(panel: any, env: Env): string?
 		if id == nil or not MATCHERS[id] then
 			return string.format("override matcher %s is not supported", tostring(id))
 		end
+		if id == "byValue" then
+			local reducer = Json.str(env, Json.path(env, matcher, "options", "reducer"))
+			if reducer and reducer ~= "" and not Reduce.supports(reducer) then
+				return string.format("override matcher byValue reducer %s is not supported", reducer)
+			end
+		end
 		for _, p in Json.list(env, Json.path(env, o, "properties")) do
 			local pid = Json.str(env, Json.path(env, p, "id"))
-			local why = if pid then unsupportedProperty(env, pid, Json.path(env, p, "value")) else nil
+			local why = if pid then unsupportedProperty(env, pid, Json.path(env, p, "value"), graph) else nil
 			if why then
 				return "override " .. why .. " is not supported"
 			end
@@ -511,6 +612,15 @@ function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Ite
 							cfg.custom[k] = v
 						end
 					end
+				end
+				if ds.thresholds ~= nil then
+					applyProperty(env, cfg, "thresholds", ds.thresholds)
+				end
+				if ds.mappings ~= nil then
+					applyProperty(env, cfg, "mappings", ds.mappings)
+				end
+				if ds.color ~= nil then
+					applyProperty(env, cfg, "color", ds.color)
 				end
 			end
 			for _, o in overrides do

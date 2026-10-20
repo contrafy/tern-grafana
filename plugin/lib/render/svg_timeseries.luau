@@ -13,9 +13,22 @@
 -- the cap (reported as `dropped`), and shrinks the budget until the document
 -- fits.
 --
+-- Y scales follow Grafana's time series config (public/app/core/components/
+-- TimeSeries/utils.ts preparePlotConfigBuilder): series share a scale when
+-- their scale key matches (packages/grafana-ui/src/components/uPlot/
+-- internal.ts buildScaleKey: unit, min/max, soft min/max, placement,
+-- distribution, label), each scale gets an axis unless its placement is
+-- hidden, and auto placement puts the first axis left and later ones right
+-- (UPlotConfigBuilder addAxis). Stacking groups are per direction, mode,
+-- group and scale (uPlot/utils.ts getStackingGroups). custom.transform
+-- negative-Y draws a series negated and constant draws its first value
+-- across the time range (preparePlotData2, the Constant path builder); the
+-- legend and cursor keep reading the series' own values.
+--
 -- Exemplars are diamonds in one `tg-exemplar` path over the series, at most
 -- EXEMPLAR_CAP of them (thinned evenly over time); layout.exemplars lists
--- the ones drawn so a block can select one by index.
+-- the ones drawn so a block can select one by index. They share the first
+-- series' scale.
 
 local Axis = require("./axis")
 local Format = require("../units/format")
@@ -30,22 +43,59 @@ local Tbl = require("../tbl")
 type Frame = Frame.Frame
 type Layout = Layout.Layout
 type DrawnSeries = Layout.DrawnSeries
+type YAxis = Layout.YAxis
 
 export type ThresholdStyle = "off" | "line" | "area" | "line+area"
 export type Draw = "line" | "bars" | "points"
+export type Placement = "auto" | "left" | "right" | "hidden"
+export type Transform = "negative-Y" | "constant"
+-- Grafana custom.scaleDistribution: type linear|log|symlog, log base 2|10,
+-- linearThreshold for symlog.
+export type Distribution = { type: Axis.Distr, log: number?, linear_threshold: number? }
+
+-- One series' GraphFieldConfig as far as the scales see it.
+export type SeriesStyle = {
+	unit: string?,
+	decimals: number?,
+	-- Hard bounds (fieldConfig min/max).
+	min: number?,
+	max: number?,
+	-- custom.axisSoftMin/Max: the scale reaches at least this far.
+	soft_min: number?,
+	soft_max: number?,
+	-- custom.axisCenteredZero.
+	centered_zero: boolean?,
+	placement: Placement?,
+	-- custom.axisLabel.
+	label: string?,
+	-- custom.axisGridShow (default true).
+	grid: boolean?,
+	distribution: Distribution?,
+	transform: Transform?,
+	stack: Series.StackMode?,
+	-- custom.stacking.group (default "A").
+	stack_group: string?,
+	thresholds: Thresholds.Thresholds?,
+	threshold_style: ThresholdStyle?,
+	hide_legend: boolean?,
+	hide_tooltip: boolean?,
+}
 
 export type Options = {
 	-- Design size in px (the image scales down to the pane).
 	width: number?,
 	height: number?,
+	-- One shared scale (used when `series` is nil): unit, decimals, hard
+	-- y-axis bounds, stacking and thresholds for every series.
 	unit: string?,
 	decimals: number?,
-	-- Hard y-axis bounds.
 	min: number?,
 	max: number?,
 	thresholds: Thresholds.Thresholds?,
 	threshold_style: ThresholdStyle?,
 	stack: Series.StackMode?,
+	-- Per series (extraction order): replaces the shared scale settings.
+	series: { SeriesStyle }?,
 	draw: Draw?,
 	-- 0..100, Grafana's fillOpacity.
 	fill_opacity: number?,
@@ -86,6 +136,9 @@ local fmt = string.format
 local PAD_TOP = 8
 local PAD_RIGHT = 12
 local X_AXIS_H = 24
+-- Narrowest y axis band, and the extra band an axis label takes.
+local AXIS_MIN_W = 36
+local AXIS_LABEL_W = 18
 -- Bytes per drawn sample, measured on this generator's output.
 local BYTES_LINE = 12
 local BYTES_BAR = 30
@@ -123,33 +176,192 @@ local function presentOnly(times: { number }, values: { any }): ({ number }, { a
 	return t2, v2
 end
 
+-- Scales -----------------------------------------------------------------------
+
+local function keyPart(v: any): string
+	return if v == nil then "na" else tostring(v)
+end
+
+-- buildScaleKey (uPlot/internal.ts); every series here is a number field.
+function M.scaleKey(s: SeriesStyle): string
+	local d = s.distribution
+	local dist = if d == nil then "linear" elseif d.type == "log" then "log" .. keyPart(d.log) else d.type
+	local label = if s.label ~= nil and s.label ~= "" then s.label else "na"
+	return fmt(
+		"%s/%s-%s/%s-%s/%s/%s/%s/number",
+		s.unit or "__fixed",
+		keyPart(s.min),
+		keyPart(s.max),
+		keyPart(s.soft_min),
+		keyPart(s.soft_max),
+		s.placement or "auto",
+		dist,
+		label
+	)
+end
+
+-- A scale and the series on it; the first series' style configures it
+-- (UPlotConfigBuilder keeps the first scale and axis of a key).
+type ScaleSpec = {
+	key: string,
+	style: SeriesStyle,
+	members: { number },
+	side: "left" | "right" | "hidden",
+	percent: boolean,
+}
+
+local function scaleSpecs(styles: { SeriesStyle }): ({ ScaleSpec }, { number })
+	local specs: { ScaleSpec } = {}
+	local byKey: { [string]: number } = {}
+	local scaleOf: { number } = table.create(#styles)
+	local hasLeft = false
+	for i, st in styles do
+		local key = M.scaleKey(st)
+		local at = byKey[key]
+		if at == nil then
+			local placement = st.placement or "auto"
+			local side: "left" | "right" | "hidden"
+			if placement == "hidden" then
+				side = "hidden"
+			elseif placement == "right" or (placement ~= "left" and hasLeft) then
+				side = "right"
+			else
+				side = "left"
+				hasLeft = true
+			end
+			table.insert(specs, { key = key, style = st, members = {}, side = side, percent = st.stack == "percent" })
+			at = #specs
+			byKey[key] = at
+		end
+		local a = at :: number
+		table.insert(specs[a].members, i)
+		scaleOf[i] = a
+	end
+	return specs, scaleOf
+end
+
+local function distr(st: SeriesStyle): Axis.Distr
+	local d = st.distribution
+	return if d then d.type else "linear"
+end
+
+-- The series as drawn: negated (negative-Y), flattened to its first value
+-- across the time range (constant), non-positive values dropped on a log
+-- scale (uPlot cannot place them).
+local function transformed(
+	list: { Series.Series },
+	styles: { SeriesStyle },
+	tFrom: number,
+	tTo: number
+): { Series.Series }
+	local out: { Series.Series } = table.create(#list)
+	for i, s in list do
+		local st = styles[i]
+		local log = distr(st) == "log"
+		if st.transform == "constant" then
+			local first: number? = nil
+			for _, v in s.values do
+				first = finite(v)
+				if first then
+					break
+				end
+			end
+			local copy = Tbl.copy(s)
+			copy.times = { tFrom, tTo }
+			local v: any = if first == nil or (log and first <= 0) then NULL else first
+			copy.values = { v, v }
+			out[i] = copy
+		elseif st.transform == "negative-Y" or log then
+			local neg = st.transform == "negative-Y"
+			local values: { any } = table.create(#s.values)
+			for j, raw in s.values do
+				local v = finite(raw)
+				if v and neg then
+					v = -v
+				end
+				values[j] = if v == nil or (log and v <= 0) then NULL else v
+			end
+			local copy = Tbl.copy(s)
+			copy.values = values
+			out[i] = copy
+		else
+			out[i] = s
+		end
+	end
+	return out
+end
+
+type StackGroup = { mode: Series.StackMode, neg: boolean, members: { number } }
+
+-- getStackingGroups: one group per direction (a series with a negative
+-- sample after its transform stacks down), mode, group and scale.
+local function stackGroups(shown: { Series.Series }, styles: { SeriesStyle }, scaleOf: { number }): { StackGroup }
+	local groups: { StackGroup } = {}
+	local byKey: { [string]: StackGroup } = {}
+	for i = 1, #shown do
+		local st = styles[i]
+		local mode: Series.StackMode = st.stack or "none"
+		if mode == "none" or st.transform == "constant" then
+			continue
+		end
+		local neg = false
+		for _, v in shown[i].values do
+			local n = finite(v)
+			if n and n < 0 then
+				neg = true
+				break
+			end
+		end
+		local key = fmt("%s|%s|%s|%d", if neg then "neg" else "pos", mode, st.stack_group or "A", scaleOf[i])
+		local g = byKey[key]
+		if g == nil then
+			g = { mode = mode, neg = neg, members = {} }
+			byKey[key] = g
+			table.insert(groups, g :: StackGroup)
+		end
+		table.insert((g :: StackGroup).members, i)
+	end
+	return groups
+end
+
 type Plot = {
-	-- Per series: times, raw values, values to plot (stacked tops), and the
-	-- base each fill or bar starts from (nil: the axis baseline).
+	-- Per series: times, values as drawn (transformed, not stacked), values
+	-- to plot (stacked tops), and the base each fill or bar starts from
+	-- (nil: the axis baseline).
 	times: { { number } },
 	raw: { { any } },
 	tops: { { any } },
 	bottoms: { { number }? },
+	stacked: { [number]: boolean },
 }
 
-local function downsample(list: { Series.Series }, opts: Options, perSeries: number): Plot
-	local stack: Series.StackMode = opts.stack or "none"
-	local plot: Plot = { times = {}, raw = {}, tops = {}, bottoms = {} }
-	if stack ~= "none" and #list > 0 then
-		local times, columns = Series.join(list)
-		local tops, bottoms = Series.stack(columns, stack)
-		-- One index set for all series keeps the stack aligned: LTTB on the
-		-- stack's upper envelope.
+local function downsample(
+	shown: { Series.Series },
+	groups: { StackGroup },
+	nullMode: ("gap" | "connect")?,
+	perSeries: number
+): Plot
+	local plot: Plot = { times = {}, raw = {}, tops = {}, bottoms = {}, stacked = {} }
+	for _, g in groups do
+		local sub: { Series.Series } = table.create(#g.members)
+		for k, i in g.members do
+			sub[k] = shown[i]
+			plot.stacked[i] = true
+		end
+		local times, columns = Series.join(sub)
+		local tops, bottoms = Series.stack(columns, g.mode)
+		-- One index set for the whole group keeps the stack aligned: LTTB on
+		-- the stack's outer envelope.
 		local envelope: { any } = table.create(#times)
 		for j = 1, #times do
-			local hi: number? = nil
-			for i = 1, #tops do
-				local v = finite(tops[i][j])
-				if v and (hi == nil or v > hi) then
-					hi = v
+			local edge: number? = nil
+			for k = 1, #tops do
+				local v = finite(tops[k][j])
+				if v and (edge == nil or (if g.neg then v < edge else v > edge)) then
+					edge = v
 				end
 			end
-			envelope[j] = if hi == nil then NULL else hi
+			envelope[j] = if edge == nil then NULL else edge
 		end
 		local keptT = Lttb.downsample(times, envelope, perSeries, NULL)
 		local idx: { number }
@@ -169,17 +381,19 @@ local function downsample(list: { Series.Series }, opts: Options, perSeries: num
 			end
 		end
 		local drawnT = pick(times, idx) :: { number }
-		for i = 1, #list do
+		for k, i in g.members do
 			plot.times[i] = drawnT
-			plot.raw[i] = pick(columns[i], idx)
-			plot.tops[i] = pick(tops[i], idx)
-			plot.bottoms[i] = pick(bottoms[i], idx) :: { number }
+			plot.raw[i] = pick(columns[k], idx)
+			plot.tops[i] = pick(tops[k], idx)
+			plot.bottoms[i] = pick(bottoms[k], idx) :: { number }
 		end
-		return plot
 	end
-	for i, s in list do
+	for i, s in shown do
+		if plot.stacked[i] then
+			continue
+		end
 		local t, v = s.times, s.values
-		if opts.null_mode == "connect" then
+		if nullMode == "connect" then
 			t, v = presentOnly(t, v)
 		end
 		local dt, dv = Lttb.downsample(t, v, perSeries, NULL)
@@ -190,7 +404,9 @@ local function downsample(list: { Series.Series }, opts: Options, perSeries: num
 	return plot
 end
 
-local function valueRange(list: { Series.Series }, plot: Plot, opts: Options): (number?, number?)
+-- The data extent of each scale: stacked tops and bases, or the full-
+-- resolution values (so downsampling never moves an axis).
+local function scaleRange(shown: { Series.Series }, plot: Plot, members: { number }): (number?, number?)
 	local lo: number?, hi: number? = nil, nil
 	local function see(v: any)
 		local n = finite(v)
@@ -203,8 +419,8 @@ local function valueRange(list: { Series.Series }, plot: Plot, opts: Options): (
 			end
 		end
 	end
-	if (opts.stack or "none") ~= "none" then
-		for i = 1, #plot.tops do
+	for _, i in members do
+		if plot.stacked[i] then
 			for _, v in plot.tops[i] do
 				see(v)
 			end
@@ -214,19 +430,79 @@ local function valueRange(list: { Series.Series }, plot: Plot, opts: Options): (
 					see(v)
 				end
 			end
-		end
-	else
-		-- Full resolution, so downsampling never moves the axis.
-		for _, s in list do
-			local c = Series.calcs(s.values)
+		else
+			local c = Series.calcs(shown[i].values)
 			see(c.min)
 			see(c.max)
 		end
 	end
-	if lo ~= nil and ((opts.draw or "line") == "bars" or (opts.fill_opacity or 0) > 0) then
-		see(0)
-	end
 	return lo, hi
+end
+
+-- UPlotScaleBuilder range: hard bounds kept, centered zero, soft bounds the
+-- scale reaches at least, percent stacks 0..1; nice steps between.
+local function buildScale(spec: ScaleSpec, lo: number?, hi: number?, plotPx: number, zero: boolean): Axis.Scale
+	local st = spec.style
+	local d = st.distribution
+	local kind = distr(st)
+	local hardMin, hardMax = st.min, st.max
+	if spec.percent then
+		hardMin, hardMax = hardMin or 0, hardMax or 1
+	end
+	if kind == "log" then
+		local base = Axis.logBase(if d then d.log else nil)
+		local softLo = if st.soft_min and st.soft_min > 0 then st.soft_min else nil
+		local softHi = if st.soft_max and st.soft_max > 0 then st.soft_max else nil
+		local a, b = lo, hi
+		if softLo and (a == nil or softLo < a) then
+			a = softLo
+		end
+		if softHi and (b == nil or softHi > b) then
+			b = softHi
+		end
+		return Axis.logScale(a, b, plotPx, base, hardMin, hardMax)
+	end
+	local a, b = lo or 0, hi or 1
+	if lo ~= nil and zero and kind == "linear" then
+		a, b = math.min(a, 0), math.max(b, 0)
+	end
+	if st.centered_zero then
+		local m = math.max(math.abs(a), math.abs(b))
+		if m == 0 then
+			m = 80
+		end
+		a, b = -m, m
+	end
+	if hardMin == nil and st.soft_min ~= nil and st.soft_min < a then
+		hardMin = st.soft_min
+	end
+	if hardMax == nil and st.soft_max ~= nil and st.soft_max > b then
+		hardMax = st.soft_max
+	end
+	if kind == "symlog" then
+		local base = Axis.logBase(if d then d.log else nil)
+		local lt = if d and d.linear_threshold and d.linear_threshold > 0 then d.linear_threshold else 1
+		return Axis.symlogScale(a, b, plotPx, base, lt, hardMin, hardMax)
+	end
+	return Axis.niceScale(a, b, plotPx, hardMin, hardMax)
+end
+
+-- The fewest decimals (up to MAX_TICK_DECIMALS) that print `v` exactly in
+-- its display unit, or nil when none does.
+local function exactDecimals(v: number, unit: string?): number?
+	local function trimmed(s: string): string
+		if string.find(s, ".", 1, true) then
+			s = string.gsub(string.gsub(s, "0+$", ""), "%.$", "")
+		end
+		return s
+	end
+	local exact = trimmed(Format.format(v, unit, 10).text)
+	for d = 0, MAX_TICK_DECIMALS do
+		if trimmed(Format.format(v, unit, d).text) == exact then
+			return d
+		end
+	end
+	return nil
 end
 
 local function yLabels(scale: Axis.Scale, unit: string?, decimals: number?): { string }
@@ -240,23 +516,21 @@ local function yLabels(scale: Axis.Scale, unit: string?, decimals: number?): { s
 	if decimals ~= nil then
 		return render(decimals)
 	end
+	if (scale.distr or "linear") ~= "linear" then
+		-- Ticks a magnitude apart: each prints with its own decimals.
+		local out: { string } = table.create(#scale.ticks)
+		for i, v in scale.ticks do
+			out[i] = Format.text(v, unit, exactDecimals(v, unit))
+		end
+		return out
+	end
 	-- One decimals count for every tick, the fewest that print each tick
 	-- exactly in its display unit: a 0.25 step reads 0.25/0.50 (not 0.3),
 	-- a 0.2 percentunit step reads 20% (not 20.0%), 1.5 MiB keeps its .5.
-	local function trimmed(s: string): string
-		if string.find(s, ".", 1, true) then
-			s = string.gsub(string.gsub(s, "0+$", ""), "%.$", "")
-		end
-		return s
-	end
 	local common = 0
 	for _, v in scale.ticks do
-		local exact = trimmed(Format.format(v, unit, 10).text)
-		local d = 0
-		while d <= MAX_TICK_DECIMALS and trimmed(Format.format(v, unit, d).text) ~= exact do
-			d += 1
-		end
-		if d > MAX_TICK_DECIMALS then
+		local d = exactDecimals(v, unit)
+		if d == nil then
 			-- Not a short decimal in this unit (1500 B = 1.46484375 KiB):
 			-- Grafana's automatic three significant digits.
 			return render(nil)
@@ -367,9 +641,9 @@ local function pathBars(
 	end
 end
 
-local function thresholdShapes(out: { string }, g: Geometry, opts: Options)
-	local style = opts.threshold_style or "off"
-	local spec = opts.thresholds
+local function thresholdShapes(out: { string }, g: Geometry, scale: Axis.Scale, st: SeriesStyle)
+	local style = st.threshold_style or "off"
+	local spec = st.thresholds
 	if style == "off" or spec == nil or #spec.steps == 0 then
 		return
 	end
@@ -381,7 +655,7 @@ local function thresholdShapes(out: { string }, g: Geometry, opts: Options)
 		if type(v) ~= "number" then
 			return -math.huge
 		end
-		return if percent then layout.y_min + (layout.y_max - layout.y_min) * v / 100 else v
+		return if percent then scale.min + (scale.max - scale.min) * v / 100 else v
 	end
 	table.sort(steps, function(a, b)
 		return at(a) < at(b)
@@ -389,8 +663,8 @@ local function thresholdShapes(out: { string }, g: Geometry, opts: Options)
 	local l, r = layout.plot_left, layout.plot_right
 	if style == "area" or style == "line+area" then
 		for k, step in steps do
-			local lo = math.max(at(step), layout.y_min)
-			local hi = if k < #steps then math.min(at(steps[k + 1]), layout.y_max) else layout.y_max
+			local lo = math.max(at(step), scale.min)
+			local hi = if k < #steps then math.min(at(steps[k + 1]), scale.max) else scale.max
 			if hi > lo then
 				local yTop, yBot = g.yOf(hi), g.yOf(lo)
 				table.insert(
@@ -410,7 +684,7 @@ local function thresholdShapes(out: { string }, g: Geometry, opts: Options)
 	if style == "line" or style == "line+area" then
 		for _, step in steps do
 			local v = at(step)
-			if v > layout.y_min and v <= layout.y_max then
+			if v > scale.min and v <= scale.max then
 				table.insert(
 					out,
 					fmt(
@@ -426,20 +700,57 @@ local function thresholdShapes(out: { string }, g: Geometry, opts: Options)
 	end
 end
 
-local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: Options, yScale: Axis.Scale): string
+type Ctx = {
+	shown: { Series.Series },
+	plot: Plot,
+	layout: Layout,
+	opts: Options,
+	styles: { SeriesStyle },
+	specs: { ScaleSpec },
+	scales: { Axis.Scale },
+	labels: { { string } },
+	scaleOf: { number },
+}
+
+local function axisLabel(out: { string }, a: YAxis, cy: number)
+	local label = a.label
+	if label == nil or label == "" then
+		return
+	end
+	local x = if a.side == "left" then a.x0 + 14 else a.x1 - 14
+	table.insert(
+		out,
+		fmt(
+			'<text class="tg-label" x="%.1f" y="%.1f" font-size="12" text-anchor="middle" transform="rotate(%d %.1f %.1f)">%s</text>',
+			x,
+			cy,
+			if a.side == "left" then -90 else 90,
+			x,
+			cy,
+			escape(label)
+		)
+	)
+end
+
+local function build(ctx: Ctx): string
+	local layout, plot, opts = ctx.layout, ctx.plot, ctx.opts
 	local out: { string } = {}
 	local W, H = layout.width, layout.height
-	local yMin, yMax = layout.y_min, layout.y_max
 	local top, bottom = layout.plot_top, layout.plot_bottom
-	local g: Geometry = {
-		layout = layout,
-		xOf = function(t: number): number
-			return math.clamp(Layout.xOfTime(layout, t), layout.plot_left, layout.plot_right)
-		end,
-		yOf = function(v: number): number
-			return math.clamp(Layout.yOfValue(layout, v), top, bottom)
-		end,
-	}
+	local axes = layout.axes :: { YAxis }
+	local function xOf(t: number): number
+		return math.clamp(Layout.xOfTime(layout, t), layout.plot_left, layout.plot_right)
+	end
+	local geo: { Geometry } = table.create(#axes)
+	for k in axes do
+		geo[k] = {
+			layout = layout,
+			xOf = xOf,
+			yOf = function(v: number): number
+				return math.clamp(Layout.yOfValue(layout, v, k), top, bottom)
+			end,
+		}
+	end
 	table.insert(
 		out,
 		fmt(
@@ -454,13 +765,18 @@ local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: 
 	-- Grid and axis labels.
 	local ticks = Axis.timeTicks(layout.t_from, layout.t_to, layout.plot_right - layout.plot_left, opts.offset_min)
 	local grid: { string } = {}
-	for _, v in yScale.ticks do
-		if v >= yMin and v <= yMax then
-			table.insert(grid, fmt("M%.1f %.1fH%.1f", layout.plot_left, g.yOf(v), layout.plot_right))
+	for k, a in axes do
+		local scale = ctx.scales[k]
+		if a.side ~= "hidden" and ctx.specs[k].style.grid ~= false then
+			for _, v in scale.ticks do
+				if v >= scale.min and v <= scale.max then
+					table.insert(grid, fmt("M%.1f %.1fH%.1f", layout.plot_left, geo[k].yOf(v), layout.plot_right))
+				end
+			end
 		end
 	end
 	for _, t in ticks.ticks do
-		table.insert(grid, fmt("M%.1f %.1fV%.1f", g.xOf(t), top, bottom))
+		table.insert(grid, fmt("M%.1f %.1fV%.1f", xOf(t), top, bottom))
 	end
 	if #grid > 0 then
 		table.insert(out, '<path class="tg-grid" fill="none" stroke-width="1" d="' .. table.concat(grid) .. '"/>')
@@ -474,23 +790,31 @@ local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: 
 			layout.plot_right
 		)
 	)
-	local unit = layout.unit
-	local labels = yLabels(yScale, unit, layout.decimals)
-	for i, v in yScale.ticks do
-		if v >= yMin and v <= yMax then
-			table.insert(
-				out,
-				fmt(
-					'<text class="tg-label" x="%.1f" y="%.1f" font-size="12" text-anchor="end">%s</text>',
-					layout.plot_left - 6,
-					g.yOf(v) + 4,
-					escape(labels[i])
-				)
-			)
+	for k, a in axes do
+		if a.side == "hidden" then
+			continue
 		end
+		local scale = ctx.scales[k]
+		local labels = ctx.labels[k]
+		local left = a.side == "left"
+		for i, v in scale.ticks do
+			if v >= scale.min and v <= scale.max then
+				table.insert(
+					out,
+					fmt(
+						'<text class="tg-label" x="%.1f" y="%.1f" font-size="12" text-anchor="%s">%s</text>',
+						if left then a.x1 - 6 else a.x0 + 6,
+						geo[k].yOf(v) + 4,
+						if left then "end" else "start",
+						escape(labels[i])
+					)
+				)
+			end
+		end
+		axisLabel(out, a, (top + bottom) / 2)
 	end
 	for i, t in ticks.ticks do
-		local x = g.xOf(t)
+		local x = xOf(t)
 		local half = #ticks.labels[i] * Axis.CHAR_PX / 2
 		if x - half >= 0 and x + half <= W then
 			table.insert(
@@ -505,21 +829,47 @@ local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: 
 		end
 	end
 
-	thresholdShapes(out, g, opts)
+	-- Thresholds: per scale, from its first series that shows them
+	-- (UPlotConfigBuilder addThresholds keeps the first per scale key).
+	for k, spec in ctx.specs do
+		for _, i in spec.members do
+			local st = ctx.styles[i]
+			if (st.threshold_style or "off") ~= "off" and st.thresholds then
+				thresholdShapes(out, geo[k], ctx.scales[k], st)
+				break
+			end
+		end
+	end
 
-	-- Series: fills and bars first, lines on top.
+	-- Series: fills and bars first, lines on top. Constant series are
+	-- always lines (Grafana swaps in a linear path builder for them).
+	local list = ctx.shown
 	local draw = opts.draw or "line"
 	local fill = math.clamp(opts.fill_opacity or 0, 0, 100) / 100
-	local base = math.clamp(0, yMin, yMax)
+	local function baseOf(i: number): number
+		local s = ctx.scales[ctx.scaleOf[i]]
+		if (s.distr or "linear") == "log" then
+			return s.min
+		end
+		return math.clamp(0, s.min, s.max)
+	end
+	local function lineOf(i: number): boolean
+		return draw ~= "bars" or ctx.styles[i].transform == "constant"
+	end
 	if draw == "bars" then
 		local n = 1
 		for i = 1, #plot.times do
-			n = math.max(n, #plot.times[i])
+			if not lineOf(i) then
+				n = math.max(n, #plot.times[i])
+			end
 		end
 		local barW = math.max(1, (layout.plot_right - layout.plot_left) / n * 0.6)
 		for i = 1, #list do
+			if lineOf(i) then
+				continue
+			end
 			local buf: { string } = {}
-			pathBars(buf, g, plot.times[i], plot.tops[i], plot.bottoms[i], base, barW)
+			pathBars(buf, geo[ctx.scaleOf[i]], plot.times[i], plot.tops[i], plot.bottoms[i], baseOf(i), barW)
 			if #buf > 0 then
 				table.insert(
 					out,
@@ -532,49 +882,51 @@ local function build(list: { Series.Series }, plot: Plot, layout: Layout, opts: 
 				)
 			end
 		end
-	else
-		if fill > 0 and draw == "line" then
-			for i = 1, #list do
-				local buf: { string } = {}
-				pathArea(buf, g, plot.times[i], plot.tops[i], plot.bottoms[i], base)
-				if #buf > 0 then
-					table.insert(
-						out,
-						fmt(
-							'<path class="%s tg-area" fill-opacity="%.2f" d="%s"/>',
-							M.seriesClass(i),
-							fill,
-							table.concat(buf)
-						)
-					)
-				end
-			end
-		end
-		local width = if draw == "points" then 4 else 1.5
+	elseif fill > 0 and draw == "line" then
 		for i = 1, #list do
 			local buf: { string } = {}
-			pathLine(buf, g, plot.times[i], plot.tops[i], draw == "points")
+			pathArea(buf, geo[ctx.scaleOf[i]], plot.times[i], plot.tops[i], plot.bottoms[i], baseOf(i))
 			if #buf > 0 then
 				table.insert(
 					out,
 					fmt(
-						'<path class="%s tg-line" fill="none" stroke-width="%s" stroke-linecap="round" stroke-linejoin="round" d="%s"/>',
+						'<path class="%s tg-area" fill-opacity="%.2f" d="%s"/>',
 						M.seriesClass(i),
-						tostring(width),
+						fill,
 						table.concat(buf)
 					)
 				)
 			end
 		end
 	end
+	for i = 1, #list do
+		if not lineOf(i) then
+			continue
+		end
+		local dots = draw == "points" and ctx.styles[i].transform ~= "constant"
+		local buf: { string } = {}
+		pathLine(buf, geo[ctx.scaleOf[i]], plot.times[i], plot.tops[i], dots)
+		if #buf > 0 then
+			table.insert(
+				out,
+				fmt(
+					'<path class="%s tg-line" fill="none" stroke-width="%s" stroke-linecap="round" stroke-linejoin="round" d="%s"/>',
+					M.seriesClass(i),
+					if dots then "4" else "1.5",
+					table.concat(buf)
+				)
+			)
+		end
+	end
 
-	-- Exemplars: one path of diamonds over the lines.
+	-- Exemplars: one path of diamonds over the lines, on the first scale.
 	local exemplars = layout.exemplars
-	if exemplars and #exemplars > 0 then
+	if exemplars and #exemplars > 0 and #geo > 0 then
 		local r = M.EXEMPLAR_R
+		local yOf = geo[1].yOf
 		local buf: { string } = table.create(#exemplars)
 		for i, e in exemplars do
-			buf[i] = fmt("M%.1f %.1fl%d %dl%d %dl%d %dZ", g.xOf(e.time_ms), g.yOf(e.value) - r, r, r, -r, r, -r, -r)
+			buf[i] = fmt("M%.1f %.1fl%d %dl%d %dl%d %dZ", xOf(e.time_ms), yOf(e.value) - r, r, r, -r, r, -r, -r)
 		end
 		table.insert(out, '<path class="tg-exemplar" stroke-width="1" d="' .. table.concat(buf) .. '"/>')
 	end
@@ -684,6 +1036,52 @@ function M.drawnExemplars(
 	return kept, n - M.EXEMPLAR_CAP
 end
 
+-- Per-series styles: the given ones, or the shared scale settings for all.
+local function stylesFor(list: { Series.Series }, opts: Options): { SeriesStyle }
+	local out: { SeriesStyle } = table.create(#list)
+	if opts.series then
+		for i = 1, math.max(1, #list) do
+			out[i] = opts.series[i] or {}
+		end
+		return out
+	end
+	local shared: SeriesStyle = {
+		unit = opts.unit or (if list[1] then list[1].unit else nil),
+		decimals = if opts.decimals ~= nil then opts.decimals elseif list[1] then list[1].decimals else nil,
+		min = opts.min,
+		max = opts.max,
+		stack = opts.stack,
+		thresholds = opts.thresholds,
+		threshold_style = opts.threshold_style,
+	}
+	for i = 1, math.max(1, #list) do
+		out[i] = shared
+	end
+	return out
+end
+
+-- The series' own value at each drawn time: the source sample when the time
+-- is one of its samples, else the drawn value with its transform undone.
+local function ownValues(source: Series.Series, st: SeriesStyle, times: { number }, drawn: { any }): { any }
+	local at: { [number]: any } = {}
+	for j, t in source.times do
+		at[t] = source.values[j]
+	end
+	local out: { any } = table.create(#times)
+	for k, t in times do
+		local v = at[t]
+		if v == nil then
+			v = drawn[k]
+			local n = finite(v)
+			if n and st.transform == "negative-Y" then
+				v = -n
+			end
+		end
+		out[k] = v
+	end
+	return out
+end
+
 function M.render(frames: { Frame }, options: Options?): Result
 	local opts: Options = options or {}
 	local W = opts.width or 960
@@ -692,13 +1090,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 	local cap = opts.series_cap or M.PALETTE
 	local list: { Series.Series } = table.move(all, 1, math.min(cap, #all), 1, {})
 	local dropped = #all - #list
-	local stack = opts.stack or "none"
-
-	local unit = opts.unit or (if list[1] then list[1].unit else nil)
-	local decimals = if opts.decimals ~= nil then opts.decimals elseif list[1] then list[1].decimals else nil
-	if stack == "percent" then
-		unit = "percentunit"
-	end
+	local draw = opts.draw or "line"
 
 	-- Time domain.
 	local tFrom, tTo = opts.from_ms, opts.to_ms
@@ -722,10 +1114,21 @@ function M.render(frames: { Frame }, options: Options?): Result
 		tFrom_, tTo_ = tFrom_ - 30000, tTo_ + 30000
 	end
 
+	local styles = stylesFor(list, opts)
+	local specs, scaleOf = scaleSpecs(styles)
+	-- An empty chart still has its (empty) first scale.
+	for _, spec in specs do
+		table.clear(spec.members)
+	end
+	for i = 1, #list do
+		table.insert(specs[scaleOf[i]].members, i)
+	end
+	local shown = transformed(list, styles, tFrom_, tTo_)
+
 	local plotTop, plotBottom = PAD_TOP, H - X_AXIS_H
-	local plotRight = W - PAD_RIGHT
-	local estimate = if (opts.draw or "line") == "bars" then BYTES_BAR else BYTES_LINE
-	if (opts.fill_opacity or 0) > 0 and (opts.draw or "line") == "line" then
+	local plotH = plotBottom - plotTop
+	local estimate = if draw == "bars" then BYTES_BAR else BYTES_LINE
+	if (opts.fill_opacity or 0) > 0 and draw == "line" then
 		estimate *= 2
 	end
 	local marks: { FrameProm.Exemplar }?, marksDropped = nil, 0
@@ -734,73 +1137,150 @@ function M.render(frames: { Frame }, options: Options?): Result
 	end
 	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
 
-	local perSeries = opts.point_budget or math.floor(plotRight)
+	local perSeries = opts.point_budget or math.floor(W - PAD_RIGHT)
 	if #list > 0 then
 		perSeries = math.min(perSeries, math.floor((M.TARGET - fixed) / (#list * estimate)))
 	end
 	perSeries = math.max(3, perSeries)
 
 	-- What is drawn; `list` keeps the samples the legend calcs read.
-	local shown = list
-	if (opts.draw or "line") == "bars" then
-		local slots = math.floor((plotRight - 36) / M.MIN_BAR_PX)
-		shown = bucketBars(list, tFrom_, tTo_, slots)
+	if draw == "bars" then
+		local slots = math.floor((W - PAD_RIGHT - 36) / M.MIN_BAR_PX)
+		local bucketed = bucketBars(shown, tFrom_, tTo_, slots)
+		for i, st in styles do
+			if st.transform ~= "constant" and bucketed[i] then
+				shown[i] = bucketed[i]
+			end
+		end
 	end
+	local groups = stackGroups(shown, styles, scaleOf)
+	local zero = draw == "bars" or (opts.fill_opacity or 0) > 0
 
-	local svg, layout, points = "", (nil :: any) :: Layout, 0
-	for _ = 1, 8 do
-		local plot = downsample(shown, opts, perSeries)
-		local lo, hi = valueRange(shown, plot, opts)
-		-- Exemplars share the axis (as in Grafana): a marker pinned to the
-		-- plot edge would misstate its value. Percent stacks keep 0..1.
-		if marks and stack ~= "percent" then
+	-- Scales and axis bands depend on the plot height only.
+	local plot = downsample(shown, groups, opts.null_mode, perSeries)
+	local scales: { Axis.Scale } = table.create(#specs)
+	local labels: { { string } } = table.create(#specs)
+	local widths: { number } = table.create(#specs)
+	local leftW, rightW = 0, 0
+	for k, spec in specs do
+		local lo, hi = scaleRange(shown, plot, spec.members)
+		-- Exemplars share the first scale (as in Grafana): a marker pinned
+		-- to the plot edge would misstate its value. Percent stacks keep 0..1.
+		if k == 1 and marks and not spec.percent then
 			for _, e in marks do
 				lo = if lo == nil then e.value else math.min(lo :: number, e.value)
 				hi = if hi == nil then e.value else math.max(hi :: number, e.value)
 			end
 		end
-		local hardMin, hardMax = opts.min, opts.max
-		if stack == "percent" then
-			hardMin, hardMax = hardMin or 0, hardMax or 1
+		scales[k] = buildScale(spec, lo, hi, plotH, zero)
+		local st = spec.style
+		local unit = if spec.percent then "percentunit" else st.unit
+		labels[k] = yLabels(scales[k], unit, st.decimals)
+		if spec.side ~= "hidden" then
+			local chars = 0
+			for _, label in labels[k] do
+				chars = math.max(chars, utf8.len(label) or #label)
+			end
+			local w = math.max(AXIS_MIN_W, chars * Axis.CHAR_PX + 12)
+			if st.label ~= nil and st.label ~= "" then
+				w += AXIS_LABEL_W
+			end
+			widths[k] = w
+			if spec.side == "left" then
+				leftW += w
+			else
+				rightW += w
+			end
 		end
-		local yScale = Axis.niceScale(lo or 0, hi or 1, plotBottom - plotTop, hardMin, hardMax)
-		local labelW = 0
-		for _, label in yLabels(yScale, unit, decimals) do
-			labelW = math.max(labelW, utf8.len(label) or #label)
+	end
+	local plotLeft = if leftW > 0 then leftW else PAD_RIGHT
+	local plotRight = W - (if rightW > 0 then rightW else PAD_RIGHT)
+	local axes: { YAxis } = table.create(#specs)
+	local nextLeft, nextRight = plotLeft, plotRight
+	for k, spec in specs do
+		local s = scales[k]
+		local x0, x1 = 0, 0
+		if spec.side == "left" then
+			x1 = nextLeft
+			x0 = x1 - widths[k]
+			nextLeft = x0
+		elseif spec.side == "right" then
+			x0 = nextRight
+			x1 = x0 + widths[k]
+			nextRight = x1
+		end
+		axes[k] = {
+			key = spec.key,
+			side = spec.side,
+			min = s.min,
+			max = s.max,
+			distr = s.distr,
+			log = s.log,
+			linear_threshold = s.linear_threshold,
+			unit = if spec.percent then "percentunit" else spec.style.unit,
+			decimals = spec.style.decimals,
+			label = spec.style.label,
+			x0 = x0,
+			x1 = x1,
+		}
+	end
+
+	local svg, layout, points = "", (nil :: any) :: Layout, 0
+	for attempt = 1, 8 do
+		if attempt > 1 then
+			plot = downsample(shown, groups, opts.null_mode, perSeries)
 		end
 		local drawn: { DrawnSeries } = table.create(#list)
 		points = 0
 		for i, s in list do
+			local st = styles[i]
 			drawn[i] = {
 				name = s.name,
 				class = M.seriesClass(i),
 				labels = s.labels,
 				times = plot.times[i],
-				values = plot.raw[i],
+				values = ownValues(s, st, plot.times[i], plot.raw[i]),
 				calcs = Series.calcs(s.values),
+				axis = scaleOf[i],
+				unit = st.unit,
+				decimals = st.decimals,
+				hide_legend = st.hide_legend,
+				hide_tooltip = st.hide_tooltip,
 			}
 			points += #plot.times[i]
 		end
+		local first = axes[1]
 		layout = {
 			width = W,
 			height = H,
-			plot_left = math.max(36, labelW * Axis.CHAR_PX + 12),
+			plot_left = plotLeft,
 			plot_right = plotRight,
 			plot_top = plotTop,
 			plot_bottom = plotBottom,
 			t_from = tFrom_,
 			t_to = tTo_,
-			y_min = yScale.min,
-			y_max = yScale.max,
-			unit = unit,
-			decimals = decimals,
+			y_min = first.min,
+			y_max = first.max,
+			unit = first.unit,
+			decimals = first.decimals,
+			axes = axes,
 			times = unionTimes(plot),
 			series = drawn,
 			dropped = dropped,
 			exemplars = marks,
 			exemplars_dropped = if marks then marksDropped else nil,
 		}
-		svg = build(shown, plot, layout, opts, yScale)
+		svg = build({
+			shown = shown,
+			plot = plot,
+			layout = layout,
+			opts = opts,
+			styles = styles,
+			specs = specs,
+			scales = scales,
+			labels = labels,
+			scaleOf = scaleOf,
+		})
 		if #svg <= M.TARGET or perSeries <= 3 then
 			break
 		end

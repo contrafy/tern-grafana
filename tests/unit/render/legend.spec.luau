@@ -76,6 +76,32 @@ describe("Legend.rows", function()
 		expect(layout.series[1].calcs.count).toBe(n)
 		expect(layout.series[1].calcs.max).toBe(1e6)
 	end)
+
+	-- A series on a second axis reads in its own unit (Grafana's tooltip and
+	-- legend use each field's display processor), and a percent stack's axis
+	-- unit does not leak into the values.
+	it("formats each series in its own unit, at the cursor and in the calcs", function()
+		local styles: { Svg.SeriesStyle } = { { unit = "ms" }, { unit = "bytes", stack = "percent" } }
+		local layout = Svg.render(frames(), { series = styles }).layout
+		local _, cursorRows = Legend.rows(layout, { cursor = 0 })
+		expect(cursorRows[1].values).toEqual({ "1 ms" })
+		expect(cursorRows[2].values).toEqual({ "4 B" })
+		local _, rows = Legend.rows(layout, { calcs = { "max" } :: { Legend.Calc } })
+		expect(rows[1].values).toEqual({ "3 ms" })
+		expect(rows[2].values).toEqual({ "6 B" })
+	end)
+
+	-- custom.hideFrom: legend hides the calcs row, tooltip the read-out.
+	it("leaves out series hidden from the legend or the tooltip", function()
+		local styles: { Svg.SeriesStyle } = { { hide_legend = true }, { hide_tooltip = true } }
+		local layout = Svg.render(frames(), { series = styles }).layout
+		local _, rows = Legend.rows(layout, {})
+		expect(#rows).toBe(1)
+		expect(rows[1].name).toBe('req{code="500"}')
+		local _, cursorRows = Legend.rows(layout, { cursor = 0 })
+		expect(#cursorRows).toBe(1)
+		expect(cursorRows[1].name).toBe('req{code="200"}')
+	end)
 end)
 
 describe("Legend.view", function()

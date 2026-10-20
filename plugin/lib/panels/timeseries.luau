@@ -2,13 +2,21 @@
 -- The time series panel (public/app/plugins/panel/timeseries: panelcfg.cue,
 -- packages/grafana-schema common GraphFieldConfig) mapped onto
 -- lib/render/svg_timeseries:
--- - fieldConfig.defaults unit, decimals, min, max, thresholds;
+-- - fieldConfig unit, decimals, min, max, thresholds, per series: series
+--   whose unit, bounds, soft bounds (custom.axisSoftMin/Max), placement
+--   (custom.axisPlacement), label (custom.axisLabel) or scale distribution
+--   (custom.scaleDistribution linear|log|symlog) differ get their own y
+--   axis, as Grafana's buildScaleKey groups them (a per-series unit
+--   override draws a second axis on the right); custom.axisCenteredZero,
+--   custom.axisGridShow;
 -- - custom.drawStyle line|bars|points, fillOpacity, spanNulls (true
 --   connects; false or a gap threshold keeps gaps), stacking.mode
---   none|normal|percent, thresholdsStyle.mode (off, line, dashed, area,
---   line+area, dashed+area; "series" colors by value, drawn as off);
+--   none|normal|percent and stacking.group per series (stacks per scale),
+--   custom.transform negative-Y|constant, thresholdsStyle.mode (off, line,
+--   dashed, area, line+area, dashed+area; "series" colors by value, drawn
+--   as off);
 -- - overrides (lib/panels/fieldconfig) for display names, colors and
---   hidden series (custom.hideFrom.viz);
+--   hidden series (custom.hideFrom.viz, .legend, .tooltip);
 -- - series colors: palette-classic keeps the chart palette; fixed and
 --   by-value modes (thresholds, continuous) paint the whole series in the
 --   tone of its `seriesBy` value (getFieldSeriesColor);
@@ -16,10 +24,9 @@
 --   lib/panels/reduce reducer, formatted with the series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
 --   read out under the legend.
--- Per-series stacking and per-series units (a second y axis) are reported
--- as unsupported: one SVG has one stack and one axis.
 
 local Assets = require("../render/assets")
+local Axis = require("../render/axis")
 local ChartView = require("../render/chart_view")
 local Common = require("./common")
 local Env = require("../env")
@@ -50,7 +57,22 @@ local function legendCalcs(panel: any, env: Env): { string }
 	return out
 end
 
+local function legendWhy(panel: any, env: Env): string?
+	for _, c in legendCalcs(panel, env) do
+		if not Reduce.supports(c) then
+			return string.format("legend reducer %s is not supported", c)
+		end
+	end
+	return nil
+end
+
 function M.unsupported(panel: any, env: Env): string?
+	return legendWhy(panel, env)
+end
+
+-- For panels drawn on one y scale (lib/render/svg_xy: trend): per-series
+-- stacking and per-series units have no second stack or axis there.
+function M.singleAxisUnsupported(panel: any, env: Env): string?
 	local defaultsUnit = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "unit"))
 	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
 		for _, p in Json.list(env, Json.path(env, o, "properties")) do
@@ -63,12 +85,7 @@ function M.unsupported(panel: any, env: Env): string?
 			end
 		end
 	end
-	for _, c in legendCalcs(panel, env) do
-		if not Reduce.supports(c) then
-			return string.format("legend reducer %s is not supported", c)
-		end
-	end
-	return nil
+	return legendWhy(panel, env)
 end
 
 local THRESHOLD_STYLES: { [string]: SvgTimeseries.ThresholdStyle } = {
@@ -108,11 +125,15 @@ local function legendView(
 	calcs: { string },
 	mode: string,
 	dropped: number,
-	opts: Common.Options
+	opts: Common.Options,
+	env: Env
 ): Node
 	local rows: { { class: string, name: string, values: { string } } } = {}
-	for i, d in drawn do
+	for _, d in drawn do
 		local item = d.item
+		if Json.bool(env, Json.path(env, item.config.custom.hideFrom, "legend")) == true then
+			continue
+		end
 		local results = Reduce.calcs(item.field.values, calcs, item.field.type, item.config.null_mode)
 		local values: { string } = {}
 		for k, c in calcs do
@@ -123,7 +144,7 @@ local function legendView(
 					FieldConfig.display(item, v, { theme = opts.theme, offset_min = opts.offset_min })
 				)
 		end
-		rows[i] = { class = d.class, name = item.name, values = values }
+		table.insert(rows, { class = d.class, name = item.name, values = values })
 	end
 	local children: { Node } = {}
 	if mode == "table" then
@@ -205,6 +226,51 @@ function M.renderOptions(panel: any, env: Env, opts: Common.Options): SvgTimeser
 	}
 end
 
+local PLACEMENTS: { [string]: SvgTimeseries.Placement } =
+	{ auto = "auto", left = "left", right = "right", hidden = "hidden" }
+local DISTRIBUTIONS: { [string]: Axis.Distr } = { linear = "linear", log = "log", symlog = "symlog" }
+
+-- One series' resolved GraphFieldConfig as the renderer's scale, stacking
+-- and transform settings (TimeSeries/utils.ts preparePlotConfigBuilder).
+function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesStyle
+	local cfg = item.config
+	local custom = cfg.custom
+	local stackMode = Json.str(env, Json.path(env, custom.stacking, "mode"))
+	local style: SvgTimeseries.ThresholdStyle? =
+		THRESHOLD_STYLES[Json.str(env, Json.path(env, custom.thresholdsStyle, "mode")) or "off"]
+	local dist = Json.tbl(env, custom.scaleDistribution)
+	local distType: Axis.Distr? = if dist then DISTRIBUTIONS[Json.str(env, dist.type) or ""] else nil
+	local transform = Json.str(env, custom.transform)
+	local label = Json.str(env, custom.axisLabel)
+	local hideFrom = Json.obj(env, custom.hideFrom)
+	return {
+		unit = cfg.unit,
+		decimals = cfg.decimals,
+		min = cfg.min,
+		max = cfg.max,
+		soft_min = Json.num(env, custom.axisSoftMin),
+		soft_max = Json.num(env, custom.axisSoftMax),
+		centered_zero = Json.bool(env, custom.axisCenteredZero) == true,
+		placement = PLACEMENTS[Json.str(env, custom.axisPlacement) or ""],
+		label = if label ~= "" then label else nil,
+		grid = Json.bool(env, custom.axisGridShow),
+		distribution = if dist and distType
+			then {
+				type = distType,
+				log = Json.num(env, dist.log),
+				linear_threshold = Json.num(env, dist.linearThreshold),
+			}
+			else nil,
+		transform = if transform == "negative-Y" or transform == "constant" then transform else nil,
+		stack = if stackMode == "normal" or stackMode == "percent" then stackMode else "none",
+		stack_group = Json.str(env, Json.path(env, custom.stacking, "group")),
+		thresholds = if style then cfg.thresholds else nil,
+		threshold_style = style or "off",
+		hide_legend = Json.bool(env, hideFrom.legend) == true,
+		hide_tooltip = Json.bool(env, hideFrom.tooltip) == true,
+	}
+end
+
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "palette-classic" })
 	local render = M.renderOptions(panel, env, opts)
@@ -247,13 +313,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if opts.exemplars and #opts.exemplars > 0 then
 		render.exemplars = opts.exemplars
 	end
-	if #visible > 0 then
-		local first = visible[1].config
-		render.unit = render.unit or first.unit
-		if render.decimals == nil then
-			render.decimals = first.decimals
-		end
+	local styles: { SvgTimeseries.SeriesStyle } = table.create(#visible)
+	for i, item in visible do
+		styles[i] = M.seriesStyle(item, env)
 	end
+	render.series = styles
 	local result = SvgTimeseries.render(baked, render)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
@@ -282,7 +346,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if not showLegend or opts.cursor ~= nil then
 		return chart, assets
 	end
-	local legend = legendView(opts.key .. ".legend", drawn, legendCalcs(panel, env), mode, result.dropped, opts)
+	local legend = legendView(opts.key .. ".legend", drawn, legendCalcs(panel, env), mode, result.dropped, opts, env)
 	return { k = "col", p = { key = opts.key .. ".panel", gap = "xs" }, c = { chart, legend } }, assets
 end
 

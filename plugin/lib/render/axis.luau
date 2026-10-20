@@ -28,7 +28,19 @@ local function clean(v: number): number
 	return if n == 0 then 0 else n
 end
 
-export type Scale = { min: number, max: number, step: number, ticks: { number } }
+-- `distr` nil reads as linear. Log scales place values by log_base(v),
+-- symlog by asinh(v / linear_threshold) (uPlot distr 3 and 4).
+export type Distr = "linear" | "log" | "symlog"
+export type Range = { min: number, max: number, distr: Distr?, log: number?, linear_threshold: number? }
+export type Scale = {
+	min: number,
+	max: number,
+	step: number,
+	ticks: { number },
+	distr: Distr?,
+	log: number?,
+	linear_threshold: number?,
+}
 
 local MULTIPLES = { 1, 2, 2.5, 5, 10 }
 
@@ -73,6 +85,169 @@ function M.niceScale(lo: number, hi: number, plotPx: number, hardMin: number?, h
 		table.insert(ticks, clean(i * step))
 	end
 	return { min = lo2, max = hi2, step = step, ticks = ticks }
+end
+
+-- UPlotScaleBuilder: a log base is 2 or 10, anything else falls back to 10.
+function M.logBase(base: number?): number
+	return if base == 2 then 2 else 10
+end
+
+local function asinh(x: number): number
+	local a = math.abs(x)
+	local r = math.log(a + math.sqrt(a * a + 1))
+	return if x < 0 then -r else r
+end
+
+-- Where `v` sits on a scale, 0 at min and 1 at max (outside for values out
+-- of range); nil for a value a log scale cannot place (<= 0).
+function M.position(r: Range, v: number): number?
+	local d = r.distr or "linear"
+	local a, b, x
+	if d == "log" then
+		if v <= 0 or r.min <= 0 then
+			return nil
+		end
+		a, b, x = math.log(r.min), math.log(r.max), math.log(v)
+	elseif d == "symlog" then
+		local lt = r.linear_threshold or 1
+		a, b, x = asinh(r.min / lt), asinh(r.max / lt), asinh(v / lt)
+	else
+		a, b, x = r.min, r.max, v
+	end
+	if b <= a then
+		return 0.5
+	end
+	return (x - a) / (b - a)
+end
+
+local function ySpace(plotPx: number): number
+	return if plotPx <= 150 then M.Y_SPACE_SMALL else M.Y_SPACE
+end
+
+-- A log scale over positive data lo..hi (uPlot rangeLog with whole
+-- magnitudes: bounds at powers of `base`; hard bounds snap outward to
+-- powers as UPlotScaleBuilder does). Ticks at powers of the base no closer
+-- than the axis spacing, with 2x and 5x between decades of base 10 when
+-- they fit.
+function M.logScale(lo: number?, hi: number?, plotPx: number, base: number, hardMin: number?, hardMax: number?): Scale
+	local lb = math.log(base)
+	local function exp(v: number): number
+		return math.log(v) / lb
+	end
+	local a = if hardMin and hardMin > 0 then hardMin else lo or 1
+	local b = if hardMax and hardMax > 0 then hardMax else hi or base
+	if a > b then
+		a, b = b, a
+	end
+	if a == b then
+		a, b = a / base, b * base
+	end
+	local e0 = math.floor(exp(a) + 1e-9)
+	local e1 = math.ceil(exp(b) - 1e-9)
+	if e1 <= e0 then
+		e1 = e0 + 1
+	end
+	local space = ySpace(plotPx)
+	local perMag = plotPx / (e1 - e0)
+	local every = math.max(1, math.ceil(space / perMag - 1e-9))
+	local minor = base == 10 and every == 1 and perMag * math.log10(2) >= space
+	local ticks: { number } = {}
+	for k = e0, e1, every do
+		local p = base ^ k
+		table.insert(ticks, clean(p))
+		if minor and k < e1 then
+			table.insert(ticks, clean(2 * p))
+			table.insert(ticks, clean(5 * p))
+		end
+	end
+	return { min = clean(base ^ e0), max = clean(base ^ e1), step = base, ticks = ticks, distr = "log", log = base }
+end
+
+-- A symlog (asinh) scale over lo..hi: free ends grow outward to signed
+-- powers of `base` (uPlot rangeAsinh, 0 stays 0); ticks at 0 and the signed
+-- powers from the linear threshold up, thinned to the axis spacing outward
+-- from 0.
+function M.symlogScale(
+	lo: number,
+	hi: number,
+	plotPx: number,
+	base: number,
+	linearThreshold: number,
+	hardMin: number?,
+	hardMax: number?
+): Scale
+	local lb = math.log(base)
+	local function grow(v: number, up: boolean): number
+		if v == 0 then
+			return 0
+		end
+		local e = math.log(math.abs(v)) / lb
+		local k = if (v > 0) == up then math.ceil(e - 1e-9) else math.floor(e + 1e-9)
+		return clean((if v < 0 then -1 else 1) * base ^ k)
+	end
+	local a, b = hardMin or lo, hardMax or hi
+	if a > b then
+		a, b = b, a
+	end
+	local min = hardMin or grow(a, false)
+	local max = hardMax or grow(b, true)
+	if min >= max then
+		if max > 0 then
+			min = 0
+		elseif min < 0 then
+			max = 0
+		else
+			max = base
+		end
+	end
+	local s: Scale = {
+		min = min,
+		max = max,
+		step = base,
+		ticks = {},
+		distr = "symlog",
+		log = base,
+		linear_threshold = linearThreshold,
+	}
+	local k0 = math.floor(math.log(linearThreshold) / lb + 1e-9)
+	local k1 = math.ceil(math.log(math.max(math.abs(min), math.abs(max), linearThreshold)) / lb - 1e-9)
+	local pos: { number }, neg: { number } = {}, {}
+	for k = k0, k1 do
+		local p = clean(base ^ k)
+		local tol = 1e-9 * math.max(math.abs(min), math.abs(max))
+		if p <= max + tol and p >= min - tol then
+			table.insert(pos, p)
+		end
+		if -p >= min - tol and -p <= max + tol then
+			table.insert(neg, -p)
+		end
+	end
+	local minGap = ySpace(plotPx) / plotPx
+	local function thin(list: { number }, from: number?): { number }
+		local out: { number } = {}
+		local last = if from then M.position(s, from) else nil
+		for _, v in list do
+			local p = M.position(s, v) :: number
+			if last == nil or math.abs(p - last) >= minGap then
+				table.insert(out, v)
+				last = p
+			end
+		end
+		return out
+	end
+	local zero = min <= 0 and max >= 0
+	local up = thin(pos, if zero then 0 else nil)
+	local down = thin(neg, if zero then 0 else nil)
+	for i = #down, 1, -1 do
+		table.insert(s.ticks, down[i])
+	end
+	if zero then
+		table.insert(s.ticks, 0)
+	end
+	for _, v in up do
+		table.insert(s.ticks, v)
+	end
+	return s
 end
 
 -- uPlot's timeIncrsMs (month and year steps are calendar steps).

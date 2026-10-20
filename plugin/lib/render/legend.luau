@@ -1,7 +1,10 @@
 --!strict
 -- Chart legend: one row per drawn series with its palette swatch, display
 -- name and either reduction calcs (full-resolution, nulls and NaN skipped)
--- or, while the keyboard cursor is on, each series' value at the cursor.
+-- or, while the keyboard cursor is on, each series' value at the cursor,
+-- formatted in the series' own unit. Series hidden from the legend
+-- (custom.hideFrom.legend) skip the calcs rows, those hidden from the
+-- tooltip skip the cursor read-out.
 
 local Cursor = require("./cursor")
 local Format = require("../units/format")
@@ -34,9 +37,15 @@ local HEADS: { [string]: string } = { last = "Last *", min = "Min", max = "Max",
 
 M.NO_VALUE = "-"
 
-local function text(v: number?, layout: Layout): string
+-- A value in its series' own unit (a second axis has its own; a percent
+-- stack's axis reads percent but its values keep their unit), else the
+-- chart's.
+local function text(v: number?, s: Layout.DrawnSeries, layout: Layout): string
 	if v == nil then
 		return M.NO_VALUE
+	end
+	if s.axis ~= nil then
+		return Format.text(v, s.unit, s.decimals)
 	end
 	return Format.text(v, layout.unit, layout.decimals)
 end
@@ -56,8 +65,12 @@ function M.rows(layout: Layout, opts: Options?): ({ string }, { Row })
 	local o: Options = opts or {}
 	local rows: { Row } = table.create(#layout.series)
 	if o.cursor then
+		-- The tooltip's series: custom.hideFrom.tooltip leaves it out.
 		for i, r in Cursor.read(layout, o.cursor) do
-			rows[i] = { class = r.class, name = r.name, values = { text(r.value, layout) } }
+			local s = layout.series[i]
+			if not s.hide_tooltip then
+				table.insert(rows, { class = r.class, name = r.name, values = { text(r.value, s, layout) } })
+			end
 		end
 		return { "Value" }, rows
 	end
@@ -66,12 +79,15 @@ function M.rows(layout: Layout, opts: Options?): ({ string }, { Row })
 	for i, c in calcs do
 		heads[i] = HEADS[c]
 	end
-	for i, s in layout.series do
+	for _, s in layout.series do
+		if s.hide_legend then
+			continue
+		end
 		local values: { string } = table.create(#calcs)
 		for k, c in calcs do
-			values[k] = text((s.calcs :: any)[c], layout)
+			values[k] = text((s.calcs :: any)[c], s, layout)
 		end
-		rows[i] = { class = s.class, name = s.name, values = values }
+		table.insert(rows, { class = s.class, name = s.name, values = values })
 	end
 	return heads, rows
 end

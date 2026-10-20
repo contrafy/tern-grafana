@@ -418,4 +418,289 @@ describe("svg_timeseries.render exemplars", function()
 	end)
 end)
 
+-- Svg.render taking option literals whose singleton strings the type
+-- checker would widen.
+local render = (Svg.render :: any) :: (frames: { Frame.Frame }, options: any) -> Svg.Result
+
+-- Tick labels by anchor: "end" for left axes, "start" for right axes.
+local function tickTexts(svg: string, anchor: string): { string }
+	local out: { string } = {}
+	for a, text in string.gmatch(svg, 'text%-anchor="(%a+)">([^<]*)</text>') do
+		if a == anchor then
+			table.insert(out, text :: string)
+		end
+	end
+	return out
+end
+
+local function anyContains(list: { string }, needle: string): boolean
+	for _, s in list do
+		if has(s, needle) then
+			return true
+		end
+	end
+	return false
+end
+
+local function values(list: { number }): (i: number) -> number
+	return function(i: number): number
+		return list[i]
+	end
+end
+
+-- y of every vertex of a path's `d`.
+local function ys(d: string): { number }
+	local out: { number } = {}
+	for _, y in string.gmatch(d, "([%d%.%-]+) ([%d%.%-]+)") do
+		table.insert(out, tonumber(y) :: number)
+	end
+	return out
+end
+
+-- Grafana's time series puts series on scales by buildScaleKey
+-- (packages/grafana-ui/src/components/uPlot/internal.ts: unit, min/max, soft
+-- min/max, placement, distribution, label) and gives each scale an axis
+-- (public/app/core/components/TimeSeries/utils.ts preparePlotConfigBuilder;
+-- UPlotConfigBuilder.addAxis: auto is left for the first axis, right after).
+describe("svg_timeseries.render y scales", function()
+	local pct = series(4, values({ 10, 40, 70, 95 }))
+	local mem = series(4, values({ 1048576, 2097152, 3145728, 4194304 }))
+
+	it("puts a series with another unit on its own scale with an axis on the right", function()
+		local r = Svg.render({ pct, mem }, { series = { { unit = "percent" }, { unit = "bytes" } } })
+		local axes = r.layout.axes :: { any }
+		expect(#axes).toBe(2)
+		expect(axes[1].side).toBe("left")
+		expect(axes[2].side).toBe("right")
+		expect(r.layout.series[1].axis).toBe(1)
+		expect(r.layout.series[2].axis).toBe(2)
+		-- Each scale fits its own data: 4 MiB is not squeezed onto 0..100.
+		expect(axes[1].max).toBe(100)
+		expect(axes[2].max >= 4194304 and axes[2].max < 8388608).toBe(true)
+		expect(anyContains(tickTexts(r.svg, "end"), "%")).toBe(true)
+		expect(anyContains(tickTexts(r.svg, "start"), " MiB")).toBe(true)
+		expect(anyContains(tickTexts(r.svg, "end"), "MiB")).toBe(false)
+		expect(r.layout.plot_right < 960 - 12).toBe(true)
+		-- Both series peak at the top of their own scale.
+		local top1 = math.min(table.unpack(ys(paths(r.svg, "tg-s1")[1])))
+		local top2 = math.min(table.unpack(ys(paths(r.svg, "tg-s2")[1])))
+		expect(math.abs(top1 - top2) < 40).toBe(true)
+		assertTernSafe(r.svg)
+	end)
+
+	it("keeps series whose scale key matches on one scale", function()
+		local r = render({ pct, pct }, { series = { { unit = "percent" }, { unit = "percent" } } })
+		expect(#(r.layout.axes :: { any })).toBe(1)
+		expect(#tickTexts(r.svg, "start")).toBe(0)
+		-- A different min is a different scale, as in buildScaleKey.
+		local split = render({ pct, pct }, { series = { { unit = "percent" }, { unit = "percent", min = 0 } } })
+		expect(#(split.layout.axes :: { any })).toBe(2)
+	end)
+
+	it("places axes as configured: auto goes left after a right axis, hidden draws no axis", function()
+		local rightFirst: { Svg.SeriesStyle } = { { unit = "percent", placement = "right" }, { unit = "bytes" } }
+		local r = render({ pct, mem }, { series = rightFirst })
+		local axes = r.layout.axes :: { any }
+		expect(axes[1].side).toBe("right")
+		expect(axes[2].side).toBe("left")
+		local hidden = render(
+			{ pct, mem },
+			{ series = { { unit = "percent" }, { unit = "bytes", placement = "hidden" } } }
+		)
+		local h = hidden.layout.axes :: { any }
+		expect(h[2].side).toBe("hidden")
+		expect(#tickTexts(hidden.svg, "start")).toBe(0)
+		expect(anyContains(tickTexts(hidden.svg, "end"), "MiB")).toBe(false)
+		expect(hidden.layout.plot_right).toBe(960 - 12)
+		-- The hidden scale still fits its series.
+		expect(h[2].max >= 4194304).toBe(true)
+		local both = render(
+			{ pct, mem },
+			{ series = { { unit = "percent", placement = "left" }, { unit = "bytes", placement = "left" } } }
+		)
+		local b = both.layout.axes :: { any }
+		expect(b[2].side).toBe("left")
+		expect(b[2].x1).toBe(b[1].x0)
+		expect(both.layout.plot_left).toBe(b[1].x1)
+	end)
+
+	it("draws an axis label rotated beside its axis (custom.axisLabel)", function()
+		local r = render(
+			{ pct, mem },
+			{ series = { { unit = "percent", label = "busy" }, { unit = "bytes", label = "traffic" } } }
+		)
+		expect(r.svg).toContain('transform="rotate(-90 ')
+		expect(r.svg).toContain('transform="rotate(90 ')
+		expect(r.svg).toContain(">busy<")
+		expect(r.svg).toContain(">traffic<")
+		assertTernSafe(r.svg)
+	end)
+
+	-- UPlotScaleBuilder: a soft bound is a value the scale reaches at least.
+	it("widens to soft min/max but never narrows the data's range", function()
+		local data = { series(5, values({ 3, 97, 40, 12, 55 })) }
+		local function axis(style: Svg.SeriesStyle): any
+			return (render(data, { series = { style } }).layout.axes :: { any })[1]
+		end
+		expect(axis({ soft_max = 200 }).max).toBe(200)
+		expect(axis({ soft_max = 50 }).max).toBe(100)
+		expect(axis({ soft_min = -50 }).min).toBe(-50)
+		expect(axis({ soft_min = 20 }).min).toBe(0)
+		local centered = axis({ centered_zero = true })
+		expect(centered.min).toBe(-100)
+		expect(centered.max).toBe(100)
+	end)
+
+	-- getStackingGroups: the stack key holds the scale and stacking.group.
+	it("stacks per scale and per stacking group", function()
+		local ten, thirty, five =
+			series(3, function()
+				return 10
+			end), series(3, function()
+				return 30
+			end), series(3, function()
+				return 5
+			end)
+		local r = render({ ten, thirty, five }, {
+			series = {
+				{ unit = "a", stack = "normal" },
+				{ unit = "a", stack = "normal" },
+				{ unit = "b", stack = "normal" },
+			},
+		})
+		local axes = r.layout.axes :: { any }
+		expect(axes[1].max >= 40).toBe(true)
+		expect(axes[2].max < 10).toBe(true)
+		local groups = render({ ten, thirty }, {
+			series = { { stack = "normal", stack_group = "A" }, { stack = "normal", stack_group = "B" } },
+		})
+		expect(groups.layout.y_max < 40).toBe(true)
+	end)
+
+	-- uPlot rangeLog with whole magnitudes, ticks at the powers of the base.
+	it("draws log scales over whole magnitudes, decades equally spaced", function()
+		local r = render(
+			{ series(4, values({ 1, 10, 100, 1000 })) },
+			{ series = { { distribution = { type = "log", log = 10 } } } }
+		)
+		local axis = (r.layout.axes :: { any })[1]
+		expect(axis.distr).toBe("log")
+		expect(axis.min).toBe(1)
+		expect(axis.max).toBe(1000)
+		local labels = tickTexts(r.svg, "end")
+		for _, want in { "1", "10", "100", "1000" } do
+			expect(table.find(labels, want) ~= nil).toBe(true)
+		end
+		local Layout = require("../../../plugin/lib/render/layout")
+		local d1 = Layout.yOfValue(r.layout, 1) - Layout.yOfValue(r.layout, 10)
+		local d2 = Layout.yOfValue(r.layout, 100) - Layout.yOfValue(r.layout, 1000)
+		expect(math.abs(d1 - d2) < 0.01).toBe(true)
+		-- A log scale cannot place 0: the line starts at the first positive.
+		local gap = render(
+			{ series(3, values({ 0, 10, 100 })) },
+			{ series = { { distribution = { type = "log", log = 10 } } } }
+		)
+		local d = paths(gap.svg, "tg-line")[1]
+		expect(subpaths(d)).toBe(1)
+		expect(#ys(d)).toBe(2)
+	end)
+
+	it("draws symlog scales through zero with signed powers", function()
+		local r = render(
+			{ series(3, values({ -1000, 0, 1000 })) },
+			{ series = { { distribution = { type = "symlog", log = 10, linear_threshold = 1 } } } }
+		)
+		local axis = (r.layout.axes :: { any })[1]
+		expect(axis.distr).toBe("symlog")
+		expect(axis.min).toBe(-1000)
+		expect(axis.max).toBe(1000)
+		local labels = tickTexts(r.svg, "end")
+		expect(table.find(labels, "0") ~= nil).toBe(true)
+		expect(table.find(labels, "1000") ~= nil).toBe(true)
+		expect(table.find(labels, "-1000") ~= nil).toBe(true)
+		local Layout = require("../../../plugin/lib/render/layout")
+		local mid = (r.layout.plot_top + r.layout.plot_bottom) / 2
+		expect(math.abs(Layout.yOfValue(r.layout, 0) - mid) < 0.01).toBe(true)
+	end)
+
+	it("stays under the 256 KiB cap with 10 x 5000 points on several scales", function()
+		local frames = many(10, 5000)
+		local styles: { Svg.SeriesStyle } = {}
+		for i = 1, 10 do
+			styles[i] = {
+				unit = ({ "short", "bytes", "s" })[i % 3 + 1],
+				stack = if i % 2 == 0 then "normal" else "none",
+				transform = if i == 3 then "negative-Y" else nil,
+				distribution = if i % 3 == 1 then { type = "log", log = 10 } else nil,
+			}
+		end
+		for _, draw in { "line", "bars" } :: { Svg.Draw } do
+			local r = render(frames, { series = styles, draw = draw, fill_opacity = 30 })
+			expect(#r.svg <= Svg.CAP).toBe(true)
+			expect(#(r.layout.axes :: { any }) >= 3).toBe(true)
+			checkXml(r.svg)
+		end
+	end)
+end)
+
+-- preparePlotData2 (uPlot/utils.ts): negative-Y negates a series before
+-- stacking; the Constant path builder (TimeSeries/utils.ts) draws the first
+-- value from the range's start to its end. Tooltips and legends read the
+-- field's own values, so the layout keeps them.
+describe("svg_timeseries.render transforms", function()
+	it("draws negative-Y series below zero with negative ticks, keeping their own values", function()
+		local rx = series(4, values({ 10, 20, 40, 50 }))
+		local tx = series(4, values({ 10, 20, 40, 50 }))
+		local r = render({ rx, tx }, { series = { { unit = "Bps" }, { unit = "Bps", transform = "negative-Y" } } })
+		expect(#(r.layout.axes :: { any })).toBe(1)
+		expect(r.layout.y_min <= -50).toBe(true)
+		expect(r.layout.y_max >= 50).toBe(true)
+		local negative = 0
+		for _, label in tickTexts(r.svg, "end") do
+			if string.match(label, "^%-%d+ B/s$") then
+				negative += 1
+			end
+		end
+		expect(negative >= 2).toBe(true)
+		local Layout = require("../../../plugin/lib/render/layout")
+		local zero = Layout.yOfValue(r.layout, 0)
+		for _, y in ys(paths(r.svg, "tg-s2")[1]) do
+			expect(y > zero).toBe(true)
+		end
+		expect(r.layout.series[2].values[4]).toBe(50)
+		expect(r.layout.series[2].calcs.max).toBe(50)
+	end)
+
+	-- A negated series stacks downwards in its own group (getStackDirection).
+	it("stacks negative-Y series down, apart from the upward stack", function()
+		local function flat(v: number): Frame.Frame
+			return series(3, function()
+				return v
+			end)
+		end
+		local r = render({ flat(10), flat(30), flat(20) }, {
+			series = {
+				{ stack = "normal", transform = "negative-Y" } :: Svg.SeriesStyle,
+				{ stack = "normal", transform = "negative-Y" } :: Svg.SeriesStyle,
+				{ stack = "normal" } :: Svg.SeriesStyle,
+			},
+		})
+		expect(r.layout.y_min <= -40).toBe(true)
+		expect(r.layout.y_max >= 20 and r.layout.y_max < 40).toBe(true)
+	end)
+
+	it("draws a constant series as its first value across the time range", function()
+		local r = render({
+			series(4, values({ 1, 2, 3, 4 })),
+			series(4, function(i)
+				return ({ NULL, 7, 9, 3 } :: { any })[i]
+			end),
+		}, { from_ms = T0 - 60000, to_ms = T0 + 120000, series = { {}, { transform = "constant" } } })
+		local d = paths(r.svg, "tg-s2")[1]
+		expect(subpaths(d)).toBe(1)
+		local Layout = require("../../../plugin/lib/render/layout")
+		local y = string.format("%.1f", Layout.yOfValue(r.layout, 7))
+		expect(d).toBe(string.format("M%.1f %sL%.1f %s", r.layout.plot_left, y, r.layout.plot_right, y))
+	end)
+end)
 return nil

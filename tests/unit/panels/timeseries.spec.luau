@@ -141,34 +141,145 @@ for _, version in S.VERSIONS do
 	end)
 end
 
+-- Per-series units and stacking are drawn (second axis, stacks per scale);
+-- only unknown legend reducers stay on the ladder. The trend panel, drawn by
+-- svg_xy on one scale, keeps rejecting them.
 describe("timeseries support", function()
-	it("rejects per-series stacking, second-axis units and unknown legend calcs", function()
-		local stacking = {
-			fieldConfig = {
-				defaults = { unit = "short" },
-				overrides = {
-					{
-						matcher = { id = "byName", options = "a" },
-						properties = { { id = "custom.stacking", value = { mode = "none", group = "B" } } },
-					},
+	local stacking = {
+		fieldConfig = {
+			defaults = { unit = "short" },
+			overrides = {
+				{
+					matcher = { id = "byName", options = "a" },
+					properties = { { id = "custom.stacking", value = { mode = "none", group = "B" } } },
 				},
 			},
-		}
-		expect(Timeseries.unsupported(stacking, env)).toBe(
-			"per-series stacking (custom.stacking override) is not supported"
-		)
-		local units = {
-			fieldConfig = {
-				defaults = { unit = "short" },
-				overrides = {
-					{ matcher = { id = "byName", options = "a" }, properties = { { id = "unit", value = "bytes" } } },
-				},
+		},
+	}
+	local units = {
+		fieldConfig = {
+			defaults = { unit = "short" },
+			overrides = {
+				{ matcher = { id = "byName", options = "a" }, properties = { { id = "unit", value = "bytes" } } },
 			},
-		}
-		expect(Timeseries.unsupported(units, env)).toBe("a per-series unit override (second y axis) is not supported")
+		},
+	}
+
+	it("draws per-series units and stacking, rejects unknown legend calcs", function()
+		expect(Timeseries.unsupported(stacking, env)).toBeNil()
+		expect(Timeseries.unsupported(units, env)).toBeNil()
 		local legend = { options = { legend = { calcs = { "mean", "allValues" } } } }
 		expect(Timeseries.unsupported(legend, env)).toBe("legend reducer allValues is not supported")
 	end)
+
+	it("keeps single-axis panels off per-series units and stacking", function()
+		expect(Timeseries.singleAxisUnsupported(stacking, env)).toBe(
+			"per-series stacking (custom.stacking override) is not supported"
+		)
+		expect(Timeseries.singleAxisUnsupported(units, env)).toBe(
+			"a per-series unit override (second y axis) is not supported"
+		)
+	end)
 end)
+
+-- Text of the SVG tick labels anchored `anchor` ("end": left axes,
+-- "start": right axes).
+local function ticks(svg: string, anchor: string): { string }
+	local out: { string } = {}
+	for a, text in string.gmatch(svg, 'text%-anchor="(%a+)">([^<]*)</text>') do
+		if a == anchor then
+			table.insert(out, text :: string)
+		end
+	end
+	return out
+end
+
+for _, version in S.VERSIONS do
+	describe("timeseries axes on tern-panels, Grafana " .. version, function()
+		-- A unit override gives "idle" its own scale (buildScaleKey). It is
+		-- the first series, so its axis takes the left and the other modes'
+		-- axis goes right (addAxis auto placement); negative-Y draws it below
+		-- zero with negative ticks, and the legend keeps its own positive
+		-- values in its unit.
+		it("draws a per-series unit on its own axis and negative-Y below zero", function()
+			local panel = S.clone(S.panel(version, 2))
+			panel.fieldConfig.overrides = {
+				{
+					matcher = { id = "byName", options = "idle" },
+					properties = {
+						{ id = "unit", value = "percentunit" },
+						{ id = "custom.transform", value = "negative-Y" },
+						{ id = "custom.axisLabel", value = "idle share" },
+					},
+				},
+			}
+			local frames = S.refFrames(version, "prom_range", "A")
+			local node, assets = Timeseries.view(panel, frames, env, { key = "p" })
+			local svg = assets.p.bytes
+			local left = ticks(svg, "end")
+			expect(#left > 0).toBe(true)
+			local negative = 0
+			for _, label in left do
+				expect(string.sub(label, -1)).toBe("%")
+				if string.sub(label, 1, 1) == "-" then
+					negative += 1
+				end
+			end
+			expect(negative > 0).toBe(true)
+			local right = ticks(svg, "start")
+			expect(#right > 0).toBe(true)
+			for _, label in right do
+				expect((string.find(label, "%", 1, true))).toBeNil()
+			end
+			expect(svg).toContain(">idle share<")
+			local legend = S.text(S.find(node, function(n)
+				return n.p and n.p.key == "p.legend"
+			end))
+			expect(string.find(legend, "idle%d[%d%.]*%%") ~= nil).toBe(true)
+			expect((string.find(legend, "idle-", 1, true))).toBeNil()
+		end)
+
+		-- byValue (fieldValueMatcher.ts) evaluated on the panel's frames:
+		-- series that are all zero leave the legend (Grafana's hideZero).
+		it("hides all-zero series from the legend through a byValue override", function()
+			local panel = S.clone(S.panel(version, 2))
+			panel.options.legend.displayMode = "list"
+			panel.fieldConfig.overrides = {
+				{
+					matcher = { id = "byValue", options = { reducer = "allIsZero", op = "gte", value = 0 } },
+					properties = { { id = "custom.hideFrom", value = { legend = true, tooltip = true, viz = false } } },
+				},
+			}
+			local frames = S.refFrames(version, "prom_range", "A")
+			local zero = 0
+			for _, f in frames do
+				for _, field in f.fields do
+					if field.type == "number" then
+						local all = true
+						for _, v in field.values do
+							if v ~= 0 then
+								all = false
+							end
+						end
+						zero += if all then 1 else 0
+					end
+				end
+			end
+			local node, assets = Timeseries.view(panel, frames, env, { key = "p" })
+			local rows = S.findAll(
+				S.find(node, function(n)
+					return n.p and n.p.key == "p.legend"
+				end),
+				function(n)
+					return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tg-swatch", 1, true) ~= nil
+				end
+			)
+			expect(zero > 0).toBe(true)
+			expect(#rows).toBe(8 - zero)
+			-- Still drawn: hideFrom.viz is false.
+			expect(count(assets.p.bytes, "tg-line")).toBe(8)
+		end)
+	end)
+end
 
 return nil

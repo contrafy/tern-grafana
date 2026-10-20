@@ -3,6 +3,7 @@
 -- hold it in state and place the cursor overlay (a fraction of the image
 -- width) without rebuilding the SVG.
 
+local Axis = require("./axis")
 local FrameProm = require("../frame/prom")
 local Series = require("./series")
 
@@ -11,12 +12,39 @@ export type DrawnSeries = {
 	-- Palette class, "tg-s1" .. "tg-s10".
 	class: string,
 	labels: { [string]: string },
-	-- The drawn samples (after downsampling), raw values (not stacked);
-	-- missing samples are Frame.NULL.
+	-- The drawn sample times (after downsampling) and the series' own values
+	-- there (not stacked, not transformed); missing samples are Frame.NULL.
 	times: { number },
 	values: { any },
 	-- Over the full-resolution series.
 	calcs: Series.Calcs,
+	-- Index into layout.axes of the scale the series is drawn on (default 1).
+	axis: number?,
+	-- The series' own unit and decimals for read-outs (default: the layout's).
+	unit: string?,
+	decimals: number?,
+	-- Grafana custom.hideFrom.legend / .tooltip.
+	hide_legend: boolean?,
+	hide_tooltip: boolean?,
+}
+
+-- One y scale (Grafana's scale key: unit, bounds, placement, distribution,
+-- label) and where its axis is drawn.
+export type YAxis = {
+	key: string,
+	side: "left" | "right" | "hidden",
+	min: number,
+	max: number,
+	distr: Axis.Distr?,
+	log: number?,
+	linear_threshold: number?,
+	-- Tick label format (percentunit on a percent stack).
+	unit: string?,
+	decimals: number?,
+	label: string?,
+	-- Horizontal band of the tick labels (and axis label), viewBox px.
+	x0: number,
+	x1: number,
 }
 
 export type Layout = {
@@ -28,10 +56,13 @@ export type Layout = {
 	plot_bottom: number,
 	t_from: number,
 	t_to: number,
+	-- The first scale's range and format (exemplars use it).
 	y_min: number,
 	y_max: number,
 	unit: string?,
 	decimals: number?,
+	-- Every y scale; nil means one linear scale y_min..y_max.
+	axes: { YAxis }?,
 	-- Sorted union of the drawn sample times (cursor stops).
 	times: { number },
 	series: { DrawnSeries },
@@ -52,10 +83,18 @@ function M.xOfTime(layout: Layout, t: number): number
 	return layout.plot_left + f * (layout.plot_right - layout.plot_left)
 end
 
-function M.yOfValue(layout: Layout, v: number): number
-	local span = layout.y_max - layout.y_min
-	local f = if span > 0 then (v - layout.y_min) / span else 0.5
-	return layout.plot_bottom - f * (layout.plot_bottom - layout.plot_top)
+-- The y of value `v` on scale `axis` (default the first); a value a log
+-- scale cannot place sits at the bottom.
+function M.yOfValue(layout: Layout, v: number, axis: number?): number
+	local a = if layout.axes then layout.axes[axis or 1] else nil
+	local f: number?
+	if a then
+		f = Axis.position(a, v)
+	else
+		local span = layout.y_max - layout.y_min
+		f = if span > 0 then (v - layout.y_min) / span else 0.5
+	end
+	return layout.plot_bottom - (f or 0) * (layout.plot_bottom - layout.plot_top)
 end
 
 -- Position of time `t` as a fraction of the whole image width (0..1).
