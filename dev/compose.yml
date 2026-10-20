@@ -23,7 +23,7 @@ x-grafana-env: &grafana-env
 
 services:
   grafana12:
-    image: grafana/grafana:12.4.12
+    image: grafana/grafana:13.2.4
     depends_on: [renderer]
     ports: ["127.0.0.1:3000:3000"]
     environment:
@@ -46,7 +46,7 @@ services:
 
   # Deliberately without an image renderer, so the "no renderer" ladder step is capturable.
   grafana11:
-    image: grafana/grafana:11.6.16
+    image: grafana/grafana:13.2.4
     ports: ["127.0.0.1:3011:3000"]
     environment:
       <<: *grafana-env
