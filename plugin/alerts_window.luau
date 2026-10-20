@@ -9,19 +9,20 @@
 -- (watches_window) and the IRM segment (lib/irm/segment.luau, from the kv
 -- summary irm_poll_host writes); the signature covers all of them, so any
 -- change refreshes.
+--
+-- The segment stack loads in timer callbacks right after the window entry,
+-- one group per tick, never with the entry (50 ms load budget) nor in the
+-- formatter (4 ms budget): until it is loaded the formatter shows nothing
+-- and the last group's tick refreshes the chrome (docs/architecture.md).
 
-local IrmSegment = require("./lib/irm/segment")
-local IrmSummary = require("./lib/irm/summary")
-local Segment = require("./lib/alerts/segment")
-local WatchSegment = require("./lib/watches/segment")
 local WatchesWindow = require("./watches_window")
-local Summary = require("./lib/alerts/summary")
-local Toasts = require("./lib/alerts/toasts")
 
 local M = {}
 
 M.COMMAND_ID = "alerts"
 M.BLOCK = "tern-grafana.alerts"
+-- lib/alerts/segment.luau ICON; a literal so the command needs no lib module.
+M.ICON = "flame"
 -- How often the window re-reads the kv summary.
 M.CHECK_MS = 5000
 
@@ -33,21 +34,52 @@ local function localOffsetMin(seconds: number): number
 	return math.floor(os.difftime(seconds, os.time(utc)) / 60 + 0.5)
 end
 
-local function current(t: any): { Segment.Segment }?
+type Stack = {
+	Segment: any,
+	Summary: any,
+	Toasts: any,
+	IrmSegment: any,
+	IrmSummary: any,
+	WatchSegment: any,
+}
+
+-- Nil until every group below is loaded.
+local stack: Stack? = nil
+
+-- Loading groups, one per timer tick; each stays far under the 50 ms budget.
+local partial: { [string]: any } = {}
+local GROUPS: { () -> () } = {
+	function()
+		partial.Segment = require("./lib/alerts/segment")
+		partial.Summary = require("./lib/alerts/summary")
+		partial.Toasts = require("./lib/alerts/toasts")
+	end,
+	function()
+		partial.IrmSegment = require("./lib/irm/segment")
+		partial.IrmSummary = require("./lib/irm/summary")
+	end,
+	function()
+		partial.WatchSegment = WatchesWindow.load()
+		stack = partial :: any
+	end,
+}
+
+local function current(t: any, s: Stack): { any }?
 	local seconds = os.time()
 	local now = seconds * 1000
-	local ok, raw = pcall(t.kv.get, Summary.KEY)
-	local alerts = if ok then Segment.segments(raw, now) else nil
-	local okIrm, irmRaw = pcall(t.kv.get, IrmSummary.KEY)
-	local irm = if okIrm then IrmSegment.segments(irmRaw, now, localOffsetMin(seconds)) else nil
-	return WatchSegment.append(WatchSegment.append(alerts, WatchesWindow.segments(t)), irm)
+	local ok, raw = pcall(t.kv.get, s.Summary.KEY)
+	local alerts = if ok then s.Segment.segments(raw, now) else nil
+	local okIrm, irmRaw = pcall(t.kv.get, s.IrmSummary.KEY)
+	local irm = if okIrm then s.IrmSegment.segments(irmRaw, now, localOffsetMin(seconds)) else nil
+	local watches = WatchesWindow.segments(t)
+	return s.WatchSegment.append(s.WatchSegment.append(alerts, watches), irm)
 end
 
 function M.register(t: any)
 	t.command({
 		id = M.COMMAND_ID,
 		title = "Grafana: Alerts",
-		icon = Segment.ICON,
+		icon = M.ICON,
 		group = "Tern Grafana",
 		run = function(cx: any)
 			cx:new_block(M.BLOCK, {})
@@ -55,19 +87,23 @@ function M.register(t: any)
 	})
 
 	t.chrome.status(function(_pane: any): { any }?
-		return current(t)
+		local s = stack
+		if s == nil then
+			return nil
+		end
+		return current(t, s)
 	end)
 
 	-- Records before toasting, so a second window finds the poll announced.
-	local function announce(cx: any)
-		local okSummary, summary = pcall(t.kv.get, Summary.KEY)
-		local okNotified, notified = pcall(t.kv.get, Toasts.KEY)
+	local function announce(s: Stack, cx: any)
+		local okSummary, summary = pcall(t.kv.get, s.Summary.KEY)
+		local okNotified, notified = pcall(t.kv.get, s.Toasts.KEY)
 		if not okSummary or not okNotified then
 			return
 		end
-		local record, toasts = Toasts.check(summary, notified)
+		local record, toasts = s.Toasts.check(summary, notified)
 		if record then
-			t.kv.set(Toasts.KEY, record)
+			t.kv.set(s.Toasts.KEY, record)
 		end
 		if cx then
 			for _, toast in toasts do
@@ -76,18 +112,41 @@ function M.register(t: any)
 		end
 	end
 
-	local shown = Segment.signature(current(t))
+	local shown: string? = nil
 	local function check(cx: any)
-		pcall(function()
-			local sig = Segment.signature(current(t))
-			if sig ~= shown then
-				shown = sig
-				t.chrome.refresh()
-			end
-		end)
-		pcall(announce, cx)
+		local s = stack
+		if s ~= nil then
+			pcall(function()
+				local sig = s.Segment.signature(current(t, s))
+				if sig ~= shown then
+					shown = sig
+					t.chrome.refresh()
+				end
+			end)
+			pcall(announce, s, cx)
+		end
 		t.timer(M.CHECK_MS, check)
 	end
+
+	local function warm(i: number)
+		t.timer(0, function(_cx: any)
+			local ok, err = pcall(GROUPS[i] :: any)
+			if not ok then
+				pcall(t.log.warn, "tern-grafana status segments failed to load", tostring(err))
+				return
+			end
+			if i < #GROUPS then
+				warm(i + 1)
+				return
+			end
+			local s = stack :: Stack
+			pcall(function()
+				shown = s.Segment.signature(current(t, s))
+			end)
+			pcall(t.chrome.refresh)
+		end)
+	end
+	warm(1)
 	t.timer(M.CHECK_MS, check)
 end
 

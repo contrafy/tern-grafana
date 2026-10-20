@@ -3,9 +3,8 @@
 -- focus, pane and tab events, and on a short check timer (zoom, park and
 -- float changes raise no event), records which panes the active tab shows in
 -- kv, writing only when that changed. Block machines read it to pause
--- auto-refresh in background tabs.
-
-local Visibility = require("./lib/visibility")
+-- auto-refresh in background tabs. lib/visibility loads on the first
+-- update, not with the window entry (50 ms load budget).
 
 local M = {}
 
@@ -22,6 +21,7 @@ function M.register(t: any)
 			return
 		end
 		local ok, err = pcall(function()
+			local Visibility = require("./lib/visibility")
 			local session = cx.session
 			local focused: number? = session:focused()
 			local tab = if focused then session:tab_of(focused) else nil

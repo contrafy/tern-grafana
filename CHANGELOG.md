@@ -59,6 +59,15 @@ versions may break).
   `hideFrom.legend`/`hideFrom.tooltip`. Field overrides can match by value
   (`byValue`) in every panel type.
 
+### Fixed
+
+- The window half loads in about 2 ms instead of 26-40 ms: under load it
+  could exceed Tern's 50 ms window budget (`load exceeded 50 ms`), which
+  disabled link routes, palette commands, status segments and Carly. Window
+  modules now load their lib stacks on first use, the status segments load in
+  timer ticks after the entry, and `make check` guards the load size
+  (`make window-load`). See docs/architecture.md, Window load budget.
+
 ## [0.3.0] - 2026-10-12
 
 ### Added

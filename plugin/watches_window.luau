@@ -6,38 +6,62 @@
 -- lib/watches/toasts.luau, deduped across windows through kv), and the
 -- "Grafana: Watches" palette command, which is also what clicking the
 -- segment runs: it opens the most urgent watch's query.
-
-local Poll = require("./lib/watches/poll")
-local Scheme = require("./lib/links/scheme")
-local Segment = require("./lib/watches/segment")
-local Toasts = require("./lib/watches/toasts")
+--
+-- The watches stack loads through `load`, which alerts_window's warm-up
+-- timer calls, or on the first command or toast check; never with the
+-- window entry (50 ms load budget, docs/architecture.md).
 
 local M = {}
 
 M.COMMAND_ID = "watches"
 M.QUERY_BLOCK = "tern-grafana.query"
+-- lib/watches/segment.luau ICON; a literal so the command needs no lib module.
+M.ICON = "eye"
 -- How often the window re-reads the kv summary for toasts.
 M.CHECK_MS = 5000
+
+type Stack = { Poll: any, Segment: any, Toasts: any }
+
+local stack: Stack? = nil
+
+-- Loads the watches stack (once) and returns lib/watches/segment.
+function M.load(): any
+	if stack == nil then
+		stack = {
+			Poll = require("./lib/watches/poll"),
+			Segment = require("./lib/watches/segment"),
+			Toasts = require("./lib/watches/toasts"),
+		}
+	end
+	return (stack :: Stack).Segment
+end
 
 local function nowMs(): number
 	return os.time() * 1000
 end
 
-local function summary(t: any): any
-	local ok, raw = pcall(t.kv.get, Poll.KEY)
+local function summary(t: any, s: Stack): any
+	local ok, raw = pcall(t.kv.get, s.Poll.KEY)
 	return if ok then raw else nil
 end
 
--- The watches segments for the status line; nil adds none.
-function M.segments(t: any): { Segment.Segment }?
-	return Segment.segments(summary(t), nowMs())
+-- The watches segments for the status line; nil adds none, also before
+-- `load` ran (the formatter never loads modules).
+function M.segments(t: any): { any }?
+	local s = stack
+	if s == nil then
+		return nil
+	end
+	return s.Segment.segments(summary(t, s), nowMs())
 end
 
 local function open(t: any, cx: any)
-	local raw = summary(t)
-	local entry = Segment.focus(raw)
+	M.load()
+	local s = stack :: Stack
+	local raw = summary(t, s)
+	local entry = s.Segment.focus(raw)
 	if entry == nil then
-		local payload = Poll.read(raw)
+		local payload = s.Poll.read(raw)
 		if payload == nil or #payload.watches == 0 then
 			cx:toast("info", "No watches configured", "Add a `watches` list to the tern-grafana config")
 		else
@@ -45,14 +69,15 @@ local function open(t: any, cx: any)
 		end
 		return
 	end
-	cx:new_block(M.QUERY_BLOCK, { Scheme.encode(Segment.link(entry) :: any) }, "beside")
+	local Scheme = require("./lib/links/scheme")
+	cx:new_block(M.QUERY_BLOCK, { Scheme.encode(s.Segment.link(entry) :: any) }, "beside")
 end
 
 function M.register(t: any)
 	t.command({
 		id = M.COMMAND_ID,
 		title = "Grafana: Watches",
-		icon = Segment.ICON,
+		icon = M.ICON,
 		group = "Tern Grafana",
 		run = function(cx: any)
 			local ok, err = pcall(function()
@@ -66,13 +91,15 @@ function M.register(t: any)
 
 	-- Records before toasting, so a second window finds the transition announced.
 	local function announce(cx: any)
-		local okNotified, notified = pcall(t.kv.get, Toasts.KEY)
+		M.load()
+		local s = stack :: Stack
+		local okNotified, notified = pcall(t.kv.get, s.Toasts.KEY)
 		if not okNotified then
 			return
 		end
-		local record, toasts = Toasts.check(summary(t), notified, nowMs())
+		local record, toasts = s.Toasts.check(summary(t, s), notified, nowMs())
 		if record then
-			t.kv.set(Toasts.KEY, record)
+			t.kv.set(s.Toasts.KEY, record)
 		end
 		if cx then
 			for _, toast in toasts do
