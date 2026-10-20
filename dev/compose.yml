@@ -55,7 +55,7 @@ services:
     healthcheck: *grafana-health
 
   renderer:
-    image: grafana/grafana-image-renderer:v5.12.6
+    image: grafana/grafana-image-renderer:v5.12.7
     environment:
       GOMEMLIMIT: 1GiB
 
