@@ -70,7 +70,12 @@ Before the mitigations, per refresh of one panel (Tern All Panels and Tern Panel
 | Histogram | 1 | 2.4 KB |
 | Gauge, SVG (5) | 1 when its value changed (3 panels), else 0 | 0.7 to 21 KB |
 | Pie chart, bar chart, trend, XY chart, flame graph, node graph, geomap, canvas | 0 after the first draw (same bytes, same id) | 0.7 to 27 KB |
-| Stat, bar gauge, table, text, logs, clock, alert/annotation/dashboard lists, news | none: native Tern kinds | |
+| Stat value (dashboard grid) | 1 when its text changed, else 0 | one line of SVG text |
+| Bar gauge, table, text, logs, clock, alert/annotation/dashboard lists, news | none: native Tern kinds | |
+
+Stat values in a dashboard grid are drawn as a one-line SVG (measured above before this change, when they were
+text) because Tern gives a block no reliable pane width, so CSS text could not be sized to fill its card like
+Grafana's. A value that does not change between refreshes keeps its image.
 
 Time-axis panels made two blobs per refresh: the refresh resolved the new range at once, so the panel was redrawn
 with its old data on the new axis while the query ran, then again when the answer arrived. After the mitigations a

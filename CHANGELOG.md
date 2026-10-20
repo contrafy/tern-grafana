@@ -25,9 +25,10 @@ versions may break).
 - Panel transformations drawn natively: add field from calculation, join by
   field (and seriesToColumns), labels to fields, merge, convert field type,
   format time, sort by, filter data by values, extract fields, reduce, rows to
-  fields and config from query results, ported from Grafana 13 with its own
-  test cases; transformation options see dashboard variables. See
-  docs/dashboards.md, Transformations.
+  fields, config from query results, group by, limit, rename by regex and
+  series to rows, ported from Grafana 13 with its own test cases;
+  transformation options see dashboard variables. See docs/dashboards.md,
+  Transformations.
 
 - Grafana IRM: **Grafana: On-call** (OnCall alert groups with acknowledge,
   unacknowledge, resolve, unresolve and silence; schedules with who is on call

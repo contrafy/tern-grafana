@@ -965,7 +965,7 @@ function M.view(panel: any, _: { Frame.Frame }, env: Env, opts: Common.Options):
 			options = { colorMode = "none", graphMode = "none", textMode = "value", justifyMode = "auto" },
 		}
 		local frame: Frame.Frame = { fields = { Frame.field("Value", "number", { #rows }) } }
-		table.insert(children, Stat.view(statPanel, { frame }, env, { key = "stat" }))
+		table.insert(children, (Stat.view(statPanel, { frame }, env, { key = "stat" })))
 	elseif o.groupMode == "custom" then
 		for _, n in groupedNode(rows, o, now) do
 			table.insert(children, n)

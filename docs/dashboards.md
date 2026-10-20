@@ -200,11 +200,13 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   and unary operations, index, cumulative and window functions), join by field (`joinByField`/`seriesToColumns`:
   outer, inner, outer tabular), labels to fields, merge, convert field type (number, string, time, boolean, enum,
   other; time formats parsed like moment), format time, sort by, filter data by values, extract fields (JSON, key
-  value pairs, delimiter, regex, auto), reduce, rows to fields and config from query results (`configFromData`:
-  min, max, unit, decimals, display name, color, thresholds and value mappings from data). Values follow
-  JavaScript as Grafana's code does: in a calculation a null counts as 0 and a gap a join created as NaN. Other
-  transformations (group by, grouping to matrix, limit, ...) and filters other than `byRefId` keep the panel on
-  the ladder.
+  value pairs, delimiter, regex, auto), reduce, rows to fields, config from query results (`configFromData`:
+  min, max, unit, decimals, display name, color, thresholds and value mappings from data), group by (every
+  reducer; columns named like `Value (mean)`), limit (a number or a variable), rename by regex (`$1`
+  replacements, `/.../g` for every match) and series to rows (also an old table panel's "Time series to rows").
+  Values follow JavaScript as Grafana's code does: in a calculation a null counts as 0 and a gap a join created
+  as NaN. Other transformations (grouping to matrix, partition by values, ...) and filters other than `byRefId`
+  keep the panel on the ladder.
 
 ### Clock panels (grafana-clock-panel)
 

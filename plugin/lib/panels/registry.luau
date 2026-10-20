@@ -8,6 +8,8 @@
 -- - panels that query get their frames through the panel's
 --   transformations, and an unsupported transformation is the reason the
 --   panel is not native;
+-- - field config displayName strings get the dashboard variables
+--   (opts.replace); field macros resolve per field in lib/panels/fieldconfig;
 -- - a module failure shows as an error line in the panel instead of taking
 --   the dashboard down.
 --
@@ -127,7 +129,7 @@ local STAT: PanelModule = {
 	types = { "stat" },
 	supports = supportsWith(Values.unsupported),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return Stat.view(panel, frames, env, opts), nil
+		return Stat.view(panel, frames, env, opts)
 	end,
 }
 
@@ -365,6 +367,9 @@ local function render(panel: any, frames: { Frame }, env: Env, opts: Options): (
 		return ui.muted(why or "Not supported", { key = opts.key }), {}
 	end
 	local mod = m :: PanelModule
+	if opts.replace then
+		p = FieldConfig.withVariables(p, env, opts.replace)
+	end
 	local data = if queriesOf(mod, p) then Transform.prepare(p, frames, env, opts.interpolate) else frames
 	local node, assets = mod.view(p, data, env, opts)
 	return node, assets or {}

@@ -31,6 +31,9 @@ export type Options = {
 	offset_min: number?,
 	-- Dashboard variable interpolation for text content and titles.
 	interpolate: ((string) -> string)?,
+	-- Dashboard variable interpolation in Grafana's default format (glob), as
+	-- the panel's replaceVariables applies it to field config displayName.
+	replace: ((string) -> string)?,
 	-- Logs: override the panel's showLabels (the block's labels toggle).
 	show_labels: boolean?,
 	-- Time series: exemplar markers (lib/frame/prom Exemplar) and the
@@ -39,6 +42,10 @@ export type Options = {
 	exemplar: number?,
 	-- Panel size in px from its gridPos (lib/dashboard/render_png size).
 	size: { w: number, h: number }?,
+	-- The panel card body's height in px under the card's height cap
+	-- (lib/dashboard/view cardHeight), often less than size.h; nil when the
+	-- card is not capped (an expanded panel).
+	card_height: number?,
 	-- The panel's query range after its own time overrides (timeFrom,
 	-- timeShift); from_ms/to_ms carry the same range.
 	time: { from_ms: number, to_ms: number }?,
