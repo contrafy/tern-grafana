@@ -421,4 +421,102 @@ describe("singlestat -> stat (StatMigrations.ts, SingleStatBaseOptions.ts)", fun
 	end)
 end)
 
+-- public/app/plugins/panel/table/migrations.test.ts (Grafana v12.4.0): the
+-- `tablePanelChangedHandler` cases, then tableMigrationHandler's
+-- migrateHiddenFields, as Grafana runs both on an auto-migrated table-old.
+describe("table-old -> table (table/migrations.ts)", function()
+	local function tableOld(extra: string): any
+		return migrate('{"type": "table-old", "id": 3, "title": "T", "targets": [{"refId": "A"}], ' .. extra .. "}")
+	end
+
+	it("turns the old transform into a core transformation (migrates transform out to core transforms)", function()
+		local columns = tableOld('"columns": [], "styles": [], "transform": "timeseries_to_columns"')
+		expect(columns.type).toBe("table")
+		expect(columns.transformations).toEqual({ { id = "seriesToColumns", options = { reducers = {} } } })
+		expect(columns.fieldConfig).toEqual({ defaults = { custom = {} }, overrides = {} })
+		expect(tableOld('"styles": [], "transform": "timeseries_to_rows"').transformations[1].id).toBe("seriesToRows")
+		expect(tableOld('"styles": [], "transform": "table"').transformations[1].id).toBe("merge")
+		local agg = tableOld(
+			'"columns": [{"text": "Avg", "value": "avg"}, {"text": "Max", "value": "max"}, {"text": "Current", "value": "current"}],'
+				.. ' "styles": [], "transform": "timeseries_aggregations"'
+		)
+		expect(agg.transformations).toEqual({
+			{ id = "reduce", options = { includeTimeField = false, reducers = { "mean", "max", "lastNotNull" } } },
+		})
+		expect(agg.targets[1].refId).toBe("A")
+	end)
+
+	it("moves the /.*/ style to defaults and the others to overrides (migrates styles)", function()
+		local p = tableOld([=["columns": [], "styles": [
+			{"alias": "Time", "align": "auto", "dateFormat": "YYYY-MM-DD HH:mm:ss", "pattern": "Time", "type": "date"},
+			{"alias": "", "align": "left", "colorMode": "cell",
+			 "colors": ["rgba(245, 54, 54, 0.9)", "rgba(237, 129, 40, 0.89)", "rgba(50, 172, 45, 0.97)"],
+			 "dateFormat": "YYYY-MM-DD HH:mm:ss", "decimals": 2, "mappingType": 1, "pattern": "ColorCell",
+			 "thresholds": ["5", "10"], "type": "number", "unit": "currencyUSD"},
+			{"alias": "", "align": "auto", "colorMode": "value",
+			 "colors": ["rgba(245, 54, 54, 0.9)", "rgba(237, 129, 40, 0.89)", "rgba(50, 172, 45, 0.97)"],
+			 "dateFormat": "YYYY-MM-DD HH:mm:ss", "decimals": 2, "link": true, "linkTargetBlank": true,
+			 "linkTooltip": "", "linkUrl": "http://www.grafana.com", "mappingType": 1, "pattern": "ColorValue",
+			 "thresholds": ["5", "10"], "type": "number", "unit": "Bps"},
+			{"unit": "short", "type": "number", "alias": "", "decimals": 2,
+			 "colors": ["rgba(245, 54, 54, 0.9)", "rgba(237, 129, 40, 0.89)", "rgba(50, 172, 45, 0.97)"],
+			 "colorMode": null, "pattern": "/.*/", "thresholds": [], "align": "right"}
+		]]=])
+		local steps = {
+			{ color = "rgba(245, 54, 54, 0.9)", value = -math.huge },
+			{ color = "rgba(237, 129, 40, 0.89)", value = 5 },
+			{ color = "rgba(50, 172, 45, 0.97)", value = 10 },
+		}
+		expect(p.fieldConfig.defaults).toEqual({
+			custom = { align = "right" },
+			decimals = 2,
+			displayName = "",
+			unit = "short",
+		})
+		expect(p.transformations).toEqual({})
+		expect(p.fieldConfig.overrides).toEqual({
+			{
+				matcher = { id = "byName", options = "Time" },
+				properties = {
+					P("displayName", "Time"),
+					P("unit", "time: YYYY-MM-DD HH:mm:ss"),
+					P("custom.align", env.null),
+				},
+			},
+			{
+				matcher = { id = "byName", options = "ColorCell" },
+				properties = {
+					P("unit", "currencyUSD"),
+					P("decimals", 2),
+					P("custom.cellOptions", { type = "color-background" }),
+					P("custom.align", "left"),
+					P("thresholds", { mode = "absolute", steps = steps }),
+				},
+			},
+			{
+				matcher = { id = "byName", options = "ColorValue" },
+				properties = {
+					P("unit", "Bps"),
+					P("decimals", 2),
+					P("links", { { targetBlank = true, title = "", url = "http://www.grafana.com" } }),
+					P("custom.cellOptions", { type = "color-text" }),
+					P("custom.align", env.null),
+					P("thresholds", { mode = "absolute", steps = steps }),
+				},
+			},
+		})
+	end)
+
+	it("hides hidden-style columns from the visualization (migrates hidden fields, migrateHiddenFields)", function()
+		local p = tableOld(
+			'"styles": [{"dateFormat": "YYYY-MM-DD HH:mm:ss", "pattern": "time", "type": "hidden"},'
+				.. ' {"pattern": "/^cpu.*/", "type": "number", "unit": "percent"}]'
+		)
+		expect(p.fieldConfig.overrides).toEqual({
+			{ matcher = { id = "byName", options = "time" }, properties = { P("custom.hideFrom.viz", true) } },
+			{ matcher = { id = "byRegexp", options = "/^cpu.*/" }, properties = { P("unit", "percent") } },
+		})
+	end)
+end)
+
 return nil

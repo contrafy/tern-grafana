@@ -185,6 +185,26 @@ describe("fieldconfig display edge cases (displayProcessor.ts)", function()
 		expect(items[3].name).toBe("state")
 	end)
 
+	-- calculateFieldDisplayName ends with getUniqueFieldName: a joined
+	-- table's repeated columns are "Time 1"/"Time 2", the names organize,
+	-- renameByName and sortBy refer to. A time field without labels keeps
+	-- its plain name (the early return comes first, as in Grafana).
+	it("numbers repeated field names within a frame (getUniqueFieldName)", function()
+		local joined: Frame.Frame = {
+			fields = {
+				Frame.field("Time", "time", { 0 }, {}),
+				Frame.field("x", "number", { 1 }),
+				Frame.field("Time", "time", { 0 }, {}),
+			},
+		}
+		expect(FieldConfig.displayName(joined.fields[1], joined, { joined })).toBe("Time 1")
+		expect(FieldConfig.displayName(joined.fields[2], joined, { joined })).toBe("x")
+		expect(FieldConfig.displayName(joined.fields[3], joined, { joined })).toBe("Time 2")
+		local plain: Frame.Frame =
+			{ fields = { Frame.field("Time", "time", { 0 }), Frame.field("Time", "time", { 0 }) } }
+		expect(FieldConfig.displayName(plain.fields[2], plain, { plain })).toBe("Time")
+	end)
+
 	it("matches byType and byFrameRefID overrides", function()
 		local items = resolve({}, {
 			{ matcher = { id = "byType", options = "string" }, properties = { { id = "displayName", value = "S" } } },

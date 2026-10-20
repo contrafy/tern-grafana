@@ -238,6 +238,30 @@ local function singleLabelName(frames: { Frame }): string?
 	return single
 end
 
+-- getUniqueFieldName (field/fieldState.ts): a name other fields of the
+-- frame share gets " <n>", n counting the duplicates up to this field.
+local function uniqueName(field: Field, frame: Frame?): string
+	if frame == nil then
+		return field.name
+	end
+	local dupes, foundSelf = 0, false
+	for _, other in frame.fields do
+		if other == field then
+			foundSelf = true
+			if dupes > 0 then
+				dupes += 1
+				break
+			end
+		elseif other.name == field.name then
+			dupes += 1
+			if foundSelf then
+				break
+			end
+		end
+	end
+	return if dupes > 0 then field.name .. " " .. dupes else field.name
+end
+
 -- calculateFieldDisplayName. The frame converters store Grafana's
 -- displayNameFromDS in config.displayName, so it comes first here exactly
 -- as it does in Grafana (a panel displayName replaces it beforehand).
@@ -284,12 +308,13 @@ function M.displayName(field: Field, frame: Frame?, frames: { Frame }?): string
 			table.insert(parts, frame.name)
 		end
 	end
-	if #parts > 0 then
-		return table.concat(parts, " ")
-	elseif field.name ~= "" then
-		return field.name
+	local name = if #parts > 0 then table.concat(parts, " ") elseif field.name ~= "" then field.name else "Value"
+	-- "Ensure unique field name": a joined table's two Time columns read
+	-- "Time 1" and "Time 2", the names organize/rename/sortBy refer to.
+	if name == field.name then
+		return uniqueName(field, frame)
 	end
-	return "Value"
+	return name
 end
 
 -- Matchers --------------------------------------------------------------------

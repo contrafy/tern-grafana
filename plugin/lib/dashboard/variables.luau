@@ -814,6 +814,7 @@ function M.datasourceOptions(
 			name: string,
 			is_default: boolean,
 			manage_alerts: boolean?,
+			backend: boolean?,
 		}
 	},
 	scope: Interpolate.Scope

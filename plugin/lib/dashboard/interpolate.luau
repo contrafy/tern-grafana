@@ -224,6 +224,38 @@ function M.loki(values: { string }, var: Var, list: boolean): string
 	return mapJoin(values, promSpecial, "|")
 end
 
+local function sqlQuote(s: string): string
+	return "'" .. string.gsub(s, "'", "''") .. "'"
+end
+
+local function sqlEscape(s: string): string
+	return (string.gsub(s, "'", "''"))
+end
+
+-- The SQL datasources (packages/grafana-sql SqlDatasource.interpolateVariable):
+-- a list becomes quoted literals joined by commas (for `IN ($var)`); a single
+-- value of a multi-value or include-all variable is quoted; any other value
+-- only has its quotes doubled (the query writes `'$var'`).
+function M.sql(values: { string }, var: Var, list: boolean): string
+	if list then
+		return mapJoin(values, sqlQuote, ",")
+	end
+	local v = table.concat(values, ",")
+	if var.multi or var.include_all then
+		return sqlQuote(v)
+	end
+	return sqlEscape(v)
+end
+
+-- PostgreSQL (grafana-postgresql-datasource/datasource.ts interpolateVariable):
+-- like `sql`, but a single value is never quoted.
+function M.postgres(values: { string }, _var: Var, list: boolean): string
+	if list then
+		return mapJoin(values, sqlQuote, ",")
+	end
+	return sqlEscape(table.concat(values, ","))
+end
+
 local function isoDate(ms: number): string
 	local s = math.floor(ms / 1000)
 	local frac = math.floor(ms - s * 1000)

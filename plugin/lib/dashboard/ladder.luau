@@ -6,11 +6,17 @@
 -- render's status: Grafana 11 without a renderer answers 200 with an error
 -- picture); else the solo panel page in a Tern browser pane. The reason a
 -- panel left the native rung is kept and shown on the panel.
+--
+-- A `-- Dashboard --` panel is native when its source panel's queries are
+-- (whatever the source's own rung: Grafana runs the source's queries for it)
+-- and, with `withTransforms`, Tern applies the source's transformations. A
+-- missing source panel is Grafana's own error, shown natively.
 
 local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Model = require("./model")
 local Queries = require("./queries")
+local Transform = require("../panels/transform")
 
 type Env = Env.Env
 
@@ -27,7 +33,49 @@ export type Context = {
 	renderer_available: boolean?,
 	scope: Interpolate.Scope,
 	datasources: { Queries.Datasource },
+	-- The dashboard's panel with this id (the source of a `-- Dashboard --`
+	-- query), nil when there is none.
+	source: ((panel_id: number) -> Model.Panel?)?,
 }
+
+-- Chained `-- Dashboard --` queries followed at most this deep.
+local MAX_CHAIN = 8
+
+-- Why the data of a panel cannot be produced natively; nil when it can.
+local function queryBlocker(panel: Model.Panel, ctx: Context, env: Env, depth: number): string?
+	local _, err = Queries.resolve(panel.json, ctx.scope, ctx.datasources, env)
+	if err then
+		return err
+	end
+	local dq, derr = Queries.dashboardQuery(panel.json, env)
+	if derr then
+		return derr
+	end
+	if dq == nil then
+		return nil
+	end
+	local src = if ctx.source then ctx.source(dq.panel_id) else nil
+	if src == nil then
+		return nil
+	end
+	if depth >= MAX_CHAIN or src.id == panel.id then
+		return "-- Dashboard -- queries reference each other in a loop"
+	end
+	if src.library_uid then
+		return "library panel is still loading"
+	end
+	local why = queryBlocker(src, ctx, env, depth + 1)
+	if why then
+		return string.format("reuses panel %d, whose queries are not run natively: %s", src.id, why)
+	end
+	if dq.with_transforms then
+		local tw = Transform.unsupported(src.json, env)
+		if tw then
+			return string.format("reuses panel %d with its transformations: %s", src.id, tw)
+		end
+	end
+	return nil
+end
 
 -- Why a panel cannot be drawn natively; nil when it can.
 function M.nativeBlocker(panel: Model.Panel, ctx: Context, env: Env): string?
@@ -41,8 +89,7 @@ function M.nativeBlocker(panel: Model.Panel, ctx: Context, env: Env): string?
 	if not ok then
 		return reason or string.format("%s panels are not drawn natively", panel.type)
 	end
-	local _, err = Queries.resolve(panel.json, ctx.scope, ctx.datasources, env)
-	return err
+	return queryBlocker(panel, ctx, env, 0)
 end
 
 function M.decide(panel: Model.Panel, ctx: Context, env: Env): Decision

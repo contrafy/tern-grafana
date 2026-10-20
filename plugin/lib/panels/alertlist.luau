@@ -182,7 +182,14 @@ end
 
 local GRAFANA_DATASOURCE_NAME = "-- Grafana --"
 
-export type Source = { uid: string, type: string, name: string, is_default: boolean, manage_alerts: boolean? }
+export type Source = {
+	uid: string,
+	type: string,
+	name: string,
+	is_default: boolean,
+	manage_alerts: boolean?,
+	backend: boolean?,
+}
 
 -- The rules sources the panel reads: whether Grafana-managed rules are read,
 -- the data sources to read and the ones left out by MAX_EXTERNAL; nil while

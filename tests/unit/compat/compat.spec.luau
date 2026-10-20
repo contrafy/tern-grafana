@@ -33,6 +33,7 @@ local DASHBOARDS = {
 	{ uid = "tern-variables", fs = "frontend_settings.json" },
 	{ uid = "tern-all-panels", fs = "frontend_settings_all_panels.json" },
 	{ uid = "tern-observability", fs = "frontend_settings.json" },
+	{ uid = "tern-sql", fs = "frontend_settings_sql.json" },
 }
 
 local function dashFixture(version: string, uid: string): string

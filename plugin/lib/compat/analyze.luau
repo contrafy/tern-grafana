@@ -139,6 +139,9 @@ function M.panels(d: Model.Dashboard, settings: Settings, env: Env): { PanelResu
 	resolveDatasourceVariables(vars, settings.datasources)
 	local base = Variables.scope(vars, nil)
 	local out: { PanelResult } = {}
+	local function source(id: number): Model.Panel?
+		return Model.findPanel(d, id)
+	end
 	for _, sec in Repeat.expand(d, vars) do
 		-- Copies of a repeated row ("r5.1") repeat the first one.
 		if string.find(sec.key, ".", 1, true) then
@@ -159,6 +162,7 @@ function M.panels(d: Model.Dashboard, settings: Settings, env: Env): { PanelResu
 				renderer_available = settings.renderer,
 				scope = scope,
 				datasources = settings.datasources,
+				source = source,
 			}
 			local decision = Ladder.decide(p, ctx, env)
 			local blocker = if decision.mode == "native" then nil else Ladder.nativeBlocker(p, ctx, env)

@@ -59,7 +59,16 @@ export type RequestContext = {
 	time: { from_ms: number, to_ms: number },
 	dashboard_uid: string?,
 	-- The Grafana's data sources (frontend settings); nil until they are known.
-	datasources: { { uid: string, type: string, name: string, is_default: boolean, manage_alerts: boolean? } }?,
+	datasources: {
+		{
+			uid: string,
+			type: string,
+			name: string,
+			is_default: boolean,
+			manage_alerts: boolean?,
+			backend: boolean?,
+		}
+	}?,
 }
 
 -- dashboards, alerts and annotations go to the dashboard's Grafana (Grafana's

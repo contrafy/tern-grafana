@@ -155,4 +155,74 @@ describe("render_png solo URLs", function()
 	end)
 end)
 
+-- A `-- Dashboard --` panel shows its source panel's results: it is native
+-- when the source's queries are (Grafana runs them whatever the source's own
+-- rung) and Tern applies the transformations it reuses; a missing source is
+-- Grafana's own "Could not find source panel", shown natively.
+describe("ladder for -- Dashboard -- panels", function()
+	local env = S.env()
+	local fs = S.response(S.grafana("12.4.12", "frontend_settings.json"))
+	local function panel(id: number, json: { [string]: any }): Model.Panel
+		json.id = id
+		json.type = json.type or "table"
+		return { id = id, type = json.type, title = "P" .. id, grid = { x = 0, y = 0, w = 12, h = 8 }, json = json }
+	end
+	local function shared(id: number, source: number, extra: { [string]: any }?): Model.Panel
+		local target: { [string]: any } = { refId = "A", datasource = { uid = "-- Dashboard --" }, panelId = source }
+		local more: { [string]: any } = extra or {}
+		for k, v in more do
+			target[k] = v
+		end
+		return panel(id, { datasource = { uid = "-- Dashboard --", type = "datasource" }, targets = { target } })
+	end
+	local PROM = { uid = "prom3", type = "prometheus" }
+	local panels: { [number]: Model.Panel } = {
+		[1] = panel(1, {
+			-- Not drawn natively itself: its data still is the source's.
+			type = "acme-flow-panel",
+			datasource = PROM,
+			targets = { { refId = "A", expr = "up" } },
+			transformations = { { id = "acmeShuffle", options = {} } },
+		}),
+		[2] = panel(
+			2,
+			{ datasource = { uid = "tempo", type = "tempo" }, type = "timeseries", targets = { { refId = "A" } } }
+		),
+		[3] = shared(3, 1),
+		[4] = shared(4, 1, { withTransforms = true }),
+		[5] = shared(5, 2),
+		[6] = shared(6, 3),
+		[7] = shared(7, 7),
+		[8] = shared(8, 99),
+		[9] = shared(9, 1, { topic = "annotations" }),
+	}
+	local ctx: Ladder.Context = {
+		supports = supports,
+		renderer_available = true,
+		scope = {},
+		datasources = Queries.frontendDatasources(fs, env),
+		source = function(id: number): Model.Panel?
+			return panels[id]
+		end,
+	}
+	local function blocker(id: number): string?
+		return Ladder.nativeBlocker(panels[id], ctx, env)
+	end
+
+	it("is native when the source panel's queries are, chained ones included", function()
+		expect(blocker(3)).toBeNil()
+		expect(blocker(6)).toBeNil()
+		expect(blocker(8)).toBeNil()
+	end)
+
+	it("names what keeps the reused data from being produced natively", function()
+		expect(blocker(4)).toBe("reuses panel 1 with its transformations: transformation acmeShuffle is not supported")
+		expect(blocker(5)).toBe(
+			"reuses panel 2, whose queries are not run natively: tempo queries are not run natively"
+		)
+		expect(blocker(7)).toBe("-- Dashboard -- queries reference each other in a loop")
+		expect(blocker(9)).toBe("reuses another panel's annotations (-- Dashboard --)")
+	end)
+end)
+
 return nil
