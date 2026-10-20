@@ -16,6 +16,7 @@
 local Env = require("../env")
 local Format = require("../units/format")
 local Frame = require("../frame/types")
+local Interpolate = require("../dashboard/interpolate")
 local Json = require("./json")
 local Mappings = require("./mappings")
 local Range = require("../time/range")
@@ -201,8 +202,9 @@ end
 
 -- Display names ---------------------------------------------------------------
 
--- Grafana formatLabels: every label, sorted, `{a="1", b="2"}`.
-local function formatLabels(labels: { [string]: string }): string
+-- Grafana formatLabels (utils/labels.ts): every label, sorted,
+-- `{a="1", b="2"}`; without the braces for `${__field.labels}`.
+local function formatLabels(labels: { [string]: string }, withoutBraces: boolean?): string
 	local keys: { string } = {}
 	for k in labels do
 		table.insert(keys, k)
@@ -215,7 +217,8 @@ local function formatLabels(labels: { [string]: string }): string
 	for i, k in keys do
 		parts[i] = string.format('%s="%s"', k, labels[k])
 	end
-	return "{" .. table.concat(parts, ", ") .. "}"
+	local text = table.concat(parts, ", ")
+	return if withoutBraces then text else "{" .. text .. "}"
 end
 
 -- getSingleLabelName: the label key when every labeled field across the
@@ -315,6 +318,139 @@ function M.displayName(field: Field, frame: Frame?, frames: { Frame }?): string
 		return uniqueName(field, frame)
 	end
 	return name
+end
+
+-- Field macros ----------------------------------------------------------------
+
+-- getFrameDisplayName (field/fieldState.ts) of the frame at 0-based `index`:
+-- its name, else its one value field's display name, else "Series (refId)",
+-- else "Series (index)".
+local function frameDisplayName(frame: Frame, index: number): string
+	if frame.name and frame.name ~= "" then
+		return frame.name
+	end
+	local names: { string } = {}
+	for _, f in frame.fields do
+		if f.type ~= "time" then
+			if #names > 1 then
+				break
+			end
+			table.insert(names, M.displayName(f, frame))
+		end
+	end
+	if #names == 1 then
+		return names[1]
+	end
+	if frame.refId and frame.refId ~= "" then
+		return "Series (" .. frame.refId .. ")"
+	end
+	return "Series (" .. tostring(index) .. ")"
+end
+
+-- The data macros a display name can use (public/app/features/templating/
+-- dataMacros.ts fieldMacro and seriesNameMacro over templateProxies.ts
+-- getTemplateProxyForField): `${__field.name}`, `${__field.displayName}`,
+-- `${__field.labels}` (`a="1", b="2"`), `${__field.labels.<key>}`,
+-- `${__field.labels.__values}` (the sorted values) and `${__series.name}`.
+-- Another `__field` path reads "" (lodash property finds nothing); a
+-- reference without a path stays as written.
+local function fieldMacro(field: Field, frame: Frame, frameIndex: number, frames: { Frame })
+	return function(name: string, path: string?): Interpolate.Var?
+		if path == nil or path == "" then
+			return nil
+		elseif name == "__series" then
+			return if path == "name" then Interpolate.value(frameDisplayName(frame, frameIndex - 1)) else nil
+		elseif name ~= "__field" then
+			return nil
+		end
+		local labels = field.labels
+		local text = ""
+		if path == "name" then
+			text = field.name
+		elseif path == "displayName" then
+			text = M.displayName(field, frame, frames)
+		elseif path == "labels" or path == "formattedLabels" then
+			text = if labels then formatLabels(labels, true) else ""
+		else
+			local key = string.match(path, "^labels%.(.+)$") or string.match(path, "^formattedLabels%.(.+)$")
+			if key == "__values" and labels then
+				local values: { string } = {}
+				for _, v in labels do
+					table.insert(values, v)
+				end
+				table.sort(values)
+				text = table.concat(values, ", ")
+			elseif key and labels then
+				text = labels[key] or ""
+			end
+		end
+		return Interpolate.value(text)
+	end
+end
+
+local NO_SCOPE: Interpolate.Scope = table.freeze({})
+
+-- A displayName with the field's macros replaced (stringOverrideProcessor
+-- with the field's scopedVars); nil when it reads "", which Grafana treats
+-- as no displayName.
+local function scopedName(text: string, field: Field, frame: Frame, frameIndex: number, frames: { Frame }): string?
+	if not string.find(text, "${__", 1, true) then
+		return text
+	end
+	local out = Interpolate.replace(text, NO_SCOPE, { macro = fieldMacro(field, frame, frameIndex, frames) })
+	return if out ~= "" then out else nil
+end
+
+-- The panel with its displayName strings (fieldConfig defaults and
+-- overrides; the one standard field option registered with
+-- expandTemplateVars, public/app/core/components/OptionsUI/registry.tsx)
+-- passed through `replace`, the dashboard variables. Field macros are left
+-- for resolve, which knows each field. The panel itself when none changes.
+function M.withVariables(panel: any, env: Env, replace: (string) -> string): any
+	local fc = Json.tbl(env, Json.path(env, panel, "fieldConfig"))
+	if fc == nil then
+		return panel
+	end
+	local changed = false
+	local function sub(t: { [any]: any }, key: string): { [any]: any }
+		local v = t[key]
+		local s = if type(v) == "string" then replace(v) else v
+		if s == v then
+			return t
+		end
+		changed = true
+		local c = Tbl.copy(t)
+		c[key] = s
+		return c
+	end
+	local newFc = Tbl.copy(fc)
+	local defaults = Json.tbl(env, fc.defaults)
+	if defaults then
+		newFc.defaults = sub(defaults, "displayName")
+	end
+	local overrides: { any } = {}
+	for i, o in Json.list(env, fc.overrides) do
+		local ot = Json.tbl(env, o)
+		if ot == nil then
+			overrides[i] = o
+			continue
+		end
+		local props: { any } = {}
+		for j, p in Json.list(env, ot.properties) do
+			local pt = Json.tbl(env, p)
+			props[j] = if pt and pt.id == "displayName" then sub(pt, "value") else p
+		end
+		local no = Tbl.copy(ot)
+		no.properties = props
+		overrides[i] = no
+	end
+	if not changed then
+		return panel
+	end
+	newFc.overrides = overrides
+	local out = Tbl.copy(panel)
+	out.fieldConfig = newFc
+	return out
 end
 
 -- Matchers --------------------------------------------------------------------
@@ -655,7 +791,8 @@ function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Ite
 					end
 				end
 			end
-			local name = cfg.display_name or M.displayName(field, frame, frames)
+			local scoped = if cfg.display_name then scopedName(cfg.display_name, field, frame, fi, frames) else nil
+			local name: string = scoped or M.displayName(field, frame, frames)
 			local lo, hi = cfg.min, cfg.max
 			if field.type == "number" and (lo == nil or hi == nil) then
 				if cfg.field_min_max then

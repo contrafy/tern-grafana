@@ -7,6 +7,7 @@
 -- native panel prints and in which color.
 local t = require("../../lib/test")
 local FieldConfig = require("../../../plugin/lib/panels/fieldconfig")
+local Interpolate = require("../../../plugin/lib/dashboard/interpolate")
 local Frame = require("../../../plugin/lib/frame/types")
 local S = require("./support")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -117,6 +118,45 @@ for _, version in S.VERSIONS do
 			local items = FieldConfig.resolve(S.panel(version, 2), S.refFrames(version, "prom_range", "A"), env)
 			expect(items[1].field.type).toBe("time")
 			expect(text(items[1], 0)).toBe("1970-01-01 00:00:00")
+		end)
+
+		-- A legend written with field macros (fieldOverrides.ts
+		-- stringOverrideProcessor with the field's scopedVars, resolved by
+		-- public/app/features/templating/dataMacros.ts fieldMacro and
+		-- seriesNameMacro): every series reads its own labels next to the
+		-- dashboard variables, never the template text.
+		it("resolves ${__field.*} and ${__series.name} per field in displayName, with dashboard variables", function()
+			local panel = S.clone(S.panel(version, 7))
+			panel.fieldConfig.defaults.displayName = "${__field.labels.job} on $env (${__field.name})"
+			panel.fieldConfig.overrides = {
+				{
+					matcher = { id = "byName", options = 'up{env="dev", instance="node-exporter:9100", job="node"}' },
+					properties = {
+						{
+							id = "displayName",
+							value = "${__field.labels}|${__field.labels.missing}|${__field.labels.__values}|${__series.name}",
+						},
+					},
+				},
+				{
+					matcher = { id = "byName", options = 'up{instance="node-exporter:9999", job="down"}' },
+					properties = { { id = "displayName", value = "${__field.labels.missing}" } },
+				},
+			}
+			local scope = { env = Interpolate.value("prod") }
+			local replaced = FieldConfig.withVariables(panel, env, function(s: string): string
+				return Interpolate.replace(s, scope)
+			end)
+			local items = FieldConfig.resolve(replaced, S.frames(version, "prom_instant"), env)
+			expect(items[2].name).toBe("alertmanager on prod (up)")
+			expect(items[4].name).toBe(
+				'__name__="up", env="dev", instance="node-exporter:9100", job="node"|'
+					.. '|dev, node, node-exporter:9100, up|up{env="dev", instance="node-exporter:9100", job="node"}'
+			)
+			-- A name that reads "" is no displayName: the series keeps its own.
+			expect(items[6].name).toBe('up{instance="node-exporter:9999", job="down"}')
+			-- The dashboard JSON itself is left as written.
+			expect(panel.fieldConfig.defaults.displayName).toBe("${__field.labels.job} on $env (${__field.name})")
 		end)
 	end)
 end
