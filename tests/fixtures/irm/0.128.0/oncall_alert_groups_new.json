@@ -1,0 +1,811 @@
+{
+ "count": 6,
+ "current_page_number": 1,
+ "next": null,
+ "page_length": 6,
+ "page_size": 50,
+ "previous": null,
+ "results": [
+  {
+   "acknowledged_at": null,
+   "acknowledged_by": null,
+   "alert_group_number": 15326,
+   "alerts_count": 41,
+   "created_at": "2026-10-19T15:49:11.016086Z",
+   "dependent_alert_group_ids": [],
+   "id": "I000000000135",
+   "integration_id": "C000000000107",
+   "labels": [],
+   "last_alert": {
+    "alert_group_id": "I000000000135",
+    "created_at": "2026-10-19T20:34:11.098308Z",
+    "id": "A000000000136",
+    "payload": {
+     "alerts": [
+      {
+       "annotations": {
+        "summary": "value 25"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "d000000000000139",
+       "generatorURL": "https://example.invalid/irm/16",
+       "labels": {
+        "alertname": "value 12",
+        "grafana_folder": "value 16",
+        "instance": "value 9",
+        "job": "value 2",
+        "label 1": "value 1",
+        "label 10": "value 11",
+        "label 11": "value 13",
+        "label 12": "value 14",
+        "label 13": "value 15",
+        "label 14": "value 17",
+        "label 15": "value 18",
+        "label 16": "value 19",
+        "label 17": "value 20",
+        "label 18": "value 21",
+        "label 19": "value 22",
+        "label 2": "value 3",
+        "label 20": "value 23",
+        "label 21": "value 24",
+        "label 3": "value 1",
+        "label 4": "value 4",
+        "label 5": "value 5",
+        "label 6": "value 6",
+        "label 7": "value 7",
+        "label 8": "value 8",
+        "label 9": "value 10"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "b0000000000138",
+       "silenceURL": "https://example.invalid/irm/15",
+       "startsAt": "2026-09-28T22:08:10Z",
+       "status": "firing",
+       "valueString": "valueString 1",
+       "values": {
+        "label 22": 100,
+        "label 23": 1
+       }
+      },
+      {
+       "annotations": {
+        "summary": "value 25"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "X000000000000140",
+       "generatorURL": "https://example.invalid/irm/16",
+       "labels": {
+        "alertname": "value 12",
+        "grafana_folder": "value 16",
+        "instance": "value 9",
+        "job": "value 2",
+        "label 1": "value 26",
+        "label 10": "value 11",
+        "label 11": "value 13",
+        "label 12": "value 32",
+        "label 14": "value 17",
+        "label 16": "value 34",
+        "label 17": "value 35",
+        "label 18": "value 36",
+        "label 19": "value 37",
+        "label 2": "value 3",
+        "label 20": "value 38",
+        "label 21": "value 39",
+        "label 24": "value 30",
+        "label 25": "value 33",
+        "label 3": "value 26",
+        "label 4": "value 4",
+        "label 5": "value 27",
+        "label 6": "value 6",
+        "label 7": "value 28",
+        "label 8": "value 29",
+        "label 9": "value 31"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "b0000000000138",
+       "silenceURL": "https://example.invalid/irm/17",
+       "startsAt": "2026-09-28T22:08:10Z",
+       "status": "firing",
+       "valueString": "valueString 2",
+       "values": {
+        "label 22": 100,
+        "label 23": 1
+       }
+      }
+     ],
+     "appVersion": "appVersion 1",
+     "commonAnnotations": {
+      "summary": "value 25"
+     },
+     "commonLabels": {
+      "alertname": "value 12",
+      "grafana_folder": "value 16",
+      "instance": "value 9",
+      "job": "value 2",
+      "label 14": "value 17",
+      "label 2": "value 3"
+     },
+     "externalURL": "https://example.invalid/irm/18",
+     "groupKey": "X0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000141",
+     "groupLabels": {
+      "alertname": "value 12",
+      "grafana_folder": "value 16"
+     },
+     "message": "message 1",
+     "numFiring": 13,
+     "numResolved": 1,
+     "orgId": 1137,
+     "receiver": "I00000000000142",
+     "state": "alerting",
+     "status": "firing",
+     "title": "title 2",
+     "truncatedAlerts": 0,
+     "version": "1"
+    }
+   },
+   "permalinks": {
+    "web": "https://example.invalid/irm/14"
+   },
+   "resolved_at": null,
+   "resolved_by": null,
+   "root_alert_group_id": null,
+   "route_id": "R000000000109",
+   "silenced_at": null,
+   "state": "firing",
+   "team_id": null,
+   "title": "title 1"
+  },
+  {
+   "acknowledged_at": null,
+   "acknowledged_by": null,
+   "alert_group_number": 15289,
+   "alerts_count": 26,
+   "created_at": "2026-10-15T12:02:18.050520Z",
+   "dependent_alert_group_ids": [],
+   "id": "I000000000143",
+   "integration_id": "C000000000110",
+   "labels": [],
+   "last_alert": {
+    "alert_group_id": "I000000000143",
+    "created_at": "2026-10-19T16:43:03.029283Z",
+    "id": "A000000000144",
+    "payload": {
+     "alerts": [
+      {
+       "annotations": {
+        "description": "value 44"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "d000000000000146",
+       "generatorURL": "https://example.invalid/irm/21",
+       "labels": {
+        "alertname": "value 41",
+        "grafana_folder": "value 43",
+        "label 26": "value 40",
+        "label 27": "value 42"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "e0000000000145",
+       "silenceURL": "https://example.invalid/irm/20",
+       "startsAt": "2026-10-15T12:01:40Z",
+       "status": "firing",
+       "valueString": "",
+       "values": null
+      }
+     ],
+     "appVersion": "appVersion 1",
+     "commonAnnotations": {
+      "description": "value 44"
+     },
+     "commonLabels": {
+      "alertname": "value 41",
+      "grafana_folder": "value 43",
+      "label 26": "value 40",
+      "label 27": "value 42"
+     },
+     "externalURL": "https://example.invalid/irm/18",
+     "groupKey": "X00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000147",
+     "groupLabels": {
+      "alertname": "value 41",
+      "grafana_folder": "value 43"
+     },
+     "message": "message 2",
+     "numFiring": 1,
+     "numResolved": 0,
+     "orgId": 1137,
+     "receiver": "I000000000148",
+     "state": "alerting",
+     "status": "firing",
+     "title": "title 4",
+     "truncatedAlerts": 0,
+     "version": "1"
+    }
+   },
+   "permalinks": {
+    "web": "https://example.invalid/irm/19"
+   },
+   "resolved_at": null,
+   "resolved_by": null,
+   "root_alert_group_id": null,
+   "route_id": "R000000000111",
+   "silenced_at": null,
+   "state": "firing",
+   "team_id": null,
+   "title": "title 3"
+  },
+  {
+   "acknowledged_at": null,
+   "acknowledged_by": null,
+   "alert_group_number": 15264,
+   "alerts_count": 93,
+   "created_at": "2026-10-13T10:37:39.582379Z",
+   "dependent_alert_group_ids": [],
+   "id": "I000000000149",
+   "integration_id": "C000000000120",
+   "labels": [
+    {
+     "label 28": {
+      "id": "s0000150",
+      "name": "name 13"
+     },
+     "label 29": {
+      "id": "h0151",
+      "name": "name 21"
+     }
+    }
+   ],
+   "last_alert": {
+    "alert_group_id": "I000000000149",
+    "created_at": "2026-10-19T19:08:24.010671Z",
+    "id": "A000000000152",
+    "payload": {
+     "alerts": [
+      {
+       "annotations": {
+        "description": "value 55",
+        "label 34": "value 53",
+        "summary": "value 54"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "X000000000000154",
+       "generatorURL": "https://example.invalid/irm/24",
+       "labels": {
+        "alertname": "value 49",
+        "grafana_folder": "value 52",
+        "label 30": "value 46",
+        "label 31": "value 48",
+        "label 32": "value 50",
+        "label 33": "value 51",
+        "service": "value 47",
+        "severity": "value 17",
+        "team": "value 45"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "c0000000000153",
+       "silenceURL": "https://example.invalid/irm/23",
+       "startsAt": "2026-10-08T20:06:30Z",
+       "status": "firing",
+       "valueString": "valueString 3",
+       "values": {
+        "label 22": 2,
+        "label 23": 1
+       }
+      },
+      {
+       "annotations": {
+        "description": "value 60",
+        "label 34": "value 53",
+        "summary": "value 59"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "X000000000000155",
+       "generatorURL": "https://example.invalid/irm/24",
+       "labels": {
+        "alertname": "value 49",
+        "grafana_folder": "value 52",
+        "label 30": "value 46",
+        "label 31": "value 56",
+        "label 32": "value 57",
+        "label 33": "value 58",
+        "service": "value 47",
+        "severity": "value 17",
+        "team": "value 45"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "c0000000000153",
+       "silenceURL": "https://example.invalid/irm/25",
+       "startsAt": "2026-10-08T20:06:30Z",
+       "status": "firing",
+       "valueString": "valueString 4",
+       "values": {
+        "label 22": 2,
+        "label 23": 1
+       }
+      }
+     ],
+     "appVersion": "appVersion 1",
+     "commonAnnotations": {
+      "label 34": "value 53"
+     },
+     "commonLabels": {
+      "alertname": "value 49",
+      "grafana_folder": "value 52",
+      "label 30": "value 46",
+      "service": "value 47",
+      "severity": "value 17",
+      "team": "value 45"
+     },
+     "externalURL": "https://example.invalid/irm/18",
+     "groupKey": "X0000000000000000000156",
+     "groupLabels": {},
+     "message": "message 3",
+     "numFiring": 2,
+     "numResolved": 0,
+     "orgId": 1137,
+     "receiver": "I000000000000157",
+     "state": "alerting",
+     "status": "firing",
+     "title": "title 6",
+     "truncatedAlerts": 0,
+     "version": "1"
+    }
+   },
+   "permalinks": {
+    "web": "https://example.invalid/irm/22"
+   },
+   "resolved_at": null,
+   "resolved_by": null,
+   "root_alert_group_id": null,
+   "route_id": "R000000000121",
+   "silenced_at": null,
+   "state": "firing",
+   "team_id": null,
+   "title": "title 5"
+  },
+  {
+   "acknowledged_at": null,
+   "acknowledged_by": null,
+   "alert_group_number": 15238,
+   "alerts_count": 19,
+   "created_at": "2026-10-10T12:56:33.774731Z",
+   "dependent_alert_group_ids": [],
+   "id": "I000000000158",
+   "integration_id": "C000000000126",
+   "labels": [
+    {
+     "label 28": {
+      "id": "s0000150",
+      "name": "name 13"
+     },
+     "label 29": {
+      "id": "l0159",
+      "name": "name 22"
+     }
+    }
+   ],
+   "last_alert": {
+    "alert_group_id": "I000000000158",
+    "created_at": "2026-10-19T13:26:33.840466Z",
+    "id": "A000000000160",
+    "payload": {
+     "alerts": [
+      {
+       "annotations": {
+        "description": "value 66",
+        "label 34": "value 53",
+        "summary": "value 65"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "c000000000000162",
+       "generatorURL": "https://example.invalid/irm/28",
+       "labels": {
+        "alertname": "value 64",
+        "grafana_folder": "value 52",
+        "label 30": "value 46",
+        "label 5": "value 61",
+        "label 7": "value 62",
+        "service": "value 47",
+        "severity": "value 63",
+        "team": "value 45"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "b0000000000161",
+       "silenceURL": "https://example.invalid/irm/27",
+       "startsAt": "2026-10-10T12:41:30Z",
+       "status": "firing",
+       "valueString": "valueString 5",
+       "values": {
+        "label 22": 4,
+        "label 23": 1
+       }
+      },
+      {
+       "annotations": {
+        "description": "value 69",
+        "label 34": "value 53",
+        "summary": "value 68"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "X000000000000163",
+       "generatorURL": "https://example.invalid/irm/28",
+       "labels": {
+        "alertname": "value 64",
+        "grafana_folder": "value 52",
+        "label 30": "value 46",
+        "label 5": "value 61",
+        "label 7": "value 67",
+        "service": "value 47",
+        "severity": "value 63",
+        "team": "value 45"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "b0000000000161",
+       "silenceURL": "https://example.invalid/irm/29",
+       "startsAt": "2026-10-10T12:42:30Z",
+       "status": "firing",
+       "valueString": "valueString 6",
+       "values": {
+        "label 22": 2,
+        "label 23": 1
+       }
+      }
+     ],
+     "appVersion": "appVersion 1",
+     "commonAnnotations": {
+      "label 34": "value 53"
+     },
+     "commonLabels": {
+      "alertname": "value 64",
+      "grafana_folder": "value 52",
+      "label 30": "value 46",
+      "label 5": "value 61",
+      "service": "value 47",
+      "severity": "value 63",
+      "team": "value 45"
+     },
+     "externalURL": "https://example.invalid/irm/18",
+     "groupKey": "X0000000000000000000000000000164",
+     "groupLabels": {
+      "label 5": "value 61"
+     },
+     "message": "message 4",
+     "numFiring": 2,
+     "numResolved": 0,
+     "orgId": 1137,
+     "receiver": "I00000000000000000165",
+     "state": "alerting",
+     "status": "firing",
+     "title": "title 8",
+     "truncatedAlerts": 0,
+     "version": "1"
+    }
+   },
+   "permalinks": {
+    "web": "https://example.invalid/irm/26"
+   },
+   "resolved_at": null,
+   "resolved_by": null,
+   "root_alert_group_id": null,
+   "route_id": "R000000000127",
+   "silenced_at": null,
+   "state": "firing",
+   "team_id": null,
+   "title": "title 7"
+  },
+  {
+   "acknowledged_at": null,
+   "acknowledged_by": null,
+   "alert_group_number": 15219,
+   "alerts_count": 245,
+   "created_at": "2026-10-08T12:52:39.032126Z",
+   "dependent_alert_group_ids": [],
+   "id": "I000000000166",
+   "integration_id": "C000000000123",
+   "labels": [
+    {
+     "label 28": {
+      "id": "s0000150",
+      "name": "name 13"
+     },
+     "label 29": {
+      "id": "m00167",
+      "name": "name 23"
+     }
+    }
+   ],
+   "last_alert": {
+    "alert_group_id": "I000000000166",
+    "created_at": "2026-10-19T18:57:39.022355Z",
+    "id": "A000000000168",
+    "payload": {
+     "alerts": [
+      {
+       "annotations": {
+        "description": "value 85",
+        "label 34": "value 53",
+        "label 42": "value 83",
+        "label 43": "value 86",
+        "label 44": "value 87",
+        "summary": "value 84"
+       },
+       "dashboardURL": "",
+       "endsAt": "2026-10-19T18:56:30Z",
+       "fingerprint": "d000000000000170",
+       "generatorURL": "https://example.invalid/irm/32",
+       "labels": {
+        "alertname": "value 79",
+        "grafana_folder": "value 52",
+        "instance": "value 76",
+        "job": "value 71",
+        "label 30": "value 46",
+        "label 31": "value 75",
+        "label 32": "value 81",
+        "label 33": "value 58",
+        "label 35": "value 70",
+        "label 36": "value 72",
+        "label 37": "value 74",
+        "label 38": "value 58",
+        "label 39": "value 77",
+        "label 40": "value 80",
+        "label 41": "value 82",
+        "label 7": "value 73",
+        "service": "value 47",
+        "severity": "value 78",
+        "team": "value 45"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "d0000000000169",
+       "silenceURL": "https://example.invalid/irm/31",
+       "startsAt": "2026-10-19T18:50:30Z",
+       "status": "resolved",
+       "valueString": "",
+       "values": {
+        "label 22": -1,
+        "label 23": -1
+       }
+      },
+      {
+       "annotations": {
+        "description": "value 99",
+        "summary": "value 98"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "d000000000000172",
+       "generatorURL": "https://example.invalid/irm/34",
+       "labels": {
+        "alertname": "value 90",
+        "grafana_folder": "value 94",
+        "label 14": "value 78",
+        "label 19": "value 97",
+        "label 45": "value 89",
+        "label 46": "value 91",
+        "label 47": "value 92",
+        "label 48": "value 93",
+        "label 49": "value 95",
+        "label 50": "value 96",
+        "label 7": "value 88",
+        "severity": "value 78",
+        "team": "value 45"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "c0000000000171",
+       "silenceURL": "https://example.invalid/irm/33",
+       "startsAt": "2026-10-15T20:01:10Z",
+       "status": "firing",
+       "valueString": "valueString 7",
+       "values": {
+        "label 23": 1,
+        "label 51": 11
+       }
+      }
+     ],
+     "appVersion": "appVersion 1",
+     "commonAnnotations": {},
+     "commonLabels": {
+      "severity": "value 78",
+      "team": "value 45"
+     },
+     "externalURL": "https://example.invalid/irm/18",
+     "groupKey": "X000000000000000000000173",
+     "groupLabels": {},
+     "message": "message 5",
+     "numFiring": 7,
+     "numResolved": 1,
+     "orgId": 1137,
+     "receiver": "I00000000000000000000174",
+     "state": "alerting",
+     "status": "firing",
+     "title": "title 10",
+     "truncatedAlerts": 0,
+     "version": "1"
+    }
+   },
+   "permalinks": {
+    "web": "https://example.invalid/irm/30"
+   },
+   "resolved_at": null,
+   "resolved_by": null,
+   "root_alert_group_id": null,
+   "route_id": "R000000000124",
+   "silenced_at": null,
+   "state": "firing",
+   "team_id": null,
+   "title": "title 9"
+  },
+  {
+   "acknowledged_at": null,
+   "acknowledged_by": null,
+   "alert_group_number": 15209,
+   "alerts_count": 3151,
+   "created_at": "2026-10-07T20:34:24.860095Z",
+   "dependent_alert_group_ids": [],
+   "id": "I000000000175",
+   "integration_id": "C000000000110",
+   "labels": [],
+   "last_alert": {
+    "alert_group_id": "I000000000175",
+    "created_at": "2026-10-19T20:34:24.826315Z",
+    "id": "A000000000176",
+    "payload": {
+     "alerts": [
+      {
+       "annotations": {
+        "description": "value 123",
+        "summary": "value 122"
+       },
+       "dashboardURL": "",
+       "endsAt": "2026-10-19T20:31:50Z",
+       "fingerprint": "X000000000000178",
+       "generatorURL": "https://example.invalid/irm/37",
+       "labels": {
+        "alertname": "value 108",
+        "grafana_folder": "value 52",
+        "instance": "value 104",
+        "job": "value 100",
+        "label 10": "value 107",
+        "label 11": "value 110",
+        "label 12": "value 111",
+        "label 13": "value 113",
+        "label 14": "value 115",
+        "label 15": "value 116",
+        "label 16": "value 117",
+        "label 17": "value 118",
+        "label 18": "value 23",
+        "label 19": "value 119",
+        "label 20": "value 121",
+        "label 21": "value 23",
+        "label 24": "value 105",
+        "label 25": "value 112",
+        "label 4": "value 101",
+        "label 5": "value 102",
+        "label 52": "value 109",
+        "label 53": "value 114",
+        "label 54": "value 120",
+        "label 6": "value 103",
+        "label 7": "value 104",
+        "label 8": "value 8",
+        "label 9": "value 106"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "c0000000000177",
+       "silenceURL": "https://example.invalid/irm/36",
+       "startsAt": "2026-10-19T20:29:50Z",
+       "status": "resolved",
+       "valueString": "valueString 8",
+       "values": {
+        "label 22": 1,
+        "label 23": 0,
+        "label 51": 1
+       }
+      },
+      {
+       "annotations": {
+        "description": "value 123",
+        "summary": "value 122"
+       },
+       "dashboardURL": "",
+       "endsAt": "0001-01-01T00:00:00Z",
+       "fingerprint": "a000000000000179",
+       "generatorURL": "https://example.invalid/irm/37",
+       "labels": {
+        "alertname": "value 108",
+        "grafana_folder": "value 52",
+        "instance": "value 7",
+        "job": "value 100",
+        "label 10": "value 11",
+        "label 11": "value 13",
+        "label 12": "value 14",
+        "label 13": "value 15",
+        "label 14": "value 115",
+        "label 15": "value 18",
+        "label 16": "value 19",
+        "label 17": "value 20",
+        "label 18": "value 21",
+        "label 19": "value 22",
+        "label 20": "value 23",
+        "label 21": "value 24",
+        "label 4": "value 4",
+        "label 5": "value 5",
+        "label 52": "value 1",
+        "label 53": "value 124",
+        "label 6": "value 6",
+        "label 7": "value 7",
+        "label 8": "value 8",
+        "label 9": "value 10"
+       },
+       "orgId": 1137,
+       "panelURL": "",
+       "ruleUID": "c0000000000177",
+       "silenceURL": "https://example.invalid/irm/38",
+       "startsAt": "2026-10-08T20:03:50Z",
+       "status": "firing",
+       "valueString": "valueString 9",
+       "values": {
+        "label 22": 0,
+        "label 23": 1,
+        "label 51": 0
+       }
+      }
+     ],
+     "appVersion": "appVersion 1",
+     "commonAnnotations": {
+      "description": "value 123",
+      "summary": "value 122"
+     },
+     "commonLabels": {
+      "alertname": "value 108",
+      "grafana_folder": "value 52",
+      "job": "value 100",
+      "label 14": "value 115"
+     },
+     "externalURL": "https://example.invalid/irm/18",
+     "groupKey": "X000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000180",
+     "groupLabels": {
+      "alertname": "value 108",
+      "grafana_folder": "value 52"
+     },
+     "message": "message 6",
+     "numFiring": 10,
+     "numResolved": 5,
+     "orgId": 1137,
+     "receiver": "I000000000148",
+     "state": "alerting",
+     "status": "firing",
+     "title": "title 11",
+     "truncatedAlerts": 0,
+     "version": "1"
+    }
+   },
+   "permalinks": {
+    "web": "https://example.invalid/irm/35"
+   },
+   "resolved_at": null,
+   "resolved_by": null,
+   "root_alert_group_id": null,
+   "route_id": "R000000000111",
+   "silenced_at": null,
+   "state": "firing",
+   "team_id": null,
+   "title": "title 3"
+  }
+ ],
+ "total_pages": 1
+}

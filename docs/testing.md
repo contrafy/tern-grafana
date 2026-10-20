@@ -27,7 +27,8 @@ not installable on CI runners, so it stays local.
 ## Unit tests
 
 `make check` = `fmt-check` (StyLua), `lint` (selene, std `tern`), `typecheck` (luau-lsp with the pinned
-`tern.d.luau`), `test-runner-selfcheck`, `test`.
+`tern.d.luau`), `window-load` (`scripts/check-window-load.sh`: the bytes `plugin/window.luau` requires at load stay
+under 40 KiB, see [architecture.md](architecture.md#window-load-budget)), `test-runner-selfcheck`, `test`.
 
 - Specs: `tests/unit/**/*.spec.luau`, run by `tests/run.luau` under the pinned standalone `luau` (no filesystem:
   `make test` passes the spec list). `make test FILTER=<substring>` runs only tests whose

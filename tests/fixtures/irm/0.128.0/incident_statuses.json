@@ -1,0 +1,58 @@
+{
+ "configurations": [
+  {
+   "default": true,
+   "incidentType": "internal",
+   "statuses": [
+    {
+     "archivedTime": "",
+     "category": "active",
+     "color": "color 1",
+     "createdTime": "2025-04-03T15:12:47.222914Z",
+     "description": "The incident is happening now",
+     "icon": "clock",
+     "immutable": false,
+     "incidentType": "",
+     "kind": "initial",
+     "modifiedTime": "2025-04-03T15:12:47.222914Z",
+     "name": "Active",
+     "position": 0,
+     "slug": "active",
+     "statusID": "00000000-0000-4000-8000-000000000259"
+    },
+    {
+     "archivedTime": "",
+     "category": "active",
+     "color": "color 2",
+     "createdTime": "2026-04-24T04:59:32.626775Z",
+     "description": "RFO Pending",
+     "icon": "question-circle",
+     "immutable": false,
+     "incidentType": "",
+     "kind": "intermediate",
+     "modifiedTime": "2026-04-24T04:59:32.626775Z",
+     "name": "RFO",
+     "position": 1,
+     "slug": "rfo",
+     "statusID": "00000000-0000-4000-8000-000000000262"
+    },
+    {
+     "archivedTime": "",
+     "category": "resolved",
+     "color": "color 3",
+     "createdTime": "2025-04-03T15:12:47.222914Z",
+     "description": "The incident is resolved",
+     "icon": "check-circle",
+     "immutable": false,
+     "incidentType": "",
+     "kind": "terminal",
+     "modifiedTime": "2025-04-03T15:12:47.222914Z",
+     "name": "Resolved",
+     "position": 99999,
+     "slug": "resolved",
+     "statusID": "00000000-0000-4000-8000-000000000263"
+    }
+   ]
+  }
+ ]
+}

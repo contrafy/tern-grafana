@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-postgresql-datasource","uid":"postgres"},"rawSql":"SELECT name, team, region, replicas, error_rate\nFROM services\nORDER BY name","format":"table","intervalMs":5000,"maxDataPoints":640}],"from":"1792512590000","to":"1792516190000"}

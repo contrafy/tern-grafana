@@ -7,6 +7,105 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
+### Added
+
+- Panels on backend datasource plugins run natively: PostgreSQL, MySQL,
+  MSSQL, Elasticsearch, Infinity (backend parsers), Grafana Incident and any
+  plugin with a backend, each target sent as its datasource's frontend sends
+  it (SQL-quoted variables, Lucene formatting, every string interpolated).
+  Server-side expressions run (with the hidden queries they read), and
+  `-- Dashboard --` panels show their source panel's results (with its
+  transformations when asked), querying the source when it is not on screen.
+  Legacy `table-old` panels migrate to table as in Grafana. Datasources whose
+  frontends query in the browser (JSON API, cardinality, Zabbix, Graphite,
+  InfluxDB, Infinity frontend parsers, Incident queries with variables) keep
+  a precise ladder reason. Dev stack: a seeded PostgreSQL and dashboard
+  `tern-sql`. See docs/dashboards.md, the ladder.
+
+- Panel transformations drawn natively: add field from calculation, join by
+  field (and seriesToColumns), labels to fields, merge, convert field type,
+  format time, sort by, filter data by values, extract fields, reduce, rows to
+  fields, config from query results, group by, grouping to matrix, limit,
+  prepare time series, rename by regex and series to rows, ported from
+  Grafana 13 with its own test cases;
+  transformation options see dashboard variables. See docs/dashboards.md,
+  Transformations.
+
+- **Grafana: Compatibility** scans every dashboard a context can see and
+  lists, per panel, whether it is drawn natively, by Grafana's renderer or in
+  a browser pane and why, with counts grouped by reason; filter, open a
+  dashboard or panel, copy the report as Markdown (`compat.max_dashboards`).
+  See docs/compat.md.
+
+- Display names using `${__field.name}`, `${__field.displayName}`,
+  `${__field.labels.<key>}`, `${__field.labels}` or `${__series.name}` resolve
+  per field in legends, table headers and stat or gauge titles, and dashboard
+  variables apply to display names.
+
+- Grafana IRM: **Grafana: On-call** (OnCall alert groups with acknowledge,
+  unacknowledge, resolve, unresolve and silence; schedules with who is on call
+  now and next) and **Grafana: Incidents** (open incidents, detail and
+  timeline; declare, change status or severity, add a note). Every write is
+  previewed, attributed to the service account and sent only on confirmation.
+  A status segment (`IRM: you are on call until 22:00, 2 alert groups,
+  1 incident`) from a background poll (`irm.poll_s`, `irm.contexts`,
+  `irm.names`, `irm.user`: your email, to recognize you among on-call users).
+  See docs/irm.md.
+
+- Image-cache economy: Tern keeps every distinct chart image a block sends for
+  the whole session (measured: about 180 MB/h for two auto-refreshing
+  dashboards), so auto-refresh now pauses in background tabs (window module
+  `visibility_window.luau`, kv key `visible_panes`), byte-identical answers
+  are not redrawn, a refreshing panel keeps its picture on its own axis (one
+  image per refresh instead of two), ranges ending at now are drawn on the
+  query interval, and panels behind an expanded one wait until shown. Numbers
+  before and after in docs/performance.md; an upstream issue draft in
+  docs/upstream/stencil-blob-cache.md.
+
+- Time series panels with several y axes draw natively: series are grouped
+  into scales as Grafana groups them (unit, bounds, soft bounds, placement,
+  label, distribution), so a per-series unit override gets its own axis on the
+  right with its own ticks; legends and the cursor read each series in its own
+  unit. Also drawn: `axisPlacement`, `axisLabel`, `axisSoftMin`/`axisSoftMax`,
+  `axisCenteredZero`, `axisGridShow`, log and symlog scales, stacking per
+  scale and `stacking.group`, the `negative-Y` and `constant` transforms, and
+  `hideFrom.legend`/`hideFrom.tooltip`. Field overrides can match by value
+  (`byValue`) in every panel type.
+
+### Changed
+
+- Time series panels draw each series with its own field config (line width,
+  dash and dot styles, step and smooth interpolation, fill opacity and opacity
+  gradient, points, span nulls, fill below another series, bar width and
+  alignment), range value axes as Grafana does (headroom above the data, an
+  all-zero series on the floor of 0..100), and color series in Grafana's
+  palette order. Chart series colors are now the first ten colors of
+  Grafana's classic palette. `gradientMode` hue and by-value scheme stay on
+  the PNG rung with that reason.
+
+### Fixed
+
+- The window half loads in about 2 ms instead of 26-40 ms: under load it
+  could exceed Tern's 50 ms window budget (`load exceeded 50 ms`), which
+  disabled link routes, palette commands, status segments and Carly. Window
+  modules now load their lib stacks on first use, the status segments load in
+  timer ticks after the entry, and `make check` guards the load size
+  (`make window-load`). See docs/architecture.md, Window load budget.
+
+- Stat values are sized like Grafana's BigValue for the panel and kept
+  within the card on one line; they had a fixed size, so large panels looked
+  empty and long values could wrap.
+
+- A `query_result()` variable whose query returns a scalar expands to the
+  value, as in Grafana, instead of the raw row text that broke the PromQL
+  using it.
+
+- The "Copy matchers", "Copy prompt" and "Copy YAML" buttons copied their own
+  label: Tern handles a click action named `copy` itself. They now use their
+  own action names.
+
 ## [0.3.0] - 2026-10-12
 
 ### Added
@@ -177,7 +276,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/contrafy/tern-grafana/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/contrafy/tern-grafana/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/contrafy/tern-grafana/compare/v0.1.0...v0.1.1

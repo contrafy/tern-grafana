@@ -153,4 +153,127 @@ describe("stat edge cases", function()
 	end)
 end)
 
+describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
+	local function classOf(node: any, key: string): string
+		local n = S.find(node, function(x)
+			return x.p and x.p.key == key and x.p.class ~= nil
+		end)
+		assert(n, "node " .. key)
+		return n.p.class
+	end
+	local function has(class: string, token: string): boolean
+		return string.find(" " .. class .. " ", " " .. token .. " ", 1, true) ~= nil
+	end
+	-- The value's font size in px: the SVG image's font-size (Stat.valueSvg).
+	local function valuePx(node: any, assets: any): number
+		local image = S.find(node, function(x)
+			return x.k == "image"
+		end)
+		assert(image, "value image")
+		local svg = assets[image.p.asset].bytes
+		return assert(tonumber(string.match(svg, 'font%-size="(%d+)"')))
+	end
+
+	-- Grafana's 1000x500 render of panel 17 draws the lone "5" about 356 px
+	-- tall: the box height (452 px less 12 px padding twice) over the line
+	-- height 1.2. A fixed size would look tiny next to it.
+	it("grows a lone value to the box height and centers it", function()
+		local node, assets = Stat.view(
+			S.panel("12.4.12", 17),
+			S.refFrames("12.4.12", "prom_range", "B"),
+			env,
+			{ key = "s", size = { w = 1000, h = 500 } }
+		)
+		expect(valuePx(node, assets)).toBe(357)
+		expect(has(classOf(node, "l"), "tgp-stat-center")).toBe(true)
+		expect(has(classOf(node, "s1"), "tgp-stat-fit")).toBe(true)
+	end)
+
+	-- Panel 6 at its gridPos 4x4 (267x144 px) with six named values:
+	-- autoGrid puts them 3 by 2, each box 81.7x46.5; the title takes 15% of
+	-- the box height and the value the rest.
+	it("lays many values in VizRepeater's grid and sizes them alike", function()
+		local node, assets = Stat.view(
+			S.panel("12.4.12", 6),
+			S.frames("12.4.12", "prom2_range"),
+			env,
+			{ key = "s", size = { w = 267, h = 144 } }
+		)
+		expect(has(classOf(node, "g"), "tgp-stat-g3")).toBe(true)
+		local sizes: { number } = {}
+		for _, key in { "s1", "s6" } do
+			local tile = S.find(node, function(x)
+				return x.p and x.p.key == key
+			end)
+			table.insert(sizes, valuePx(tile, assets))
+			expect(has(classOf(tile, "t"), "tgp-stat-fs10")).toBe(true)
+		end
+		-- The box height less its padding and the title line, over 1.2.
+		expect(sizes).toEqual({ 20, 20 })
+	end)
+
+	-- A wide box (w/h > 2.5) with a sparkline gives the value 40% of the
+	-- width and half the height (WideWithChartLayout).
+	it("uses the wide layout for wide panels", function()
+		local node, assets = Stat.view(
+			S.panel("12.4.12", 5),
+			S.refFrames("12.4.12", "prom_range", "B"),
+			env,
+			{ key = "s", size = { w = 267, h = 144 } }
+		)
+		expect(has(classOf(node, "l"), "tgp-stat-wide")).toBe(true)
+		expect(valuePx(node, assets)).toBe(33)
+	end)
+
+	it("honors text.valueSize and text.titleSize", function()
+		local panel = S.clone(S.panel("12.4.12", 6))
+		panel.options.text = { valueSize = 40, titleSize = 12 }
+		local node, assets =
+			Stat.view(panel, S.frames("12.4.12", "prom2_range"), env, { key = "s", size = { w = 267, h = 144 } })
+		expect(valuePx(node, assets)).toBe(40)
+		expect(has(classOf(node, "t"), "tgp-stat-fs12")).toBe(true)
+	end)
+
+	-- A long value is limited by the box width, not its height: it must not
+	-- spill out of the tile.
+	it("shrinks a long value to the box width", function()
+		local short = Stat.fit({ w = 300, h = 200, value = "5", spark = false, change = false })
+		local long = Stat.fit({ w = 300, h = 200, value = "123456789.12 MB", spark = false, change = false })
+		expect(short.value_px).toBe((200 - 24) / 1.2)
+		expect(long.value_px < short.value_px / 3).toBe(true)
+		expect(long.value_px * Stat.textEm("123456789.12 MB") <= 300 - 24).toBe(true)
+	end)
+
+	-- The value is one line of SVG text whose viewBox is its own box
+	-- (textLength pins the drawn width to it), so a tile narrower than
+	-- Grafana's scales it down instead of wrapping it, and the image's max
+	-- height never lets it outgrow Grafana's size (smoke: "No targets"
+	-- wrapped and was clipped in a wide pane).
+	it("draws the value as one SVG line that only scales down", function()
+		local svg, w, h = Stat.valueSvg("No targets", 70, "tgg-f-success")
+		expect(w).toBe(math.ceil(10 * Stat.TEXT_EM * 70))
+		expect(h).toBe(84)
+		expect(string.find(svg, string.format('viewBox="0 0 %d %d"', w, h), 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, string.format('textLength="%d"', w), 1, true) ~= nil).toBe(true)
+		expect(select(2, string.gsub(svg, "<text", ""))).toBe(1)
+		local node = Stat.view(
+			{ type = "stat", title = "x", fieldConfig = { defaults = { noValue = "No targets" } }, options = {} },
+			{},
+			env,
+			{ key = "s", size = { w = 400, h = 296 } }
+		)
+		local image = S.find(node, function(x)
+			return x.k == "image"
+		end)
+		expect(image.p.alt).toBe("No targets")
+		local lines = assert(tonumber(string.match(image.p.max.h, "^(%d+)lines$")))
+		expect(lines * 16 >= image.p.h and (lines - 1) * 16 < image.p.h).toBe(true)
+	end)
+
+	it("keeps the plain tile without a panel size", function()
+		local node = Stat.view(S.panel("12.4.12", 5), S.refFrames("12.4.12", "prom_range", "B"), env, OPTS)
+		expect(classOf(node, "s1")).toBe("tgp-stat tgp-bg tgp-success")
+	end)
+end)
+
 return nil

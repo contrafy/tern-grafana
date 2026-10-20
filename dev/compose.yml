@@ -100,6 +100,22 @@ services:
       timeout: 3s
       retries: 30
 
+  # SQL datasource panels (dashboard tern-sql): seeded by dev/postgres/init.sql, reached by both
+  # Grafanas on the stack network only.
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: tern
+      POSTGRES_PASSWORD: tern-dev
+      POSTGRES_DB: tern
+    volumes:
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tern", "-d", "tern"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   # Loki and Tempo images ship no shell; scripts/stack.sh probes their /ready endpoints from the host.
   loki:
     image: grafana/loki:3.7.8

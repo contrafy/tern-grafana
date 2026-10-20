@@ -1,0 +1,148 @@
+{
+  "error": "",
+  "incident": {
+    "closedTime": "2021-08-07T11:58:23Z",
+    "createdByUser": {
+      "name": "Morty Smith",
+      "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+      "userID": "user-123"
+    },
+    "createdTime": "2021-08-07T11:58:23Z",
+    "durationSeconds": 60,
+    "incidentChannels": [
+      {
+        "channelID": "C0123456789",
+        "provider": "slack",
+        "teamID": "T0123456789"
+      },
+      {
+        "channelID": "C0123456789",
+        "provider": "slack",
+        "teamID": "T0123456789"
+      }
+    ],
+    "incidentEnd": "2022-02-11 00:50:20.574137",
+    "incidentID": "incident-123",
+    "incidentMembership": {
+      "assignments": [
+        {
+          "role": {
+            "archived": true,
+            "createdAt": "2020-01-01T00:00:00Z",
+            "description": "The commander is the incident commander.",
+            "important": true,
+            "mandatory": true,
+            "name": "commander",
+            "orgID": "org-1",
+            "roleID": 1,
+            "updatedAt": "2020-01-01T00:00:00Z"
+          },
+          "roleID": 1,
+          "user": {
+            "name": "Morty Smith",
+            "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+            "userID": "user-123"
+          }
+        },
+        {
+          "role": {
+            "archived": true,
+            "createdAt": "2020-01-01T00:00:00Z",
+            "description": "The commander is the incident commander.",
+            "important": true,
+            "mandatory": true,
+            "name": "commander",
+            "orgID": "org-1",
+            "roleID": 1,
+            "updatedAt": "2020-01-01T00:00:00Z"
+          },
+          "roleID": 1,
+          "user": {
+            "name": "Morty Smith",
+            "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+            "userID": "user-123"
+          }
+        }
+      ],
+      "totalAssignments": 5,
+      "totalParticipants": 3
+    },
+    "incidentStart": "2022-02-11 00:50:20.574137",
+    "incidentType": "internal",
+    "isDrill": true,
+    "labels": [
+      {
+        "colorHex": "#ff0000",
+        "description": "Customers are affected by this incident.",
+        "key": "service_name",
+        "label": "customers-affected"
+      },
+      {
+        "colorHex": "#ff0000",
+        "description": "Customers are affected by this incident.",
+        "key": "service_name",
+        "label": "customers-affected"
+      }
+    ],
+    "modifiedTime": "2021-08-07T11:58:23Z",
+    "overviewURL": "/a/grafana-irm-app/incidents/incident-123/title",
+    "refs": [
+      {
+        "key": "com.grafana.oncall",
+        "ref": "abc123",
+        "url": "https://grafana.com/a/grafana-irm-app/incidents/456"
+      },
+      {
+        "key": "com.grafana.oncall",
+        "ref": "abc123",
+        "url": "https://grafana.com/a/grafana-irm-app/incidents/456"
+      }
+    ],
+    "severity": "minor",
+    "status": "active",
+    "summary": "Something happened, we found out something interesting, then we fixed it.",
+    "taskList": {
+      "doneCount": 8,
+      "tasks": [
+        {
+          "assignedUser": {
+            "name": "Morty Smith",
+            "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+            "userID": "user-123"
+          },
+          "authorUser": {
+            "name": "Morty Smith",
+            "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+            "userID": "user-123"
+          },
+          "createdTime": "2018-01-01T00:00:00Z",
+          "immutable": true,
+          "modifiedTime": "2018-01-01T00:00:00Z",
+          "status": "todo",
+          "taskID": "task-123456",
+          "text": "Assign an investigator"
+        },
+        {
+          "assignedUser": {
+            "name": "Morty Smith",
+            "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+            "userID": "user-123"
+          },
+          "authorUser": {
+            "name": "Morty Smith",
+            "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+            "userID": "user-123"
+          },
+          "createdTime": "2018-01-01T00:00:00Z",
+          "immutable": true,
+          "modifiedTime": "2018-01-01T00:00:00Z",
+          "status": "todo",
+          "taskID": "task-123456",
+          "text": "Assign an investigator"
+        }
+      ],
+      "todoCount": 5
+    },
+    "title": "high latency in web requests"
+  }
+}

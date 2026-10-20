@@ -102,11 +102,12 @@ end
 describe("transform support", function()
 	it("names the first transformation it cannot apply", function()
 		local panel = S.json([[{"transformations": [
-			{"id": "merge", "disabled": true},
+			{"id": "groupBy", "disabled": true},
 			{"id": "organize", "options": {}},
-			{"id": "reduce", "options": {}}
+			{"id": "reduce", "options": {"reducers": ["max"]}},
+			{"id": "partitionByValues", "options": {}}
 		]}]])
-		expect(Transform.unsupported(panel, env)).toBe("transformation reduce is not supported")
+		expect(Transform.unsupported(panel, env)).toBe("transformation partitionByValues is not supported")
 		expect(Transform.unsupported({ transformations = { { id = "organize" } } }, env)).toBeNil()
 		local filtered = {
 			transformations = { { id = "organize", filter = { id = "byValue", options = {} } } },
@@ -114,6 +115,58 @@ describe("transform support", function()
 		expect(Transform.unsupported(filtered, env)).toBe(
 			"transformation organize with a byValue filter is not supported"
 		)
+	end)
+end)
+
+-- transformDataFrame.ts: `filter` limits a transformation to the frames it
+-- matches and puts the others back where the first of them stood;
+-- `disabled` skips it; string options see dashboard variables.
+describe("transform pipeline", function()
+	local function frame(refId: string, v: number): Frame.Frame
+		return {
+			refId = refId,
+			fields = { Frame.field("Time", "time", { 1 }), Frame.field("Value", "number", { v }) },
+		}
+	end
+
+	it("applies a filtered transformation to its frames and keeps the rest in place", function()
+		local panel = {
+			transformations = {
+				{ id = "merge", options = {}, filter = { id = "byRefId", options = "B|C" } },
+			},
+		}
+		local out = Transform.prepare(panel, { frame("A", 1), frame("B", 2), frame("C", 3), frame("D", 4) }, env)
+		expect(#out).toBe(3)
+		expect(out[1].refId).toBe("merge-B-C")
+		expect(out[2].refId).toBe("A")
+		expect(out[3].refId).toBe("D")
+		-- Only the frames before the first later-kept one stay at index 0.
+		local first = Transform.prepare(panel, { frame("A", 1), frame("B", 2), frame("C", 3) }, env)
+		expect(first[1].refId).toBe("A")
+		expect(first[2].refId).toBe("merge-B-C")
+	end)
+
+	it("skips disabled transformations and interpolates options", function()
+		local panel: any = {
+			transformations = {
+				{ id = "merge", disabled = true } :: any,
+				{
+					id = "filterByValue",
+					options = {
+						type = "include",
+						match = "any",
+						filters = { { fieldName = "Value", config = { id = "greater", options = { value = "$min" } } } },
+					},
+				},
+			},
+		}
+		local interpolate = function(s: string): string
+			return (string.gsub(s, "%$min", "1"))
+		end
+		local out = Transform.prepare(panel, { frame("A", 1), frame("B", 2) }, env, interpolate)
+		expect(#out).toBe(2)
+		expect(#out[1].fields[2].values).toBe(0)
+		expect(out[2].fields[2].values).toEqual({ 2 })
 	end)
 end)
 

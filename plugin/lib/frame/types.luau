@@ -21,6 +21,12 @@ export type FieldConfig = {
 	interval: number?,
 	-- Grafana's field config `custom` (hidden, drawStyle, ...), verbatim.
 	custom: { [string]: any }?,
+	-- Grafana field config thresholds, mappings and color, in Grafana's JSON
+	-- shape, when a datasource or transformation sets them (configFromData,
+	-- rowsToFields); they outrank the panel's defaults like the keys above.
+	thresholds: any?,
+	mappings: any?,
+	color: any?,
 }
 
 export type Field = {

@@ -10,7 +10,7 @@ TERN_DEFS = .tools/types/tern.lsp.d.luau
 LUAU_DIRS = $(wildcard plugin tests)
 FILTER =
 
-.PHONY: bootstrap tools fixtures test test-runner-selfcheck e2e lint fmt fmt-check typecheck check \
+.PHONY: bootstrap tools fixtures test test-runner-selfcheck e2e lint fmt fmt-check typecheck window-load check \
 	stack-up stack-down fixtures-capture
 
 bootstrap:
@@ -51,7 +51,11 @@ fmt-check: tools
 typecheck: tools fixtures
 	$(LUAU_LSP) analyze --platform=standard --definitions=@tern=$(TERN_DEFS) $(LUAU_DIRS)
 
-check: fmt-check lint typecheck test-runner-selfcheck test
+# The window half's entry must load far under Tern's 50 ms window budget (docs/architecture.md).
+window-load:
+	@sh scripts/check-window-load.sh
+
+check: fmt-check lint typecheck window-load test-runner-selfcheck test
 
 # Docker dev stack (dev/); scripts/stack.sh owns the details.
 STACK = @[ -f scripts/stack.sh ] || { echo "scripts/stack.sh is missing: the dev stack is not set up" >&2; exit 1; }; sh scripts/stack.sh

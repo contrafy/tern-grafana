@@ -1,0 +1,496 @@
+{
+ "count": 11,
+ "current_page_number": 1,
+ "next": null,
+ "page_length": 11,
+ "page_size": 50,
+ "previous": null,
+ "results": [
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000109",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000107",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/3",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 6",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000111",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000110",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/4",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 9",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": "F000000000114",
+    "id": "R000000000113",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": "description_short 1",
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000112",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/5",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 10",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000116",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [],
+   "heartbeat": null,
+   "id": "C000000000115",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/6",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 11",
+   "security": [],
+   "team_id": "T000000000064",
+   "type": "direct_paging"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000119",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    },
+    {
+     "key": {
+      "id": "X0000000000000000000000000000118",
+      "name": "name 13",
+      "prescribed": false
+     },
+     "value": {
+      "id": null,
+      "name": "name 14",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000117",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/7",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 12",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": "F000000000122",
+    "id": "R000000000121",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    },
+    {
+     "key": {
+      "id": "X0000000000000000000000000000118",
+      "name": "name 13",
+      "prescribed": false
+     },
+     "value": {
+      "id": null,
+      "name": "name 14",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000120",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/8",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 15",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": "F000000000125",
+    "id": "R000000000124",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    },
+    {
+     "key": {
+      "id": "X0000000000000000000000000000118",
+      "name": "name 13",
+      "prescribed": false
+     },
+     "value": {
+      "id": null,
+      "name": "name 14",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000123",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/9",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 16",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": "F000000000128",
+    "id": "R000000000127",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    },
+    {
+     "key": {
+      "id": "X0000000000000000000000000000118",
+      "name": "name 13",
+      "prescribed": false
+     },
+     "value": {
+      "id": null,
+      "name": "name 14",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000126",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/10",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 17",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000130",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000129",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/11",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 18",
+   "security": [],
+   "team_id": null,
+   "type": "grafana_alerting"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000132",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": null,
+   "dynamic_labels": [],
+   "heartbeat": null,
+   "id": "C000000000131",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/12",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 19",
+   "security": [],
+   "team_id": "T000000000073",
+   "type": "direct_paging"
+  },
+  {
+   "default_route": {
+    "email": {
+     "enabled": false,
+     "id": null
+    },
+    "escalation_chain_id": null,
+    "id": "R000000000134",
+    "webhook": {
+     "enabled": false,
+     "id": null
+    }
+   },
+   "description_short": "description_short 2",
+   "dynamic_labels": [
+    {
+     "key": {
+      "id": "00000000-0000-4000-8000-000000000108",
+      "name": "name 7",
+      "prescribed": true
+     },
+     "value": {
+      "id": null,
+      "name": "name 8",
+      "prescribed": false
+     }
+    },
+    {
+     "key": {
+      "id": "X0000000000000000000000000000118",
+      "name": "name 13",
+      "prescribed": false
+     },
+     "value": {
+      "id": null,
+      "name": "name 14",
+      "prescribed": false
+     }
+    }
+   ],
+   "heartbeat": null,
+   "id": "C000000000133",
+   "inbound_email": null,
+   "labels": [],
+   "link": "https://example.invalid/irm/13",
+   "maintenance_end_at": null,
+   "maintenance_mode": null,
+   "maintenance_started_at": null,
+   "name": "name 20",
+   "security": [],
+   "team_id": "T000000000064",
+   "type": "grafana_alerting"
+  }
+ ],
+ "total_pages": 1
+}

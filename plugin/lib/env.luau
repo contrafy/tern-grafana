@@ -12,6 +12,9 @@ export type Env = {
 	local_offset_min: number?,
 	cols: number?,
 	rows: number?,
+	-- The block's pane id (lib/visibility.luau); nil outside a block and in
+	-- specs that do not set it.
+	pane: number?,
 	decode: (string) -> any,
 	encode: (any) -> string,
 	-- tern.json.null in Tern; the test codec's sentinel in specs.

@@ -40,12 +40,21 @@ M.MIN_PANEL_WIDTH = "18ch"
 -- Bases are scaled down this much so a band's gaps fit and it only wraps on a narrow pane;
 -- flex-grow hands the slack back.
 M.BASIS_SLACK = 0.96
+-- Card chrome in px: the head line with the card's top and bottom padding;
+-- a panel with a description or links has a chip line under the head.
+M.CARD_CHROME_PX = 40
+M.CHIP_LINE_PX = 24
 
 -- A panel's Grafana height (gridPos h rows of 30 px with 8 px margins,
 -- lib/dashboard/render_png size) in Tern lines, never above it.
 function M.heightLines(h: number): number
 	local _, px = RenderPng.size(1, h)
 	return math.max(4, math.floor(px / M.LINE_PX))
+end
+
+-- The card body's height in px under the card's height cap (heightLines).
+function M.cardHeight(h: number, chips: boolean): number
+	return math.max(M.heightLines(h) * M.LINE_PX - M.CARD_CHROME_PX - (if chips then M.CHIP_LINE_PX else 0), 0)
 end
 
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
@@ -97,7 +106,8 @@ local function nativeBody(
 	-- Text panels interpolate variables into their content.
 	local signature = Variables.signature(s.vars, s.range)
 	local memo = s.memo[inst.key]
-	local pr = if ps.time then ps.time.range else s.range
+	-- Snapped to the query interval: a refresh with the same answer is a memo hit.
+	local pr = State.drawRange(s, ps)
 	local live = if ps.live_ms then s.live_tick else nil
 	if
 		memo
@@ -124,6 +134,11 @@ local function nativeBody(
 	panelJson.title = title(s, inst)
 	local scope = State.panelScope(s, inst)
 	local pw, ph = RenderPng.size(if single then 24 else inst.panel.grid.w, inst.panel.grid.h)
+	local json = inst.panel.json
+	local chips = (type(json.description) == "string" and json.description ~= "")
+		or (type(json.links) == "table" and next(json.links) ~= nil)
+	-- An expanded panel is not height-capped.
+	local cardH = if single then nil else M.cardHeight(inst.panel.grid.h, chips)
 	local d = s.dashboard
 	local ok, node, own = pcall(Registry.view, panelJson, data.frames, env, {
 		key = inst.key,
@@ -134,6 +149,7 @@ local function nativeBody(
 		to_ms = if pr then pr.to_ms else nil,
 		time = if pr then { from_ms = pr.from_ms, to_ms = pr.to_ms } else nil,
 		size = { w = pw, h = ph },
+		card_height = cardH,
 		extra = ps.extra,
 		timezone = if d then d.timezone else nil,
 		local_offset_min = env.local_offset_min,
@@ -141,6 +157,9 @@ local function nativeBody(
 		show_labels = labels,
 		interpolate = function(text: string): string
 			return Interpolate.replace(text, scope, { format = Interpolate.text })
+		end,
+		replace = function(text: string): string
+			return Interpolate.replace(text, scope)
 		end,
 	})
 	local children: { Node } = {}

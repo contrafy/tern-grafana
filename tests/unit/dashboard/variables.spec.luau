@@ -45,6 +45,14 @@ local function dsRoute(): Route.Route
 	}
 end
 
+-- A Prometheus answered directly (raw /api/v1 bodies).
+local function directRoute(): Route.Route
+	local r = dsRoute()
+	r.via = "direct"
+	r.datasource_uid = nil
+	return r
+end
+
 for _, version in S.VERSIONS do
 	local env = S.env()
 	local function load(): { Variables.Variable }
@@ -174,6 +182,60 @@ for _, version in S.VERSIONS do
 			expect(values(options)).toEqual({ "alertmanager", "down", "loki", "node", "prometheus", "tempo" })
 		end)
 
+		-- A provisioned billing dashboard pattern: hidden query_result()
+		-- variables chained into the panel PromQL. One reads an epoch with a
+		-- fraction through a regex; the next computes `1 - $flag` without a
+		-- regex, a scalar answer, and multiplies a term that must vanish.
+		it("expands a hidden query_result() variable without a regex to the bare scalar Grafana uses", function()
+			local vars = assert(Variables.fromModel({
+				{
+					type = "query",
+					name = "at",
+					hide = 2,
+					datasource = { type = "prometheus", uid = "prom3" },
+					query = "query_result(vector(time()))",
+					regex = "{} (.*) .*",
+				},
+				{
+					type = "query",
+					name = "rest",
+					hide = 2,
+					datasource = { type = "prometheus", uid = "prom3" },
+					query = "query_result(1 - 1)",
+				},
+			}, env))
+			local at = assert(Variables.find(vars, "at"))
+			local direct = directRoute()
+			local fetch = assert(Variables.fetchFor(at, Variables.scope(vars)))
+			local raw = assert(
+				Variables.parseFetch(fetch, direct, S.response("prometheus/3.15.0/query_vector_fraction.json"), env)
+			)
+			-- Prometheus writes the sample as "1791577898.125"; so does the row.
+			expect(raw).toEqual({ "{} 1791577898.125 1791577898125" })
+			Variables.setOptions(at, (assert(Variables.optionsFrom(at, raw, Variables.scope(vars)))))
+			expect(at.values).toEqual({ "1791577898.125" })
+
+			local rest = assert(Variables.find(vars, "rest"))
+			fetch = assert(Variables.fetchFor(rest, Variables.scope(vars)))
+			raw = assert(
+				Variables.parseFetch(fetch, dsRoute(), S.response(S.grafana(version, "ds_query_prom_scalar.json")), env)
+			)
+			expect(raw).toEqual({ "0" })
+			Variables.setOptions(rest, (assert(Variables.optionsFrom(rest, raw, Variables.scope(vars)))))
+			local expr = "sum(up) @ $at\n# partner term\n- (9999999999 * $rest) >= 0"
+			expect(Interpolate.replace(expr, Variables.scope(vars), { format = Interpolate.prometheus })).toBe(
+				"sum(up) @ 1791577898.125\n# partner term\n- (9999999999 * 0) >= 0"
+			)
+		end)
+
+		it("fails a query_result() whose answer is a range vector, as Grafana does", function()
+			local fetch = assert(Variables.parseQuery("query_result(up[1m])"))
+			local options, err =
+				Variables.parseFetch(fetch, directRoute(), S.response("prometheus/3.15.0/query_matrix.json"), env)
+			expect(options).toBeNil()
+			expect(err).toBe("Unknown/Unhandled result type: [matrix]")
+		end)
+
 		it("computes the auto interval from the range and auto_count/auto_min", function()
 			local vars = load()
 			local step = assert(Variables.find(vars, "step"))
@@ -218,6 +280,15 @@ describe("variables selection", function()
 		expect(v.values).toEqual({ "c" })
 		Variables.setOptions(v, { { text = "e", value = "e" } })
 		expect(v.values).toEqual({ "e" })
+	end)
+
+	it("keeps a saved single value by its text when the options renamed its value", function()
+		local vars = Variables.fromModel({
+			{ type = "query", name = "db", query = "label_values(db)", current = { text = "orders", value = "db-1" } },
+		}, env)
+		local db = vars[1]
+		Variables.setOptions(db, { { text = "billing", value = "db-2" }, { text = "orders", value = "db-3" } })
+		expect(db.values).toEqual({ "db-3" })
 	end)
 
 	it("takes link values over the saved selection, including values the options do not list", function()

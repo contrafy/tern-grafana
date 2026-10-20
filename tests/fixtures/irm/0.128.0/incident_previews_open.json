@@ -1,0 +1,314 @@
+{
+ "cursor": {
+  "hasMore": false,
+  "nextValue": ""
+ },
+ "incidentPreviews": [
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-19T18:50:36.763144Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1218",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-19T18:50:36Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T19:10:37.195851Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c000000000000000000000000000000000000000000000000000221",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 29",
+   "version": 3
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-19T13:42:36.060775Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1222",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-19T13:42:36Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T17:50:57.834993Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c000000000000000000000000000000000000000000000000000000000223",
+   "status": "active",
+   "summary": "",
+   "title": "title 12",
+   "version": 3
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "user4@example.com",
+    "userID": "g000000000000000000000000000000000000000000226"
+   },
+   "createdTime": "2026-10-19T01:14:40.411343Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1224",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-19T01:13:55.48Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T01:24:57.866143Z",
+   "severityID": "00000000-0000-4000-8000-000000000225",
+   "severityLabel": "Minor",
+   "slug": "f00000000000000000000000000000000227",
+   "status": "active",
+   "summary": "",
+   "title": "title 30",
+   "version": 4
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "user22@example.com",
+    "userID": "g000000000000000000000000000000000000000000229"
+   },
+   "createdTime": "2026-10-17T16:49:49.778996Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1228",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-17T16:45:05.824Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T14:15:05.32341Z",
+   "severityID": "00000000-0000-4000-8000-000000000225",
+   "severityLabel": "Minor",
+   "slug": "o0000000000000000000000000000000000000000230",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 31",
+   "version": 5
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-16T23:38:36.868606Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1231",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-16T23:38:36Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-17T04:05:09.206008Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c0000000000000000000000000000000000000000000000000000000000000232",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 32",
+   "version": 3
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-16T21:06:36.695452Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1233",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-16T21:06:36Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-17T04:05:15.85048Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c0000000000000000000000000000000000000000000000000000000000000232",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 32",
+   "version": 4
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-15T14:28:08.70347Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1234",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-15T14:28:08Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T13:49:03.237792Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c0000000000000000000000000000000000000000000000000000000000000232",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 32",
+   "version": 3
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-14T19:24:37.183761Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1235",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-14T19:24:37Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T13:02:25.16291Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c00000000000000000000000000000000000000000000000000000000000236",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 14",
+   "version": 6
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-14T02:17:36.961362Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1237",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-14T02:17:36Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-19T13:45:03.611634Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c0000000000000000000000000000000000000000000000000000000000000232",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 32",
+   "version": 4
+  },
+  {
+   "closedTime": "",
+   "createdByUser": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   },
+   "createdTime": "2026-10-07T01:56:36.446493Z",
+   "description": "",
+   "fieldValues": [],
+   "incidentChannels": [],
+   "incidentEnd": "",
+   "incidentID": "1238",
+   "incidentMembershipPreview": {
+    "importantAssignments": [],
+    "totalAssignments": 0,
+    "totalParticipants": 0
+   },
+   "incidentStart": "2026-10-07T01:56:36Z",
+   "incidentType": "internal",
+   "isDrill": false,
+   "labels": [],
+   "modifiedTime": "2026-10-07T02:11:35.725148Z",
+   "severityID": "00000000-0000-4000-8000-000000000219",
+   "severityLabel": "Critical",
+   "slug": "c0000000000000000000000000000000000000000000000000000000239",
+   "status": "rfo",
+   "summary": "",
+   "title": "title 33",
+   "version": 3
+  }
+ ],
+ "query": {
+  "limit": 100,
+  "orderDirection": "DESC",
+  "orderField": "createdTime",
+  "queryString": "queryString 1"
+ }
+}

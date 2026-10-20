@@ -1,0 +1,41 @@
+{
+ "grafana-irm-app.alert-groups:read": [
+  "grafana-irm-app.alert-groups:read 1"
+ ],
+ "grafana-irm-app.chatops:read": [
+  "grafana-irm-app.chatops:read 1"
+ ],
+ "grafana-irm-app.escalation-chains:read": [
+  "grafana-irm-app.escalation-chains:read 1"
+ ],
+ "grafana-irm-app.integrations:read": [
+  "grafana-irm-app.integrations:read 1"
+ ],
+ "grafana-irm-app.maintenance:read": [
+  "grafana-irm-app.maintenance:read 1"
+ ],
+ "grafana-irm-app.notification-settings:read": [
+  "grafana-irm-app.notification-settings:read 1"
+ ],
+ "grafana-irm-app.other-settings:read": [
+  "grafana-irm-app.other-settings:read 1"
+ ],
+ "grafana-irm-app.outgoing-webhooks:read": [
+  "grafana-irm-app.outgoing-webhooks:read 1"
+ ],
+ "grafana-irm-app.schedules:read": [
+  "grafana-irm-app.schedules:read 1"
+ ],
+ "grafana-irm-app.user-settings:read": [
+  "grafana-irm-app.user-settings:read 1"
+ ],
+ "plugins.app:access": [
+  "plugins.app:access 1"
+ ],
+ "plugins.metas:read": [
+  "plugins.metas:read 1"
+ ],
+ "plugins.plugins:read": [
+  "plugins.plugins:read 1"
+ ]
+}

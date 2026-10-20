@@ -2,11 +2,9 @@
 -- Window glue for links: installs `route.link` and executes its decisions.
 -- The config is read on the window's machine to learn Grafana base URLs and
 -- contexts; Tern has no stat, so the parsed config is cached by file content.
+-- The routing stack loads on the first link, not with the window entry
+-- (window load budget, docs/architecture.md).
 
-local Investigate = require("./investigate_window")
-local ReadFile = require("./lib/read_file")
-local Route = require("./lib/links/route")
-local Validate = require("./lib/config/validate")
 local Types = require("./lib/config/types")
 
 type Config = Types.Config
@@ -19,6 +17,8 @@ local cachedText: string? = nil
 local cachedConfig: Config? = nil
 
 local function loadConfig(t: any): Config?
+	local ReadFile = require("./lib/read_file")
+	local Validate = require("./lib/config/validate")
 	local path = Validate.path({ XDG_CONFIG_HOME = t.getenv("XDG_CONFIG_HOME"), HOME = t.getenv("HOME") })
 	if not path then
 		return nil
@@ -48,6 +48,8 @@ function M.register(t: any)
 		end,
 	}
 	t.route.link(function(link: any, cx: any): any
+		local Investigate = require("./investigate_window")
+		local Route = require("./lib/links/route")
 		-- Investigate handoffs may start an agent: their own handler.
 		if Investigate.claims(link.url) then
 			local okInv, answer = pcall(Investigate.handle, link, cx, t)

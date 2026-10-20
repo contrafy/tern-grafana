@@ -1,0 +1,297 @@
+{
+ "count": 24,
+ "current_page_number": 1,
+ "next": null,
+ "page_length": 24,
+ "page_size": 100,
+ "previous": null,
+ "results": [
+  {
+   "email": "user6@example.com",
+   "grafana_id": 1070,
+   "id": "U000000000069",
+   "is_phone_number_verified": true,
+   "phone_number_status": "available",
+   "role": "admin",
+   "teams": [],
+   "timezone": "timezone 1",
+   "username": "user6@example.com"
+  },
+  {
+   "email": "user7@example.com",
+   "grafana_id": 1072,
+   "id": "U000000000071",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [
+    "T000000000073"
+   ],
+   "timezone": "timezone 1",
+   "username": "user7@example.com"
+  },
+  {
+   "email": "user8@example.com",
+   "grafana_id": 1075,
+   "id": "U000000000074",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [],
+   "timezone": "timezone 1",
+   "username": "username 3"
+  },
+  {
+   "email": "user9@example.com",
+   "grafana_id": 1077,
+   "id": "U000000000076",
+   "is_phone_number_verified": true,
+   "phone_number_status": "available",
+   "role": "editor",
+   "teams": [],
+   "timezone": "timezone 1",
+   "username": "username 4"
+  },
+  {
+   "email": "user10@example.com",
+   "grafana_id": 1079,
+   "id": "U000000000078",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [],
+   "timezone": null,
+   "username": "username 5"
+  },
+  {
+   "email": "user11@example.com",
+   "grafana_id": 1081,
+   "id": "U000000000080",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [
+    "T000000000073"
+   ],
+   "timezone": "timezone 1",
+   "username": "user11@example.com"
+  },
+  {
+   "email": "user3@example.com",
+   "grafana_id": 1066,
+   "id": "U000000000052",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 1",
+   "username": "username 2"
+  },
+  {
+   "email": "user12@example.com",
+   "grafana_id": 1083,
+   "id": "U000000000082",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [],
+   "timezone": "timezone 1",
+   "username": "user12@example.com"
+  },
+  {
+   "email": "user13@example.com",
+   "grafana_id": 1084,
+   "id": "U000000000061",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 2",
+   "username": "user13@example.com"
+  },
+  {
+   "email": "user2@example.com",
+   "grafana_id": 1065,
+   "id": "U000000000051",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 1",
+   "username": "user2@example.com"
+  },
+  {
+   "email": "user1@example.com",
+   "grafana_id": 1063,
+   "id": "U000000000050",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 1",
+   "username": "username 1"
+  },
+  {
+   "email": "user5@example.com",
+   "grafana_id": 1068,
+   "id": "U000000000054",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 1",
+   "username": "user5@example.com"
+  },
+  {
+   "email": "user4@example.com",
+   "grafana_id": 1067,
+   "id": "U000000000053",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 1",
+   "username": "user4@example.com"
+  },
+  {
+   "email": "user14@example.com",
+   "grafana_id": 1086,
+   "id": "U000000000085",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "editor",
+   "teams": [
+    "T000000000064"
+   ],
+   "timezone": "timezone 1",
+   "username": "user14@example.com"
+  },
+  {
+   "email": "user15@example.com",
+   "grafana_id": 1088,
+   "id": "U000000000087",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [
+    "T000000000073"
+   ],
+   "timezone": "timezone 1",
+   "username": "user15@example.com"
+  },
+  {
+   "email": "user16@example.com",
+   "grafana_id": 1090,
+   "id": "U000000000089",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "none",
+   "teams": [],
+   "timezone": null,
+   "username": "username 6"
+  },
+  {
+   "email": "user17@example.com",
+   "grafana_id": 1092,
+   "id": "U000000000091",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "admin",
+   "teams": [
+    "T000000000073"
+   ],
+   "timezone": "timezone 1",
+   "username": "user17@example.com"
+  },
+  {
+   "email": "user18@example.com",
+   "grafana_id": 1094,
+   "id": "U000000000093",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "none",
+   "teams": [],
+   "timezone": null,
+   "username": "username 7"
+  },
+  {
+   "email": "user19@example.com",
+   "grafana_id": 1096,
+   "id": "U000000000095",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "none",
+   "teams": [],
+   "timezone": null,
+   "username": "username 8"
+  },
+  {
+   "email": "user20@example.com",
+   "grafana_id": 1098,
+   "id": "U000000000097",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "viewer",
+   "teams": [],
+   "timezone": null,
+   "username": "username 9"
+  },
+  {
+   "email": "user21@example.com",
+   "grafana_id": 1100,
+   "id": "U000000000099",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "none",
+   "teams": [],
+   "timezone": null,
+   "username": "username 10"
+  },
+  {
+   "email": "user22@example.com",
+   "grafana_id": 1102,
+   "id": "U000000000101",
+   "is_phone_number_verified": true,
+   "phone_number_status": "available",
+   "role": "editor",
+   "teams": [],
+   "timezone": "timezone 1",
+   "username": "user22@example.com"
+  },
+  {
+   "email": "user23@example.com",
+   "grafana_id": 1104,
+   "id": "U000000000103",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "none",
+   "teams": [],
+   "timezone": null,
+   "username": "username 11"
+  },
+  {
+   "email": "user24@example.com",
+   "grafana_id": 1106,
+   "id": "U000000000105",
+   "is_phone_number_verified": false,
+   "phone_number_status": "not_configured",
+   "role": "none",
+   "teams": [],
+   "timezone": null,
+   "username": "username 12"
+  }
+ ],
+ "total_pages": 1
+}

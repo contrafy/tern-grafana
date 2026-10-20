@@ -76,3 +76,18 @@ datasources:
     uid: testdata
     type: grafana-testdata-datasource
     access: proxy
+
+  # dev/postgres (dashboard tern-sql). Local-only credentials from dev/compose.yml.
+  - name: PostgreSQL
+    uid: postgres
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgres:5432
+    user: tern
+    jsonData:
+      database: tern
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: false
+    secureJsonData:
+      password: tern-dev

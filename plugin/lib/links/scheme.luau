@@ -122,6 +122,10 @@ local function httpUrl(v: string): boolean
 	return authority ~= "" and string.find(authority, "@", 1, true) == nil
 end
 
+local function oncallView(v: string): boolean
+	return v == "groups" or v == "schedules"
+end
+
 type Spec = { params: { [string]: Check }, required: { string }, vars: boolean }
 
 local TIME: { [string]: Check } = { from = timeValue, to = timeValue }
@@ -151,6 +155,10 @@ local ACTIONS: { [string]: Spec } = {
 	-- Without `id` the block opens on TraceQL search (`q`, `from`/`to`).
 	trace = spec({}, false, withTime({ id = traceId, ds = uid, q = text, span = spanId })),
 	ops = spec({}, false, { view = opsView }),
+	-- IRM: OnCall schedules and alert groups (`group` selects one), and
+	-- incidents (`id` opens one's detail).
+	oncall = spec({}, false, { group = uid, view = oncallView }),
+	incidents = spec({}, false, { id = uid }),
 	settings = spec({}, false, {}),
 	-- Investigate (G4): the subject (source block -> preview) or the prompt
 	-- (preview -> window) travels in the link, since kv is per machine and the

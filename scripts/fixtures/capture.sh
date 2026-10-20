@@ -283,6 +283,8 @@ capture_prometheus() {
 	get walreplay /api/v1/status/walreplay
 	get query_vector "/api/v1/query?query=up&time=$END"
 	get query_scalar "/api/v1/query?query=$(enc 'scalar(sum(up))')&time=$END"
+	# A fractional sample: Grafana's query_result() text carries it as Prometheus wrote it.
+	get query_vector_fraction "/api/v1/query?query=$(enc 'vector(time())')&time=$END.125"
 	get query_string "/api/v1/query?query=$(enc '"tern"')&time=$END"
 	get query_matrix "/api/v1/query?query=$(enc 'up{job="node"}[1m]')&time=$END"
 	get query_empty "/api/v1/query?query=tern_nonexistent_metric&time=$END"
@@ -365,6 +367,8 @@ capture_grafana() {
 
 	ds_query ds_query_prom_range '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (mode) (rate(node_cpu_seconds_total[1m]))","legendFormat":"{{mode}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200},{"refId":"B","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum(up)","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_instant '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"up","range":false,"instant":true,"intervalMs":15000,"maxDataPoints":200}]'
+	# query_result(1 - $flag) with flag = 1: a scalar answer (resultType "scalar").
+	ds_query ds_query_prom_scalar '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"1 - 1","range":false,"instant":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_table '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"up","format":"table","range":false,"instant":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_exemplars '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"histogram_quantile(0.95, sum by (le, service) (rate(traces_spanmetrics_latency_bucket[1m])))","legendFormat":"{{service}}","range":true,"instant":false,"exemplar":true,"intervalMs":15000,"maxDataPoints":200}]'
 	ds_query ds_query_prom_heatmap '[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"sum by (le) (increase(traces_spanmetrics_latency_bucket[1m]))","format":"heatmap","legendFormat":"{{le}}","range":true,"instant":false,"intervalMs":15000,"maxDataPoints":200}]'
@@ -454,10 +458,57 @@ capture_all_panels() {
 	req news_feed GET /public/tern-news/feed.xml "" 'application/rss+xml, application/xml, text/xml, */*'
 }
 
+# capture_sql: dashboard tern-sql (dev/postgres, a server-side expression, a -- Dashboard -- panel).
+# Each panel's /api/ds/query as Grafana 12.4's frontend sends it, written out here rather than derived
+# (they are what Tern's query builder is checked against):
+# - SqlDatasource.applyTemplateVariables keeps refId, datasource, rawSql and format; rawSql has the
+#   variables interpolated with the SQL quoting ($service and $team are multi-value: quoted lists;
+#   $region is a textbox: quotes doubled) and $__interval with the panel interval; $__timeFilter and
+#   the other macros are left to the backend. DataSourceWithBackend adds intervalMs and maxDataPoints
+#   (and the deprecated datasourceId, not sent here).
+# - With an expression the expression datasource sends every target, the hidden one too, each through
+#   its datasource's interpolateVariablesInQueries (SQL: the whole target, rawQuery true); expression
+#   targets go as written with Grafana's expression datasource reference.
+# - Range now-1h; maxDataPoints gridPos.w * 80 as in panel_query.jq, so intervalMs is 5000 ("5s").
+# Panel 6 (-- Dashboard --) reuses panel 4's results: the frontend sends no query for it.
+capture_sql() {
+	get frontend_settings_sql /api/frontend/settings
+	to=$((NOW * 1000))
+	from=$((to - 3600000))
+	pg='{"type":"grafana-postgresql-datasource","uid":"postgres"}'
+	sql_req() {
+		# sql_req PID QUERIES_JSON
+		req "ds_query_sql_$1" POST /api/ds/query "$(jq -cn --argjson q "$2" --arg f "$from" --arg t "$to" \
+			'{queries: $q, from: $f, to: $t}')"
+	}
+	sql_req 1 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
+		rawSql: "SELECT $__timeGroupAlias(time, 5s), service AS metric, avg(rps) AS rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nGROUP BY 1, 2\nORDER BY 1",
+		format: "time_series", intervalMs: 5000, maxDataPoints: 960}]')"
+	sql_req 2 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
+		rawSql: "SELECT $__timeGroupAlias(time, '"'"'5m'"'"'),\n  avg(rps) FILTER (WHERE service = '"'"'frontend'"'"') AS frontend,\n  avg(rps) FILTER (WHERE service = '"'"'checkout'"'"') AS checkout\nFROM service_load\nWHERE $__timeFilter(time)\nGROUP BY 1\nORDER BY 1",
+		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
+	sql_req 3 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
+		rawSql: "SELECT team, avg(error_rate) AS error_rate\nFROM services\nWHERE team IN ('"'"'web'"'"','"'"'payments'"'"') AND region <> '"'"'ap'"'"'\nGROUP BY team\nORDER BY team",
+		format: "table", intervalMs: 5000, maxDataPoints: 640}]')"
+	sql_req 4 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
+		rawSql: "SELECT name, team, region, replicas, error_rate\nFROM services\nORDER BY name",
+		format: "table", intervalMs: 5000, maxDataPoints: 640}]')"
+	sql_req 5 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds, editorMode: "code", format: "table",
+		hide: true, rawQuery: true, rawSql: "SELECT sum(replicas)::float8 AS replicas\nFROM services",
+		intervalMs: 5000, maxDataPoints: 640},
+		{refId: "B", datasource: {type: "__expr__", uid: "__expr__", name: "Expression"}, type: "math",
+		expression: "$A * 2"}]')"
+	sql_req 7 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
+		rawSql: "SELECT time, service, rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nORDER BY 1",
+		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
+}
+
 capture_grafana "$G12" "$TOK12"
 capture_all_panels
+capture_sql
 capture_grafana "$G11" "$TOK11"
 capture_all_panels
+capture_sql
 
 # ---------------------------------------------------------------------------------------------
 # Alertmanager (+ amtool from the same image)

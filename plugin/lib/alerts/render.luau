@@ -217,7 +217,7 @@ local function detail(s: State, a: Alert, env: Env.Env): Node
 		buttons,
 		ui.el(
 			"button",
-			{ key = "bcopy", class = "tg-al-btn", text = "Copy matchers (y)", actions = { click = "copy" } }
+			{ key = "bcopy", class = "tg-al-btn", text = "Copy matchers (y)", actions = { click = "copy-matchers" } }
 		)
 	)
 	table.insert(

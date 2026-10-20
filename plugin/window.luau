@@ -6,5 +6,6 @@ require("./commands_window").register(tern)
 require("./alerts_window").register(tern)
 require("./watches_window").register(tern)
 require("./carly_window").register(tern)
+require("./visibility_window").register(tern)
 
 return nil

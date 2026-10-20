@@ -24,6 +24,7 @@ plugin/
                            status segment, Carly exports, agent handoff
   transport_host.luau      executes Http effects: auth resolution, tern.fetch or curl fallback
   blob_host.luau           turns view assets (SVG/PNG bytes) into blob ids, cached by content hash
+  visibility_window.luau   window half: writes which panes the active tab shows to kv (lib/visibility.luau)
   <block>_host.luau        one adapter per block: runs lib/<block>/state effects
   tern-grafana.css         styles, including chart series classes bound to theme variables
   lib/
@@ -44,7 +45,7 @@ plugin/
     render/                svg_timeseries, legend, stat, gauge, bargauge, table, logs, waterfall
     panels/                panel registry: supports(panel) and view(panel, frames, env)
     dashboard/             dashboard model, layout from gridPos, variables, interpolation, ladder
-    query/ alerts/ silences/ ops/ logs/ trace/ settings/ impact/ watches/   block state machines
+    query/ alerts/ silences/ ops/ logs/ trace/ settings/ impact/ watches/ irm/   block state machines
     lens/                  promtool, amtool, logcli, curl capture parsers and views
     links/                 tern-grafana:// encode/decode, Grafana URL recognition
 ```
@@ -127,6 +128,9 @@ multi-frame time series uses, so Grafana and direct results flow into the same r
 
 ## Effects
 
+Click action names are plugin-defined, except `copy`: Tern handles it itself and copies the clicked node's text,
+so buttons that copy something else use their own action name (`copy-matchers`, `copy-prompt`, `copy-config`).
+
 Every block and lens is a pure state machine in `lib/<feature>/state.luau`:
 
 ```luau
@@ -205,6 +209,27 @@ Toasts come from the window half (its timers receive a `cx`) or from a live bloc
 The status segment reads the kv summary (well under the 4 ms formatter budget) and a window timer calls
 `tern.chrome.refresh()` only when the summary changed. Tern keeps one status formatter per plugin (a second
 `tern.chrome.status` registration replaces the first), so `plugin/alerts_window.luau` owns the formatter and appends
-every other feature's segments (watches today); new segments must be appended there, and its change signature must
-cover them. Host `command_finished` carries `line`, `pane`, `status` and `took_ms` but no `cwd`, so the host pairs
-it with the `cwd` from `command_started` per pane.
+every other feature's segments (watches and IRM today); new segments must be appended there, and its change
+signature must cover them. Host `command_finished` carries `line`, `pane`, `status` and `took_ms` but no `cwd`, so
+the host pairs it with the `cwd` from `command_started` per pane.
+
+## Window load budget
+
+Tern runs `plugin/window.luau` under the window's 50 ms budget, and a trip disables the whole window half: link
+routes, palette commands, status segments and Carly all disappear until the next reload. Every module required at
+load is read, compiled and JIT-compiled inside that budget, so load cost grows with the bytes loaded (about 0.11 ms
+per KiB on an M-series Mac): when the window modules required their lib stacks at the top, the entry loaded
+243 KiB in 48 modules and took 26-28 ms warm, 40 ms on the first load after a file change, with a sandbox
+reporting `load exceeded 50 ms` under load. Rules:
+
+- `plugin/*_window.luau` require at the top only what registration itself needs (small constant tables such as
+  `lib/carly/specs`, type-only modules); everything else is required inside the handler that uses it (route,
+  command, timer, event, Carly export or context). A cached `require` costs a table lookup.
+- Chrome formatters (4 ms budget) never require: `alerts_window` loads the segment stack in `tern.timer(0, ...)`
+  ticks right after the entry, one group per tick (alerts, IRM, watches; the watches group is the largest at about
+  11 ms), and its formatter shows nothing until the last group loaded and refreshed the chrome.
+- Nothing at load parses config or JSON or reads kv; the first link reads and caches the config.
+
+`make window-load` (`scripts/check-window-load.sh`, part of `make check`) follows the top-level requires from
+`plugin/window.luau` and fails above 40 KiB; after the change the entry loads 23 KiB in 9 modules, about 2.3 ms
+warm (7 ms on the first load after a file change), also with every core busy.

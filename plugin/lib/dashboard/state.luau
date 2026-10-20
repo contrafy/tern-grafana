@@ -15,6 +15,13 @@
 -- timer at the smallest period among the panels shown that redraws them
 -- without querying. Every request carries a tag with a generation, and an
 -- answer whose generation is stale is dropped.
+-- Blob economy (docs/performance.md): a byte-identical answer to the same
+-- query keeps the parsed data, so the view memo skips the redraw; native
+-- panels draw a relative range snapped to their query interval
+-- (M.drawRange), so a refresh inside one step draws the same bytes; the
+-- auto-refresh and live timers pause while the block's tab is in the
+-- background (lib/visibility.luau) and refresh as soon as it is shown; in
+-- the expanded view the panels behind it are not refreshed until shown.
 -- Block `init` only fetches: opening panes and other one-shot effects follow
 -- user events, because Tern re-runs init on restore and plugin reloads.
 
@@ -38,6 +45,7 @@ local PanelTime = require("./panel_time")
 local QueryOptions = require("../query/options")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
+local Redraw = require("../render/redraw")
 local RenderPng = require("./render_png")
 local Repeat = require("./repeat")
 local Route = require("../config/route")
@@ -47,7 +55,9 @@ local Shared = require("../time/shared")
 local SvgTimeseries = require("../render/svg_timeseries")
 local TimeRange = require("../query/timerange")
 local Variables = require("./variables")
+local Visibility = require("../visibility")
 local Tbl = require("../tbl")
+local Transform = require("../panels/transform")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -60,6 +70,8 @@ M.PNG_CACHE = 24
 M.SEARCH_LIMIT = Search.LIMIT
 
 export type PanelStatus = "idle" | "loading" | "ready" | "error"
+
+export type Drawn = { range: Range.Range, interval_ms: number }
 
 export type PanelState = {
 	status: PanelStatus,
@@ -86,6 +98,22 @@ export type PanelState = {
 	extra_gen: number,
 	-- The module's live redraw period, nil when not live.
 	live_ms: number?,
+	-- The range and query interval of the query in flight, and of the one
+	-- `data` answers (the range it is drawn over).
+	asked: Drawn?,
+	drawn: Drawn?,
+	-- The last answer parsed: query signature, HTTP status and body; an
+	-- identical answer keeps `data` (and its view memo).
+	answer: { sig: string, status: number, body: string, panel_status: PanelStatus }?,
+	-- A refresh skipped while the panel was behind the expanded view.
+	stale: boolean?,
+	-- `-- Dashboard --` panels: the query, the key of the panel state whose
+	-- data this one reuses ("=<key>" for a source queried only for its
+	-- consumers, nil without a source panel), and the source data the frames
+	-- were derived from.
+	source_query: Queries.DashboardQuery?,
+	source: string?,
+	source_data: Queries.PanelData?,
 }
 
 export type Picker = {
@@ -418,12 +446,32 @@ function M.panelScope(s: State, inst: Repeat.Instance): Interpolate.Scope
 	return scope
 end
 
+-- The panel instance a `-- Dashboard --` query reads: the panel with that
+-- id itself (Grafana's `panel-<id>` key), never a repeat copy.
+local function sourceInstance(s: State, id: number): Repeat.Instance?
+	for _, sec in s.sections do
+		if string.find(sec.key, ".", 1, true) then
+			continue
+		end
+		for _, inst in sec.panels do
+			if inst.panel.id == id and inst.clone == 0 then
+				return inst
+			end
+		end
+	end
+	return nil
+end
+
 function M.ladderContext(s: State, scope: Interpolate.Scope): Ladder.Context
 	return {
 		supports = Registry.supports,
 		renderer_available = if s.settings.status == "loading" then nil else s.settings.renderer == true,
 		scope = scope,
 		datasources = s.settings.datasources,
+		source = function(id: number): Model.Panel?
+			local inst = sourceInstance(s, id)
+			return if inst then inst.panel else nil
+		end,
 	}
 end
 
@@ -491,6 +539,27 @@ local function queryContext(s: State, scope: Interpolate.Scope, env: Env, range:
 		user_login = s.user.login,
 		exemplars = s.exemplars_on,
 	}
+end
+
+-- The range a native panel draws: its own (time override) or the
+-- dashboard's, with an end relative to now snapped down to the panel's query
+-- interval (lib/render/redraw.luau), so a refresh that brought the same
+-- answer draws the same bytes.
+function M.drawRange(s: State, ps: PanelState?): Range.Range?
+	local t = if ps then ps.time else nil
+	-- Data is drawn over the range it was asked for (until a refreshed answer
+	-- arrives the old one stays on its own axis: no extra redraw meanwhile).
+	local d = if ps then ps.drawn else nil
+	local r = if d then d.range elseif t then t.range else s.range
+	if r == nil then
+		return nil
+	end
+	local to = if t then t.to else s.to
+	if d == nil or not Redraw.relative(to) then
+		return r
+	end
+	local from_ms, to_ms = Redraw.snapRange(r.from_ms, r.to_ms, (d :: Drawn).interval_ms)
+	return { from_ms = from_ms, to_ms = to_ms }
 end
 
 -- The panel's time range after its timeFrom/timeShift.
@@ -619,6 +688,144 @@ local function armLive(s: State, env: Env, effects: { Effect })
 	end
 end
 
+-- Sends a panel's query when it changed (or `again`); `key` names the panel
+-- state in the answer's tag.
+local function queryPanel(
+	s: State,
+	inst: Repeat.Instance,
+	key: string,
+	ps: PanelState,
+	scope: Interpolate.Scope,
+	pt: PanelTime.Override,
+	env: Env,
+	again: boolean,
+	effects: { Effect }
+)
+	local route = s.route :: Route
+	local pq, err = nil, nil
+	local qctx = queryContext(s, scope, env, pt.range)
+	if Registry.queries(inst.panel.json, env) then
+		pq, err = Queries.build(inst.panel.json, qctx, env)
+	end
+	if pq == nil then
+		if err then
+			ps.status, ps.error = "error", err
+		elseif ps.status ~= "ready" or ps.data == nil or #(ps.data :: Queries.PanelData).frames > 0 then
+			-- Nothing to query: keep one empty answer (the view memo
+			-- keys on its identity).
+			ps.status, ps.data, ps.error = "ready", { frames = {}, errors = {}, warnings = {} }, nil
+		end
+		return
+	end
+	local signature = env.encode(pq.queries) .. "\31" .. pt.from .. "\31" .. pt.to
+	if again or signature ~= ps.signature then
+		ps.signature = signature
+		ps.gen += 1
+		ps.status = "loading"
+		ps.asked = { range = pt.range, interval_ms = pq.interval_ms }
+		table.insert(effects, http(tag("q", s.gen, ps.gen, key), route, Queries.request(route, pq, qctx, env)))
+	end
+end
+
+-- Chained `-- Dashboard --` queries followed at most this deep.
+local MAX_SHARED_CHAIN = 8
+
+-- The panel state key of the source panel `id` of a `-- Dashboard --`
+-- query: its own when it holds its data this round, else "=<key>", queried
+-- for its consumers only (Grafana runs a source's queries even when the
+-- source is off screen or not drawn natively); nil without such a panel.
+local function provide(
+	s: State,
+	id: number,
+	env: Env,
+	force: boolean,
+	effects: { Effect },
+	held: { [string]: boolean },
+	depth: number
+): string?
+	local inst = sourceInstance(s, id)
+	if inst == nil then
+		return nil
+	end
+	if held[inst.key] then
+		return inst.key
+	end
+	local key = "=" .. inst.key
+	if held[key] then
+		return key
+	end
+	held[key] = true
+	local ps = panelState(s, key)
+	local dq = if Registry.queries(inst.panel.json, env) then Queries.dashboardQuery(inst.panel.json, env) else nil
+	ps.source_query = dq
+	if dq then
+		ps.source = if depth < MAX_SHARED_CHAIN
+			then provide(s, dq.panel_id, env, force, effects, held, depth + 1)
+			else nil
+		return key
+	end
+	ps.source, ps.source_data = nil, nil
+	local pt = M.panelTime(s, inst, env)
+	ps.time = pt
+	local again = force or ps.stale == true
+	ps.stale = nil
+	queryPanel(s, inst, key, ps, M.panelScope(s, inst), pt, env, again, effects)
+	return key
+end
+
+-- The panel instance key of a panel state key.
+local function instanceKey(key: string): string
+	return if string.sub(key, 1, 1) == "=" then string.sub(key, 2) else key
+end
+
+-- DashboardDatasource.query: the source's series (after its datasource's
+-- own processing), with its transformations when `withTransforms`.
+local function sharedData(source: any, data: Queries.PanelData, withTransforms: boolean, env: Env): Queries.PanelData
+	local p = source
+	if not withTransforms then
+		p = Tbl.copy(source)
+		p.transformations = nil
+	end
+	return { frames = Transform.prepare(p, data.frames, env), errors = data.errors, warnings = data.warnings }
+end
+
+-- Grafana's error when the source panel is gone.
+M.NO_SOURCE_PANEL = "Could not find source panel"
+
+-- A `-- Dashboard --` panel state from its source's (sources first). The
+-- frames are derived once per source answer, so the view memo holds.
+local function syncSource(s: State, ps: PanelState, env: Env, depth: number)
+	local dq = ps.source_query
+	if dq == nil then
+		return
+	end
+	local key = ps.source
+	if key == nil then
+		ps.status, ps.error, ps.source_data = "error", M.NO_SOURCE_PANEL, nil
+		return
+	end
+	local src = s.panels[key]
+	local inst = Repeat.find(s.sections, instanceKey(key))
+	if src == nil or inst == nil then
+		return
+	end
+	if src.source_query and depth < MAX_SHARED_CHAIN then
+		syncSource(s, src, env, depth + 1)
+	end
+	local data = src.data
+	if data ~= ps.source_data then
+		ps.source_data = data
+		ps.data = if data then sharedData(inst.panel.json, data, dq.with_transforms, env) else nil
+	end
+	ps.status, ps.error, ps.drawn = src.status, src.error, src.drawn
+end
+
+local function syncShared(s: State, env: Env)
+	for _, ps in s.panels do
+		syncSource(s, ps, env, 0)
+	end
+end
+
 -- Recomputes the visible panels and issues the queries and renders they
 -- need. `force` re-sends unchanged queries (refresh).
 local function advancePanels(s: State, env: Env, force: boolean, effects: { Effect })
@@ -672,42 +879,44 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 		s.focus = order[1]
 		s.cursor = nil
 	end
+	-- The expanded view shows the focused panel alone: the others are not
+	-- refreshed (no queries, renders or blobs) until they are shown again.
+	local behind = s.expanded and not s.solo and s.focus ~= nil
+	-- Panel states that hold their panel's data this round, and the
+	-- `-- Dashboard --` panels among them.
+	local held: { [string]: boolean } = {}
+	local consumers: { PanelState } = {}
 	for _, inst in visible do
 		local ps = panelState(s, inst.key)
+		if behind and inst.key ~= s.focus then
+			if force then
+				ps.stale = true
+			end
+			continue
+		end
 		local scope = M.panelScope(s, inst)
 		ps.decision = Ladder.decide(inst.panel, M.ladderContext(s, scope), env)
 		-- Every rung shows the time override info in its header.
 		local pt = M.panelTime(s, inst, env)
 		ps.time = pt
+		ps.source_query = nil
 		if ps.decision.mode == "native" then
 			ps.png = nil
 			ps.live_ms = Registry.liveMs(inst.panel.json, env)
-			advanceRequests(s, inst, ps, env, force, effects)
-			local pq, err = nil, nil
-			local qctx = queryContext(s, scope, env, pt.range)
-			if Registry.queries(inst.panel.json, env) then
-				pq, err = Queries.build(inst.panel.json, qctx, env)
+			local again = force or ps.stale == true
+			ps.stale = nil
+			advanceRequests(s, inst, ps, env, again, effects)
+			local dq = if Registry.queries(inst.panel.json, env)
+				then Queries.dashboardQuery(inst.panel.json, env)
+				else nil
+			ps.source_query = dq
+			if dq then
+				table.insert(consumers, ps)
+			else
+				ps.source, ps.source_data = nil, nil
+				queryPanel(s, inst, inst.key, ps, scope, pt, env, again, effects)
 			end
-			if pq == nil then
-				if err then
-					ps.status, ps.error = "error", err
-				elseif ps.status ~= "ready" or ps.data == nil or #(ps.data :: Queries.PanelData).frames > 0 then
-					-- Nothing to query: keep one empty answer (the view memo
-					-- keys on its identity).
-					ps.status, ps.data, ps.error = "ready", { frames = {}, errors = {}, warnings = {} }, nil
-				end
-				continue
-			end
-			local signature = env.encode(pq.queries) .. "\31" .. pt.from .. "\31" .. pt.to
-			if force or signature ~= ps.signature then
-				ps.signature = signature
-				ps.gen += 1
-				ps.status = "loading"
-				table.insert(
-					effects,
-					http(tag("q", s.gen, ps.gen, inst.key), route, Queries.request(route, pq, qctx, env))
-				)
-			end
+			held[inst.key] = true
 		elseif ps.decision.mode == "png" then
 			local spec = M.pngSpec(s, inst)
 			if spec == nil then
@@ -729,6 +938,11 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 			end
 		end
 	end
+	for _, ps in consumers do
+		local dq = ps.source_query :: Queries.DashboardQuery
+		ps.source = provide(s, dq.panel_id, env, force, effects, held, 0)
+	end
+	syncShared(s, env)
 	armLive(s, env, effects)
 end
 
@@ -909,12 +1123,30 @@ local function onVariable(s: State, name: string, response: any, env: Env, effec
 	advance(s, env, false, effects)
 end
 
-local function onQuery(s: State, key: string, response: any, env: Env)
+local function readAnswer(s: State, key: string, response: any, env: Env)
 	local ps = s.panels[key]
 	if ps == nil then
 		return
 	end
-	local inst = Repeat.find(s.sections, key)
+	-- The same query answered byte for byte as last time (Grafana aligns a
+	-- range to its step, so refreshes inside one step do): keep the parsed
+	-- data, whose identity keys the view memo, so nothing is redrawn.
+	local last = ps.answer
+	local body = if type(response.body) == "string" then response.body else nil
+	if
+		last
+		and body
+		and ps.data ~= nil
+		and last.sig == ps.signature
+		and last.status == response.status
+		and last.body == body
+	then
+		ps.status = last.panel_status
+		ps.drawn = ps.asked
+		s.updated_ms = env.now_ms
+		return
+	end
+	local inst = Repeat.find(s.sections, instanceKey(key))
 	if inst == nil then
 		return
 	end
@@ -939,7 +1171,16 @@ local function onQuery(s: State, key: string, response: any, env: Env)
 	if ps.status == "error" then
 		ps.error = table.concat(data.errors, "; ")
 	end
+	ps.drawn = ps.asked
+	ps.answer = if body and ps.signature
+		then { sig = ps.signature :: string, status = response.status, body = body, panel_status = ps.status }
+		else nil
 	s.updated_ms = env.now_ms
+end
+
+local function onQuery(s: State, key: string, response: any, env: Env)
+	readAnswer(s, key, response, env)
+	syncShared(s, env)
 end
 
 -- A module request's answer: tag x/<gen>/<req_gen>/<index>/<panel key>.
@@ -1636,7 +1877,7 @@ function M.focusedExemplars(s: State): { FrameProm.Exemplar }
 	local inst = if s.focus then Repeat.find(s.sections, s.focus :: string) else nil
 	local ps = if s.focus then s.panels[s.focus :: string] else nil
 	local data = if ps then ps.data else nil
-	local r = s.range
+	local r = M.drawRange(s, ps)
 	if inst == nil or inst.panel.type ~= "timeseries" or data == nil or data.exemplars == nil or r == nil then
 		return {}
 	end
@@ -2007,15 +2248,24 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			return s, effects
 		end
 		if msg.tag == tag("live", s.gen, s.live_gen) and s.live_ms then
-			-- Views redraw after every update; just keep ticking.
-			s.live_tick += 1
+			-- Views redraw after every update; just keep ticking (no redraw
+			-- while the tab is in the background).
+			if not Visibility.isHidden(env) then
+				s.live_tick += 1
+			end
 			local p = s.live_ms :: number
 			table.insert(effects, { kind = "timer", tag = msg.tag, ms = p - env.now_ms % p })
 			return s, effects
 		end
 		if msg.tag == tag("refresh", s.gen, s.timer_gen) and s.auto then
-			refresh(s, env, effects)
-			armRefresh(s, effects)
+			if Visibility.isHidden(env) then
+				-- Background tab: nothing is queried or drawn; look again
+				-- shortly and refresh as soon as the block is shown.
+				table.insert(effects, { kind = "timer", tag = msg.tag, ms = Visibility.POLL_MS })
+			else
+				refresh(s, env, effects)
+				armRefresh(s, effects)
+			end
 		end
 	elseif msg.kind == "event" then
 		event(s, msg.ev, env, effects)

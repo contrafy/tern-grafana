@@ -1,6 +1,6 @@
 --!strict
 -- Grafana 11/12 auto-migration of legacy angular panels, ported from v12.4.0
--- so those panels render through the native timeseries/stat renderers:
+-- so those panels render through the native timeseries/stat/table renderers:
 --
 --   public/app/features/dashboard/state/PanelModel.ts (autoMigrateAngular,
 --     getOptionsToRemember, clearPropertiesBeforePluginChange,
@@ -12,7 +12,9 @@
 --     (sharedSingleStatPanelChangedHandler, migrateFromAngularSinglestat,
 --     sharedSingleStatMigrationHandler);
 --   packages/grafana-data/src/utils/valueMappings.ts
---     (convertOldAngularValueMappings).
+--     (convertOldAngularValueMappings);
+--   public/app/plugins/panel/table/migrations.ts (tablePanelChangedHandler,
+--     then tableMigrationHandler's migrateHiddenFields).
 --
 -- Grafana iterates object keys in JSON order. Dashboards served by the API are
 -- marshalled from Go maps, so that order is alphabetical; Luau tables have no
@@ -30,6 +32,7 @@ M.LEGACY = {
 	graph = "timeseries",
 	singlestat = "stat",
 	["grafana-singlestat-panel"] = "stat",
+	["table-old"] = "table",
 } :: { [string]: string }
 
 -- PanelModel.ts mustKeepProps: everything else is legacy panel state that
@@ -761,6 +764,165 @@ local function singlestatToStat(env: Env, prev: { [any]: any }, fieldConfig: { [
 	return options
 end
 
+-- table/migrations.ts transformsMap, columnsMap and colorModeMap.
+local TABLE_TRANSFORMS: { [string]: string } = {
+	timeseries_to_rows = "seriesToRows",
+	timeseries_to_columns = "seriesToColumns",
+	timeseries_aggregations = "reduce",
+	table = "merge",
+}
+local TABLE_COLUMNS: { [string]: string } = {
+	avg = "mean",
+	min = "min",
+	max = "max",
+	total = "sum",
+	current = "lastNotNull",
+	count = "count",
+}
+local TABLE_COLOR_MODES: { [string]: string } = {
+	cell = "color-background",
+	row = "color-background",
+	value = "color-text",
+}
+
+-- JavaScript parseInt(s, 10); nil stands for NaN.
+local function parseInt(s: any): number?
+	if type(s) == "number" then
+		return if s == s then (if s < 0 then math.ceil(s) else math.floor(s)) else nil
+	elseif type(s) ~= "string" then
+		return nil
+	end
+	local digits = string.match(s, "^%s*([+-]?%d+)")
+	return if digits then tonumber(digits) else nil
+end
+
+-- generateThresholds: -Infinity first, numbers kept, strings parseInt'ed.
+local function tableThresholds(env: Env, thresholds: any, colors: any): { [string]: any }
+	local colorList = Json.list(env, colors)
+	local steps = newList(env)
+	table.insert(steps, { value = -math.huge, color = colorList[1] })
+	for i, t in Json.list(env, thresholds) do
+		table.insert(steps, { value = if type(t) == "number" then t else parseInt(t), color = colorList[i + 1] })
+	end
+	return { mode = "absolute", steps = steps }
+end
+
+-- migrateTransformations: the panel's own, then the old `transform`.
+local function tableOldTransformations(env: Env, own: any, angular: { [any]: any }): { any }
+	local out = newList(env)
+	for _, t in Json.list(env, own) do
+		table.insert(out, t)
+	end
+	local kind = angular.transform
+	local id = if type(kind) == "string" then TABLE_TRANSFORMS[kind] else nil
+	if id then
+		local options: { [string]: any } = { reducers = newList(env) }
+		if kind == "timeseries_aggregations" then
+			options.includeTimeField = false
+			for _, column in Json.list(env, angular.columns) do
+				local value = Json.str(env, Json.path(env, column, "value"))
+				table.insert(options.reducers, if value then TABLE_COLUMNS[value] or env.null else env.null)
+			end
+		end
+		table.insert(out, { id = id, options = options })
+	end
+	return out
+end
+
+-- `Json.list` of a value, or nil when it is not a non-empty list.
+local function nonEmpty(env: Env, v: any): { any }?
+	local l = Json.list(env, v)
+	return if #l > 0 then l else nil
+end
+
+-- migrateTableStyleToOverride, with migrateHiddenFields' custom.hidden ->
+-- custom.hideFrom.viz.
+local function tableStyleOverride(env: Env, style: { [any]: any }): { [string]: any }
+	local pattern = Json.str(env, style.pattern)
+	local regex = pattern ~= nil and string.match(pattern, "^/.*/$") ~= nil
+	local props = newList(env)
+	if truthy(env, style.alias) then
+		table.insert(props, prop("displayName", style.alias))
+	end
+	if truthy(env, style.unit) then
+		table.insert(props, prop("unit", style.unit))
+	end
+	if style.decimals ~= nil then
+		table.insert(props, prop("decimals", style.decimals))
+	end
+	if style.type == "date" then
+		-- A template string: an absent format reads "undefined".
+		table.insert(props, prop("unit", "time: " .. (Json.str(env, style.dateFormat) or "undefined")))
+	end
+	if style.type == "hidden" then
+		table.insert(props, prop("custom.hideFrom.viz", true))
+	end
+	if truthy(env, style.link) then
+		local links = newList(env)
+		table.insert(links, {
+			title = if present(env, style.linkTooltip) then style.linkTooltip else "",
+			url = if present(env, style.linkUrl) then style.linkUrl else "",
+			targetBlank = if present(env, style.linkTargetBlank) then style.linkTargetBlank else false,
+		})
+		table.insert(props, prop("links", links))
+	end
+	if truthy(env, style.colorMode) then
+		local mode = Json.str(env, style.colorMode)
+		table.insert(props, prop("custom.cellOptions", { type = if mode then TABLE_COLOR_MODES[mode] else nil }))
+	end
+	if truthy(env, style.align) then
+		table.insert(props, prop("custom.align", if style.align == "auto" then env.null else style.align))
+	end
+	if nonEmpty(env, style.thresholds) and nonEmpty(env, style.colors) then
+		table.insert(props, prop("thresholds", tableThresholds(env, style.thresholds, style.colors)))
+	end
+	return { matcher = { id = if regex then "byRegexp" else "byName", options = pattern }, properties = props }
+end
+
+-- migrateDefaults of the `/.*/` style.
+local function tableDefaults(env: Env, style: { [any]: any }?): { [string]: any }
+	if style == nil then
+		return { custom = {} }
+	end
+	local s = style :: { [any]: any }
+	local custom: { [string]: any } = {}
+	if present(env, s.align) then
+		custom.align = if s.align == "auto" then env.null else s.align
+	end
+	local defaults: { [string]: any } = omitNil(env, {
+		unit = s.unit,
+		decimals = s.decimals,
+		displayName = s.alias,
+		custom = custom,
+	})
+	if nonEmpty(env, s.thresholds) then
+		defaults.thresholds = tableThresholds(env, s.thresholds, s.colors)
+	end
+	if truthy(env, s.colorMode) then
+		local mode = Json.str(env, s.colorMode)
+		custom.cellOptions = { type = if mode then TABLE_COLOR_MODES[mode] else nil }
+	end
+	return defaults
+end
+
+-- tablePanelChangedHandler: field config from the angular `styles`.
+local function tableOldFieldConfig(env: Env, angular: { [any]: any }): { [string]: any }
+	local defaultStyle: { [any]: any }? = nil
+	local overrides = newList(env)
+	for _, raw in Json.list(env, angular.styles) do
+		local style = Json.tbl(env, raw)
+		if style == nil then
+			continue
+		end
+		if style.pattern == "/.*/" then
+			defaultStyle = defaultStyle or style
+		else
+			table.insert(overrides, tableStyleOverride(env, style))
+		end
+	end
+	return { defaults = tableDefaults(env, defaultStyle), overrides = overrides }
+end
+
 -- The panel JSON Grafana would render after auto-migrating a legacy type, or nil + reason
 -- when the type is not a legacy one / cannot be migrated mechanically.
 function M.migrate(panel: any, env: Env): (any?, string?)
@@ -826,6 +988,10 @@ function M.migrate(panel: any, env: Env): (any?, string?)
 		out.fieldConfig = newFieldConfig
 		out.options = options
 		out.alert = angular.alert
+	elseif from == "table-old" then
+		out.options = {}
+		out.transformations = tableOldTransformations(env, copy.transformations, angular)
+		out.fieldConfig = tableOldFieldConfig(env, angular)
 	else
 		out.options = singlestatToStat(env, angular, fieldConfig, copy.pluginVersion)
 		out.fieldConfig = fieldConfig

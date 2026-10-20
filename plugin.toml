@@ -1,8 +1,8 @@
 schema = 1
 id = "tern-grafana"
 name = "Tern Grafana"
-version = "0.3.0"
-description = "Native Grafana and Prometheus views: queries, dashboards, alerts and silences inside Tern."
+version = "0.4.0"
+description = "Native Grafana and Prometheus views: queries, dashboards, alerts, silences and on-call inside Tern."
 icon = "chart"
 host = "plugin/host.luau"
 window = "plugin/window.luau"
@@ -17,6 +17,7 @@ styles = [
 	"plugin/logs.css",
 	"plugin/annotations.css",
 	"plugin/trace.css",
+	"plugin/irm.css",
 ]
 
 [[blocks]]
@@ -78,6 +79,21 @@ icon = "flame"
 id = "impact"
 title = "Grafana Deploy Impact"
 icon = "chart"
+
+[[blocks]]
+id = "compat"
+title = "Grafana Compatibility"
+icon = "chart"
+
+[[blocks]]
+id = "oncall"
+title = "Grafana On-call"
+icon = "flame"
+
+[[blocks]]
+id = "incidents"
+title = "Grafana Incidents"
+icon = "flame"
 
 [[lenses]]
 id = "promtool-query"

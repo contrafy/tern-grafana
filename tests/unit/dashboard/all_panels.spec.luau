@@ -193,6 +193,71 @@ for _, version in S.VERSIONS do
 			-- The trace's root span heads the waterfall.
 			expect(string.find(text, '"t":"payments: "', 1, true) ~= nil).toBe(true)
 		end)
+
+		-- The stat panels as the dashboard block draws them (State + View, the
+		-- recorded answers): each value is one SVG line of BigValue's size for
+		-- the panel's Grafana box, its height within the card body under the
+		-- card's height cap. Grafana draws "No targets" about 70 px tall in
+		-- its 400x296 panel; a body-text size or a wrapped line is wrong.
+		it("sizes the stat values like Grafana within the card", function()
+			local h = start(version)
+			for tag in h.pending do
+				local id = string.match(tag, "^q/%d+/%d+/p(%d+)$")
+				if id == "5" or id == "6" then
+					State.update(h.s, {
+						kind = "http_done",
+						tag = tag,
+						response = S.response(S.grafana(version, "ds_query_all_panels_" .. id .. ".json")),
+					}, h.env)
+				end
+			end
+			local rendered, assets = View.view(h.s, h.env)
+			local view: any = rendered
+			local function stat(key: string): (any, number)
+				local card: any = nil
+				local function walk(n: any)
+					if card == nil and type(n) == "table" then
+						if n.p and n.p.key == key then
+							card = n
+							return
+						end
+						for _, c in n.c or {} do
+							walk(c)
+						end
+					end
+				end
+				walk(view.main)
+				assert(card, "card " .. key)
+				local image: any = nil
+				local function find(n: any)
+					if image == nil and type(n) == "table" then
+						if n.k == "image" then
+							image = n
+							return
+						end
+						for _, c in n.c or {} do
+							find(c)
+						end
+					end
+				end
+				find(card)
+				assert(image, "value image of " .. key)
+				local px = assert(tonumber(string.match(assets[image.p.asset].bytes, 'font%-size="(%d+)"')))
+				return image, px
+			end
+			local body = View.cardHeight(8, false)
+			local up, upPx = stat("p5")
+			local none, nonePx = stat("p6")
+			expect(up.p.alt).toBe("5")
+			expect(none.p.alt).toBe("No targets")
+			-- Width-bound in Grafana's 400 px box: 360 px over 10 characters of ~0.55 em.
+			expect(nonePx >= 50 and nonePx <= 70).toBe(true)
+			expect(upPx >= 100).toBe(true)
+			for _, image in { up, none } do
+				local lines = assert(tonumber(string.match(image.p.max.h, "^(%d+)lines$")))
+				expect(lines * View.LINE_PX <= body).toBe(true)
+			end
+		end)
 	end)
 end
 

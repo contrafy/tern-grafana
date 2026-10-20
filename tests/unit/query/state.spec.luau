@@ -5,6 +5,7 @@
 local History = require("../../../plugin/lib/query/history")
 local Scheme = require("../../../plugin/lib/links/scheme")
 local State = require("../../../plugin/lib/query/state")
+local Visibility = require("../../../plugin/lib/visibility")
 local S = require("./support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -364,6 +365,39 @@ describe("Query block keys", function()
 		local _, tickFx = State.update(s, { kind = "tick", tag = timer.tag }, env)
 		expect(S.find(tickFx, "http")).toBeNil()
 		expect(S.find(tickFx, "timer") ~= nil).toBe(true)
+	end)
+
+	-- Tern keeps every distinct chart blob: a refresh that brought the same
+	-- samples must keep the chart already drawn (docs/performance.md).
+	it("keeps the drawn chart when a refresh brings the same answer", function()
+		local s, env = ready()
+		local chart, ran = s.chart, s.ran
+		env.now_ms += 4000
+		press(s, env, "r")
+		done(s, env, "q:2", "prometheus/3.15.0/query_range_multi.json")
+		expect(s.status).toBe("ok")
+		expect(s.chart).toBe(chart)
+		-- Still described by the window it was drawn over.
+		expect({ s.ran.gen, s.ran.from_ms, s.ran.to_ms }).toEqual({ 2, ran.from_ms, ran.to_ms })
+		press(s, env, "r")
+		done(s, env, "q:3", "prometheus/2.53.5/query_range_multi.json")
+		expect(s.chart == chart).toBe(false)
+	end)
+
+	it("pauses auto-refresh while its tab is in the background", function()
+		local s, env = ready()
+		local shown = false
+		env.pane = 9
+		env.kv_get = function(k: string): any
+			return if k == Visibility.KEY then Visibility.record({ 9 }, if shown then { 9 } else {}) else nil
+		end
+		local timer = S.find(press(s, env, "a"), "timer")
+		local _, hidden = State.update(s, { kind = "tick", tag = timer.tag }, env)
+		expect(hidden).toEqual({ { kind = "timer", tag = timer.tag, ms = Visibility.POLL_MS } })
+		shown = true
+		local _, tickFx = State.update(s, { kind = "tick", tag = timer.tag }, env)
+		expect(S.find(tickFx, "http") ~= nil).toBe(true)
+		expect(S.find(tickFx, "timer").ms).toBe(30000)
 	end)
 end)
 

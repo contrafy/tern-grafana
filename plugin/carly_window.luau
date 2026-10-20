@@ -4,7 +4,8 @@
 -- lib/carly/context. Exports run on the window's UI thread under a 50 ms
 -- budget, so they only validate, start the fetches and return
 -- `call:wait`; the answer is built in the fetch callbacks. The query stack
--- loads on the first call, not with the window entry (50 ms load budget).
+-- loads on the first call and the context stack on the first request, not
+-- with the window entry (50 ms load budget).
 --
 -- Requests go through transport_host in this VM, so credentials resolve
 -- exactly as in the host half (keychain item, token_env with the login-shell
@@ -13,9 +14,7 @@
 -- links only. A credential failure reaches Carly as the same one-line
 -- message plus fix a block shows; raised errors lose their traceback.
 
-local CarlyContext = require("./lib/carly/context")
 local Specs = require("./lib/carly/specs")
-local Summary = require("./lib/alerts/summary")
 
 local M = {}
 
@@ -96,6 +95,8 @@ function M.register(t: any)
 		return answer("logs", { expr, range, context }, call)
 	end)
 	t.carly.context(function(_cx: any): string?
+		local CarlyContext = require("./lib/carly/context")
+		local Summary = require("./lib/alerts/summary")
 		local ok, raw = pcall(t.kv.get, Summary.KEY)
 		if not ok then
 			return nil

@@ -51,6 +51,7 @@ function M.make(cx: BlockCx?): Env.Env
 		local_offset_min = M.localOffsetMin(),
 		cols = if cx then cx.cols else nil,
 		rows = if cx then cx.rows else nil,
+		pane = if cx then cx.pane else nil,
 		decode = tern.json.decode,
 		encode = tern.json.encode,
 		null = tern.json.null,

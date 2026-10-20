@@ -86,7 +86,7 @@ function M.view(s: State, env: Env.Env): any
 	table.insert(children, M.prompt(s.prompt))
 	local buttons: { Node } = {
 		button("bsend", if s.sent_ms then "Send again" else "Send to agent (enter)", "send", true),
-		button("bcopy", "Copy prompt (y)", "copy"),
+		button("bcopy", "Copy prompt (y)", "copy-prompt"),
 	}
 	if fetches then
 		table.insert(buttons, button("brefresh", "Refresh values (r)", "refresh"))

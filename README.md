@@ -18,6 +18,8 @@ browser pane.
   firing counts in the status line.
 - **Silence an alert** prefilled from its labels, with a preview of what it
   covers. Nothing is written until you confirm.
+- **Handle on-call and incidents** from Grafana IRM: acknowledge or resolve
+  alert groups, see who is on call, follow incidents.
 - **Tail Loki logs** with level colors, volume bars and one-click label filters.
 - **Check a Prometheus server**: scrape targets, cardinality, build and flags.
 - `promtool`, `amtool`, `logcli` and `curl` output renders natively.
@@ -73,8 +75,10 @@ first rung of a ladder that works:
    bar, histogram, trend, XY, candlestick, heatmap, state timeline, status
    history, flame graph, traces, node graph, geomap, canvas, alert list,
    annotation list, dashboard list, news) plus `grafana-clock-panel`, with the
-   panel's `noValue`, time overrides, description and links honored
-   ([details and limits](docs/dashboards.md#native-panels));
+   panel's `noValue`, time overrides, description, links, transformations,
+   overrides and multiple y axes honored; panels on SQL, Elasticsearch and
+   other backend datasources, server-side expressions and `-- Dashboard --`
+   reuse run natively too ([details and limits](docs/dashboards.md#native-panels));
 2. a PNG from Grafana's image renderer, when the server has one;
 3. the reason, and `o` to open the panel in a Tern browser pane.
 
@@ -112,6 +116,18 @@ tern-grafana://dashboard?context=lab&uid=tern-variables&from=now-6h
 
 Details: [Dashboards](docs/dashboards.md).
 
+### Compatibility report
+
+**Grafana: Compatibility** scans every dashboard a context's user can see and
+shows, per panel, which rung it takes and why, with counts grouped by reason
+across the whole stack. `/` filters, `enter` opens a dashboard or a panel
+natively, `m` copies the report as Markdown, `r` rescans. Use it to see what
+still falls back on your Grafana before you rely on a dashboard in Tern.
+
+![Compatibility report on the dev stack](docs/screenshots/compat-report.png)
+
+Details: [Compatibility report](docs/compat.md).
+
 ## Alerts and silences
 
 **Grafana: Alerts** opens the inbox: firing, pending and silenced alerts from
@@ -144,6 +160,26 @@ writes it. Expiring a silence is confirmed the same way.
 | `v` `c` `C` `r` | rules view, next and previous context, refresh |
 
 Details: [Alerts](docs/alerts.md).
+
+## On-call and incidents (Grafana IRM)
+
+**Grafana: On-call** lists a context's open OnCall alert groups (state,
+integration, age, alert count, detail with the latest alerts) and every
+schedule with who is on call now and next. **Grafana: Incidents** lists open
+IRM incidents with severity, status and how long they have been open, and an
+incident's detail with roles and timeline. Both read IRM through the context's
+Grafana endpoint and token; the OnCall host is discovered from the IRM app.
+
+Acknowledge, unacknowledge, resolve, unresolve and silence (with a duration),
+and declaring an incident, changing its status or severity or adding a note,
+are staged first: the confirmation panel says what changes, that incident hooks
+may notify people, and that IRM records the action under the service account.
+Only `y` or **Confirm** sends it. The status line shows `IRM: 2 alert groups,
+1 incident` while something is open. Set `irm.user` to your OnCall email and
+the block marks you in each schedule and the status line says
+`IRM: you are on call until 22:00`.
+
+Details: [Grafana IRM](docs/irm.md).
 
 ## Logs
 
@@ -477,13 +513,22 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | Variables with picker; time range, auto-refresh | done |
 | Native rendering of every core panel type and `grafana-clock-panel` | done |
 | Panel `noValue`, time overrides, descriptions, links, transparent | done |
+| Grafana transformations, field overrides, multiple y axes, log scales | done |
+| Backend datasources (SQL, Elasticsearch, ...), expressions, `-- Dashboard --` | done |
 | Grafana image renderer PNG, then browser pane, per panel | done |
 | Pin a panel as its own block | done |
+| Compatibility report across every dashboard | done |
+| Auto-refresh pauses in background tabs; identical data is not redrawn | done |
 | **Alerts and silences** | |
 | Inbox: Grafana unified alerting, Alertmanager v2, Prometheus | done |
 | Status-line firing counts; opt-in toasts | done |
 | Alerting and recording rules with health and last error | done |
 | Create silence with preview and confirm; list, expire | done |
+| **On-call and incidents (Grafana IRM)** | |
+| OnCall alert groups and schedules; who is on call, including you | done |
+| Acknowledge, resolve, silence alert groups with confirmation | done |
+| Incidents with timeline; declare, status, severity, note with confirmation | done |
+| Status-line IRM segment | done |
 | **Logs and traces** | |
 | Loki logs: LogQL suggestions, level colors, volume bars, tail | done |
 | Label, metadata and parsed-field chips that filter the query | done |

@@ -11,8 +11,8 @@
 -- - fieldConfig unit, decimals, min, max, thresholdsStyle, axis placement,
 --   label, soft bounds and grid; the x axis uses the x field's unit and
 --   decimals over the data's exact range; legend with calcs.
--- Per-series stacking and per-series units are unsupported, as for the
--- time series panel (lib/panels/timeseries unsupported).
+-- Per-series stacking and per-series units are unsupported: svg_xy draws
+-- one stack on one y axis (lib/panels/timeseries singleAxisUnsupported).
 
 local Assets = require("../render/assets")
 local Charts = require("./charts")
@@ -40,7 +40,7 @@ M.WIDTH = 960
 M.HEIGHT = 300
 
 function M.supports(panel: any, env: Env): (boolean, string?)
-	local why = Timeseries.unsupported(panel, env)
+	local why = Timeseries.singleAxisUnsupported(panel, env)
 	if why then
 		return false, why
 	end

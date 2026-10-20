@@ -282,6 +282,17 @@ local function validate(v: Variable)
 		v.texts = Tbl.copy(v.values)
 		return
 	end
+	-- A single value no option holds keeps the option whose text it showed
+	-- (scenes MultiValueVariable findOptionMatchingCurrent: value, then text).
+	local savedText = v.texts[1]
+	if not v.multi and savedText ~= nil then
+		for _, o in v.options do
+			if o.text == savedText then
+				v.values, v.texts = { o.value }, { o.text }
+				return
+			end
+		end
+	end
 	if v.include_all then
 		v.values, v.texts = { M.ALL }, { Interpolate.ALL_TEXT }
 	elseif v.options[1] then
@@ -566,7 +577,10 @@ function M.request(fetch: Fetch, route: Route, range: Range): Request
 	return Metrics.instantRequest(route, { expr = fetch.expr, time_ms = range.to_ms })
 end
 
-local function number(v: any): string
+-- A sample as Prometheus writes it (Go strconv.FormatFloat(v, 'f', -1, 64):
+-- the shortest decimal that reads back as v, never an exponent), the text
+-- Grafana copies into a query_result() row.
+local function sampleText(v: any): string
 	if type(v) ~= "number" then
 		return tostring(v)
 	elseif v ~= v then
@@ -575,18 +589,58 @@ local function number(v: any): string
 		return "+Inf"
 	elseif v == -math.huge then
 		return "-Inf"
-	elseif v == math.floor(v) and math.abs(v) < 1e15 then
-		return string.format("%d", v)
+	elseif v == 0 then
+		return "0"
 	end
-	return string.format("%.17g", v)
+	local e = ""
+	for p = 0, 16 do
+		e = string.format("%." .. p .. "e", v)
+		if tonumber(e) == v then
+			break
+		end
+	end
+	local sign, lead, frac, exp = string.match(e, "^(%-?)(%d)%.?(%d*)e([%+%-]%d+)$")
+	if sign == nil or lead == nil or frac == nil or exp == nil then
+		return e
+	end
+	local digits = string.gsub(lead .. frac, "0+$", "")
+	local x = tonumber(exp) :: number
+	local n = #digits
+	local text: string
+	if x >= n - 1 then
+		text = digits .. string.rep("0", x - (n - 1))
+	elseif x >= 0 then
+		text = string.sub(digits, 1, x + 1) .. "." .. string.sub(digits, x + 2)
+	else
+		text = "0." .. string.rep("0", -x - 1) .. digits
+	end
+	return sign .. text
 end
 
--- query_result rows as Grafana's Prometheus datasource writes them:
--- `metric{a="1",b="2"} value timestamp_ms` (labels sorted, no spaces).
-function M.queryResultValues(frames: { Frame.Frame }): { string }
+-- query_result() options as Grafana's Prometheus datasource writes them
+-- (packages/grafana-prometheus/src/metric_find_query.ts queryResultQuery,
+-- raw.githubusercontent.com/grafana/grafana/v12.4.0/...): a scalar or a
+-- string result is its value alone; a vector row is `metric{a="1",b="2"}
+-- value timestamp_ms` (labels sorted, no spaces); any other result type is
+-- an error.
+function M.queryResultValues(frames: { Frame.Frame }): ({ string }?, string?)
 	local out: { string } = {}
 	for _, frame in frames do
+		local custom = if frame.meta then frame.meta.custom else nil
+		local resultType = if custom then custom.resultType else nil
 		local timeField = Frame.timeField(frame)
+		if resultType == "scalar" or resultType == "string" then
+			for _, field in frame.fields do
+				if field ~= timeField then
+					local value = field.values[#field.values]
+					table.insert(out, if Frame.isNull(value) then "" else sampleText(value))
+					break
+				end
+			end
+			continue
+		elseif resultType ~= nil and resultType ~= "vector" then
+			return nil, string.format("Unknown/Unhandled result type: [%s]", tostring(resultType))
+		end
 		for _, field in Frame.numberFields(frame) do
 			local n = #field.values
 			local value = field.values[n]
@@ -597,14 +651,14 @@ function M.queryResultValues(frames: { Frame.Frame }): { string }
 				table.insert(parts, k .. '="' .. labels[k] .. '"')
 			end
 			local text = (labels.__name__ or "") .. "{" .. table.concat(parts, ",") .. "}"
-			text ..= " " .. number(if Frame.isNull(value) then 0 / 0 else value)
+			text ..= " " .. sampleText(if Frame.isNull(value) then 0 / 0 else value)
 			if type(ts) == "number" then
 				text ..= " " .. string.format("%d", ts)
 			end
 			table.insert(out, text)
 		end
 	end
-	return out
+	return out, nil
 end
 
 -- The raw values a fetch answered, before regex and sort.
@@ -614,7 +668,7 @@ function M.parseFetch(fetch: Fetch, route: Route, response: Response, env: Env):
 		if not r.ok then
 			return nil, (r :: any).error.message
 		end
-		return M.queryResultValues((r :: any).frames), nil
+		return M.queryResultValues((r :: any).frames)
 	end
 	local r = Metrics.parseList(route, response, env)
 	if not r.ok then
@@ -814,6 +868,7 @@ function M.datasourceOptions(
 			name: string,
 			is_default: boolean,
 			manage_alerts: boolean?,
+			backend: boolean?,
 		}
 	},
 	scope: Interpolate.Scope

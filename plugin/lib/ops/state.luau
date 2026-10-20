@@ -688,7 +688,7 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 		setLimit(s, if value == "up" then 1 else -1, effects)
 	elseif act == "rules" then
 		openRules(s, effects)
-	elseif act == "copy" then
+	elseif act == "copy-config" then
 		copyConfig(s, effects)
 	end
 end

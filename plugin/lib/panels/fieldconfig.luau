@@ -4,7 +4,8 @@
 -- fieldOverrides.ts applyFieldOverrides), field display names
 -- (field/fieldState.ts calculateFieldDisplayName), override matchers
 -- (transformations/matchers/nameMatcher.ts, fieldTypeMatcher.ts,
--- refIdMatcher.ts) and the display processor that turns one value into
+-- refIdMatcher.ts, fieldValueMatcher.ts with compareValues.ts) and the
+-- display processor that turns one value into
 -- text and a color (field/displayProcessor.ts, field/scale.ts,
 -- field/fieldColor.ts).
 --
@@ -15,6 +16,7 @@
 local Env = require("../env")
 local Format = require("../units/format")
 local Frame = require("../frame/types")
+local Interpolate = require("../dashboard/interpolate")
 local Json = require("./json")
 local Mappings = require("./mappings")
 local Range = require("../time/range")
@@ -200,8 +202,9 @@ end
 
 -- Display names ---------------------------------------------------------------
 
--- Grafana formatLabels: every label, sorted, `{a="1", b="2"}`.
-local function formatLabels(labels: { [string]: string }): string
+-- Grafana formatLabels (utils/labels.ts): every label, sorted,
+-- `{a="1", b="2"}`; without the braces for `${__field.labels}`.
+local function formatLabels(labels: { [string]: string }, withoutBraces: boolean?): string
 	local keys: { string } = {}
 	for k in labels do
 		table.insert(keys, k)
@@ -214,7 +217,8 @@ local function formatLabels(labels: { [string]: string }): string
 	for i, k in keys do
 		parts[i] = string.format('%s="%s"', k, labels[k])
 	end
-	return "{" .. table.concat(parts, ", ") .. "}"
+	local text = table.concat(parts, ", ")
+	return if withoutBraces then text else "{" .. text .. "}"
 end
 
 -- getSingleLabelName: the label key when every labeled field across the
@@ -235,6 +239,30 @@ local function singleLabelName(frames: { Frame }): string?
 		end
 	end
 	return single
+end
+
+-- getUniqueFieldName (field/fieldState.ts): a name other fields of the
+-- frame share gets " <n>", n counting the duplicates up to this field.
+local function uniqueName(field: Field, frame: Frame?): string
+	if frame == nil then
+		return field.name
+	end
+	local dupes, foundSelf = 0, false
+	for _, other in frame.fields do
+		if other == field then
+			foundSelf = true
+			if dupes > 0 then
+				dupes += 1
+				break
+			end
+		elseif other.name == field.name then
+			dupes += 1
+			if foundSelf then
+				break
+			end
+		end
+	end
+	return if dupes > 0 then field.name .. " " .. dupes else field.name
 end
 
 -- calculateFieldDisplayName. The frame converters store Grafana's
@@ -283,12 +311,146 @@ function M.displayName(field: Field, frame: Frame?, frames: { Frame }?): string
 			table.insert(parts, frame.name)
 		end
 	end
-	if #parts > 0 then
-		return table.concat(parts, " ")
-	elseif field.name ~= "" then
-		return field.name
+	local name = if #parts > 0 then table.concat(parts, " ") elseif field.name ~= "" then field.name else "Value"
+	-- "Ensure unique field name": a joined table's two Time columns read
+	-- "Time 1" and "Time 2", the names organize/rename/sortBy refer to.
+	if name == field.name then
+		return uniqueName(field, frame)
 	end
-	return "Value"
+	return name
+end
+
+-- Field macros ----------------------------------------------------------------
+
+-- getFrameDisplayName (field/fieldState.ts) of the frame at 0-based `index`:
+-- its name, else its one value field's display name, else "Series (refId)",
+-- else "Series (index)".
+local function frameDisplayName(frame: Frame, index: number): string
+	if frame.name and frame.name ~= "" then
+		return frame.name
+	end
+	local names: { string } = {}
+	for _, f in frame.fields do
+		if f.type ~= "time" then
+			if #names > 1 then
+				break
+			end
+			table.insert(names, M.displayName(f, frame))
+		end
+	end
+	if #names == 1 then
+		return names[1]
+	end
+	if frame.refId and frame.refId ~= "" then
+		return "Series (" .. frame.refId .. ")"
+	end
+	return "Series (" .. tostring(index) .. ")"
+end
+
+-- The data macros a display name can use (public/app/features/templating/
+-- dataMacros.ts fieldMacro and seriesNameMacro over templateProxies.ts
+-- getTemplateProxyForField): `${__field.name}`, `${__field.displayName}`,
+-- `${__field.labels}` (`a="1", b="2"`), `${__field.labels.<key>}`,
+-- `${__field.labels.__values}` (the sorted values) and `${__series.name}`.
+-- Another `__field` path reads "" (lodash property finds nothing); a
+-- reference without a path stays as written.
+local function fieldMacro(field: Field, frame: Frame, frameIndex: number, frames: { Frame })
+	return function(name: string, path: string?): Interpolate.Var?
+		if path == nil or path == "" then
+			return nil
+		elseif name == "__series" then
+			return if path == "name" then Interpolate.value(frameDisplayName(frame, frameIndex - 1)) else nil
+		elseif name ~= "__field" then
+			return nil
+		end
+		local labels = field.labels
+		local text = ""
+		if path == "name" then
+			text = field.name
+		elseif path == "displayName" then
+			text = M.displayName(field, frame, frames)
+		elseif path == "labels" or path == "formattedLabels" then
+			text = if labels then formatLabels(labels, true) else ""
+		else
+			local key = string.match(path, "^labels%.(.+)$") or string.match(path, "^formattedLabels%.(.+)$")
+			if key == "__values" and labels then
+				local values: { string } = {}
+				for _, v in labels do
+					table.insert(values, v)
+				end
+				table.sort(values)
+				text = table.concat(values, ", ")
+			elseif key and labels then
+				text = labels[key] or ""
+			end
+		end
+		return Interpolate.value(text)
+	end
+end
+
+local NO_SCOPE: Interpolate.Scope = table.freeze({})
+
+-- A displayName with the field's macros replaced (stringOverrideProcessor
+-- with the field's scopedVars); nil when it reads "", which Grafana treats
+-- as no displayName.
+local function scopedName(text: string, field: Field, frame: Frame, frameIndex: number, frames: { Frame }): string?
+	if not string.find(text, "${__", 1, true) then
+		return text
+	end
+	local out = Interpolate.replace(text, NO_SCOPE, { macro = fieldMacro(field, frame, frameIndex, frames) })
+	return if out ~= "" then out else nil
+end
+
+-- The panel with its displayName strings (fieldConfig defaults and
+-- overrides; the one standard field option registered with
+-- expandTemplateVars, public/app/core/components/OptionsUI/registry.tsx)
+-- passed through `replace`, the dashboard variables. Field macros are left
+-- for resolve, which knows each field. The panel itself when none changes.
+function M.withVariables(panel: any, env: Env, replace: (string) -> string): any
+	local fc = Json.tbl(env, Json.path(env, panel, "fieldConfig"))
+	if fc == nil then
+		return panel
+	end
+	local changed = false
+	local function sub(t: { [any]: any }, key: string): { [any]: any }
+		local v = t[key]
+		local s = if type(v) == "string" then replace(v) else v
+		if s == v then
+			return t
+		end
+		changed = true
+		local c = Tbl.copy(t)
+		c[key] = s
+		return c
+	end
+	local newFc = Tbl.copy(fc)
+	local defaults = Json.tbl(env, fc.defaults)
+	if defaults then
+		newFc.defaults = sub(defaults, "displayName")
+	end
+	local overrides: { any } = {}
+	for i, o in Json.list(env, fc.overrides) do
+		local ot = Json.tbl(env, o)
+		if ot == nil then
+			overrides[i] = o
+			continue
+		end
+		local props: { any } = {}
+		for j, p in Json.list(env, ot.properties) do
+			local pt = Json.tbl(env, p)
+			props[j] = if pt and pt.id == "displayName" then sub(pt, "value") else p
+		end
+		local no = Tbl.copy(ot)
+		no.properties = props
+		overrides[i] = no
+	end
+	if not changed then
+		return panel
+	end
+	newFc.overrides = overrides
+	local out = Tbl.copy(panel)
+	out.fieldConfig = newFc
+	return out
 end
 
 -- Matchers --------------------------------------------------------------------
@@ -302,7 +464,74 @@ local MATCHERS: { [string]: boolean } = {
 	byType = true,
 	byNames = true,
 	byRegexpOrNames = true,
+	byValue = true,
 }
+
+-- JS `${v}` for the values a reducer or a matcher option holds.
+local function jsString(v: any): string
+	if v == nil then
+		return "null"
+	elseif type(v) == "number" then
+		if v ~= v then
+			return "NaN"
+		elseif v == math.huge then
+			return "Infinity"
+		elseif v == -math.huge then
+			return "-Infinity"
+		elseif v == math.floor(v) and math.abs(v) < 1e21 then
+			return string.format("%d", v)
+		end
+	end
+	return tostring(v)
+end
+
+-- JS relational comparison: strings compare as strings, anything else as
+-- numbers (a non-numeric string or "null" is NaN, so never ordered).
+local function jsNumber(v: any): number
+	if type(v) == "number" then
+		return v
+	elseif type(v) == "boolean" then
+		return if v then 1 else 0
+	elseif type(v) == "string" then
+		local s = string.match(v, "^%s*(.-)%s*$") or ""
+		if s == "" then
+			return 0
+		end
+		return tonumber(s) or 0 / 0
+	end
+	return 0 / 0
+end
+
+-- compareValues (transformations/matchers/compareValues.ts): a missing side
+-- reads as "null", and gte/lte against it become equality.
+function M.compareValues(left: any, op: string, right: any): boolean
+	if left == nil or right == nil then
+		left = if left == nil then "null" else left
+		right = if right == nil then "null" else right
+		if op == "gte" or op == "lte" then
+			op = "eq"
+		end
+	end
+	if op == "eq" then
+		return jsString(left) == jsString(right)
+	elseif op == "neq" then
+		return jsString(left) ~= jsString(right)
+	end
+	local a: any, b: any = left, right
+	if type(a) ~= "string" or type(b) ~= "string" then
+		a, b = jsNumber(a), jsNumber(b)
+	end
+	if op == "gt" then
+		return a > b
+	elseif op == "gte" then
+		return a >= b
+	elseif op == "lt" then
+		return a < b
+	elseif op == "lte" then
+		return a <= b
+	end
+	return false
+end
 
 local function regexMatcher(pattern: string?): Matcher
 	local re = if pattern and pattern ~= "" then Regex.parseJs(pattern) else nil
@@ -386,23 +615,49 @@ local function matcherFor(env: Env, raw: any): Matcher?
 		return function(field: Field, frame: Frame, frames: { Frame }): boolean
 			return byNames(field, frame, frames) or byRegex(field, frame, frames)
 		end
+	elseif id == "byValue" then
+		-- fieldValueMatcher.ts: the field reduced by `reducer`, compared to
+		-- `value` with `op` (eq when unset); allIsNull/allIsZero match on
+		-- their own truth. Fields of every type are reduced, as in Grafana.
+		local o = Json.obj(env, options)
+		local reducer = Json.str(env, o.reducer)
+		if reducer == nil or reducer == "" then
+			return function(): boolean
+				return false
+			end
+		end
+		local r = reducer :: string
+		local op = Json.str(env, o.op) or "eq"
+		local value: any = if o.value == env.null then nil else o.value
+		local boolean = r == "allIsNull" or r == "allIsZero"
+		return function(field: Field): boolean
+			local left = Reduce.reduce(field.values, r, field.type)
+			if boolean then
+				return left == true
+			end
+			return M.compareValues(left, op, value)
+		end
 	end
 	return nil
 end
 
 M.matcherFor = matcherFor
 
+-- Panel types whose renderer honors custom.transform (negative-Y, constant)
+-- and log/symlog scaleDistribution (lib/render/svg_timeseries).
+local GRAPH_NATIVE: { [string]: boolean } = { timeseries = true }
+
 -- Properties that change what a panel means and that the native renderers
 -- cannot honor; any of them sends the panel down the ladder.
-local function unsupportedProperty(env: Env, id: string, value: any): string?
+local function unsupportedProperty(env: Env, id: string, value: any, graph: boolean): string?
 	if id == "custom.transform" then
 		local s = Json.str(env, value)
-		if s == "negative-Y" or s == "constant" then
+		if not graph and (s == "negative-Y" or s == "constant") then
 			return "custom.transform " .. s
 		end
 	elseif id == "custom.scaleDistribution" then
 		local kind = Json.str(env, Json.path(env, value, "type"))
-		if kind and kind ~= "linear" then
+		if kind and kind ~= "linear" and not (graph and (kind == "log" or kind == "symlog")) then
 			return "custom.scaleDistribution " .. kind
 		end
 	end
@@ -411,10 +666,11 @@ end
 
 -- Why the panel's field config cannot be rendered natively, or nil.
 function M.unsupported(panel: any, env: Env): string?
+	local graph = GRAPH_NATIVE[Json.str(env, Json.path(env, panel, "type")) or ""] == true
 	local defaults = Json.obj(env, Json.path(env, panel, "fieldConfig", "defaults"))
 	local custom = Json.obj(env, defaults.custom)
 	for _, key in { "transform", "scaleDistribution" } do
-		local why = unsupportedProperty(env, "custom." .. key, custom[key])
+		local why = unsupportedProperty(env, "custom." .. key, custom[key], graph)
 		if why then
 			return "field config " .. why .. " is not supported"
 		end
@@ -425,9 +681,15 @@ function M.unsupported(panel: any, env: Env): string?
 		if id == nil or not MATCHERS[id] then
 			return string.format("override matcher %s is not supported", tostring(id))
 		end
+		if id == "byValue" then
+			local reducer = Json.str(env, Json.path(env, matcher, "options", "reducer"))
+			if reducer and reducer ~= "" and not Reduce.supports(reducer) then
+				return string.format("override matcher byValue reducer %s is not supported", reducer)
+			end
+		end
 		for _, p in Json.list(env, Json.path(env, o, "properties")) do
 			local pid = Json.str(env, Json.path(env, p, "id"))
-			local why = if pid then unsupportedProperty(env, pid, Json.path(env, p, "value")) else nil
+			local why = if pid then unsupportedProperty(env, pid, Json.path(env, p, "value"), graph) else nil
 			if why then
 				return "override " .. why .. " is not supported"
 			end
@@ -512,6 +774,15 @@ function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Ite
 						end
 					end
 				end
+				if ds.thresholds ~= nil then
+					applyProperty(env, cfg, "thresholds", ds.thresholds)
+				end
+				if ds.mappings ~= nil then
+					applyProperty(env, cfg, "mappings", ds.mappings)
+				end
+				if ds.color ~= nil then
+					applyProperty(env, cfg, "color", ds.color)
+				end
 			end
 			for _, o in overrides do
 				if o.match(field, frame, frames) then
@@ -520,7 +791,8 @@ function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Ite
 					end
 				end
 			end
-			local name = cfg.display_name or M.displayName(field, frame, frames)
+			local scoped = if cfg.display_name then scopedName(cfg.display_name, field, frame, fi, frames) else nil
+			local name: string = scoped or M.displayName(field, frame, frames)
 			local lo, hi = cfg.min, cfg.max
 			if field.type == "number" and (lo == nil or hi == nil) then
 				if cfg.field_min_max then

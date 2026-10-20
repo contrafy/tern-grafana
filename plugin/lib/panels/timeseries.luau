@@ -2,13 +2,21 @@
 -- The time series panel (public/app/plugins/panel/timeseries: panelcfg.cue,
 -- packages/grafana-schema common GraphFieldConfig) mapped onto
 -- lib/render/svg_timeseries:
--- - fieldConfig.defaults unit, decimals, min, max, thresholds;
+-- - fieldConfig unit, decimals, min, max, thresholds, per series: series
+--   whose unit, bounds, soft bounds (custom.axisSoftMin/Max), placement
+--   (custom.axisPlacement), label (custom.axisLabel) or scale distribution
+--   (custom.scaleDistribution linear|log|symlog) differ get their own y
+--   axis, as Grafana's buildScaleKey groups them (a per-series unit
+--   override draws a second axis on the right); custom.axisCenteredZero,
+--   custom.axisGridShow;
 -- - custom.drawStyle line|bars|points, fillOpacity, spanNulls (true
 --   connects; false or a gap threshold keeps gaps), stacking.mode
---   none|normal|percent, thresholdsStyle.mode (off, line, dashed, area,
---   line+area, dashed+area; "series" colors by value, drawn as off);
+--   none|normal|percent and stacking.group per series (stacks per scale),
+--   custom.transform negative-Y|constant, thresholdsStyle.mode (off, line,
+--   dashed, area, line+area, dashed+area; "series" colors by value, drawn
+--   as off);
 -- - overrides (lib/panels/fieldconfig) for display names, colors and
---   hidden series (custom.hideFrom.viz);
+--   hidden series (custom.hideFrom.viz, .legend, .tooltip);
 -- - series colors: palette-classic keeps the chart palette; fixed and
 --   by-value modes (thresholds, continuous) paint the whole series in the
 --   tone of its `seriesBy` value (getFieldSeriesColor);
@@ -16,10 +24,9 @@
 --   lib/panels/reduce reducer, formatted with the series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
 --   read out under the legend.
--- Per-series stacking and per-series units (a second y axis) are reported
--- as unsupported: one SVG has one stack and one axis.
 
 local Assets = require("../render/assets")
+local Axis = require("../render/axis")
 local ChartView = require("../render/chart_view")
 local Common = require("./common")
 local Env = require("../env")
@@ -50,7 +57,54 @@ local function legendCalcs(panel: any, env: Env): { string }
 	return out
 end
 
+local function legendWhy(panel: any, env: Env): string?
+	for _, c in legendCalcs(panel, env) do
+		if not Reduce.supports(c) then
+			return string.format("legend reducer %s is not supported", c)
+		end
+	end
+	return nil
+end
+
+-- gradientMode hue (a hue shift along the fill) and scheme (line and fill
+-- colored by value along the color scheme; drawn plainly with a fixed
+-- color, UPlotSeriesBuilder getLineColor/getFill) need colors the
+-- class-only SVG cannot express.
+local function gradientWhy(mode: string?, fixedColor: boolean): string?
+	if mode == "hue" then
+		return "custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
+	elseif mode == "scheme" and not fixedColor then
+		return "custom.gradientMode scheme (series colored by value) is not drawn natively"
+	end
+	return nil
+end
+
 function M.unsupported(panel: any, env: Env): string?
+	local defaults = Json.obj(env, Json.path(env, panel, "fieldConfig", "defaults"))
+	local fixed = Json.str(env, Json.path(env, defaults.color, "mode")) == "fixed"
+	local why = gradientWhy(Json.str(env, Json.path(env, defaults.custom, "gradientMode")), fixed)
+	if why then
+		return why
+	end
+	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
+		for _, p in Json.list(env, Json.path(env, o, "properties")) do
+			local id = Json.str(env, Json.path(env, p, "id"))
+			if id == "custom.gradientMode" then
+				why = gradientWhy(Json.str(env, Json.path(env, p, "value")), fixed)
+			elseif id == "custom" then
+				why = gradientWhy(Json.str(env, Json.path(env, p, "value", "gradientMode")), fixed)
+			end
+			if why then
+				return "override " .. why
+			end
+		end
+	end
+	return legendWhy(panel, env)
+end
+
+-- For panels drawn on one y scale (lib/render/svg_xy: trend): per-series
+-- stacking and per-series units have no second stack or axis there.
+function M.singleAxisUnsupported(panel: any, env: Env): string?
 	local defaultsUnit = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "unit"))
 	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
 		for _, p in Json.list(env, Json.path(env, o, "properties")) do
@@ -63,12 +117,7 @@ function M.unsupported(panel: any, env: Env): string?
 			end
 		end
 	end
-	for _, c in legendCalcs(panel, env) do
-		if not Reduce.supports(c) then
-			return string.format("legend reducer %s is not supported", c)
-		end
-	end
-	return nil
+	return legendWhy(panel, env)
 end
 
 local THRESHOLD_STYLES: { [string]: SvgTimeseries.ThresholdStyle } = {
@@ -78,23 +127,6 @@ local THRESHOLD_STYLES: { [string]: SvgTimeseries.ThresholdStyle } = {
 	["line+area"] = "line+area",
 	["dashed+area"] = "line+area",
 }
-
--- `s` with every plain occurrence of `from` replaced by `to`.
-local function replacePlain(s: string, from: string, to: string): string
-	local out: { string } = {}
-	local i = 1
-	while true do
-		local a, b = string.find(s, from, i, true)
-		if a == nil or b == nil then
-			break
-		end
-		table.insert(out, string.sub(s, i, a - 1))
-		table.insert(out, to)
-		i = b + 1
-	end
-	table.insert(out, string.sub(s, i))
-	return table.concat(out)
-end
 
 type Drawn = { item: FieldConfig.Item, class: string }
 
@@ -108,11 +140,15 @@ local function legendView(
 	calcs: { string },
 	mode: string,
 	dropped: number,
-	opts: Common.Options
+	opts: Common.Options,
+	env: Env
 ): Node
 	local rows: { { class: string, name: string, values: { string } } } = {}
-	for i, d in drawn do
+	for _, d in drawn do
 		local item = d.item
+		if Json.bool(env, Json.path(env, item.config.custom.hideFrom, "legend")) == true then
+			continue
+		end
 		local results = Reduce.calcs(item.field.values, calcs, item.field.type, item.config.null_mode)
 		local values: { string } = {}
 		for k, c in calcs do
@@ -123,7 +159,7 @@ local function legendView(
 					FieldConfig.display(item, v, { theme = opts.theme, offset_min = opts.offset_min })
 				)
 		end
-		rows[i] = { class = d.class, name = item.name, values = values }
+		table.insert(rows, { class = d.class, name = item.name, values = values })
 	end
 	local children: { Node } = {}
 	if mode == "table" then
@@ -205,6 +241,134 @@ function M.renderOptions(panel: any, env: Env, opts: Common.Options): SvgTimeser
 	}
 end
 
+local PLACEMENTS: { [string]: SvgTimeseries.Placement } =
+	{ auto = "auto", left = "left", right = "right", hidden = "hidden" }
+local DISTRIBUTIONS: { [string]: Axis.Distr } = { linear = "linear", log = "log", symlog = "symlog" }
+local DRAWS: { [string]: SvgTimeseries.Draw } = { line = "line", bars = "bars", points = "points" }
+local INTERPOLATIONS: { [string]: SvgTimeseries.Interpolation } =
+	{ linear = "linear", smooth = "smooth", stepBefore = "stepBefore", stepAfter = "stepAfter" }
+local SHOW_POINTS: { [string]: SvgTimeseries.ShowPoints } = { auto = "auto", always = "always", never = "never" }
+
+-- One series' resolved GraphFieldConfig as the renderer's scale, stacking,
+-- transform and draw settings (TimeSeries/utils.ts preparePlotConfigBuilder
+-- and UPlotSeriesBuilder.ts): drawStyle, lineWidth, lineStyle (dash/dot),
+-- lineInterpolation, fillOpacity, gradientMode opacity, showPoints,
+-- pointSize, spanNulls (true or a gap in ms) and the bar options.
+function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesStyle
+	local cfg = item.config
+	local custom = cfg.custom
+	local stackMode = Json.str(env, Json.path(env, custom.stacking, "mode"))
+	local style: SvgTimeseries.ThresholdStyle? =
+		THRESHOLD_STYLES[Json.str(env, Json.path(env, custom.thresholdsStyle, "mode")) or "off"]
+	local dist = Json.tbl(env, custom.scaleDistribution)
+	local distType: Axis.Distr? = if dist then DISTRIBUTIONS[Json.str(env, dist.type) or ""] else nil
+	local transform = Json.str(env, custom.transform)
+	local label = Json.str(env, custom.axisLabel)
+	local hideFrom = Json.obj(env, custom.hideFrom)
+	-- lineStyle: anything but solid dashes ([10, 10] unless given); dot
+	-- also rounds the caps.
+	local lineStyle = Json.obj(env, custom.lineStyle)
+	local lineFill = Json.str(env, lineStyle.fill) or "solid"
+	local dash: { number }? = nil
+	if lineFill ~= "solid" then
+		local list: { number } = {}
+		for _, d in Json.list(env, lineStyle.dash) do
+			local n = Json.num(env, d)
+			if n then
+				table.insert(list, n)
+			end
+		end
+		dash = if #list > 0 then list else { 10, 10 }
+	end
+	local span: (boolean | number)? = Json.bool(env, custom.spanNulls)
+	if span == nil then
+		span = Json.num(env, custom.spanNulls)
+	end
+	local gradient = Json.str(env, custom.gradientMode)
+	return {
+		unit = cfg.unit,
+		decimals = cfg.decimals,
+		min = cfg.min,
+		max = cfg.max,
+		soft_min = Json.num(env, custom.axisSoftMin),
+		soft_max = Json.num(env, custom.axisSoftMax),
+		centered_zero = Json.bool(env, custom.axisCenteredZero) == true,
+		placement = PLACEMENTS[Json.str(env, custom.axisPlacement) or ""],
+		label = if label ~= "" then label else nil,
+		grid = Json.bool(env, custom.axisGridShow),
+		distribution = if dist and distType
+			then {
+				type = distType,
+				log = Json.num(env, dist.log),
+				linear_threshold = Json.num(env, dist.linearThreshold),
+			}
+			else nil,
+		transform = if transform == "negative-Y" or transform == "constant" then transform else nil,
+		stack = if stackMode == "normal" or stackMode == "percent" then stackMode else "none",
+		stack_group = Json.str(env, Json.path(env, custom.stacking, "group")),
+		thresholds = if style then cfg.thresholds else nil,
+		threshold_style = style or "off",
+		hide_legend = Json.bool(env, hideFrom.legend) == true,
+		hide_tooltip = Json.bool(env, hideFrom.tooltip) == true,
+		draw = DRAWS[Json.str(env, custom.drawStyle) or ""] or "line",
+		line_width = Json.num(env, custom.lineWidth),
+		dash = dash,
+		dot = lineFill == "dot",
+		interpolation = INTERPOLATIONS[Json.str(env, custom.lineInterpolation) or ""],
+		fill_opacity = Json.num(env, custom.fillOpacity) or 0,
+		gradient = if gradient == "opacity" then "opacity" else "none",
+		show_points = SHOW_POINTS[Json.str(env, custom.showPoints) or ""],
+		point_size = Json.num(env, custom.pointSize),
+		span_nulls = span or false,
+		bar_alignment = Json.num(env, custom.barAlignment),
+		bar_width_factor = Json.num(env, custom.barWidthFactor),
+		bar_max_width = Json.num(env, custom.barMaxWidth),
+	}
+end
+
+-- setClassicPaletteIdxs (public/app/plugins/panel/timeseries/utils.ts,
+-- run by prepareGraphableFields): palette positions count, over the frames
+-- with a time field and a number field, every number and boolean field but
+-- each frame's first graphable field, hidden ones included. The classic
+-- palette color is colors[seriesIndex % length] (fieldColor.ts).
+function M.paletteIndexes(frames: { Frame }): { [Frame.Field]: number }
+	local out: { [Frame.Field]: number } = {}
+	local idx = 0
+	for _, frame in frames do
+		local hasTime, hasValue = false, false
+		for _, f in frame.fields do
+			hasTime = hasTime or f.type == "time"
+			hasValue = hasValue or f.type == "number"
+		end
+		if not (hasTime and hasValue) then
+			continue
+		end
+		local pos = 0
+		for _, f in frame.fields do
+			if f.type == "time" or f.type == "number" or f.type == "boolean" then
+				pos += 1
+				if pos > 1 and f.type ~= "time" then
+					idx += 1
+					out[f] = idx
+				end
+			end
+		end
+	end
+	return out
+end
+
+-- custom.fillBelowTo names another series by field name, datasource
+-- display name or display name (TimeSeries/utils.ts).
+local function fillBelowIndex(name: string, visible: { FieldConfig.Item }): number?
+	for j, other in visible do
+		local f = other.field
+		if name == f.name or name == other.name or (f.config ~= nil and f.config.displayName == name) then
+			return j
+		end
+	end
+	return nil
+end
+
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "palette-classic" })
 	local render = M.renderOptions(panel, env, opts)
@@ -247,25 +411,29 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if opts.exemplars and #opts.exemplars > 0 then
 		render.exemplars = opts.exemplars
 	end
-	if #visible > 0 then
-		local first = visible[1].config
-		render.unit = render.unit or first.unit
-		if render.decimals == nil then
-			render.decimals = first.decimals
+	local palette = M.paletteIndexes(frames)
+	local styles: { SvgTimeseries.SeriesStyle } = table.create(#visible)
+	for i, item in visible do
+		item.series_index = palette[item.field] or item.series_index
+		local st = M.seriesStyle(item, env)
+		local color = FieldConfig.seriesColor(item, { theme = opts.theme })
+		st.class = color.class
+			or (FieldConfig.paletteClass(item.series_index) .. " tgp-fx " .. Common.toneClass(color.tone))
+		local below = Json.str(env, item.config.custom.fillBelowTo)
+		if below and below ~= "" then
+			st.fill_below = fillBelowIndex(below, visible)
+			if st.fill_below == nil then
+				-- No such series: Grafana drops the fill.
+				st.fill_opacity = 0
+			end
 		end
+		styles[i] = st
 	end
+	render.series = styles
 	local result = SvgTimeseries.render(baked, render)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
-		local item = visible[i]
-		local color = FieldConfig.seriesColor(item, { theme = opts.theme })
-		if color.class == nil then
-			local extra = "tgp-fx " .. Common.toneClass(color.tone)
-			result.svg =
-				replacePlain(result.svg, 'class="' .. s.class .. " ", 'class="' .. s.class .. " " .. extra .. " ")
-			s.class = s.class .. " " .. extra
-		end
-		drawn[i] = { item = item, class = s.class }
+		drawn[i] = { item = visible[i], class = s.class }
 	end
 	local legendOpts = Json.obj(env, Json.path(env, panel, "options", "legend"))
 	local mode = Json.str(env, legendOpts.displayMode) or "list"
@@ -282,7 +450,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if not showLegend or opts.cursor ~= nil then
 		return chart, assets
 	end
-	local legend = legendView(opts.key .. ".legend", drawn, legendCalcs(panel, env), mode, result.dropped, opts)
+	local legend = legendView(opts.key .. ".legend", drawn, legendCalcs(panel, env), mode, result.dropped, opts, env)
 	return { k = "col", p = { key = opts.key .. ".panel", gap = "xs" }, c = { chart, legend } }, assets
 end
 

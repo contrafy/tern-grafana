@@ -19,8 +19,10 @@ sleep 0.5
 ctl key enter >/dev/null
 bwait dashboard "Down targets" || return
 contains "title and context" "$(btext dashboard '.sf-text')" "Tern Panels Tern Fixtures Last 1 hour"
-contains "down targets stat value" "$(texts "$D .sf-card")" '"Down targets1"'
-has "$D .tgp-stat-value" 2 || fail "stat panels not drawn natively"
+# Fitted stat values are SVG images whose alt text is the value.
+contains "down targets stat panel" "$(texts "$D .sf-card-head")" '"Down targets"'
+has "$D .tgp-stat-value svg[aria-label='1']" || fail "down targets stat value is not 1"
+has "$D .tgp-stat-value .sf-image" 2 || fail "stat panels not drawn natively"
 shot lab-panels
 
 # panel_card: the ladder panel's card text.

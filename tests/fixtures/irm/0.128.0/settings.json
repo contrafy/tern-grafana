@@ -1,0 +1,15 @@
+{
+ "enabled": true,
+ "id": "grafana-irm-app",
+ "info": {
+  "version": "0.128.0"
+ },
+ "jsonData": {
+  "clusterSlug": "p0000000000000002",
+  "incidentApiUrl": "https://example.invalid/irm/1",
+  "onCallApiUrl": "https://example.invalid/irm/2",
+  "orgId": 1003,
+  "stackId": 1004,
+  "stackSlug": "w0000005"
+ }
+}

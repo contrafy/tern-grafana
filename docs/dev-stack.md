@@ -34,6 +34,7 @@ All published ports bind to `127.0.0.1`.
 | loki | `grafana/loki:3.7.8` | 3100 | Volume API enabled. |
 | tempo | `grafana/tempo:2.10.8` | 3200 | OTLP gRPC/HTTP internal (4317/4318); metrics generator on. |
 | node-exporter | `quay.io/prometheus/node-exporter:v1.12.1` | internal | Scrape target. |
+| postgres | `postgres:17.6-alpine` | internal 5432 | Seeded once from `dev/postgres/init.sql`; datasource `postgres` in both Grafanas. |
 | loggen | `quay.io/curl/curl:8.22.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s, plus one line per recent Tempo trace every 10 s. |
 | tracegen-frontend, tracegen-payments | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.162.0` | none | OTLP traces; payments spans carry error status. |
 | logcli | `grafana/logcli:3.7.8` | none | Profile `tools`; only used by `capture` via `docker compose run`. |
@@ -95,6 +96,19 @@ first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
   request" trace_id=<id> service=<svc>`. Payments traces get `level=error`. Every `trace_id` here
   resolves in Tempo (`/api/traces/<id>`), and Grafana's Loki derived field links it to the trace.
 - Tempo: services `frontend` and `payments` (error status), 3 and 2 child spans.
+- PostgreSQL (datasource uid `postgres`, type `grafana-postgresql-datasource`): table `services` (four
+  rows: name, team, region, replicas, error_rate) and view `service_load` (per-minute `rps` per service
+  over the last day, computed at query time, deterministic per minute). Dashboard `tern-sql`
+  (`dev/grafana/dashboards/tern-sql.json`), with multi-value custom variables `service` and `team` and
+  textbox `region`: 1 timeseries in `time_series` format (the backend turns the long rows wide), 2
+  timeseries on a wide table, 3 stat per team (`IN ($team)`, `'$region'`), 4 table with an organize
+  transform, 5 stat of a server-side math expression over a hidden SQL query, 6 `-- Dashboard --` table
+  reusing panel 4 with its transformations, 7 timeseries on a long table (Grafana draws one zigzag
+  series: its timeseries panel does not convert long to wide). Fixtures `ds_query_sql_<panel>` hold the
+  request Grafana's frontend sends for each panel (written out in `capture_sql`).
+  Adding it to a running stack without recreating the Grafanas: `docker compose -f dev/compose.yml up
+  -d --wait --no-deps postgres`, then `POST /api/admin/provisioning/datasources/reload` and
+  `.../dashboards/reload` on each Grafana.
 
 ### Server behavior the fixtures pin down
 

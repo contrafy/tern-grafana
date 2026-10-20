@@ -40,6 +40,10 @@ export type Formatter = (values: { string }, var: Var, list: boolean) -> string
 export type Options = {
 	-- Used when the reference names no format.
 	format: Formatter?,
+	-- Grafana's macroRegistry (public/app/features/templating/
+	-- macroRegistry.ts): a `${name.path}` or `$name` the scope does not hold
+	-- is offered here (`__field`, `__series`); nil keeps it as written.
+	macro: ((name: string, path: string?) -> Var?)?,
 }
 
 M.ALL_TEXT = "All"
@@ -224,6 +228,38 @@ function M.loki(values: { string }, var: Var, list: boolean): string
 	return mapJoin(values, promSpecial, "|")
 end
 
+local function sqlQuote(s: string): string
+	return "'" .. string.gsub(s, "'", "''") .. "'"
+end
+
+local function sqlEscape(s: string): string
+	return (string.gsub(s, "'", "''"))
+end
+
+-- The SQL datasources (packages/grafana-sql SqlDatasource.interpolateVariable):
+-- a list becomes quoted literals joined by commas (for `IN ($var)`); a single
+-- value of a multi-value or include-all variable is quoted; any other value
+-- only has its quotes doubled (the query writes `'$var'`).
+function M.sql(values: { string }, var: Var, list: boolean): string
+	if list then
+		return mapJoin(values, sqlQuote, ",")
+	end
+	local v = table.concat(values, ",")
+	if var.multi or var.include_all then
+		return sqlQuote(v)
+	end
+	return sqlEscape(v)
+end
+
+-- PostgreSQL (grafana-postgresql-datasource/datasource.ts interpolateVariable):
+-- like `sql`, but a single value is never quoted.
+function M.postgres(values: { string }, _var: Var, list: boolean): string
+	if list then
+		return mapJoin(values, sqlQuote, ",")
+	end
+	return sqlEscape(table.concat(values, ","))
+end
+
 local function isoDate(ms: number): string
 	local s = math.floor(ms / 1000)
 	local frac = math.floor(ms - s * 1000)
@@ -337,20 +373,29 @@ end
 
 -- The scope entry a reference names: `${x.field}` looks up "x.field" first
 -- (built-ins such as `${__user.login}`); `.text` and `.value` of a plain
--- variable select its display text or value.
-local function lookup(ref: Ref, scope: Scope): (string?, Var?, string?)
+-- variable select its display text or value. Anything else goes to the
+-- caller's macro.
+local function lookup(ref: Ref, scope: Scope, opts: Options?): (string?, Var?, string?)
 	if ref.field == nil then
-		return ref.name, scope[ref.name], ref.fmt
+		if scope[ref.name] then
+			return ref.name, scope[ref.name], ref.fmt
+		end
+	else
+		local dotted = ref.name .. "." .. ref.field
+		if scope[dotted] then
+			return dotted, scope[dotted], ref.fmt
+		end
+		local base = scope[ref.name]
+		if base and ref.field == "text" then
+			return ref.name, base, "text"
+		elseif base and ref.field == "value" then
+			return ref.name, base, ref.fmt
+		end
 	end
-	local dotted = ref.name .. "." .. ref.field
-	if scope[dotted] then
-		return dotted, scope[dotted], ref.fmt
-	end
-	local base = scope[ref.name]
-	if base and ref.field == "text" then
-		return ref.name, base, "text"
-	elseif base and ref.field == "value" then
-		return ref.name, base, ref.fmt
+	local macro = if opts then opts.macro else nil
+	local var = if macro then macro(ref.name, ref.field) else nil
+	if var then
+		return ref.name, var, ref.fmt
 	end
 	return nil, nil, nil
 end
@@ -366,7 +411,7 @@ function M.replace(text: string, scope: Scope, opts: Options?): string
 		if ref == nil then
 			break
 		end
-		local name, var, fmt = lookup(ref, scope)
+		local name, var, fmt = lookup(ref, scope, opts)
 		if name and var then
 			table.insert(out, string.sub(text, pos, ref.start - 1))
 			table.insert(out, formatVar(name, var, fmt, opts))
