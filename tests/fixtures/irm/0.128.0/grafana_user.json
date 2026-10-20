@@ -1,0 +1,17 @@
+{
+ "createdAt": "0001-01-01T00:00:00Z",
+ "email": "user24@example.com",
+ "id": 1242,
+ "isDisabled": false,
+ "isExternal": false,
+ "isExternallySynced": false,
+ "isGrafanaAdmin": false,
+ "isGrafanaAdminExternallySynced": false,
+ "isProvisioned": false,
+ "login": "login 1",
+ "name": "name 28",
+ "orgId": 1137,
+ "theme": "",
+ "uid": "s00000000000000266",
+ "updatedAt": "0001-01-01T00:00:00Z"
+}

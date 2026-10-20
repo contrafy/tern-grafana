@@ -1,0 +1,299 @@
+{
+ "activityItems": [
+  {
+   "activityItemID": "a0000000000000000000000000000000000244",
+   "activityKind": "userNote",
+   "attachments": [],
+   "body": "body 1",
+   "createdTime": "2026-10-19T17:50:55.83184Z",
+   "eventTime": "2026-10-19T17:50:57Z",
+   "fieldValues": {
+    "notifications": "user26@example.com"
+   },
+   "immutable": false,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000245",
+   "activityKind": "userNote",
+   "attachments": [],
+   "body": "body 2",
+   "createdTime": "2026-10-19T15:23:30.16578Z",
+   "eventTime": "2026-10-19T15:23:31Z",
+   "fieldValues": {
+    "notifications": "user27@example.com"
+   },
+   "immutable": false,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000246",
+   "activityKind": "userNote",
+   "attachments": [],
+   "body": "body 3",
+   "createdTime": "2026-10-19T14:23:13.316231Z",
+   "eventTime": "2026-10-19T14:23:14Z",
+   "fieldValues": {
+    "notifications": "user28@example.com"
+   },
+   "immutable": false,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000247",
+   "activityKind": "userNote",
+   "attachments": [],
+   "body": "body 4",
+   "createdTime": "2026-10-19T14:18:53.41578Z",
+   "eventTime": "2026-10-19T14:18:55Z",
+   "fieldValues": {
+    "notifications": "user29@example.com"
+   },
+   "immutable": false,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000248",
+   "activityKind": "userNote",
+   "attachments": [],
+   "body": "body 5",
+   "createdTime": "2026-10-19T13:48:34.578403Z",
+   "eventTime": "2026-10-19T13:48:36Z",
+   "fieldValues": {
+    "notifications": "user30@example.com"
+   },
+   "immutable": false,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000249",
+   "activityKind": "roleAssigned",
+   "attachments": [],
+   "body": "body 6",
+   "createdTime": "2026-10-19T13:43:54.137325Z",
+   "eventTime": "2026-10-19T13:43:54Z",
+   "fieldValues": {
+    "notifications": "user31@example.com",
+    "role": "investigator"
+   },
+   "immutable": true,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "user1@example.com",
+    "userID": "g000000000000000000000000000000000000000000240"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000250",
+   "activityKind": "hookRunMetadata",
+   "attachments": [],
+   "body": "",
+   "createdTime": "2026-10-19T13:42:38.040399Z",
+   "eventTime": "2026-10-19T13:42:38Z",
+   "fieldValues": {
+    "hookID": "g0000000000000252",
+    "integrationID": "g0000000000000252",
+    "integrationName": "integrationName 1",
+    "responseUrl": "https://example.invalid/irm/55",
+    "timestamp": "2026-10-19T13:42:37.908764+00:00",
+    "webhookID": "W0000000000253",
+    "webhookMethod": "POST",
+    "webhookName": "webhookName 1",
+    "webhookStatusCode": "webhookStatusCode 1",
+    "webhookUrl": "https://example.invalid/irm/56"
+   },
+   "immutable": true,
+   "incidentID": "1222",
+   "relevance": "low",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "name 27",
+    "userID": "g000000000000000000000000000000000000000000251"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000254",
+   "activityKind": "hookRunMetadata",
+   "attachments": [],
+   "body": "body 7",
+   "createdTime": "2026-10-19T13:42:36.610217Z",
+   "eventTime": "2026-10-19T13:42:37Z",
+   "fieldValues": {
+    "eventName": "eventName 1",
+    "hookID": "g0000000000000000000000000000255",
+    "hookName": "hookName 1",
+    "integrationID": "g0000000000256",
+    "integrationName": "integrationName 2"
+   },
+   "immutable": true,
+   "incidentID": "1222",
+   "relevance": "low",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000257",
+   "activityKind": "incidentStart",
+   "attachments": [],
+   "body": "body 8",
+   "createdTime": "2026-10-19T13:42:36.234353Z",
+   "eventTime": "2026-10-19T13:42:36Z",
+   "fieldValues": {
+    "eventTime": "2026-10-19T13:42:36Z"
+   },
+   "immutable": false,
+   "incidentID": "1222",
+   "relevance": "low",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000258",
+   "activityKind": "incidentCreated",
+   "attachments": [],
+   "body": "body 9",
+   "createdTime": "2026-10-19T13:42:36.232276Z",
+   "eventTime": "2026-10-19T13:42:36Z",
+   "fieldValues": {
+    "incidentDescription": "",
+    "incidentSeverityID": "00000000-0000-4000-8000-000000000219",
+    "incidentStatus": "incidentStatus 1",
+    "incidentStatusID": "00000000-0000-4000-8000-000000000259",
+    "incidentTitle": "incidentTitle 1",
+    "notifications": "notifications 1"
+   },
+   "immutable": true,
+   "incidentID": "1222",
+   "relevance": "normal",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "",
+   "user": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   }
+  },
+  {
+   "activityItemID": "a0000000000000000000000000000000000260",
+   "activityKind": "contextAttached",
+   "attachments": [],
+   "body": "body 10",
+   "createdTime": "2026-10-19T13:42:36.288473Z",
+   "eventTime": "2026-10-19T13:42:36Z",
+   "fieldValues": {
+    "contextID": "c00000000000000000000000000000000261",
+    "contextType": "contextType 1"
+   },
+   "immutable": true,
+   "incidentID": "1222",
+   "relevance": "low",
+   "subjectUser": {
+    "name": "",
+    "userID": ""
+   },
+   "tags": [],
+   "url": "https://example.invalid/irm/39",
+   "user": {
+    "name": "name 25",
+    "userID": "g000000000000000000000000000000000000000000220"
+   }
+  }
+ ],
+ "cursor": {
+  "hasMore": false,
+  "nextValue": ""
+ },
+ "query": {
+  "activityKind": [],
+  "incidentID": "1222",
+  "limit": 50,
+  "orderDirection": "DESC",
+  "tag": ""
+ }
+}

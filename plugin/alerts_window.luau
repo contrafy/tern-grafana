@@ -6,8 +6,12 @@
 -- command, which is also what clicking the segment runs. Status segments
 -- only show while the user's status bar is on. Tern keeps one status
 -- formatter per plugin, so this one also shows the watches segment
--- (watches_window); the signature covers both, so either change refreshes.
+-- (watches_window) and the IRM segment (lib/irm/segment.luau, from the kv
+-- summary irm_poll_host writes); the signature covers all of them, so any
+-- change refreshes.
 
+local IrmSegment = require("./lib/irm/segment")
+local IrmSummary = require("./lib/irm/summary")
 local Segment = require("./lib/alerts/segment")
 local WatchSegment = require("./lib/watches/segment")
 local WatchesWindow = require("./watches_window")
@@ -21,10 +25,22 @@ M.BLOCK = "tern-grafana.alerts"
 -- How often the window re-reads the kv summary.
 M.CHECK_MS = 5000
 
+-- Minutes east of UTC here now (the IRM segment shows shift ends in local
+-- time): the UTC wall fields read back as local time differ by the offset.
+local function localOffsetMin(seconds: number): number
+	local utc: any = os.date("!*t", seconds)
+	utc.isdst = (os.date("*t", seconds) :: any).isdst
+	return math.floor(os.difftime(seconds, os.time(utc)) / 60 + 0.5)
+end
+
 local function current(t: any): { Segment.Segment }?
+	local seconds = os.time()
+	local now = seconds * 1000
 	local ok, raw = pcall(t.kv.get, Summary.KEY)
-	local alerts = if ok then Segment.segments(raw, os.time() * 1000) else nil
-	return WatchSegment.append(alerts, WatchesWindow.segments(t))
+	local alerts = if ok then Segment.segments(raw, now) else nil
+	local okIrm, irmRaw = pcall(t.kv.get, IrmSummary.KEY)
+	local irm = if okIrm then IrmSegment.segments(irmRaw, now, localOffsetMin(seconds)) else nil
+	return WatchSegment.append(WatchSegment.append(alerts, WatchesWindow.segments(t)), irm)
 end
 
 function M.register(t: any)

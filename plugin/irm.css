@@ -1,0 +1,7 @@
+/* Tern Grafana IRM blocks (lib/irm/*_render.luau). Rows, chips and buttons reuse the alerts
+   inbox's `tg-al-` classes and the silence panel's `tg-sil-` ones; these add severity edges. */
+
+.tg-al-row.tg-irm-error { border-left-color: var(--bad); }
+.tg-al-row.tg-irm-warning { border-left-color: var(--warn); }
+.tg-al-row.tg-irm-accent { border-left-color: var(--accent); }
+.tg-al-row.tg-irm-muted { border-left-color: var(--t4); }

@@ -36,6 +36,8 @@ local FEATURE_SECTIONS = {
 	"logs",
 	"trace",
 	"investigate",
+	"compat",
+	"irm",
 }
 local TOP_FIELDS = { "version", "default_context", "contexts" }
 local ENDPOINT_FIELDS = { "url", "auth", "headers", "path_prefix", "tls", "timeout_ms" }
@@ -581,6 +583,8 @@ function M.validate(raw: any): (Config?, { Problem })
 		logs = raw.logs,
 		trace = raw.trace,
 		investigate = raw.investigate,
+		compat = raw.compat,
+		irm = raw.irm,
 	},
 		problems
 end

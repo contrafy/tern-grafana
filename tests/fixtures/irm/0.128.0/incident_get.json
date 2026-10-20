@@ -1,0 +1,222 @@
+{
+ "incident": {
+  "closedTime": "",
+  "createdByUser": {
+   "name": "name 25",
+   "userID": "g000000000000000000000000000000000000000000220"
+  },
+  "createdTime": "2026-10-19T13:42:36.060775Z",
+  "durationSeconds": 24778,
+  "incidentChannels": [
+   {
+    "channelID": "1243",
+    "provider": "msTeams",
+    "teamID": "user25@example.com"
+   }
+  ],
+  "incidentEnd": "",
+  "incidentID": "1222",
+  "incidentMembership": {
+   "assignments": [
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "2023-11-30T18:18:24Z",
+      "description": "description 1",
+      "important": true,
+      "mandatory": true,
+      "name": "name 26",
+      "orgID": "1004",
+      "roleID": 1241,
+      "updatedAt": ""
+     },
+     "roleID": 1241,
+     "user": {
+      "name": "user1@example.com",
+      "userID": "g000000000000000000000000000000000000000000240"
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    },
+    {
+     "role": {
+      "archived": false,
+      "createdAt": "",
+      "description": "",
+      "important": false,
+      "mandatory": false,
+      "name": "",
+      "orgID": "",
+      "roleID": 1242,
+      "updatedAt": ""
+     },
+     "roleID": 1242,
+     "user": {
+      "name": "",
+      "userID": ""
+     }
+    }
+   ],
+   "totalAssignments": 1,
+   "totalParticipants": 0
+  },
+  "incidentStart": "2026-10-19T13:42:36Z",
+  "incidentType": "internal",
+  "isDrill": false,
+  "labels": [],
+  "modifiedTime": "2026-10-19T17:50:57.834993Z",
+  "overviewURL": "overviewURL 1",
+  "refs": [],
+  "severity": "Critical",
+  "status": "active",
+  "summary": "",
+  "taskList": {
+   "doneCount": 0,
+   "tasks": [],
+   "todoCount": 0
+  },
+  "title": "title 12"
+ }
+}

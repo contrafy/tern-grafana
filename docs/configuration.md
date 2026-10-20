@@ -33,7 +33,7 @@ treated as absent.
 | `version` | number | `1` | Schema version. Only `1` exists. |
 | `default_context` | string | the only context, if there is exactly one | Context used when none is chosen. Must name a context in `contexts`. |
 | `contexts` | object | required | Context name to context. At least one. |
-| `query`, `dashboard`, `alerts`, `logs`, `trace`, `investigate`, `annotations`, `impact`, `watches`, `hosts` | object (`watches`: list) | none | Feature sections, each documented below. |
+| `query`, `dashboard`, `alerts`, `logs`, `trace`, `investigate`, `annotations`, `impact`, `watches`, `hosts`, `irm`, `compat` | object (`watches`: list) | none | Feature sections, each documented below. |
 
 Context names may contain letters, digits, `.`, `_` and `-`.
 
@@ -467,6 +467,41 @@ characters, `?` exactly one. An exact name beats every glob; among globs the lon
 characters and at most 256 entries are read. An entry with an empty key, a value that is not a defined context name,
 or a key repeating another in a different case is skipped and reported. The match takes the place of
 `default_context`; a context named explicitly still wins.
+
+## IRM
+
+[Grafana IRM](irm.md) (OnCall and incidents) status polling, in the `irm` section. The blocks themselves need no
+settings: they read IRM through the context's `grafana` endpoint and its service-account token.
+
+```json
+"irm": {
+  "poll_s": 60,
+  "contexts": ["cloud"],
+  "names": true,
+  "user": "me@example.com"
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `poll_s` | number | `60` | Seconds between background polls for the status segment. `0` turns polling and the segment off; otherwise at least `30` (OnCall allows 300 requests a minute per token, shared with every other client of it). |
+| `contexts` | list of strings | the default context, when it has a `grafana` endpoint | Contexts polled; each needs a `grafana` endpoint. At most 8. |
+| `names` | boolean | `true` | Keep who is on call now (OnCall usernames, per schedule) in the kv summary. `false` skips the schedules and users requests unless `user` is set. |
+| `user` | string | none | Your email as your OnCall user has it. Matched case-insensitively against OnCall users' emails to show when you are on call (On-call block and status segment), since the service-account token has no "you" of its own. Must look like an email. |
+
+An unknown key or a bad value is reported (`irm.<key>`) and the default is used.
+
+## Compatibility report
+
+The [Compatibility block](compat.md) reads the `compat` section:
+
+```json
+"compat": { "max_dashboards": 500 }
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `max_dashboards` | `500` | At most this many dashboards are scanned, in search order (1 to 10000). |
 
 ## Examples
 

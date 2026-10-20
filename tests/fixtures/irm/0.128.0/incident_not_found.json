@@ -1,0 +1,14 @@
+{
+ "code": "incidents.not_found",
+ "context": {
+  "incident_id": "1265"
+ },
+ "detail": "Incident not found",
+ "error": "error 1",
+ "hint": "Check the incident ID and try again.",
+ "retryable": false,
+ "status": 404,
+ "title": "title 34",
+ "trace_id": "X0000000000000000000000000000264",
+ "type": "https://grafana.com/docs/grafana-cloud/alerting-and-irm/irm/reference/errors#incidents.not_found"
+}

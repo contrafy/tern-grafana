@@ -1,0 +1,71 @@
+{
+  "activityItem": {
+    "activityItemID": "activity-item-123",
+    "activityKind": "incidentCreated",
+    "attachments": [
+      {
+        "attachedByUserID": "user-123",
+        "attachmentErr": "file too large",
+        "attachmentID": "attachment-123",
+        "contentLength": 123456,
+        "contentType": "image/jpeg",
+        "deletedTime": "2019-01-01T00:00:00Z",
+        "displayType": "list",
+        "downloadURL": "https://somewhere.com/path/to/filename.jpg",
+        "ext": ".jpg",
+        "fileType": "image",
+        "hasThumbnail": true,
+        "path": "filename.jpg",
+        "sHA512": "327232b67c88cba87c0a85a32bb192df527c21854d6515144d691f8cf1554f8e9969eed443b85e00d5ea21628c0ca4b6bbc9f26c837815fad6e9b3881cbb5cfd",
+        "sourceURL": "https://somewhere-like-slack.com/path/to/filename.jpg",
+        "thumbnailURL": "https://somewhere.com/path/to/thumbnail.jpg",
+        "uploadTime": "2019-01-01T00:00:00Z",
+        "useSourceURL": true
+      },
+      {
+        "attachedByUserID": "user-123",
+        "attachmentErr": "file too large",
+        "attachmentID": "attachment-123",
+        "contentLength": 123456,
+        "contentType": "image/jpeg",
+        "deletedTime": "2019-01-01T00:00:00Z",
+        "displayType": "list",
+        "downloadURL": "https://somewhere.com/path/to/filename.jpg",
+        "ext": ".jpg",
+        "fileType": "image",
+        "hasThumbnail": true,
+        "path": "filename.jpg",
+        "sHA512": "327232b67c88cba87c0a85a32bb192df527c21854d6515144d691f8cf1554f8e9969eed443b85e00d5ea21628c0ca4b6bbc9f26c837815fad6e9b3881cbb5cfd",
+        "sourceURL": "https://somewhere-like-slack.com/path/to/filename.jpg",
+        "thumbnailURL": "https://somewhere.com/path/to/thumbnail.jpg",
+        "uploadTime": "2019-01-01T00:00:00Z",
+        "useSourceURL": true
+      }
+    ],
+    "body": "The incident was created by user-123",
+    "createdTime": "2021-08-07T11:58:23Z",
+    "eventTime": "2021-08-07T11:58:23Z",
+    "fieldValues": {
+      "something-else": true,
+      "title": "new title"
+    },
+    "immutable": true,
+    "incidentID": "incident-123",
+    "relevance": "low",
+    "subjectUser": {
+      "name": "Morty Smith",
+      "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+      "userID": "user-123"
+    },
+    "tags": [
+      "important"
+    ],
+    "url": "https://meet.google.com/my-incident-room",
+    "user": {
+      "name": "Morty Smith",
+      "photoURL": "https://upload.wikimedia.org/wikipedia/en/c/c3/Morty_Smith.png",
+      "userID": "user-123"
+    }
+  },
+  "error": ""
+}

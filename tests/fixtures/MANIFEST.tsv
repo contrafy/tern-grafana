@@ -394,3 +394,30 @@ tempo/2.10.8/search_tags_v2.json	GET	/api/v2/search/tags	200	2026-10-09T20:32:03
 tempo/2.10.8/trace.json	GET	/api/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:32:03Z	2.10.8	-
 tempo/2.10.8/trace_not_found.txt	GET	/api/traces/0000000000000000000000000000beef	404	2026-10-09T20:32:03Z	2.10.8	-
 tempo/2.10.8/trace_v2.json	GET	/api/v2/traces/82c9f1c2bda850d878e52762cc0816	200	2026-10-09T20:32:03Z	2.10.8	-
+irm/0.128.0/settings.json	GET	/api/plugins/grafana-irm-app/settings	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/grafana_permissions.json	GET	/api/access-control/user/permissions (irm and plugins actions only)	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/grafana_user.json	GET	/api/user (service account)	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_schedules.json	GET	<oncall>/api/v1/schedules/?perpage=100	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_current_oncall.json	GET	<oncall>/api/v1/schedules/<id>/current_oncall/	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_next_oncall.json	GET	<oncall>/api/v1/schedules/<id>/next_oncall/	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_users.json	GET	<oncall>/api/v1/users/?perpage=100	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_integrations.json	GET	<oncall>/api/v1/integrations/	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alert_groups_new.json	GET	<oncall>/api/v1/alert_groups/?state=new&perpage=50	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alert_groups_acknowledged.json	GET	<oncall>/api/v1/alert_groups/?state=acknowledged&perpage=50	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alert_groups_new_count.json	GET	<oncall>/api/v1/alert_groups/?state=new&perpage=1	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alert_groups_acknowledged_count.json	GET	<oncall>/api/v1/alert_groups/?state=acknowledged&perpage=1	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alert_groups_silenced_count.json	GET	<oncall>/api/v1/alert_groups/?state=silenced&perpage=1	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alert_group.json	GET	<oncall>/api/v1/alert_groups/<id>/	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_alerts.json	GET	<oncall>/api/v1/alerts/?alert_group_id=<id>&perpage=10	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_forbidden.json	POST	<oncall>/api/v1/integrations/ (Viewer service account)	403	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/oncall_sa_current_user.json	GET	<oncall>/api/v1/users/current/	403	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/incident_previews_open.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/IncidentsService.QueryIncidentPreviews (isdrill:false -status:resolved)	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/incident_get.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/IncidentsService.GetIncident	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/incident_activity.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/ActivityService.QueryActivity	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/incident_statuses.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/StatusService.QueryOrgStatuses	200	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/incident_severities_404.txt	POST	/api/plugins/grafana-irm-app/resources/api/v1/SeveritiesService.GetOrgSeverities	404	2026-10-19T19:30:00Z	0.128.0	-
+irm/0.128.0/incident_not_found.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/IncidentsService.UpdateSeverity (unknown incident id)	404	2026-10-19T19:30:00Z	0.128.0	-
+irm/docs/incident_create.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/IncidentsService.CreateIncident	200	2026-10-19T19:40:00Z	docs	-
+irm/docs/incident_update_status.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/IncidentsService.UpdateStatus	200	2026-10-19T19:40:00Z	docs	-
+irm/docs/incident_update_severity.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/IncidentsService.UpdateSeverity	200	2026-10-19T19:40:00Z	docs	-
+irm/docs/activity_add.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/ActivityService.AddActivity	200	2026-10-19T19:40:00Z	docs	-

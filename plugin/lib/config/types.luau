@@ -74,6 +74,8 @@ export type Config = {
 	logs: any,
 	trace: any,
 	investigate: any,
+	compat: any,
+	irm: any,
 }
 
 export type Problem = { path: string, message: string }
