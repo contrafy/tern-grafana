@@ -142,7 +142,7 @@ In the `query` section of the config file:
 | --- | --- | --- | --- |
 | `query.default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
 | `query.max_points` | number | `600` | Points per series a range query asks for, 10 to 11000. The step is Grafana's: range / max points, rounded, at least 15s. Tern blocks report a fixed 80-column size, so this is not derived from the pane. |
-| `query.refresh` | string | `"30s"` | Auto-refresh interval used by `a`, at least `5s`. Auto-refresh is off when a block opens. |
+| `query.refresh` | string | `"30s"` | Auto-refresh interval used by `a`, at least `5s`. Auto-refresh is off when a block opens, pauses while the block's tab is in the background (it runs within a second of the tab being shown), and keeps the drawn chart when an answer is byte-identical to the last ([performance.md](performance.md)). |
 | `query.exemplars` | boolean | `true` | Fetch and draw exemplars with range queries, in the Query block and in dashboard time series panels. |
 | `query.exemplar_trace_label` | string | none | Exemplar label holding the trace id, tried before `trace_id`, `traceID` and `traceId`. |
 

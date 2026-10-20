@@ -5,6 +5,10 @@
 -- rung each fixture panel lands on per Grafana version, and what the keys
 -- and clicks do. Late answers to superseded requests must never overwrite
 -- newer data, and nothing that opens a pane may happen in init.
+-- Refreshes must not mint blobs nobody sees (Tern never evicts them):
+-- docs/performance.md.
+local Assets = require("../../../plugin/lib/render/assets")
+local BlobCache = require("../../../plugin/lib/render/blob_cache")
 local Frame = require("../../../plugin/lib/frame/types")
 local PanelState = require("../../../plugin/lib/dashboard/panel_state")
 local Repeat = require("../../../plugin/lib/dashboard/repeat")
@@ -15,6 +19,7 @@ local Tbl = require("../../../plugin/lib/tbl")
 local View = require("../../../plugin/lib/dashboard/view")
 local json = require("../../lib/json")
 local t = require("../../lib/test")
+local Visibility = require("../../../plugin/lib/visibility")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local function key(name: string, text: string?, shift: boolean?): any
@@ -619,6 +624,91 @@ for _, version in S.VERSIONS do
 		end)
 	end)
 end
+
+-- Draws the view and turns its assets into blob ids as plugin/blob_host.luau
+-- does; `minted.n` counts the blobs Tern would have stored.
+local function draw(h: Harness, cache: BlobCache.Cache, minted: { n: number })
+	local regions, assets = View.view(h.s, h.env)
+	local mint = function(_bytes: string, _mime: string): string
+		minted.n += 1
+		return "blob" .. minted.n
+	end
+	for _, region in { (regions :: any).main, (regions :: any).dock, (regions :: any).layer } do
+		Assets.materialize(region, assets or {}, function(k: string, a: Assets.Asset): string
+			return BlobCache.get(cache, k, a.bytes, a.mime, mint)
+		end)
+	end
+end
+
+local RANGE = S.grafana("12.4.12", "ds_query_prom_range.json")
+
+describe("dashboard refreshes and blobs", function()
+	it("mints no blob while a refresh runs, none for the same answer and one for a new one", function()
+		local h = start("12.4.12", PANELS)
+		answer(h, "p2", RANGE)
+		local cache, minted = BlobCache.new(), { n = 0 }
+		draw(h, cache, minted)
+		local shown = minted.n
+		expect(shown > 0).toBe(true)
+		-- A refresh later inside the same query step: Grafana aligns the range
+		-- to the step, so it answers byte for byte the same.
+		local drawn = h.s.panels.p2.drawn :: State.Drawn
+		h.env.now_ms += drawn.interval_ms - drawn.range.to_ms % drawn.interval_ms - 1
+		local data = h.s.panels.p2.data
+		press(h, "12.4.12", char("r"))
+		expect(h.s.panels.p2.status).toBe("loading")
+		draw(h, cache, minted)
+		expect(minted.n).toBe(shown)
+		answer(h, "p2", RANGE)
+		expect(h.s.panels.p2.data).toBe(data)
+		expect(h.s.panels.p2.status).toBe("ready")
+		draw(h, cache, minted)
+		expect(minted.n).toBe(shown)
+		-- The next step brings new samples: one new picture.
+		h.env.now_ms += drawn.interval_ms
+		press(h, "12.4.12", char("r"))
+		draw(h, cache, minted)
+		expect(minted.n).toBe(shown)
+		answer(h, "p2", S.grafana("12.4.12", "ds_query_prom2_range.json"))
+		draw(h, cache, minted)
+		expect(minted.n).toBe(shown + 1)
+	end)
+
+	it("pauses auto-refresh in a background tab and refreshes once the tab is shown", function()
+		local h = start("12.4.12", PANELS)
+		local shown = false
+		h.env.pane = 7
+		h.env.kv_get = function(k: string): any
+			return if k == Visibility.KEY then Visibility.record({ 5, 7 }, if shown then { 5, 7 } else { 5 }) else nil
+		end
+		local tick: any = { kind = "tick", tag = "refresh/" .. h.s.gen .. "/" .. h.s.timer_gen }
+		local _, hidden = State.update(h.s, tick, h.env)
+		expect(hidden).toEqual({ { kind = "timer", tag = tick.tag, ms = Visibility.POLL_MS } })
+		shown = true
+		local _, effects = State.update(h.s, tick, h.env)
+		local queries, period = 0, nil
+		for _, e in effects do
+			if e.kind == "http" and string.match(e.tag, "^q/") then
+				queries += 1
+			elseif e.kind == "timer" then
+				period = e.ms
+			end
+		end
+		expect(queries > 0).toBe(true)
+		expect(period).toBe(h.s.refresh_ms)
+	end)
+
+	it("refreshes only the expanded panel, and the others once they are shown again", function()
+		local h = start("12.4.12", PANELS)
+		press(h, "12.4.12", key("enter"))
+		expect(h.s.expanded).toBe(true)
+		h.pending = {}
+		press(h, "12.4.12", char("r"))
+		expect(pendingKinds(h, "q/")).toEqual({ "p2" })
+		press(h, "12.4.12", key("escape"))
+		expect(pendingKinds(h, "q/")).toEqual({ "p12", "p18", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9" })
+	end)
+end)
 
 describe("dashboard logs jump and time sync", function()
 	it("L on a panel opens logs for the labels its series share", function()

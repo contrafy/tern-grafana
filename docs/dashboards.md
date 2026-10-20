@@ -201,6 +201,13 @@ The range starts at the dashboard's own (`time` in its JSON) unless the link nam
 dashboard's `refresh` interval but never runs more often than `dashboard.min_refresh` (default 30 s); `a` pauses it.
 A refresh re-runs every panel query and re-renders PNG panels. Times are shown and computed in UTC.
 
+Refreshes are frugal with Tern's image cache, which keeps every distinct chart for the session
+([performance.md](performance.md)): an answer byte-identical to the last one is not redrawn; time series draw a range
+ending at now with its end on the query interval, so a refresh inside one interval draws the same picture; a panel
+keeps its previous picture on its own axis while the refresh runs; with a panel expanded, the others are not
+refreshed until they are shown again; and while the block's tab is in the background, auto-refresh (and the clock's
+redraw) pauses and catches up within a second of the tab being shown.
+
 With `S` the block joins the shared time range (header shows `synced`, saved with the block): range keys publish
 the range, cursor moves the cursor, and every 2 seconds the block adopts a newer range or cursor another synced
 Query, Dashboard, Panel, Logs or Trace block published; a new range re-runs the panel queries. See

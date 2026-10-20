@@ -24,6 +24,7 @@ plugin/
                            status segment, Carly exports, agent handoff
   transport_host.luau      executes Http effects: auth resolution, tern.fetch or curl fallback
   blob_host.luau           turns view assets (SVG/PNG bytes) into blob ids, cached by content hash
+  visibility_window.luau   window half: writes which panes the active tab shows to kv (lib/visibility.luau)
   <block>_host.luau        one adapter per block: runs lib/<block>/state effects
   tern-grafana.css         styles, including chart series classes bound to theme variables
   lib/
@@ -44,7 +45,7 @@ plugin/
     render/                svg_timeseries, legend, stat, gauge, bargauge, table, logs, waterfall
     panels/                panel registry: supports(panel) and view(panel, frames, env)
     dashboard/             dashboard model, layout from gridPos, variables, interpolation, ladder
-    query/ alerts/ silences/ ops/ logs/ trace/ settings/ impact/ watches/   block state machines
+    query/ alerts/ silences/ ops/ logs/ trace/ settings/ impact/ watches/ irm/   block state machines
     lens/                  promtool, amtool, logcli, curl capture parsers and views
     links/                 tern-grafana:// encode/decode, Grafana URL recognition
 ```
@@ -205,6 +206,6 @@ Toasts come from the window half (its timers receive a `cx`) or from a live bloc
 The status segment reads the kv summary (well under the 4 ms formatter budget) and a window timer calls
 `tern.chrome.refresh()` only when the summary changed. Tern keeps one status formatter per plugin (a second
 `tern.chrome.status` registration replaces the first), so `plugin/alerts_window.luau` owns the formatter and appends
-every other feature's segments (watches today); new segments must be appended there, and its change signature must
-cover them. Host `command_finished` carries `line`, `pane`, `status` and `took_ms` but no `cwd`, so the host pairs
-it with the `cwd` from `command_started` per pane.
+every other feature's segments (watches and IRM today); new segments must be appended there, and its change
+signature must cover them. Host `command_finished` carries `line`, `pane`, `status` and `took_ms` but no `cwd`, so
+the host pairs it with the `cwd` from `command_started` per pane.

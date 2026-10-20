@@ -14,6 +14,11 @@
 -- - Range queries also fetch exemplars (`x` selects, `enter` opens the
 --   trace); `L` jumps to logs; `S` joins the shared time range
 --   (lib/time/shared.luau), adopted on a 2 s poll while synced.
+-- - Blob economy (docs/performance.md): a byte-identical answer to the same
+--   query keeps the drawn chart (no render, no new blob); through Grafana,
+--   which aligns a range to its step, auto-refreshes inside one step get
+--   one. Auto-refresh pauses while the block's tab is in the background
+--   (lib/visibility.luau) and runs as soon as it is shown.
 
 local Effect = require("../effect")
 local Env = require("../env")
@@ -38,6 +43,7 @@ local TimeRange = require("./timerange")
 local Cursor = require("../render/cursor")
 local Edit = require("./edit")
 local Tbl = require("../tbl")
+local Visibility = require("../visibility")
 
 type Env = Env.Env
 type Effect = Effect.Effect
@@ -129,6 +135,18 @@ export type State = {
 	ex_anchor: number?,
 	-- Shared time range and cursor (key S).
 	sync: Shared.Sync,
+	-- The last answer drawn: its body and status, the run and context it
+	-- answered, and its exemplars. An identical answer keeps the chart.
+	answer: Answer?,
+}
+
+export type Answer = {
+	body: string,
+	status: number,
+	run: Run,
+	context: string?,
+	ds: string?,
+	exemplars: { FrameProm.Exemplar }?,
 }
 
 local M = {}
@@ -297,9 +315,41 @@ local function renderChart(s: State)
 	s.restore_cursor = nil
 end
 
+-- Whether two runs asked the same thing (the window may have moved: an
+-- identical answer then means no sample changed inside it).
+local function sameRun(a: Run, b: Run): boolean
+	return a.kind == b.kind
+		and a.expr == b.expr
+		and a.to_ms - a.from_ms == b.to_ms - b.from_ms
+		and a.step_ms == b.step_ms
+end
+
 local function finish(s: State, env: Env, response: any)
 	local r = s.inflight :: Run
 	s.inflight = nil
+	local body = if type(response.body) == "string" then response.body else nil
+	local a = s.answer
+	if
+		a
+		and body
+		and s.chart
+		and a.body == body
+		and a.status == response.status
+		and a.context == s.context
+		and a.ds == s.ds
+		and sameRun(a.run, r)
+	then
+		-- The same answer as on screen: keep the frames and the drawn chart,
+		-- and the window it was drawn over.
+		r.from_ms, r.to_ms = a.run.from_ms, a.run.to_ms
+		s.status, s.failure, s.ran = "ok", nil, r
+		a.run = r
+		if a.exemplars and s.exemplars_gen ~= r.gen then
+			s.exemplars, s.exemplars_gen = a.exemplars, r.gen
+		end
+		return
+	end
+	s.answer = nil
 	local result: any, exemplars = Metrics.parseWithExemplars(r.route, response, env, r.kind)
 	if not result.ok then
 		local e = result.error
@@ -324,6 +374,16 @@ local function finish(s: State, env: Env, response: any)
 	else
 		s.cursor_t = nil
 	end
+	if body and s.chart then
+		s.answer = {
+			body = body,
+			status = response.status,
+			run = r,
+			context = s.context,
+			ds = s.ds,
+			exemplars = if s.exemplars_gen == r.gen then s.exemplars else nil,
+		}
+	end
 end
 
 -- The answer of a direct endpoint's /api/v1/query_exemplars. Arriving after
@@ -339,6 +399,10 @@ local function exemplarsDone(s: State, env: Env, gen: number, response: any)
 		return
 	end
 	s.exemplars, s.exemplars_gen = result.exemplars, gen
+	local a = s.answer
+	if a and a.run.gen == gen then
+		a.exemplars = result.exemplars
+	end
 	if s.ran and s.ran.gen == gen and s.chart and #result.exemplars > 0 then
 		renderChart(s)
 	end
@@ -1132,6 +1196,11 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			table.insert(effects, Shared.timer(s.sync))
 		end
 		if msg.tag == M.REFRESH_TAG .. s.timer_gen and s.refresh_ms then
+			if Visibility.isHidden(env) then
+				-- Background tab: look again shortly, run once shown.
+				table.insert(effects, { kind = "timer", tag = msg.tag, ms = Visibility.POLL_MS })
+				return s, effects
+			end
 			if s.status ~= "loading" then
 				run(s, env, effects)
 			end

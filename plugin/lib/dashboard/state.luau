@@ -15,6 +15,13 @@
 -- timer at the smallest period among the panels shown that redraws them
 -- without querying. Every request carries a tag with a generation, and an
 -- answer whose generation is stale is dropped.
+-- Blob economy (docs/performance.md): a byte-identical answer to the same
+-- query keeps the parsed data, so the view memo skips the redraw; native
+-- panels draw a relative range snapped to their query interval
+-- (M.drawRange), so a refresh inside one step draws the same bytes; the
+-- auto-refresh and live timers pause while the block's tab is in the
+-- background (lib/visibility.luau) and refresh as soon as it is shown; in
+-- the expanded view the panels behind it are not refreshed until shown.
 -- Block `init` only fetches: opening panes and other one-shot effects follow
 -- user events, because Tern re-runs init on restore and plugin reloads.
 
@@ -38,6 +45,7 @@ local PanelTime = require("./panel_time")
 local QueryOptions = require("../query/options")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
+local Redraw = require("../render/redraw")
 local RenderPng = require("./render_png")
 local Repeat = require("./repeat")
 local Route = require("../config/route")
@@ -47,6 +55,7 @@ local Shared = require("../time/shared")
 local SvgTimeseries = require("../render/svg_timeseries")
 local TimeRange = require("../query/timerange")
 local Variables = require("./variables")
+local Visibility = require("../visibility")
 local Tbl = require("../tbl")
 
 type Env = Env.Env
@@ -60,6 +69,8 @@ M.PNG_CACHE = 24
 M.SEARCH_LIMIT = Search.LIMIT
 
 export type PanelStatus = "idle" | "loading" | "ready" | "error"
+
+export type Drawn = { range: Range.Range, interval_ms: number }
 
 export type PanelState = {
 	status: PanelStatus,
@@ -86,6 +97,15 @@ export type PanelState = {
 	extra_gen: number,
 	-- The module's live redraw period, nil when not live.
 	live_ms: number?,
+	-- The range and query interval of the query in flight, and of the one
+	-- `data` answers (the range it is drawn over).
+	asked: Drawn?,
+	drawn: Drawn?,
+	-- The last answer parsed: query signature, HTTP status and body; an
+	-- identical answer keeps `data` (and its view memo).
+	answer: { sig: string, status: number, body: string, panel_status: PanelStatus }?,
+	-- A refresh skipped while the panel was behind the expanded view.
+	stale: boolean?,
 }
 
 export type Picker = {
@@ -493,6 +513,27 @@ local function queryContext(s: State, scope: Interpolate.Scope, env: Env, range:
 	}
 end
 
+-- The range a native panel draws: its own (time override) or the
+-- dashboard's, with an end relative to now snapped down to the panel's query
+-- interval (lib/render/redraw.luau), so a refresh that brought the same
+-- answer draws the same bytes.
+function M.drawRange(s: State, ps: PanelState?): Range.Range?
+	local t = if ps then ps.time else nil
+	-- Data is drawn over the range it was asked for (until a refreshed answer
+	-- arrives the old one stays on its own axis: no extra redraw meanwhile).
+	local d = if ps then ps.drawn else nil
+	local r = if d then d.range elseif t then t.range else s.range
+	if r == nil then
+		return nil
+	end
+	local to = if t then t.to else s.to
+	if d == nil or not Redraw.relative(to) then
+		return r
+	end
+	local from_ms, to_ms = Redraw.snapRange(r.from_ms, r.to_ms, (d :: Drawn).interval_ms)
+	return { from_ms = from_ms, to_ms = to_ms }
+end
+
 -- The panel's time range after its timeFrom/timeShift.
 function M.panelTime(s: State, inst: Repeat.Instance, env: Env): PanelTime.Override
 	local d = s.dashboard
@@ -672,8 +713,17 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 		s.focus = order[1]
 		s.cursor = nil
 	end
+	-- The expanded view shows the focused panel alone: the others are not
+	-- refreshed (no queries, renders or blobs) until they are shown again.
+	local behind = s.expanded and not s.solo and s.focus ~= nil
 	for _, inst in visible do
 		local ps = panelState(s, inst.key)
+		if behind and inst.key ~= s.focus then
+			if force then
+				ps.stale = true
+			end
+			continue
+		end
 		local scope = M.panelScope(s, inst)
 		ps.decision = Ladder.decide(inst.panel, M.ladderContext(s, scope), env)
 		-- Every rung shows the time override info in its header.
@@ -682,7 +732,9 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 		if ps.decision.mode == "native" then
 			ps.png = nil
 			ps.live_ms = Registry.liveMs(inst.panel.json, env)
-			advanceRequests(s, inst, ps, env, force, effects)
+			local again = force or ps.stale == true
+			ps.stale = nil
+			advanceRequests(s, inst, ps, env, again, effects)
 			local pq, err = nil, nil
 			local qctx = queryContext(s, scope, env, pt.range)
 			if Registry.queries(inst.panel.json, env) then
@@ -699,10 +751,11 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 				continue
 			end
 			local signature = env.encode(pq.queries) .. "\31" .. pt.from .. "\31" .. pt.to
-			if force or signature ~= ps.signature then
+			if again or signature ~= ps.signature then
 				ps.signature = signature
 				ps.gen += 1
 				ps.status = "loading"
+				ps.asked = { range = pt.range, interval_ms = pq.interval_ms }
 				table.insert(
 					effects,
 					http(tag("q", s.gen, ps.gen, inst.key), route, Queries.request(route, pq, qctx, env))
@@ -914,6 +967,24 @@ local function onQuery(s: State, key: string, response: any, env: Env)
 	if ps == nil then
 		return
 	end
+	-- The same query answered byte for byte as last time (Grafana aligns a
+	-- range to its step, so refreshes inside one step do): keep the parsed
+	-- data, whose identity keys the view memo, so nothing is redrawn.
+	local last = ps.answer
+	local body = if type(response.body) == "string" then response.body else nil
+	if
+		last
+		and body
+		and ps.data ~= nil
+		and last.sig == ps.signature
+		and last.status == response.status
+		and last.body == body
+	then
+		ps.status = last.panel_status
+		ps.drawn = ps.asked
+		s.updated_ms = env.now_ms
+		return
+	end
 	local inst = Repeat.find(s.sections, key)
 	if inst == nil then
 		return
@@ -939,6 +1010,10 @@ local function onQuery(s: State, key: string, response: any, env: Env)
 	if ps.status == "error" then
 		ps.error = table.concat(data.errors, "; ")
 	end
+	ps.drawn = ps.asked
+	ps.answer = if body and ps.signature
+		then { sig = ps.signature :: string, status = response.status, body = body, panel_status = ps.status }
+		else nil
 	s.updated_ms = env.now_ms
 end
 
@@ -1636,7 +1711,7 @@ function M.focusedExemplars(s: State): { FrameProm.Exemplar }
 	local inst = if s.focus then Repeat.find(s.sections, s.focus :: string) else nil
 	local ps = if s.focus then s.panels[s.focus :: string] else nil
 	local data = if ps then ps.data else nil
-	local r = s.range
+	local r = M.drawRange(s, ps)
 	if inst == nil or inst.panel.type ~= "timeseries" or data == nil or data.exemplars == nil or r == nil then
 		return {}
 	end
@@ -2007,15 +2082,24 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			return s, effects
 		end
 		if msg.tag == tag("live", s.gen, s.live_gen) and s.live_ms then
-			-- Views redraw after every update; just keep ticking.
-			s.live_tick += 1
+			-- Views redraw after every update; just keep ticking (no redraw
+			-- while the tab is in the background).
+			if not Visibility.isHidden(env) then
+				s.live_tick += 1
+			end
 			local p = s.live_ms :: number
 			table.insert(effects, { kind = "timer", tag = msg.tag, ms = p - env.now_ms % p })
 			return s, effects
 		end
 		if msg.tag == tag("refresh", s.gen, s.timer_gen) and s.auto then
-			refresh(s, env, effects)
-			armRefresh(s, effects)
+			if Visibility.isHidden(env) then
+				-- Background tab: nothing is queried or drawn; look again
+				-- shortly and refresh as soon as the block is shown.
+				table.insert(effects, { kind = "timer", tag = msg.tag, ms = Visibility.POLL_MS })
+			else
+				refresh(s, env, effects)
+				armRefresh(s, effects)
+			end
 		end
 	elseif msg.kind == "event" then
 		event(s, msg.ev, env, effects)

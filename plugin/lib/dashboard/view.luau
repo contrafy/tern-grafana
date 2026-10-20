@@ -97,7 +97,8 @@ local function nativeBody(
 	-- Text panels interpolate variables into their content.
 	local signature = Variables.signature(s.vars, s.range)
 	local memo = s.memo[inst.key]
-	local pr = if ps.time then ps.time.range else s.range
+	-- Snapped to the query interval: a refresh with the same answer is a memo hit.
+	local pr = State.drawRange(s, ps)
 	local live = if ps.live_ms then s.live_tick else nil
 	if
 		memo
