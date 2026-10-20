@@ -365,7 +365,7 @@ local function render(panel: any, frames: { Frame }, env: Env, opts: Options): (
 		return ui.muted(why or "Not supported", { key = opts.key }), {}
 	end
 	local mod = m :: PanelModule
-	local data = if queriesOf(mod, p) then Transform.prepare(p, frames, env) else frames
+	local data = if queriesOf(mod, p) then Transform.prepare(p, frames, env, opts.interpolate) else frames
 	local node, assets = mod.view(p, data, env, opts)
 	return node, assets or {}
 end

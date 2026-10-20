@@ -132,8 +132,8 @@ describe("registry unsupported reasons", function()
 	end)
 
 	it("passes on transformation, field config and reducer reasons", function()
-		expect(reason({ type = "table", transformations = { { id = "joinByField" } } })).toBe(
-			"transformation joinByField is not supported"
+		expect(reason({ type = "table", transformations = { { id = "groupBy" } } })).toBe(
+			"transformation groupBy is not supported"
 		)
 		expect(reason({ type = "stat", options = { reduceOptions = { calcs = { "allValues" } } } })).toBe(
 			"reducer allValues is not supported"

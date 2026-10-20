@@ -6,18 +6,36 @@
 --    frames leave the data, and every refId whose target says
 --    `format: "table"` becomes one table frame (Time, label columns,
 --    Value or `Value #<refId>`), transformDFToTable;
--- 2. the panel's `transformations`, in order, for the supported subset:
---    organize, filterFieldsByName, filterByRefId (packages/grafana-data/src/
+-- 2. the panel's `transformations`, in order, each skipped when `disabled`,
+--    applied only to the frames its `filter` (byRefId) matches (the rest are
+--    put back where the first of them stood, transformDataFrame.ts), its
+--    string options interpolated with the dashboard variables: organize,
+--    filterFieldsByName, filterByRefId (packages/grafana-data/src/
 --    transformations/transformers/{organize,filterByName,filterByRefId,
---    order,rename,filter}.ts).
--- Anything else is reported by `unsupported` so the panel falls down the
--- rendering ladder instead of showing data Grafana would not.
+--    order,rename,filter}.ts) here, and calculateField, joinByField
+--    (seriesToColumns), labelsToFields, merge, convertFieldType, formatTime,
+--    sortBy, filterByValue, extractFields, reduce, rowsToFields and
+--    configFromData in ./transforms.
+-- Anything else, or an option a port cannot honor, is reported by
+-- `unsupported` so the panel falls down the rendering ladder instead of
+-- showing data Grafana would not.
 
+local Calculate = require("./transforms/calculate")
+local ConfigMap = require("./transforms/configmap")
+local Convert = require("./transforms/convert")
 local Env = require("../env")
+local Extract = require("./transforms/extract")
 local FieldConfig = require("./fieldconfig")
+local FilterValue = require("./transforms/filtervalue")
 local Frame = require("../frame/types")
+local Join = require("./transforms/join")
 local Json = require("./json")
+local Labels = require("./transforms/labels")
+local Merge = require("./transforms/merge")
+local ReduceT = require("./transforms/reduce")
 local Regex = require("../regex")
+local Shared = require("./transforms/shared")
+local SortBy = require("./transforms/sortby")
 local Tbl = require("../tbl")
 
 type Env = Env.Env
@@ -26,7 +44,7 @@ type Field = Frame.Field
 
 local M = {}
 
-local SUPPORTED: { [string]: boolean } = { organize = true, filterFieldsByName = true, filterByRefId = true }
+type Ctx = Shared.Ctx
 
 local function isPrometheus(frame: Frame): boolean
 	local custom = frame.meta and frame.meta.custom
@@ -330,29 +348,132 @@ local function active(env: Env, t: any): boolean
 	return Json.bool(env, Json.path(env, t, "disabled")) ~= true
 end
 
+type Transformer = {
+	unsupported: (options: any, ctx: Ctx) -> string?,
+	apply: (frames: { Frame }, options: any, ctx: Ctx) -> { Frame },
+}
+
+local function none(): string?
+	return nil
+end
+
+local TRANSFORMERS: { [string]: Transformer } = {
+	organize = {
+		unsupported = none,
+		apply = function(fs: { Frame }, options: any, ctx: Ctx): { Frame }
+			return organize(fs, options, ctx.env)
+		end,
+	},
+	filterFieldsByName = {
+		unsupported = function(options: any, ctx: Ctx): string?
+			if Json.bool(ctx.env, Json.path(ctx.env, options, "byVariable")) == true then
+				return "by variable"
+			end
+			return nil
+		end,
+		apply = function(fs: { Frame }, options: any, ctx: Ctx): { Frame }
+			local env = ctx.env
+			return filterFields(
+				fs,
+				namesOrPattern(env, Json.path(env, options, "include")),
+				namesOrPattern(env, Json.path(env, options, "exclude"))
+			)
+		end,
+	},
+	filterByRefId = {
+		unsupported = none,
+		apply = function(fs: { Frame }, options: any, ctx: Ctx): { Frame }
+			return filterByRefId(fs, options, ctx.env)
+		end,
+	},
+	calculateField = Calculate,
+	joinByField = Join,
+	seriesToColumns = Join,
+	labelsToFields = Labels,
+	merge = Merge,
+	convertFieldType = Convert,
+	formatTime = { unsupported = none, apply = Convert.formatTime },
+	sortBy = SortBy,
+	filterByValue = FilterValue,
+	extractFields = Extract,
+	reduce = ReduceT,
+	rowsToFields = { unsupported = ConfigMap.rowsToFieldsUnsupported, apply = ConfigMap.rowsToFields },
+	configFromData = { unsupported = ConfigMap.configFromDataUnsupported, apply = ConfigMap.configFromData },
+}
+
 -- The first transformation Tern cannot apply, as a reason, or nil.
 function M.unsupported(panel: any, env: Env): string?
+	local ctx: Ctx = { env = env }
 	for _, t in Json.list(env, Json.path(env, panel, "transformations")) do
 		if not active(env, t) then
 			continue
 		end
 		local id = Json.str(env, Json.path(env, t, "id"))
-		if id == nil or not SUPPORTED[id] then
+		local tr = if id then TRANSFORMERS[id] else nil
+		if id == nil or tr == nil then
 			return string.format("transformation %s is not supported", tostring(id))
 		end
 		local filter = Json.tbl(env, Json.path(env, t, "filter"))
-		if filter and Json.str(env, filter.id) ~= "byRefId" then
+		if filter and Json.str(env, filter.id) ~= "byRefId" and Shared.truthy(filter.options) then
 			return string.format("transformation %s with a %s filter is not supported", id, tostring(filter.id))
 		end
-		if id == "filterFieldsByName" and Json.bool(env, Json.path(env, t, "options", "byVariable")) == true then
-			return "transformation filterFieldsByName by variable is not supported"
+		local why = tr.unsupported(Json.path(env, t, "options"), ctx)
+		if why then
+			return string.format("transformation %s %s is not supported", id, why)
 		end
 	end
 	return nil
 end
 
--- Frames as the panel's visualization receives them.
-function M.prepare(panel: any, frames: { Frame }, env: Env): { Frame }
+-- The options with every string interpolated (deepIterate over a copy).
+local function interpolated(v: any, interpolate: (string) -> string, env: Env): any
+	if type(v) == "string" then
+		return interpolate(v)
+	elseif type(v) == "table" and v ~= env.null then
+		local out: { [any]: any } = {}
+		for k, x in v do
+			out[k] = interpolated(x, interpolate, env)
+		end
+		return out
+	end
+	return v
+end
+
+-- Join gaps leave the transforms as the plugin's missing value.
+local function settle(frames: { Frame }): { Frame }
+	local out: { Frame } = frames
+	for fi, frame in frames do
+		local fields: { Field }? = nil
+		for xi, field in frame.fields do
+			local values: { any }? = nil
+			for i, v in field.values do
+				if v == Shared.GAP then
+					if values == nil then
+						values = Tbl.copy(field.values)
+					end
+					(values :: { any })[i] = Frame.NULL
+				end
+			end
+			if values then
+				if fields == nil then
+					fields = Tbl.copy(frame.fields)
+				end
+				(fields :: { Field })[xi] = Shared.withValues(field, values)
+			end
+		end
+		if fields then
+			if out == frames then
+				out = Tbl.copy(frames)
+			end
+			out[fi] = Shared.withFields(frame, fields)
+		end
+	end
+	return out
+end
+
+-- Frames as the panel's visualization receives them. `interpolate`
+-- replaces dashboard variables in transformation options.
+function M.prepare(panel: any, frames: { Frame }, env: Env, interpolate: ((string) -> string)?): { Frame }
 	local data: { Frame } = {}
 	local tables: { Frame } = {}
 	local refs = tableRefIds(panel, env)
@@ -372,51 +493,55 @@ function M.prepare(panel: any, frames: { Frame }, env: Env): { Frame }
 			table.insert(data, t)
 		end
 	end
+	local ctx: Ctx = { env = env, interpolate = interpolate }
 	for _, t in Json.list(env, Json.path(env, panel, "transformations")) do
 		if not active(env, t) then
 			continue
 		end
 		local id = Json.str(env, Json.path(env, t, "id"))
-		local options = Json.path(env, t, "options")
-		local apply: (({ Frame }) -> { Frame })? = nil
-		if id == "organize" then
-			apply = function(fs: { Frame }): { Frame }
-				return organize(fs, options, env)
-			end
-		elseif id == "filterFieldsByName" then
-			apply = function(fs: { Frame }): { Frame }
-				return filterFields(
-					fs,
-					namesOrPattern(env, Json.path(env, options, "include")),
-					namesOrPattern(env, Json.path(env, options, "exclude"))
-				)
-			end
-		elseif id == "filterByRefId" then
-			apply = function(fs: { Frame }): { Frame }
-				return filterByRefId(fs, options, env)
-			end
-		end
-		if apply == nil then
+		local tr = if id then TRANSFORMERS[id] else nil
+		if tr == nil then
 			continue
 		end
+		local raw = Json.path(env, t, "options")
+		local options: any = if interpolate then interpolated(raw, interpolate, env) else raw
+		local staticRef = Json.str(env, Json.path(env, t, "refId"))
+		staticRef = if staticRef then string.match(staticRef, "^%s*(.-)%s*$") else nil
+		if staticRef and staticRef ~= "" then
+			local o = Tbl.copy(Json.obj(env, options))
+			o.refId = staticRef
+			options = o
+		end
 		local filter = Json.tbl(env, Json.path(env, t, "filter"))
-		local pattern = if filter then Json.str(env, filter.options) else nil
+		local pattern = if filter and Shared.truthy(filter.options) then Json.str(env, filter.options) else nil
 		if pattern then
-			-- Apply to the matching frames only; the rest pass through.
+			-- Apply to the matching frames; the others go back in at the
+			-- index of the first of them past the start (Grafana's `insert`
+			-- stays 0 only while no later frame is kept).
 			local match = refIdMatcher(pattern)
 			local hit: { Frame }, pass: { Frame } = {}, {}
-			for _, f in data do
-				table.insert(if match(f) then hit else pass, f)
+			local insert = 0
+			for i, f in data do
+				if match(f) then
+					table.insert(hit, f)
+				else
+					table.insert(pass, f)
+					if insert == 0 then
+						insert = i - 1
+					end
+				end
 			end
-			data = apply(hit)
-			for _, f in pass do
-				table.insert(data, f)
+			local after = Tbl.copy(tr.apply(hit, options, ctx))
+			local at = math.min(insert, #after) + 1
+			for k, f in pass do
+				table.insert(after, at + k - 1, f)
 			end
+			data = after
 		else
-			data = apply(data)
+			data = tr.apply(data, options, ctx)
 		end
 	end
-	return data
+	return settle(data)
 end
 
 return M
