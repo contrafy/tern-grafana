@@ -163,8 +163,8 @@ end
 
 local function panelRow(p: Analyze.PanelResult): Node
 	local spans: { SpanLike } = {
-		ui.span("    " .. Markdown.modeText(p.mode) .. "  ", MODE_STYLE[p.mode]),
-		ui.span(if p.title == "" then "(untitled)" else p.title),
+		ui.span("    " .. Markdown.modeText(p.mode), MODE_STYLE[p.mode]),
+		ui.span("  " .. (if p.title == "" then "(untitled)" else p.title)),
 		ui.span("  " .. p.type, "mono"),
 	}
 	if p.blocker then
