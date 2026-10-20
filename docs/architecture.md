@@ -128,6 +128,9 @@ multi-frame time series uses, so Grafana and direct results flow into the same r
 
 ## Effects
 
+Click action names are plugin-defined, except `copy`: Tern handles it itself and copies the clicked node's text,
+so buttons that copy something else use their own action name (`copy-matchers`, `copy-prompt`, `copy-config`).
+
 Every block and lens is a pure state machine in `lib/<feature>/state.luau`:
 
 ```luau

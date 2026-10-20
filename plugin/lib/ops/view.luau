@@ -569,7 +569,7 @@ local function configCard(s: State): Node
 		add("remote write / read", string.format("%d / %d", c.remote_write, c.remote_read))
 		add("yaml", string.format("%d lines", c.lines))
 		table.insert(children, ui.kv(items))
-		table.insert(children, ui.row({ button("Copy YAML (y)", "copy", "bcopy") }, { key = "cfgbtn" }))
+		table.insert(children, ui.row({ button("Copy YAML (y)", "copy-config", "bcopy") }, { key = "cfgbtn" }))
 	end
 	return ui.card({ "Configuration" }, children, { key = "config", inset = true })
 end

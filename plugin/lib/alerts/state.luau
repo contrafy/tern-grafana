@@ -744,7 +744,7 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 		end
 	elseif act == "open" and value then
 		open(s, value, effects)
-	elseif act == "copy" then
+	elseif act == "copy-matchers" then
 		copyMatchers(s, effects)
 	elseif act == "investigate" then
 		investigate(s, env, effects)

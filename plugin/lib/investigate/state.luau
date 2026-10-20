@@ -195,7 +195,7 @@ end
 local function act(s: State, name: string, env: Env, effects: { Effect })
 	if name == "send" then
 		send(s, env, effects)
-	elseif name == "copy" then
+	elseif name == "copy-prompt" then
 		copy(s, effects)
 	elseif name == "refresh" then
 		fetch(s, env, effects)

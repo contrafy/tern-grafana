@@ -357,6 +357,9 @@ describe("actions", function()
 		expect(shows(s, "prometheus, node, alertmanager, loki, tempo, down")).toBe(true)
 		s, effects = press(s, key("y"))
 		expect(string.sub(find(effects, "copy").text, 1, 7)).toBe("global:")
+		-- Tern swallows a click action named "copy", so the button uses its own name.
+		local _, clicked = action(s, "copy-config")
+		expect(string.sub(find(clicked, "copy").text, 1, 7)).toBe("global:")
 	end)
 end)
 
