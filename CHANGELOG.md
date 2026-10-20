@@ -9,6 +9,26 @@ versions may break).
 
 ### Added
 
+- Panels on backend datasource plugins run natively: PostgreSQL, MySQL,
+  MSSQL, Elasticsearch, Infinity (backend parsers), Grafana Incident and any
+  plugin with a backend, each target sent as its datasource's frontend sends
+  it (SQL-quoted variables, Lucene formatting, every string interpolated).
+  Server-side expressions run (with the hidden queries they read), and
+  `-- Dashboard --` panels show their source panel's results (with its
+  transformations when asked), querying the source when it is not on screen.
+  Legacy `table-old` panels migrate to table as in Grafana. Datasources whose
+  frontends query in the browser (JSON API, cardinality, Zabbix, Graphite,
+  InfluxDB, Infinity frontend parsers, Incident queries with variables) keep
+  a precise ladder reason. Dev stack: a seeded PostgreSQL and dashboard
+  `tern-sql`. See docs/dashboards.md, the ladder.
+
+- Panel transformations drawn natively: add field from calculation, join by
+  field (and seriesToColumns), labels to fields, merge, convert field type,
+  format time, sort by, filter data by values, extract fields, reduce, rows to
+  fields and config from query results, ported from Grafana 13 with its own
+  test cases; transformation options see dashboard variables. See
+  docs/dashboards.md, Transformations.
+
 - Grafana IRM: **Grafana: On-call** (OnCall alert groups with acknowledge,
   unacknowledge, resolve, unresolve and silence; schedules with who is on call
   now and next) and **Grafana: Incidents** (open incidents, detail and
@@ -28,6 +48,16 @@ versions may break).
   query interval, and panels behind an expanded one wait until shown. Numbers
   before and after in docs/performance.md; an upstream issue draft in
   docs/upstream/stencil-blob-cache.md.
+
+- Time series panels with several y axes draw natively: series are grouped
+  into scales as Grafana groups them (unit, bounds, soft bounds, placement,
+  label, distribution), so a per-series unit override gets its own axis on the
+  right with its own ticks; legends and the cursor read each series in its own
+  unit. Also drawn: `axisPlacement`, `axisLabel`, `axisSoftMin`/`axisSoftMax`,
+  `axisCenteredZero`, `axisGridShow`, log and symlog scales, stacking per
+  scale and `stacking.group`, the `negative-Y` and `constant` transforms, and
+  `hideFrom.legend`/`hideFrom.tooltip`. Field overrides can match by value
+  (`byValue`) in every panel type.
 
 ## [0.3.0] - 2026-10-12
 
