@@ -30,6 +30,17 @@ versions may break).
   transformation options see dashboard variables. See docs/dashboards.md,
   Transformations.
 
+- **Grafana: Compatibility** scans every dashboard a context can see and
+  lists, per panel, whether it is drawn natively, by Grafana's renderer or in
+  a browser pane and why, with counts grouped by reason; filter, open a
+  dashboard or panel, copy the report as Markdown (`compat.max_dashboards`).
+  See docs/compat.md.
+
+- Display names using `${__field.name}`, `${__field.displayName}`,
+  `${__field.labels.<key>}`, `${__field.labels}` or `${__series.name}` resolve
+  per field in legends, table headers and stat or gauge titles, and dashboard
+  variables apply to display names.
+
 - Grafana IRM: **Grafana: On-call** (OnCall alert groups with acknowledge,
   unacknowledge, resolve, unresolve and silence; schedules with who is on call
   now and next) and **Grafana: Incidents** (open incidents, detail and
@@ -68,6 +79,18 @@ versions may break).
   modules now load their lib stacks on first use, the status segments load in
   timer ticks after the entry, and `make check` guards the load size
   (`make window-load`). See docs/architecture.md, Window load budget.
+
+- Stat values are sized like Grafana's BigValue for the panel and kept
+  within the card on one line; they had a fixed size, so large panels looked
+  empty and long values could wrap.
+
+- A `query_result()` variable whose query returns a scalar expands to the
+  value, as in Grafana, instead of the raw row text that broke the PromQL
+  using it.
+
+- The "Copy matchers", "Copy prompt" and "Copy YAML" buttons copied their own
+  label: Tern handles a click action named `copy` itself. They now use their
+  own action names.
 
 ## [0.3.0] - 2026-10-12
 
