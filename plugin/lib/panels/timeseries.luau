@@ -274,7 +274,7 @@ end
 local function seriesClass(item: FieldConfig.Item, color: FieldConfig.Scale, opts: Common.Options): string
 	local mode = item.config.color_mode
 	if mode == "fixed" or mode == "shades" then
-		return TsGradient.stopClass(item.config.fixed_color or "", opts.theme)
+		return TsGradient.fixedClass(item.config.fixed_color or "", opts.theme)
 	elseif string.sub(mode, 1, 11) == "continuous-" then
 		local c = TsGradient.schemeColor(mode, color.percent, opts.theme)
 		if c then

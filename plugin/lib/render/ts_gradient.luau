@@ -369,18 +369,36 @@ local function classOfRgb(c: Rgb): string
 	return class
 end
 
--- The stop class of a Grafana color (name, hex or rgb()) in `theme`.
+-- The stop class of a Grafana color (name, hex or rgb()) in `theme`. The
+-- dark-theme named colors' classes take their light shade under Tern's
+-- light theme (tern-grafana.css), as Grafana resolves names per theme; a
+-- literal color that is not exactly one of them (it only has the nearest
+-- class) also gets `tg-hex`, which keeps it as it is in both themes.
 function M.stopClass(color: string, theme: Theme?): string
 	if color == "panel-bg" then
 		return "tg-gc-bg"
 	elseif color == "transparent" then
 		return "tg-gx"
 	end
-	local c = parse(Thresholds.color(color, theme))
+	local resolved = Thresholds.color(color, theme)
+	local c = parse(resolved)
 	if c == nil then
 		return classOfRgb({ 128, 128, 128 })
 	end
+	if resolved == color and Thresholds.lightOf(color) == color then
+		return classOfRgb(c) .. " tg-hex"
+	end
 	return classOfRgb(c)
+end
+
+-- A fixed color (fieldConfig color.fixedColor): a literal stays that color
+-- in both themes, even when it equals a named color's dark shade.
+function M.fixedClass(color: string, theme: Theme?): string
+	local class = M.stopClass(color, theme)
+	if Thresholds.color(color, theme) == color and string.find(class, " tg-hex", 1, true) == nil then
+		return class .. " tg-hex"
+	end
+	return class
 end
 
 -- gradientMode hue: the top and bottom stop classes for a series color.

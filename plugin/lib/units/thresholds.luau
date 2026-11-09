@@ -87,9 +87,12 @@ local NAMED: { [string]: Named } = {
 	text = { dark = "rgb(204, 204, 220)", light = "rgba(36, 41, 46, 1)", tone = "neutral" },
 	transparent = { dark = "rgba(0,0,0,0)", light = "rgba(255, 255, 255, 0)", tone = "muted" },
 }
+-- A dark-theme named color (upper-case) -> the same name's light-theme color.
+local LIGHT_OF: { [string]: string } = {}
 for _, hue in HUES do
 	for i, shade in SHADES do
 		NAMED[shade .. hue.name] = { dark = hue.dark[i], light = hue.light[i], tone = hue.tone }
+		LIGHT_OF[string.upper(hue.dark[i])] = hue.light[i]
 	end
 end
 
@@ -102,6 +105,13 @@ function M.color(name: string?, theme: Theme?): string
 		return if theme == "light" then named.light else named.dark
 	end
 	return name
+end
+
+-- The light-theme color of a color resolved for the dark theme: a named
+-- color's light shade (Grafana's dark-blue is #1F60C4 dark, #1250B0 light),
+-- any other color itself.
+function M.lightOf(color: string): string
+	return LIGHT_OF[string.upper(color)] or color
 end
 
 local function rgba(color: string): (number?, number, number, number)

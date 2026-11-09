@@ -71,6 +71,7 @@ for _, version in S.VERSIONS do
 				return n.p and n.p.key == "s1"
 			end)
 			-- Threshold green #73BF69 (tern-grafana.css tg-gc80): brightness 158, white text.
+			-- (#56A64B) is Grafana's light-theme green, for Tern's light theme.
 			expect(tile.p.class).toBe("tgp-stat tgp-stat-grad tg-gc80")
 			local line = S.find(bg, function(n)
 				return n.p and n.p.key == "l"
@@ -185,26 +186,38 @@ for _, version in S.VERSIONS do
 		end
 
 		-- A fixed color fills the tile in its own Grafana color: blue and
-		-- purple came out grey or beige when they went through tones.
-		it("fills background tiles with the fixed color's class, gradient or solid", function()
-			-- green #73BF69, dark-blue #1F60C4, blue #5794F2: Grafana's gradient.
+		-- purple came out grey or beige when they went through tones. Each
+		-- named color's class takes its light shade under Tern's light theme
+		-- (dark-blue is #1F60C4 dark, #1250B0 light); a hex keeps its color.
+		it("fills background tiles with the fixed color's classes, gradient or solid", function()
+			-- green, dark-blue, blue: Grafana's gradient.
 			expect(tile(1).fill).toBe("tgp-stat-grad tg-gc80")
 			expect(tile(2).fill).toBe("tgp-stat-grad tg-gc111")
 			expect(tile(3).fill).toBe("tgp-stat-grad tg-gc103")
-			-- background_solid purple #B877D9.
+			-- background_solid purple.
 			expect(tile(4).fill).toBe("tgp-stat-solid tg-gc127")
 			-- Threshold red in background_solid.
 			expect(tile(7).fill).toBe("tgp-stat-solid tg-gc8")
+			-- A hex color is the same in both themes (only the nearest class).
+			expect(tile(10).fill).toBe("tgp-stat-grad tg-gc131 tg-hex")
 		end)
 
 		-- getTextColorForAlphaBackground: brightness above 180 takes dark text.
-		it("writes on the fill in white, or dark on a light color", function()
+		it("writes on the fill in white, or dark on a light color, per theme", function()
 			expect(tile(2).ink).toBe("light")
 			expect(tile(4).ink).toBe("light")
 			-- super-light-yellow #FFF899.
 			expect(tile(9).ink).toBe("dark")
+			expect(tile(9).ink_light).toBeNil()
 			-- A hex color counts by its own brightness, not its nearest class's.
 			expect(tile(10).ink).toBe("light")
+			-- light-green is #96D98D (188, dark text) dark, #73BF69 (158, white) light.
+			local panel, frames = fidelity(9)
+			local lg = S.clone(panel)
+			lg.fieldConfig.defaults.color.fixedColor = "light-green"
+			local green = Stat.tiles(lg, frames, env, OPTS)[1]
+			expect(green.ink).toBe("dark")
+			expect(green.ink_light).toBe("light")
 		end)
 
 		it("draws a fixed color in colorMode value exactly, thresholds as tones", function()
@@ -371,6 +384,23 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 		expect(image.p.alt).toBe("No targets")
 		local lines = assert(tonumber(string.match(image.p.max.h, "^(%d+)lines$")))
 		expect(lines * 16 >= image.p.h and (lines - 1) * 16 < image.p.h).toBe(true)
+	end)
+
+	-- buildLayout: a box wider than 2.5x its height lays title and value side
+	-- by side unless options.wideLayout is off (an untitled 12x5 billing
+	-- card at Grafana's size is 784x166 px: wide).
+	it("stacks a wide box when wideLayout is off", function()
+		local input: any = {
+			w = 784,
+			h = 166,
+			value = "$0",
+			title = "Current Metrics Series Usage Cost",
+			spark = false,
+			change = false,
+		}
+		expect(Stat.fit(input).wide).toBe(true)
+		input.no_wide = true
+		expect(Stat.fit(input).wide).toBe(false)
 	end)
 
 	it("keeps the plain tile without a panel size", function()

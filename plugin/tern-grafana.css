@@ -284,6 +284,52 @@
 .tg-gc231 { stop-color: #e2cb5c; color: #e2cb5c; stroke: #e2cb5c; fill: #e2cb5c; --tg-c: #e2cb5c; }
 .tg-gc232 { stop-color: #fdea45; color: #fdea45; stroke: #fdea45; fill: #fdea45; --tg-c: #fdea45; }
 
+/* Tern's light theme: Grafana resolves its named colors per theme, so the
+   classes of the dark shades (and the classic palette) take the light shade
+   (createVisualizationColors). A literal color only matched to its nearest
+   class carries tg-hex and keeps its own value. :where keeps the specificity
+   of the plain class, so the shape roles below still win. */
+:where(:root:not([data-theme='dark'])) .tg-gc1:not(:where(.tg-hex)) { stop-color: #ff7383; color: #ff7383; stroke: #ff7383; fill: #ff7383; --tg-c: #ff7383; }
+:where(:root:not([data-theme='dark'])) .tg-gc5:not(:where(.tg-hex)) { stop-color: #f2495c; color: #f2495c; stroke: #f2495c; fill: #f2495c; --tg-c: #f2495c; }
+:where(:root:not([data-theme='dark'])) .tg-gc8:not(:where(.tg-hex)) { stop-color: #e02f44; color: #e02f44; stroke: #e02f44; fill: #e02f44; --tg-c: #e02f44; }
+:where(:root:not([data-theme='dark'])) .tg-gc12:not(:where(.tg-hex)) { stop-color: #c4162a; color: #c4162a; stroke: #c4162a; fill: #c4162a; --tg-c: #c4162a; }
+:where(:root:not([data-theme='dark'])) .tg-gc16:not(:where(.tg-hex)) { stop-color: #ad0317; color: #ad0317; stroke: #ad0317; fill: #ad0317; --tg-c: #ad0317; }
+:where(:root:not([data-theme='dark'])) .tg-gc24:not(:where(.tg-hex)) { stop-color: #ffb357; color: #ffb357; stroke: #ffb357; fill: #ffb357; --tg-c: #ffb357; }
+:where(:root:not([data-theme='dark'])) .tg-gc28:not(:where(.tg-hex)) { stop-color: #ff9830; color: #ff9830; stroke: #ff9830; fill: #ff9830; --tg-c: #ff9830; }
+:where(:root:not([data-theme='dark'])) .tg-gc32:not(:where(.tg-hex)) { stop-color: #ff780a; color: #ff780a; stroke: #ff780a; fill: #ff780a; --tg-c: #ff780a; }
+:where(:root:not([data-theme='dark'])) .tg-gc36:not(:where(.tg-hex)) { stop-color: #fa6400; color: #fa6400; stroke: #fa6400; fill: #fa6400; --tg-c: #fa6400; }
+:where(:root:not([data-theme='dark'])) .tg-gc40:not(:where(.tg-hex)) { stop-color: #e55400; color: #e55400; stroke: #e55400; fill: #e55400; --tg-c: #e55400; }
+:where(:root:not([data-theme='dark'])) .tg-gc48:not(:where(.tg-hex)) { stop-color: #ffee52; color: #ffee52; stroke: #ffee52; fill: #ffee52; --tg-c: #ffee52; }
+:where(:root:not([data-theme='dark'])) .tg-gc52:not(:where(.tg-hex)) { stop-color: #fade2a; color: #fade2a; stroke: #fade2a; fill: #fade2a; --tg-c: #fade2a; }
+:where(:root:not([data-theme='dark'])) .tg-gc56:not(:where(.tg-hex)) { stop-color: #f2cc0c; color: #f2cc0c; stroke: #f2cc0c; fill: #f2cc0c; --tg-c: #f2cc0c; }
+:where(:root:not([data-theme='dark'])) .tg-gc60:not(:where(.tg-hex)) { stop-color: #e0b400; color: #e0b400; stroke: #e0b400; fill: #e0b400; --tg-c: #e0b400; }
+:where(:root:not([data-theme='dark'])) .tg-gc64:not(:where(.tg-hex)) { stop-color: #cc9d00; color: #cc9d00; stroke: #cc9d00; fill: #cc9d00; --tg-c: #cc9d00; }
+:where(:root:not([data-theme='dark'])) .tg-gc72:not(:where(.tg-hex)) { stop-color: #96d98d; color: #96d98d; stroke: #96d98d; fill: #96d98d; --tg-c: #96d98d; }
+:where(:root:not([data-theme='dark'])) .tg-gc76:not(:where(.tg-hex)) { stop-color: #73bf69; color: #73bf69; stroke: #73bf69; fill: #73bf69; --tg-c: #73bf69; }
+:where(:root:not([data-theme='dark'])) .tg-gc80:not(:where(.tg-hex)) { stop-color: #56a64b; color: #56a64b; stroke: #56a64b; fill: #56a64b; --tg-c: #56a64b; }
+:where(:root:not([data-theme='dark'])) .tg-gc84:not(:where(.tg-hex)) { stop-color: #37872d; color: #37872d; stroke: #37872d; fill: #37872d; --tg-c: #37872d; }
+:where(:root:not([data-theme='dark'])) .tg-gc88:not(:where(.tg-hex)) { stop-color: #19730e; color: #19730e; stroke: #19730e; fill: #19730e; --tg-c: #19730e; }
+:where(:root:not([data-theme='dark'])) .tg-gc96:not(:where(.tg-hex)) { stop-color: #8ab8ff; color: #8ab8ff; stroke: #8ab8ff; fill: #8ab8ff; --tg-c: #8ab8ff; }
+:where(:root:not([data-theme='dark'])) .tg-gc99:not(:where(.tg-hex)) { stop-color: #5794f2; color: #5794f2; stroke: #5794f2; fill: #5794f2; --tg-c: #5794f2; }
+:where(:root:not([data-theme='dark'])) .tg-gc103:not(:where(.tg-hex)) { stop-color: #3274d9; color: #3274d9; stroke: #3274d9; fill: #3274d9; --tg-c: #3274d9; }
+:where(:root:not([data-theme='dark'])) .tg-gc107:not(:where(.tg-hex)) { stop-color: #1f60c4; color: #1f60c4; stroke: #1f60c4; fill: #1f60c4; --tg-c: #1f60c4; }
+:where(:root:not([data-theme='dark'])) .tg-gc111:not(:where(.tg-hex)) { stop-color: #1250b0; color: #1250b0; stroke: #1250b0; fill: #1250b0; --tg-c: #1250b0; }
+:where(:root:not([data-theme='dark'])) .tg-gc119:not(:where(.tg-hex)) { stop-color: #ca95e5; color: #ca95e5; stroke: #ca95e5; fill: #ca95e5; --tg-c: #ca95e5; }
+:where(:root:not([data-theme='dark'])) .tg-gc123:not(:where(.tg-hex)) { stop-color: #b877d9; color: #b877d9; stroke: #b877d9; fill: #b877d9; --tg-c: #b877d9; }
+:where(:root:not([data-theme='dark'])) .tg-gc127:not(:where(.tg-hex)) { stop-color: #a352cc; color: #a352cc; stroke: #a352cc; fill: #a352cc; --tg-c: #a352cc; }
+:where(:root:not([data-theme='dark'])) .tg-gc131:not(:where(.tg-hex)) { stop-color: #8f3bb8; color: #8f3bb8; stroke: #8f3bb8; fill: #8f3bb8; --tg-c: #8f3bb8; }
+:where(:root:not([data-theme='dark'])) .tg-gc135:not(:where(.tg-hex)) { stop-color: #7c2ea3; color: #7c2ea3; stroke: #7c2ea3; fill: #7c2ea3; --tg-c: #7c2ea3; }
+:where(:root:not([data-theme='dark'])) .tg-s1 { stop-color: #56a64b; color: #56a64b; stroke: #56a64b; fill: #56a64b; --tg-c: #56a64b; }
+:where(:root:not([data-theme='dark'])) .tg-s2 { stop-color: #e0b400; color: #e0b400; stroke: #e0b400; fill: #e0b400; --tg-c: #e0b400; }
+:where(:root:not([data-theme='dark'])) .tg-s3 { stop-color: #3274d9; color: #3274d9; stroke: #3274d9; fill: #3274d9; --tg-c: #3274d9; }
+:where(:root:not([data-theme='dark'])) .tg-s4 { stop-color: #ff780a; color: #ff780a; stroke: #ff780a; fill: #ff780a; --tg-c: #ff780a; }
+:where(:root:not([data-theme='dark'])) .tg-s5 { stop-color: #e02f44; color: #e02f44; stroke: #e02f44; fill: #e02f44; --tg-c: #e02f44; }
+:where(:root:not([data-theme='dark'])) .tg-s6 { stop-color: #a352cc; color: #a352cc; stroke: #a352cc; fill: #a352cc; --tg-c: #a352cc; }
+:where(:root:not([data-theme='dark'])) .tg-s7 { stop-color: #19730e; color: #19730e; stroke: #19730e; fill: #19730e; --tg-c: #19730e; }
+:where(:root:not([data-theme='dark'])) .tg-s8 { stop-color: #cc9d00; color: #cc9d00; stroke: #cc9d00; fill: #cc9d00; --tg-c: #cc9d00; }
+:where(:root:not([data-theme='dark'])) .tg-s9 { stop-color: #1250b0; color: #1250b0; stroke: #1250b0; fill: #1250b0; --tg-c: #1250b0; }
+:where(:root:not([data-theme='dark'])) .tg-s10 { stop-color: #e55400; color: #e55400; stroke: #e55400; fill: #e55400; --tg-c: #e55400; }
+
 /* Shape roles: after the palette and tones so they win the cascade. */
 .tg-line,
 .tg-dots,

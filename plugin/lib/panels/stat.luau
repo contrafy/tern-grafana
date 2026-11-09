@@ -44,10 +44,13 @@ export type Tile = {
 	-- the palette's tg-s<n>), nil when it only has a tone (continuous
 	-- schemes). It fills the tile in the background modes and colors the
 	-- value in colorMode value when the field is not colored by thresholds.
+	-- Named colors' classes switch to their light shade under Tern's light
+	-- theme in CSS; a literal fixed color carries tg-hex and stays as it is.
 	color_class: string?,
 	-- The text on a filled tile (getTextColorForAlphaBackground): "dark" or
-	-- "light".
+	-- "light"; ink_light when the light shade takes the other one.
 	ink: string?,
+	ink_light: string?,
 	-- colorMode value with an exact color (fixed, palette, schemes).
 	exact: boolean?,
 	-- Background modes: the tile's fill classes (panels2.css tgp-stat-solid,
@@ -107,7 +110,26 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 	for i, v in values do
 		local d = v.display
 		local text = FieldConfig.joined(d)
-		local colorClass = d.class or (if d.color ~= "" then TsGradient.stopClass(d.color, opts.theme) else nil)
+		local cfg = if v.item then (v.item :: FieldConfig.Item).config else nil
+		local fixed = cfg and (cfg.color_mode == "fixed" or cfg.color_mode == "shades") and cfg.fixed_color
+		local colorClass = d.class
+			or (
+				if fixed
+					then TsGradient.fixedClass(fixed, opts.theme)
+					elseif d.color ~= "" then TsGradient.stopClass(d.color, opts.theme)
+					else nil
+			)
+		-- The light theme's shade of a named color (the class switches to it
+		-- in CSS); the ink follows it.
+		local light: string? = nil
+		if
+			colorClass
+			and d.class == nil
+			and opts.theme ~= "light"
+			and string.find(colorClass, "tg-hex", 1, true) == nil
+		then
+			light = Thresholds.lightOf(d.color)
+		end
 		local tile: Tile = {
 			title = if mode == "value_and_name" then v.title else nil,
 			value = if mode == "name" then v.title elseif mode == "none" then "" else text,
@@ -117,14 +139,11 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		}
 		if filled and colorClass then
 			tile.ink = if d.color ~= "" then Thresholds.textOn(d.color, opts.theme) else "light"
-			tile.fill = (
-				if colorMode == "background_solid"
-					then "tgp-stat-solid"
-					elseif opts.theme == "light" then "tgp-stat-grad tgp-stat-grad-light"
-					else "tgp-stat-grad"
-			)
-				.. " "
-				.. colorClass
+			if light then
+				local inkLight = Thresholds.textOn(light :: string, "light")
+				tile.ink_light = if inkLight ~= tile.ink then inkLight else nil
+			end
+			tile.fill = (if colorMode == "background_solid" then "tgp-stat-solid " else "tgp-stat-grad ") .. colorClass
 		elseif colorMode == "value" and colorClass and v.item then
 			tile.exact = (v.item :: FieldConfig.Item).config.color_mode ~= "thresholds"
 		end
@@ -380,6 +399,8 @@ export type FitInput = {
 	title_size: number?,
 	percent_size: number?,
 	justify: string?,
+	-- options.wideLayout false (BigValue disableWideLayout).
+	no_wide: boolean?,
 }
 
 -- BigValueLayout's font sizes for one box (buildLayout and its four layouts).
@@ -390,7 +411,7 @@ function M.fit(i: FitInput): Fit
 	local titlePx, valuePx = i.title_size or 0, i.value_size or 0
 	local alignTitle = if i.title_size then "" else (i.title or "")
 	local alignValue = if i.value_size then "" else i.value
-	local wide = w / h > 2.5
+	local wide = w / h > 2.5 and not i.no_wide
 	local function value(width: number, height: number)
 		if alignValue ~= "" then
 			valuePx = fontSize(alignValue, width, height)
@@ -524,6 +545,7 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		title_size = positive(text.titleSize),
 		percent_size = positive(text.percentSize),
 		justify = Json.str(env, options.justifyMode),
+		no_wide = Json.bool(env, options.wideLayout) == false,
 	})
 	if opts.card_height and title ~= "" then
 		-- The lines a wrapped title has in a tile of the capped card (an
@@ -548,13 +570,20 @@ local function fsClass(px: number): string
 	return "tgp-stat-fs" .. M.sizeClass(px)
 end
 
+-- The ink classes of a filled tile (panels2.css tgp-stat-ink-*, and
+-- tgp-stat-lnk-* under Tern's light theme).
+local function inkClass(tile: Tile): string
+	local class = "tgp-stat-ink-" .. (tile.ink :: string)
+	return if tile.ink_light then class .. " tgp-stat-lnk-" .. tile.ink_light else class
+end
+
 -- Fill class of the value text in the SVG (panels2.css .tgg-*): the text
 -- color on a filled tile, the exact color or the tone for colorMode value,
 -- the page color on a tone-filled tile, else the text color.
 local function valueFill(tile: Tile): string
 	local token = Common.token(tile.tone :: any)
 	if tile.ink then
-		return "tgp-stat-ink-" .. tile.ink
+		return inkClass(tile)
 	elseif tile.color_mode == "value" and tile.exact then
 		return tile.color_class :: string
 	elseif tile.color_mode == "value" and token ~= "" then
@@ -609,7 +638,7 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 	local lineClass = "tgp-stat-line"
 	if tile.ink then
 		-- BigValue colors title, value and percent change alike on a fill.
-		lineClass ..= " tgp-stat-ink-" .. tile.ink
+		lineClass ..= " " .. inkClass(tile)
 	end
 	if fit then
 		table.insert(classes, "tgp-stat-fit")

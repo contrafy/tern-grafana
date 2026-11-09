@@ -213,4 +213,14 @@ describe("thresholds.textOn", function()
 	end)
 end)
 
+-- Grafana resolves a named color per theme; a stat filled with dark-blue is
+-- #1250B0 in the light theme, not the dark theme's #1F60C4.
+describe("thresholds.lightOf", function()
+	it("maps a dark-theme named color to its light shade, other colors to themselves", function()
+		expect(thresholds.lightOf(thresholds.color("dark-blue"))).toBe("#1250B0")
+		expect(thresholds.lightOf("#1f60c4")).toBe("#1250B0")
+		expect(thresholds.lightOf("#ad46ff")).toBe("#ad46ff")
+	end)
+end)
+
 return nil
