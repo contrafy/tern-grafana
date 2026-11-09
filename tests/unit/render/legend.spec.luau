@@ -104,6 +104,29 @@ describe("Legend.rows", function()
 	end)
 end)
 
+-- A chart in a height-capped dashboard card leaves its legend this much
+-- room (measured in Tern: 16 px list lines 10 px apart, 22 px table header
+-- and 21 px rows); an underestimate cut the legend, an overestimate left a
+-- gap under it.
+describe("Legend.height", function()
+	local function row(name: string, values: { string }?): Legend.Row
+		return { class = "", name = name, values = values or {} }
+	end
+	it("wraps list entries across the width", function()
+		local rows = { row("Critical"), row("Minor"), row("Major"), row("Pending") }
+		expect(Legend.height(rows, "list", 1600)).toBe(16)
+		-- 240 px (incident "Daily incidents" right legend): three entries, then a fourth line.
+		expect(Legend.height(rows, "list", 240)).toBe(16 + 10 + 16)
+		expect(Legend.height({ row("total", { "12.3 ms" }) }, "list", 60)).toBe(16)
+	end)
+	it("counts a table's header and rows", function()
+		local rows =
+			{ row("Critical", { "474" }), row("Minor", { "5" }), row("Major", { "2" }), row("Pending", { "1" }) }
+		expect(Legend.height(rows, "table", 800)).toBe(106)
+		expect(Legend.height({}, "table", 800)).toBe(0)
+	end)
+end)
+
 describe("Legend.view", function()
 	it("lists names with values and notes dropped series", function()
 		local list = {}

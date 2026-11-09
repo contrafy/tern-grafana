@@ -255,10 +255,16 @@ function M.barSpecs(
 		}
 end
 
+-- The viz height Grafana gives a gauge: the card body in a height-capped
+-- card (opts.card_height), else the panel less its header row.
+local function vizHeight(opts: Common.Options, size: { w: number, h: number }, least: number): number
+	return math.max(opts.card_height or (size.h - M.HEADER_PX), least)
+end
+
 function M.barView(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
 	local size = opts.size or M.BAR_SIZE
 	local w = math.max(size.w, 60)
-	local h = math.max(size.h - M.HEADER_PX, 40)
+	local h = vizHeight(opts, size, 40)
 	local bars, o = M.barSpecs(panel, frames, env, opts, w, h)
 	local svg, iw, ih = SvgBarGauge.render(bars, o)
 	local alt: { string } = {}
@@ -570,7 +576,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	end
 	local size = opts.size or M.DEFAULT_SIZE
 	local w = math.max(size.w, 60)
-	local h = math.max(size.h - M.HEADER_PX, 60)
+	local h = vizHeight(opts, size, 60)
 	local cols, rows = M.grid(#specs, w, h)
 	local cw = math.floor((w - M.SPACING * (cols - 1)) / cols)
 	local ch = math.floor((h - M.SPACING * (rows - 1)) / rows)

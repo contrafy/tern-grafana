@@ -446,17 +446,16 @@ end
 -- A leaf's tooltip and link over the image.
 export type Hit = { x0: number, y0: number, x1: number, y1: number, title: string, href: string? }
 
--- The panel's content box: its Grafana size under its header, held to the
--- Tern card's height.
+-- The panel's content box: its Grafana size under its header, or in a
+-- height-capped card the card body (Charts.size).
 function M.size(panel: any, env: Env, opts: Common.Options): (number, number)
 	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
 	if opts.size then
-		local title = Json.str(env, Json.path(env, panel, "title")) or ""
 		W -= 2 * M.BORDER_PX
-		H -= 2 * M.BORDER_PX + (if title ~= "" then M.HEADER_PX else 0)
-	end
-	if opts.card_height then
-		H = math.min(H, opts.card_height)
+		if opts.card_height == nil then
+			local title = Json.str(env, Json.path(env, panel, "title")) or ""
+			H -= 2 * M.BORDER_PX + (if title ~= "" then M.HEADER_PX else 0)
+		end
 	end
 	return math.max(1, math.floor(W)), math.max(1, math.floor(H))
 end

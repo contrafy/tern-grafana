@@ -106,6 +106,20 @@ for _, version in S.VERSIONS do
 			expect(has(svg, ">alertmanager</text>")).toBe(true)
 		end)
 
+		-- Sized to Grafana's panel less its header, the bars ran past a
+		-- dashboard card's body (Case Priority, Total incidents by severity):
+		-- in a capped card they take the body's height.
+		it("fits the bars into the card body", function()
+			local capped = { key = "g", size = { w = 733, h = 524 }, card_height = 482 }
+			local node = Gauge.barView(S.panel(version, 8), S.frames(version, "prom2_range"), env, capped)
+			expect((node :: any).p.h).toBe(482)
+			local free = Gauge.barView(S.panel(version, 8), S.frames(version, "prom2_range"), env, {
+				key = "g",
+				size = { w = 733, h = 524 },
+			})
+			expect((free :: any).p.h).toBe(524 - Gauge.HEADER_PX)
+		end)
+
 		-- lcd lights each cell up to the value in the color of the cell's own
 		-- value.
 		it("colors lcd cells by their own value", function()

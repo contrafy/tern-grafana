@@ -10,12 +10,14 @@
 -- info marker (hover title; in full in the expanded view), panel links as
 -- chips, and transparent panels without card chrome.
 
+local AlertStates = require("./alert_states")
 local Assets = require("../render/assets")
 local ClockZone = require("../panels/clock_zone")
 local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
+local Layers = require("./layers")
 local Layout = require("./layout")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
@@ -47,6 +49,11 @@ M.BASIS_SLACK = 0.96
 -- panel with a description or links has a chip line under the head.
 M.CARD_CHROME_PX = 40
 M.CHIP_LINE_PX = 24
+-- A transparent panel's chrome (panels2.css tgp2-plain): 4 px padding and a
+-- 1 px border above and below; its head and chip lines are each a line
+-- with the 4 px gap under it.
+M.PLAIN_CHROME_PX = 10
+M.PLAIN_GAP_PX = 4
 
 -- A panel's Grafana height (gridPos h rows of 30 px with 8 px margins,
 -- lib/dashboard/render_png size) in Tern lines, never above it.
@@ -56,9 +63,15 @@ function M.heightLines(h: number): number
 end
 
 -- The card body's height in px under the card's height cap (heightLines),
--- below the chip line when the card has one.
-function M.cardHeight(h: number, chips: boolean, head: boolean): number
-	local chrome = M.CARD_CHROME_PX - (if head then 0 else M.LINE_PX) + (if chips then M.CHIP_LINE_PX else 0)
+-- below the head and the chip line when the card has them.
+function M.cardHeight(h: number, chips: boolean, head: boolean, transparent: boolean?): number
+	local chrome: number
+	if transparent then
+		local line = M.LINE_PX + M.PLAIN_GAP_PX
+		chrome = M.PLAIN_CHROME_PX + (if head then line else 0) + (if chips then line else 0)
+	else
+		chrome = M.CARD_CHROME_PX - (if head then 0 else M.LINE_PX) + (if chips then M.CHIP_LINE_PX else 0)
+	end
 	return math.max(M.heightLines(h) * M.LINE_PX - chrome, 0)
 end
 
@@ -126,6 +139,7 @@ local function nativeBody(
 	-- Snapped to the query interval: a refresh with the same answer is a memo hit.
 	local pr = State.drawRange(s, ps)
 	local live = if ps.live_ms then s.live_tick else nil
+	local annotations = Layers.marks(s, inst.panel.id)
 	if
 		memo
 		and memo.data == data
@@ -140,6 +154,7 @@ local function nativeBody(
 		and memo.extra_gen == ps.extra_gen
 		and memo.live == live
 		and memo.features == s.settings.features
+		and memo.annotations == annotations
 		and memo.from_ms == (if pr then pr.from_ms else nil)
 		and memo.to_ms == (if pr then pr.to_ms else nil)
 	then
@@ -154,7 +169,9 @@ local function nativeBody(
 	local pw, ph = RenderPng.size(if single then 24 else inst.panel.grid.w, inst.panel.grid.h)
 	local json = inst.panel.json
 	-- An expanded panel is not height-capped.
-	local cardH = if single then nil else M.cardHeight(inst.panel.grid.h, chips, head)
+	local cardH = if single
+		then nil
+		else M.cardHeight(inst.panel.grid.h, chips, head, inst.panel.json.transparent == true)
 	local d = s.dashboard
 	local ok, node, own = pcall(Registry.view, panelJson, data.frames, env, {
 		key = inst.key,
@@ -177,6 +194,7 @@ local function nativeBody(
 		),
 		base_url = Core.browserBase(s),
 		features = s.settings.features,
+		annotations = annotations,
 		show_labels = labels,
 		-- The panel JSON before the title was replaced: the registry's
 		-- migration cache key.
@@ -202,7 +220,8 @@ local function nativeBody(
 	for i, w in data.warnings do
 		table.insert(children, muted(w, "w" .. i))
 	end
-	local body = ui.col(children, { key = "body", gap = "xs" })
+	-- dashboard.css grows it to the fixed-height card's bottom.
+	local body = ui.col(children, { key = "body", gap = "xs", role = "tern-grafana.panel-body" })
 	s.memo[inst.key] = {
 		data = data,
 		cursor = cursor,
@@ -216,6 +235,7 @@ local function nativeBody(
 		extra_gen = ps.extra_gen,
 		live = live,
 		features = s.settings.features,
+		annotations = annotations,
 		from_ms = if pr then pr.from_ms else nil,
 		to_ms = if pr then pr.to_ms else nil,
 		node = body,
@@ -340,6 +360,16 @@ local function panelCard(
 	if name ~= "" then
 		addHead(name, "strong")
 	end
+	-- Grafana's alert state title item (VizPanelRenderer): a heart in the
+	-- state's color after the title.
+	local alert = Layers.alertState(s, inst.panel.id)
+	if alert then
+		local glyph, style = AlertStates.icon(alert)
+		if #head > 0 then
+			table.insert(head, ui.span(" "))
+		end
+		table.insert(head, ui.span(glyph, style))
+	end
 	local info = if ps and ps.time then ps.time.info else ""
 	-- Built before the body: a capped body's height counts its chip and head
 	-- lines. A capped card draws the chips at its head's end, the way
@@ -359,7 +389,7 @@ local function panelCard(
 			assets,
 			single,
 			meta ~= nil and not metaInHead,
-			name ~= "" or info ~= "" or metaInHead
+			name ~= "" or info ~= "" or metaInHead or alert ~= nil
 		)
 		-- Not on an untitled panel: a head line coming and going would shift it.
 		if ps.status == "loading" and ps.data and name ~= "" then
@@ -433,11 +463,13 @@ local function layoutNode(
 		-- Like Grafana's narrow-screen layout, a band wraps once a panel would get
 		-- narrower than MIN_PANEL_WIDTH, and a wrapped panel takes the full width.
 		p.basis, p.grow, p.shrink = n.basis * M.BASIS_SLACK, 1, 1
-		p.min = { w = M.MIN_PANEL_WIDTH }
-		-- Every panel type is Grafana's panel height: content past it (a
+		-- Every panel type is exactly Grafana's panel height, as in its grid:
+		-- short content leaves the card's room below it, content past it (a
 		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
-		p.max = { h = string.format("%dlines", M.heightLines(n.h)) }
+		local lines = string.format("%dlines", M.heightLines(n.h))
+		p.min = { w = M.MIN_PANEL_WIDTH, h = lines }
+		p.max = { h = lines }
 		s.card_ids[n.key] = id
 		return card
 	end

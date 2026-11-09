@@ -27,13 +27,33 @@ type Node = ui.Node
 
 local M = {}
 
--- The panel's design size in px: its gridPos size, else the view's.
+-- The panel's design size in px: its gridPos width and, in a height-capped
+-- dashboard card, the card body's height (opts.card_height, the room
+-- Grafana's viz gets below its header and padding), else its gridPos
+-- height; else the view's.
 function M.size(opts: Common.Options, w: number, h: number): (number, number)
 	local s = opts.size
 	if s then
-		return s.w, s.h
+		return s.w, opts.card_height or s.h
 	end
 	return opts.width or w, opts.height or h
+end
+
+-- The gap between a chart and the legend under it (compose's col gap xs).
+M.LEGEND_GAP_PX = 4
+-- VizLayout's maxHeight of a bottom legend: past it Grafana scrolls the
+-- legend, so the chart never gets less than the rest.
+M.LEGEND_MAX = 0.35
+
+-- The chart's height in a height-capped card (opts.card_height) with
+-- `rows` in its legend across `w` px: a bottom legend's height comes off
+-- the viz (VizLayout); `h` itself otherwise.
+function M.chartHeight(opts: Common.Options, h: number, w: number, rows: { Row }, legend: Legend): number
+	if opts.card_height == nil or #rows == 0 or not legend.show or legend.placement ~= "bottom" then
+		return h
+	end
+	local px = Legend.height(rows, legend.mode, w) + M.LEGEND_GAP_PX
+	return math.max(math.floor(h - math.min(px, h * M.LEGEND_MAX)), 1)
 end
 
 -- The panel's query range (after its time overrides), if known.
@@ -108,6 +128,9 @@ export type Legend = {
 	placement: "bottom" | "right",
 	calcs: { string },
 }
+
+-- A plain list legend under the chart (geomap, node graph).
+M.LIST_LEGEND = table.freeze({ show = true, mode = "list" :: "list", placement = "bottom" :: "bottom", calcs = {} })
 
 function M.legendOptions(panel: any, env: Env): Legend
 	local raw = Json.tbl(env, Json.path(env, panel, "options", "legend"))

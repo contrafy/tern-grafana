@@ -338,7 +338,10 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		end
 	end
 	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
-	local svgH = if #legendRows > 0 then math.max(60, H - 24) else H
+	local svgH = if opts.card_height
+		then Charts.chartHeight(opts, H, W, legendRows, Charts.LIST_LEGEND)
+		elseif #legendRows > 0 then math.max(60, H - 24)
+		else H
 	local lon, lat, world = M.viewOf(panel, env, all, W, svgH)
 	local basemap = Json.tbl(env, Json.path(env, panel, "options", "basemap"))
 	local svg = SvgGeomap.render({

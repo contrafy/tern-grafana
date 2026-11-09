@@ -441,7 +441,10 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 			table.insert(legendRows, { class = "tgn-swatch", name = s, values = {} })
 		end
 	end
-	local svgH = if #legendRows > 0 then math.max(60, H - 24) else H
+	local svgH = if opts.card_height
+		then Charts.chartHeight(opts, H, W, legendRows, Charts.LIST_LEGEND)
+		elseif #legendRows > 0 then math.max(60, H - 24)
+		else H
 	local svg = SvgNodeGraph.render({ width = W, height = svgH, nodes = g.nodes, edges = g.edges })
 	local chart, assets =
 		Charts.image(opts.key, svg, W, svgH, Charts.alt(panel, env, "Node graph"), "tern-grafana.nodegraph")

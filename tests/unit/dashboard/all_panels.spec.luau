@@ -134,9 +134,10 @@ for _, version in S.VERSIONS do
 		end)
 
 		-- Grafana gives every panel its gridPos height whatever it shows; in
-		-- the grid every panel type is cut there (a wrapped countdown clock
-		-- never outgrows its row).
-		it("caps every grid panel to its Grafana height", function()
+		-- the grid every panel type is exactly that tall: cut there (a
+		-- wrapped countdown clock never outgrows its row) and never shorter
+		-- (a short stat keeps its slot, so bands line up as in Grafana).
+		it("sizes every grid panel to its Grafana height", function()
 			local h = start(version)
 			expect(View.heightLines(8)).toBe(18) -- 8 rows: 296 px of 16 px lines
 			local view = View.view(h.s, h.env) :: any
@@ -145,7 +146,9 @@ for _, version in S.VERSIONS do
 				local p = n.p
 				if p and type(p.key) == "string" and string.match(p.key, "^p%d+$") then
 					cards += 1
-					expect(p.max and p.max.h).toBe(string.format("%dlines", View.heightLines(8)))
+					local lines = string.format("%dlines", View.heightLines(8))
+					expect(p.max and p.max.h).toBe(lines)
+					expect(p.min and p.min.h).toBe(lines)
 					return
 				end
 				for _, c in n.c or {} do

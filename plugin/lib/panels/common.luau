@@ -42,6 +42,9 @@ export type Options = {
 	-- selected one's index into the chart's drawn exemplars.
 	exemplars: { any }?,
 	exemplar: number?,
+	-- Time series: the dashboard annotations shown on this panel
+	-- (lib/dashboard/layers.luau marks, lib/render/svg_annotations Mark).
+	annotations: { any }?,
 	-- Panel size in px from its gridPos (lib/dashboard/render_png size).
 	size: { w: number, h: number }?,
 	-- The panel card body's height in px under the card's height cap

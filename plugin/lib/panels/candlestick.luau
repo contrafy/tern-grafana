@@ -397,6 +397,16 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	end
 	local side, label, softMin, softMax, grid = Charts.yAxis(cfg)
 	local thresholdMode = Json.str(env, Json.path(env, cfg.custom.thresholdsStyle, "mode"))
+	local legend = Charts.legendOptions(panel, env)
+	local rows: { Charts.Row } = {}
+	if legend.show then
+		for k, item in legendItems do
+			if not Charts.hiddenFromLegend(item) then
+				table.insert(rows, Charts.calcRow(item, legendClasses[k], legend.calcs, opts))
+			end
+		end
+	end
+	H = Charts.chartHeight(opts, H, W, rows, legend)
 	local result = SvgXY.render({
 		width = W,
 		height = H,
@@ -429,17 +439,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		Charts.alt(panel, env, "Candlestick chart"),
 		"tern-grafana.candlestick"
 	)
-	local legend = Charts.legendOptions(panel, env)
-	local legendNode: Node? = nil
-	if legend.show then
-		local rows: { Charts.Row } = {}
-		for k, item in legendItems do
-			if not Charts.hiddenFromLegend(item) then
-				table.insert(rows, Charts.calcRow(item, legendClasses[k], legend.calcs, opts))
-			end
-		end
-		legendNode = Charts.calcLegend(opts.key .. ".legend", rows, legend)
-	end
+	local legendNode = if legend.show then Charts.calcLegend(opts.key .. ".legend", rows, legend) else nil
 	return Charts.compose(opts.key, chart, legendNode, legend.placement), assets
 end
 

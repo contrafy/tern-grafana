@@ -148,6 +148,16 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	local xSide, xLabel = Charts.yAxis(p.x.config)
 	local thresholdMode = Json.str(env, Json.path(env, first.custom.thresholdsStyle, "mode"))
 	local percent = stackMode == "percent"
+	local legend = Charts.legendOptions(panel, env)
+	local rows: { Charts.Row } = {}
+	if legend.show then
+		for k, item in p.series do
+			if not Charts.hiddenFromLegend(item) then
+				table.insert(rows, Charts.calcRow(item, classes[k], legend.calcs, opts))
+			end
+		end
+	end
+	H = Charts.chartHeight(opts, H, W, rows, legend)
 	local result = SvgXY.render({
 		width = W,
 		height = H,
@@ -172,17 +182,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	})
 	local chart, assets =
 		Charts.image(opts.key, result.svg, W, H, Charts.alt(panel, env, "Trend chart"), "tern-grafana.trend")
-	local legend = Charts.legendOptions(panel, env)
-	local legendNode: Node? = nil
-	if legend.show then
-		local rows: { Charts.Row } = {}
-		for k, item in p.series do
-			if not Charts.hiddenFromLegend(item) then
-				table.insert(rows, Charts.calcRow(item, classes[k], legend.calcs, opts))
-			end
-		end
-		legendNode = Charts.calcLegend(opts.key .. ".legend", rows, legend)
-	end
+	local legendNode = if legend.show then Charts.calcLegend(opts.key .. ".legend", rows, legend) else nil
 	return Charts.compose(opts.key, chart, legendNode, legend.placement), assets
 end
 
