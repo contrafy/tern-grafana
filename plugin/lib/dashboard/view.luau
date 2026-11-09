@@ -61,11 +61,12 @@ end
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
 	.. "o browser  y copy URL  I investigate"
 
--- The panel's title with its variables, kept in the scope memo per instance.
+-- The panel's title with its variables, kept in the scope memo per instance;
+-- "" for an untitled panel, which Grafana draws without a header.
 local function title(s: State, inst: Repeat.Instance): string
 	local t = inst.panel.title
 	if t == "" then
-		return "Panel " .. inst.panel.id
+		return ""
 	end
 	local titles = Core.memo(s).titles
 	local text = titles[inst]
@@ -161,6 +162,7 @@ local function nativeBody(
 		extra = ps.extra,
 		timezone = if d then d.timezone else nil,
 		local_offset_min = env.local_offset_min,
+		base_url = Core.browserBase(s),
 		features = s.settings.features,
 		show_labels = labels,
 		-- The panel JSON before the title was replaced: the registry's
@@ -226,7 +228,8 @@ local function pngBody(s: State, inst: Repeat.Instance, ps: State.PanelState, as
 				asset = key,
 				w = if spec then spec.width else nil,
 				h = if spec then spec.height else nil,
-				alt = "Grafana render of " .. title(s, inst),
+				alt = "Grafana render of "
+					.. (if inst.panel.title ~= "" then title(s, inst) else "panel " .. inst.panel.id),
 			},
 		})
 	elseif State.pngError(s, ps) then
@@ -304,14 +307,24 @@ end
 
 local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Assets.Assets, single: boolean): Node
 	local ps = s.panels[inst.key]
-	local head: { ui.SpanLike } = { ui.span(title(s, inst), "strong") }
+	-- Empty for an untitled panel without time info or a ladder badge: no
+	-- header line, as in Grafana.
+	local head: { ui.SpanLike } = {}
+	local function addHead(text: string, style: string)
+		table.insert(head, ui.span(if #head > 0 then "  " .. text else text, style))
+	end
+	local name = title(s, inst)
+	if name ~= "" then
+		addHead(name, "strong")
+	end
 	local body: Node
 	if ps == nil then
 		body = muted("Waiting", "wait")
 	elseif ps.decision.mode == "native" then
 		body = nativeBody(s, inst, ps, env, assets, single)
-		if ps.status == "loading" and ps.data then
-			table.insert(head, ui.span("  refreshing", "muted"))
+		-- Not on an untitled panel: a head line coming and going would shift it.
+		if ps.status == "loading" and ps.data and name ~= "" then
+			addHead("refreshing", "muted")
 		end
 	elseif ps.decision.mode == "png" then
 		body = pngBody(s, inst, ps, assets)
@@ -320,11 +333,11 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	end
 	local info = if ps and ps.time then ps.time.info else ""
 	if info ~= "" then
-		table.insert(head, ui.span("  " .. info, "info"))
+		addHead(info, "info")
 	end
 	local badge = if ps then MODE_BADGE[ps.decision.mode] else nil
 	if badge then
-		table.insert(head, ui.span("  " .. badge[1], "muted"))
+		addHead(badge[1], "muted")
 	end
 	local children: { Node } = {}
 	local meta = metaRow(s, inst, env, single)
@@ -340,7 +353,9 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	local selected = s.focus == inst.key and not single
 	if inst.panel.json.transparent == true then
 		-- Grafana's transparent panels have no background or border.
-		table.insert(children, 1, ui.text(head, { key = "head", truncate = "end" }))
+		if #head > 0 then
+			table.insert(children, 1, ui.text(head, { key = "head", truncate = "end" }))
+		end
 		return {
 			k = "el",
 			p = {

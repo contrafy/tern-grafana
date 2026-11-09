@@ -136,6 +136,20 @@ local function rgba(color: string): (number?, number, number, number)
 	return nil, 0, 0, 0
 end
 
+-- getTextColorForAlphaBackground (grafana-ui utils/colors.ts): the text
+-- color on a background of `color`, "dark" (rgb(32, 34, 38)) or "light"
+-- (rgb(247, 248, 250)); a near-transparent one shows the theme's own text
+-- and one tinycolor cannot parse counts as black.
+function M.textOn(color: string, theme: Theme?): "dark" | "light"
+	local r, g, b, a = rgba(M.color(color, theme))
+	if r == nil then
+		return "light"
+	elseif a < 0.3 then
+		return if theme == "light" then "dark" else "light"
+	end
+	return if (r * 299 + g * 587 + b * 114) / 1000 > 180 then "dark" else "light"
+end
+
 local function toneOfRgb(color: string): Tone
 	local r, g, b, a = rgba(color)
 	if r == nil then

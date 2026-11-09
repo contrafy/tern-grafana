@@ -196,4 +196,21 @@ describe("thresholds.tone", function()
 	end)
 end)
 
+-- grafana-ui utils/colors.ts getTextColorForAlphaBackground: what a stat
+-- writes on a tile filled with the value's color.
+describe("thresholds.textOn", function()
+	it("picks dark text above brightness 180, else white", function()
+		-- green #73BF69: (115*299 + 191*587 + 105*114) / 1000 = 158.
+		expect(thresholds.textOn("green")).toBe("light")
+		-- yellow #FADE2A: 216.
+		expect(thresholds.textOn("yellow")).toBe("dark")
+		expect(thresholds.textOn("#ffffff")).toBe("dark")
+	end)
+
+	it("shows the theme's text on a near-transparent color", function()
+		expect(thresholds.textOn("rgba(255, 255, 255, 0.2)")).toBe("light")
+		expect(thresholds.textOn("rgba(255, 255, 255, 0.2)", "light")).toBe("dark")
+	end)
+end)
+
 return nil

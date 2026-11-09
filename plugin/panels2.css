@@ -343,24 +343,66 @@
 .tgp-stat-g24 { grid-template-columns: repeat(24, minmax(0, 1fr)); }
 .tgp-stat.tgp-stat-fit { min-width: 0; justify-content: center; }
 .tgp-stat-fit .tgp-stat-line { display: flex; flex-direction: column; min-width: 0; }
-/* Wide layouts: title left, value right. */
+/* Wide layouts: title left, value right, wrapping onto lines of their own
+   when they do not fit side by side (BigValue's flexWrap). */
 .tgp-stat-fit .tgp-stat-wide {
 	flex-direction: row;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	column-gap: 8px;
 }
 /* justifyMode center, or auto without a title. */
 .tgp-stat-fit .tgp-stat-center { align-items: center; justify-content: center; text-align: center; }
-/* The value is an SVG of Grafana's size (Stat.valueSvg): it takes the
-   tile's width and shrinks to it, never wrapping. */
-.tgp-stat-fit .tgp-stat-value { display: flex; justify-content: center; align-self: stretch; min-width: 0; }
-.tgp-stat-fit .tgp-stat-wide .tgp-stat-value { flex: 1 1 0; justify-content: flex-end; }
-.tgp-stat-fit .tgp-stat-wide.tgp-stat-center .tgp-stat-value { justify-content: center; }
+/* The value is an SVG of Grafana's size (Stat.valueSvg) whose box holds
+   the whole text: it shrinks to the tile's width, never wrapping or
+   clipping, and never yields its width to the title. */
+.tgp-stat-fit .tgp-stat-value { display: flex; justify-content: flex-start; align-self: stretch; min-width: 0; }
+.tgp-stat-fit .tgp-stat-center .tgp-stat-value { justify-content: center; }
+.tgp-stat-fit .tgp-stat-wide .tgp-stat-value {
+	flex: 0 1 auto;
+	max-width: 100%;
+	margin-left: auto;
+	justify-content: flex-end;
+}
+.tgp-stat-fit .tgp-stat-wide.tgp-stat-center .tgp-stat-value { margin-left: 0; justify-content: center; }
 .tgp-stat-fit .tgp-stat-value .sf-image { max-width: 100%; }
 .tgp-stat-on-solid { fill: var(--page); }
+/* colorMode background_solid and background (BigValueLayout getPanelStyles):
+   the tile is filled with the value's color, a tg-gc<n> or tg-s<n> class
+   that sets `color` and `--tg-c`; background is a 120deg gradient from the
+   color turned 8deg and darkened 15 to it turned back 8deg and darkened 5
+   (lightened 10.5 and 3.5 in a light theme). Text on it is BigValue's
+   getTextColorForAlphaBackground pick (Stat ink). */
+.tgp-stat.tgp-stat-solid { background: currentColor; }
+.tgp-stat.tgp-stat-grad {
+	background: linear-gradient(
+		120deg,
+		hsl(from var(--tg-c) calc(h + 8) s calc(l - 15)),
+		hsl(from var(--tg-c) calc(h - 8) s calc(l - 5))
+	);
+}
+.tgp-stat.tgp-stat-grad.tgp-stat-grad-light {
+	background: linear-gradient(
+		120deg,
+		hsl(from var(--tg-c) calc(h + 8) s calc(l + 10.5)),
+		hsl(from var(--tg-c) calc(h - 8) s calc(l + 3.5))
+	);
+}
+.tgp-stat-ink-dark { color: rgb(32, 34, 38); fill: rgb(32, 34, 38); }
+.tgp-stat-ink-light { color: rgb(247, 248, 250); fill: rgb(247, 248, 250); }
 .tgp-stat-fit .tgp-stat-title,
 .tgp-stat-fit .tgp-stat-change { line-height: 1.2; min-width: 0; }
+/* A wrapped title keeps to the lines the tile has left above the value
+   (Fit.title_lines), so the card's height cap never cuts the value. */
+.tgp-stat-fit .tgp-stat-clamp { overflow: hidden; }
+.tgp-stat-fit .tgp-stat-clamp .sf-text { line-height: 1.2; }
+.tgp-stat-fit .tgp-stat-clamp1 { max-height: 1.2em; }
+.tgp-stat-fit .tgp-stat-clamp2 { max-height: 2.4em; }
+.tgp-stat-fit .tgp-stat-clamp3 { max-height: 3.6em; }
+.tgp-stat-fit .tgp-stat-clamp4 { max-height: 4.8em; }
+.tgp-stat-fit .tgp-stat-clamp5 { max-height: 6em; }
+.tgp-stat-fit .tgp-stat-clamp6 { max-height: 7.2em; }
 /* Title and percent change sizes (Stat.FONT_SIZES; snapped down). */
 .tgp-stat-fit .tgp-stat-fs10 { font-size: 10px; }
 .tgp-stat-fit .tgp-stat-fs11 { font-size: 11px; }

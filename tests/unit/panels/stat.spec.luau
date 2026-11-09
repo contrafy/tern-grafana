@@ -58,7 +58,9 @@ for _, version in S.VERSIONS do
 			expect(tiles[2].tone).toBe("success")
 		end)
 
-		it("renders value color as a span token and background as a class", function()
+		-- BigValue fills the whole tile with the value's color (a gradient for
+		-- background) and writes on it in white or near-black, never a tint.
+		it("renders value color as a span token and fills a background tile with the Grafana color", function()
 			local node = Stat.view(S.panel(version, 6), S.frames(version, "prom2_range"), env, OPTS)
 			local value = S.find(node, function(n)
 				return n.k == "text" and n.p.spans[1].t == "1"
@@ -68,7 +70,12 @@ for _, version in S.VERSIONS do
 			local tile = S.find(bg, function(n)
 				return n.p and n.p.key == "s1"
 			end)
-			expect(tile.p.class).toBe("tgp-stat tgp-bg tgp-success")
+			-- Threshold green #73BF69 (tern-grafana.css tg-gc80): brightness 158, white text.
+			expect(tile.p.class).toBe("tgp-stat tgp-stat-grad tg-gc80")
+			local line = S.find(bg, function(n)
+				return n.p and n.p.key == "l"
+			end)
+			expect(line.p.class).toBe("tgp-stat-line tgp-stat-ink-light")
 		end)
 
 		-- Panel 17: defaults {}, colorMode none: no tone token at all.
@@ -157,6 +164,93 @@ describe("stat edge cases", function()
 		end
 	end)
 end)
+
+-- tern-stat-fidelity: stat patterns of the user dashboards (billing usage
+-- tiles, NOC counters) over constant PromQL, as Grafana 11, 12 and 13 serve
+-- them.
+for _, version in S.VERSIONS do
+	describe("stat colors and names on tern-stat-fidelity, Grafana " .. version, function()
+		local function fidelity(id: number): (any, any)
+			local d = S.decode("grafana/" .. version .. "/dashboard_tern_stat_fidelity.json").dashboard
+			for _, p in d.panels do
+				if p.id == id then
+					return p, S.frames(version, "stat_fidelity_" .. id)
+				end
+			end
+			error("no panel " .. id)
+		end
+		local function tile(id: number): Stat.Tile
+			local panel, frames = fidelity(id)
+			return Stat.tiles(panel, frames, env, OPTS)[1]
+		end
+
+		-- A fixed color fills the tile in its own Grafana color: blue and
+		-- purple came out grey or beige when they went through tones.
+		it("fills background tiles with the fixed color's class, gradient or solid", function()
+			-- green #73BF69, dark-blue #1F60C4, blue #5794F2: Grafana's gradient.
+			expect(tile(1).fill).toBe("tgp-stat-grad tg-gc80")
+			expect(tile(2).fill).toBe("tgp-stat-grad tg-gc111")
+			expect(tile(3).fill).toBe("tgp-stat-grad tg-gc103")
+			-- background_solid purple #B877D9.
+			expect(tile(4).fill).toBe("tgp-stat-solid tg-gc127")
+			-- Threshold red in background_solid.
+			expect(tile(7).fill).toBe("tgp-stat-solid tg-gc8")
+		end)
+
+		-- getTextColorForAlphaBackground: brightness above 180 takes dark text.
+		it("writes on the fill in white, or dark on a light color", function()
+			expect(tile(2).ink).toBe("light")
+			expect(tile(4).ink).toBe("light")
+			-- super-light-yellow #FFF899.
+			expect(tile(9).ink).toBe("dark")
+			-- A hex color counts by its own brightness, not its nearest class's.
+			expect(tile(10).ink).toBe("light")
+		end)
+
+		it("draws a fixed color in colorMode value exactly, thresholds as tones", function()
+			local panel, frames = fidelity(8)
+			local _, assets = Stat.view(panel, frames, env, { key = "s", size = { w = 160, h = 144 } })
+			local svg = assets["s.v1"].bytes
+			expect(string.find(svg, 'class="tg-gc127"', 1, true) ~= nil).toBe(true)
+			local multi, mframes = fidelity(11)
+			local tiles = Stat.tiles(multi, mframes, env, OPTS)
+			expect(tiles[1].exact).toBe(false)
+			expect(tiles[1].tone).toBe("success")
+		end)
+
+		-- StatPanel getTextMode: auto shows the name when the panel has no
+		-- title, so untitled tiles say what they count.
+		it("names the field above the value of an untitled stat, not of a titled one", function()
+			expect(tile(1).title).toBe("Current Billable Usage Cost")
+			expect(tile(3).title).toBe("Current Billable Metrics Series")
+			expect(tile(6).title).toBeNil()
+		end)
+
+		-- Grafana wraps a long name in full; in a height-capped card it keeps
+		-- to the lines above the value so the value is never cut.
+		it("wraps names in full and keeps the value in a capped card", function()
+			local panel, frames = fidelity(11)
+			local node = Stat.view(panel, frames, env, { key = "s", size = { w = 960, h = 144 } })
+			local title = S.find(node, function(n)
+				return n.k == "text" and n.p.spans[1].t == "Current Billable Users Over Included Allowance"
+			end)
+			expect(title.p.truncate).toBeNil()
+			local p2, f2 = fidelity(2)
+			-- gridPos 6x5 (480x182 px), card body 136 px: titleSize 23 (22 px class)
+			-- and valueSize 70 leave two title lines in the head-less card.
+			local capped = Stat.view(p2, f2, env, { key = "s", size = { w = 480, h = 182 }, card_height = 136 })
+			local head = S.find(capped, function(n)
+				return n.p and n.p.key == "t"
+			end)
+			expect(head.p.class).toBe("tgp-stat-title tgp-stat-fs22 tgp-stat-clamp tgp-stat-clamp2")
+			local free = Stat.view(p2, f2, env, { key = "s", size = { w = 480, h = 182 } })
+			local u = S.find(free, function(n)
+				return n.p and n.p.key == "t"
+			end)
+			expect(u.p.class).toBe("tgp-stat-title tgp-stat-fs22")
+		end)
+	end)
+end
 
 describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 	local function classOf(node: any, key: string): string
@@ -249,17 +343,21 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 		expect(long.value_px * Stat.textEm("123456789.12 MB") <= 300 - 24).toBe(true)
 	end)
 
-	-- The value is one line of SVG text whose viewBox is its own box
-	-- (textLength pins the drawn width to it), so a tile narrower than
-	-- Grafana's scales it down instead of wrapping it, and the image's max
-	-- height never lets it outgrow Grafana's size (smoke: "No targets"
-	-- wrapped and was clipped in a wide pane).
-	it("draws the value as one SVG line that only scales down", function()
+	-- The value is one line of SVG text whose box holds the text at the
+	-- width Tern's Geist draws it (Tern ignores textLength), so a tile
+	-- narrower than Grafana's scales it down instead of wrapping or cutting
+	-- it, and the image's max height never lets it outgrow Grafana's size
+	-- (smoke: "No targets" wrapped and was clipped in a wide pane; "40239"
+	-- and "$0" were cut at the right).
+	it("draws the value as one SVG line as wide as Tern's font draws it", function()
+		-- Geist Medium advances: "4" .629 "0" .673 "2" .63 "3" .625 "9" .606.
+		expect(math.abs(Stat.textEm("40239") - 3.163) < 1e-9).toBe(true)
+		expect(math.abs(Stat.textEm("$0") - 1.316) < 1e-9).toBe(true)
 		local svg, w, h = Stat.valueSvg("No targets", 70, "tgg-f-success")
-		expect(w).toBe(math.ceil(10 * Stat.TEXT_EM * 70))
+		expect(w).toBe(math.ceil((Stat.textEm("No targets") + 0.08) * 70))
 		expect(h).toBe(84)
 		expect(string.find(svg, string.format('viewBox="0 0 %d %d"', w, h), 1, true) ~= nil).toBe(true)
-		expect(string.find(svg, string.format('textLength="%d"', w), 1, true) ~= nil).toBe(true)
+		expect((string.find(svg, "textLength", 1, true))).toBeNil()
 		expect(select(2, string.gsub(svg, "<text", ""))).toBe(1)
 		local node = Stat.view(
 			{ type = "stat", title = "x", fieldConfig = { defaults = { noValue = "No targets" } }, options = {} },
@@ -277,7 +375,7 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 
 	it("keeps the plain tile without a panel size", function()
 		local node = Stat.view(S.panel("12.4.12", 5), S.refFrames("12.4.12", "prom_range", "B"), env, OPTS)
-		expect(classOf(node, "s1")).toBe("tgp-stat tgp-bg tgp-success")
+		expect(classOf(node, "s1")).toBe("tgp-stat tgp-stat-grad tg-gc80")
 	end)
 end)
 

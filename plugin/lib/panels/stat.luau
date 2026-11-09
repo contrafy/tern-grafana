@@ -25,6 +25,8 @@ local Frame = require("../frame/types")
 local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgKit = require("../render/svg_kit")
+local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 local Values = require("./values")
 local ui = require("../ui")
 
@@ -38,6 +40,19 @@ export type Tile = {
 	tone: string,
 	-- "value", "background", "background_solid" or "none".
 	color_mode: string,
+	-- The value's Grafana color as a class (tern-grafana.css tg-gc<n>, or
+	-- the palette's tg-s<n>), nil when it only has a tone (continuous
+	-- schemes). It fills the tile in the background modes and colors the
+	-- value in colorMode value when the field is not colored by thresholds.
+	color_class: string?,
+	-- The text on a filled tile (getTextColorForAlphaBackground): "dark" or
+	-- "light".
+	ink: string?,
+	-- colorMode value with an exact color (fixed, palette, schemes).
+	exact: boolean?,
+	-- Background modes: the tile's fill classes (panels2.css tgp-stat-solid,
+	-- tgp-stat-grad) with color_class.
+	fill: string?,
 	spark: Node?,
 	-- Formatted percent change and its tone.
 	change: string?,
@@ -53,6 +68,9 @@ export type Fit = {
 	wide: boolean,
 	-- justifyMode center, or auto without a title.
 	center: boolean,
+	-- Lines a wrapped title may take in the height-capped card
+	-- (panels2.css tgp-stat-clamp<N>), nil when uncapped.
+	title_lines: number?,
 }
 
 local M = {}
@@ -84,16 +102,32 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		{ sparkline = graph ~= "none", theme = opts.theme, offset_min = opts.offset_min }
 	)
 	local mode = textMode(panel, env, #values)
+	local filled = colorMode == "background" or colorMode == "background_solid"
 	local tiles: { Tile } = {}
 	for i, v in values do
 		local d = v.display
 		local text = FieldConfig.joined(d)
+		local colorClass = d.class or (if d.color ~= "" then TsGradient.stopClass(d.color, opts.theme) else nil)
 		local tile: Tile = {
 			title = if mode == "value_and_name" then v.title else nil,
 			value = if mode == "name" then v.title elseif mode == "none" then "" else text,
 			tone = d.tone,
 			color_mode = colorMode,
+			color_class = colorClass,
 		}
+		if filled and colorClass then
+			tile.ink = if d.color ~= "" then Thresholds.textOn(d.color, opts.theme) else "light"
+			tile.fill = (
+				if colorMode == "background_solid"
+					then "tgp-stat-solid"
+					elseif opts.theme == "light" then "tgp-stat-grad tgp-stat-grad-light"
+					else "tgp-stat-grad"
+			)
+				.. " "
+				.. colorClass
+		elseif colorMode == "value" and colorClass and v.item then
+			tile.exact = (v.item :: FieldConfig.Item).config.color_mode ~= "thresholds"
+		end
 		if v.spark and v.item then
 			local item = v.item :: FieldConfig.Item
 			tile.spark = Common.spark(
@@ -153,6 +187,9 @@ local PANEL_PADDING_PX = 8
 M.TILE_PAD_X = 16
 M.TILE_PAD_Y = 12
 M.SPARK_PX = 34
+-- Tern's text line, px: image max heights are given in lines, and an
+-- untitled card has no head line.
+local LINE_PX = 16
 
 -- Font size classes, px (panels2.css tgp-stat-fs<N>).
 M.FONT_SIZES = table.freeze({
@@ -205,14 +242,121 @@ M.FONT_SIZES = table.freeze({
 	512,
 })
 
--- calculateFontSize's measureText(text, 14).width / 14 per character: the
--- value is SVG text in the sans UI font (about 0.55 em a character, close to
--- Grafana's Inter); its textLength pins the drawn width to this estimate,
--- so a wider real font is narrowed rather than overflowing.
-M.TEXT_EM = 0.55
+-- Advance widths in em of ASCII 32..126 in Geist Medium, the font Tern
+-- draws the value's SVG text in (its --sans at weight 500; Tern ignores
+-- textLength, so the SVG's box must hold the font's own width). They stand
+-- in for calculateFontSize's measureText(text, 14).width / 14 too: Grafana
+-- measures its Inter, of about the same widths.
+local GEIST: { number } = table.freeze({
+	0.243,
+	0.228,
+	0.361,
+	0.515,
+	0.643,
+	0.81,
+	0.649,
+	0.186,
+	0.29,
+	0.29,
+	0.427,
+	0.562,
+	0.213,
+	0.418,
+	0.213,
+	0.494,
+	0.673,
+	0.406,
+	0.63,
+	0.625,
+	0.629,
+	0.641,
+	0.604,
+	0.531,
+	0.624,
+	0.606,
+	0.302,
+	0.302,
+	0.546,
+	0.544,
+	0.546,
+	0.57,
+	0.925,
+	0.689,
+	0.688,
+	0.713,
+	0.701,
+	0.609,
+	0.595,
+	0.713,
+	0.716,
+	0.28,
+	0.607,
+	0.656,
+	0.583,
+	0.89,
+	0.745,
+	0.751,
+	0.657,
+	0.745,
+	0.68,
+	0.654,
+	0.568,
+	0.694,
+	0.688,
+	0.968,
+	0.633,
+	0.594,
+	0.561,
+	0.361,
+	0.47,
+	0.361,
+	0.438,
+	0.558,
+	0.258,
+	0.565,
+	0.608,
+	0.563,
+	0.608,
+	0.576,
+	0.412,
+	0.607,
+	0.591,
+	0.256,
+	0.284,
+	0.609,
+	0.282,
+	0.885,
+	0.591,
+	0.588,
+	0.608,
+	0.608,
+	0.394,
+	0.537,
+	0.41,
+	0.586,
+	0.56,
+	0.829,
+	0.607,
+	0.553,
+	0.552,
+	0.395,
+	0.274,
+	0.395,
+	0.523,
+})
+-- Any other character: a full em, the widest a glyph usually is (CJK;
+-- Geist's em dash is 0.908), so the box still holds it.
+local WIDE_EM = 1
 
 function M.textEm(text: string): number
-	return (utf8.len(text) or #text) * M.TEXT_EM
+	if utf8.len(text) == nil then
+		return #text * WIDE_EM
+	end
+	local em = 0
+	for _, c in utf8.codes(text) do
+		em += if c >= 32 and c <= 126 then GEIST[c - 31] else WIDE_EM
+	end
+	return em
 end
 
 -- calculateFontSize: the largest size that fits width and height.
@@ -368,7 +512,7 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		local n = Json.num(env, v)
 		return if n and n > 0 then n else nil
 	end
-	return M.fit({
+	local fit = M.fit({
 		w = bw,
 		h = bh,
 		-- textMode none aligns to "1" (getTextValues).
@@ -380,38 +524,59 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		title_size = positive(text.titleSize),
 		percent_size = positive(text.percentSize),
 		justify = Json.str(env, options.justifyMode),
-	}),
-		cols
+	})
+	if opts.card_height and title ~= "" then
+		-- The lines a wrapped title has in a tile of the capped card (an
+		-- untitled card has no head line) above the value and the percent
+		-- change: a Tern tile is often narrower than Grafana's, so titles
+		-- wrap more.
+		local rows = math.ceil(#tiles / cols)
+		local body = opts.card_height
+			+ (if hasTitle then 0 else LINE_PX)
+			- M.TILE_PAD_Y
+			- (if spark then M.SPARK_PX else 0)
+		local tileH = (body + ITEM_SPACING) / rows - ITEM_SPACING
+		local rest = tileH
+			- math.ceil(math.floor(fit.value_px + 0.5) * LINE_HEIGHT)
+			- (if change then M.sizeClass(fit.change_px) * LINE_HEIGHT else 0)
+		fit.title_lines = math.max(1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
+	end
+	return fit, cols
 end
 
 local function fsClass(px: number): string
 	return "tgp-stat-fs" .. M.sizeClass(px)
 end
 
--- Fill class of the value text in the SVG (panels2.css .tgg-*): the tone for
--- colorMode value, the page color on a solid background, else the text color.
+-- Fill class of the value text in the SVG (panels2.css .tgg-*): the text
+-- color on a filled tile, the exact color or the tone for colorMode value,
+-- the page color on a tone-filled tile, else the text color.
 local function valueFill(tile: Tile): string
 	local token = Common.token(tile.tone :: any)
-	if tile.color_mode == "value" and token ~= "" then
+	if tile.ink then
+		return "tgp-stat-ink-" .. tile.ink
+	elseif tile.color_mode == "value" and tile.exact then
+		return tile.color_class :: string
+	elseif tile.color_mode == "value" and token ~= "" then
 		return "tgg-f-" .. tile.tone
-	elseif tile.color_mode == "background_solid" then
+	elseif tile.color_mode == "background" or tile.color_mode == "background_solid" then
 		return "tgp-stat-on-solid"
 	end
 	return "tgg-text"
 end
 
--- The fitted value as an SVG image of Grafana's size: its viewBox is tight
--- around one line of text (textLength pins the width whatever the font), so
--- Tern scales it down to a narrower tile instead of wrapping it, and the
--- image's max height keeps it at Grafana's size in a wider one.
+-- The fitted value as an SVG image of Grafana's size: its viewBox holds one
+-- line of the text at the font's own width (textEm, with a little room for
+-- glyphs reaching past their advance), so Tern scales it down to a narrower
+-- tile instead of wrapping or clipping it, and the image's max height keeps
+-- it at Grafana's size in a wider one.
 function M.valueSvg(text: string, px: number, fill: string): (string, number, number)
 	local size = math.max(math.floor(px + 0.5), 1)
-	local w = math.max(math.ceil(M.textEm(text) * size), 1)
+	local w = math.max(math.ceil((M.textEm(text) + 0.08) * size), 1)
 	local h = math.ceil(size * LINE_HEIGHT)
 	local svg = string.format(
 		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" class="tgg">'
-			.. '<text class="%s" x="%s" y="%s" font-size="%d" font-weight="500" text-anchor="middle" '
-			.. 'textLength="%d" lengthAdjust="spacingAndGlyphs">%s</text></svg>',
+			.. '<text class="%s" x="%s" y="%s" font-size="%d" font-weight="500" text-anchor="middle">%s</text></svg>',
 		w,
 		h,
 		w,
@@ -422,31 +587,37 @@ function M.valueSvg(text: string, px: number, fill: string): (string, number, nu
 		-- drops dominant-baseline).
 		tostring(math.floor(h / 2 + size * 0.36 + 0.5)),
 		size,
-		w,
 		SvgKit.escape(text)
 	)
 	return svg, w, h
 end
 
--- Tern's text line, px: image max heights are given in lines.
-local LINE_PX = 16
-
 local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, assets: Assets.Assets): Node
 	local token = Common.token(tile.tone :: any)
 	local valueStyle = "strong"
 	local classes = { "tgp-stat" }
+	local filled = tile.color_mode == "background" or tile.color_mode == "background_solid"
 	if tile.color_mode == "value" and token ~= "" then
 		valueStyle = "strong " .. token
-	elseif tile.color_mode == "background" then
-		table.insert(classes, "tgp-bg " .. Common.toneClass(tile.tone :: any))
-	elseif tile.color_mode == "background_solid" then
+	elseif filled and tile.fill then
+		table.insert(classes, tile.fill :: string)
+	elseif filled then
+		-- Only a tone (continuous schemes): the tone's solid color.
 		table.insert(classes, "tgp-bgs " .. Common.toneClass(tile.tone :: any))
 	end
 	local valueClass, titleClass, changeClass = "tgp-stat-value", "tgp-stat-title", "tgp-stat-change"
 	local lineClass = "tgp-stat-line"
+	if tile.ink then
+		-- BigValue colors title, value and percent change alike on a fill.
+		lineClass ..= " tgp-stat-ink-" .. tile.ink
+	end
 	if fit then
 		table.insert(classes, "tgp-stat-fit")
 		titleClass ..= " " .. fsClass(fit.title_px)
+		local titleLines = fit.title_lines
+		if titleLines and titleLines <= 6 then
+			titleClass ..= " tgp-stat-clamp tgp-stat-clamp" .. titleLines
+		end
 		changeClass ..= " " .. fsClass(fit.change_px)
 		if fit.wide then
 			lineClass ..= " tgp-stat-wide"
@@ -457,10 +628,11 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 	end
 	local line: { Node } = {}
 	if tile.title then
+		-- In full, wrapped like BigValue's title div.
 		table.insert(line, {
 			k = "el",
 			p = { tag = "div", key = "t", class = titleClass },
-			c = { ui.text({ ui.span(tile.title :: string, "muted") }, { truncate = "end" }) },
+			c = { ui.text({ ui.span(tile.title :: string, if tile.ink then nil else "muted") }) },
 		})
 	end
 	local value: Node
@@ -478,7 +650,7 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 	end
 	table.insert(line, { k = "el", p = { tag = "div", key = "v", class = valueClass }, c = { value } })
 	if tile.change then
-		local tone = Common.token((tile.change_tone or "neutral") :: any)
+		local tone = if tile.ink then nil else Common.token((tile.change_tone or "neutral") :: any)
 		table.insert(line, {
 			k = "el",
 			p = { tag = "div", key = "c", class = changeClass },
