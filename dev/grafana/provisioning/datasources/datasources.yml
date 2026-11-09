@@ -118,6 +118,16 @@ datasources:
     jsonData:
       queryParams: lat=47.61&lon=-122.33&units=imperial&appid=tern-fake-appid-0123456789abcdef
 
+  # The API as a base URL: targets pick the document with urlPath (forecast, cities for the `city` query
+  # variable, weather-${city}.json) and add params, as most JSON API panels do.
+  - name: Weather API
+    uid: json-api
+    type: marcusolsson-json-datasource
+    access: proxy
+    url: http://jsonapi:8080/data/2.5
+    jsonData:
+      queryParams: units=imperial&appid=tern-fake-appid-0123456789abcdef
+
   # Zabbix 7.0 (profile zabbix, dashboard tern-s4-zabbix). Errors until `sh scripts/stack.sh zabbix` ran.
   - name: Zabbix
     uid: zabbix

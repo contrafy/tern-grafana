@@ -1,0 +1,190 @@
+{
+ "local_offset_min": 330,
+ "doc": "{\"c0\":[null,null],\"c1\":[],\"c2\":[1,2,3],\"c3\":[1,null,2],\"c4\":[true,false],\"c5\":[true,null],\"c6\":[\"a\",\"b\"],\"c7\":[{\"a\":1,\"b\":[1,2]},[3,4],\"x\"],\"c8\":[\"2024-01-01\",\"2024-02-29\"],\"c9\":[\"2023-02-29\"],\"c10\":[\"2024-01-01T10:00:00Z\",null],\"c11\":[\"2024-01-01T10:00:00+02:00\"],\"c12\":[\"2024-01-01T10:00:00+0200\"],\"c13\":[\"2024-01-01T10:00:00+02\"],\"c14\":[\"2024-01-01T10:00:00.000Z\"],\"c15\":[\"2024-01-01T10:00:00\"],\"c16\":[\"2024-01-01 10:00:00Z\"],\"c17\":[\"2024-1-01\"],\"c18\":[\"2024-01-01T24:00:00Z\"],\"c19\":[\"2024-01-01T24:00:01Z\"],\"c20\":[\"2024-13-01\"],\"c21\":[\"2024-01-01t10:00:00Z\"],\"c22\":[\"2024-01-01T10:00:00z\"],\"c23\":[\"20240101\"],\"c24\":[\"2024-01-01\",5],\"c25\":[\"2024-01-01T10:00:60Z\"],\"c26\":[\"0099-01-01\"],\"c27\":[\"2024-06-15T23:59:59-05:30\"],\"c28\":[0,1],\"c29\":[1.5,-2e+21,1e-7,123456789012345680000],\"c30\":[\"1.5\",\"2abc\",\" 3\",\"Infinity\",\"-Infinity\",\"x\",\"\",\"0x10\",\".5\",\"1e3\"],\"c31\":[true,\"x\",1],\"c32\":[1700000000,1700000060,null],\"c33\":[1700000000000,null],\"c34\":[1700000000,1700000000000],\"c35\":[\"2024-01-02\",\"2024-01-02 10:30\",\"2024-01-02T10:30:15.123\",\"2024-01-02T10:30:00Z\",\"2024-01-02T10:30:00+05:00\",\"garbage\",null],\"c36\":[true,1],\"c37\":[0,null,1700000000],\"c38\":[\"2024\",\"2024-06\",\"2024/06/15\",\"2024-00-10\",\"2024-01-00\"],\"c39\":[\"1.5\",true,null,[1,2],{\"a\":1},\"  -4e2x\"],\"c40\":[1,2],\"c41\":[1,true,null,[1,\"a\",null],{\"b\":\"c\",\"a\":{\"d\":null}},1e+21,0.1],\"c42\":[\"true\",0,\"False\",null,1],\"c43\":[\"yes\"],\"c44\":[1],\"c45\":[1]}",
+ "cases": [
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[null,null]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"number\",\"values\":[1,2,3]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"1\",null,\"2\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"boolean\",\"values\":[true,false]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"true\",null]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"a\",\"b\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"{\\\"a\\\":1,\\\"b\\\":[1,2]}\",\"[3,4]\",\"x\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1704047400000,1709145000000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2023-02-29\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1704103200000,null]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1704096000000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1704096000000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[\"NaN\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01T10:00:00.000Z\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01T10:00:00\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01 10:00:00Z\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-1-01\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1704153600000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01T24:00:01Z\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-13-01\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01t10:00:00Z\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1704103200000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"20240101\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01\",\"5\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"2024-01-01T10:00:60Z\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[915129000000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"time\",\"values\":[1718515799000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"number\",\"values\":[0,1]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"number\",\"values\":[1.5,-2e+21,1e-7,123456789012345680000]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"1.5\",\"2abc\",\" 3\",\"Infinity\",\"-Infinity\",\"x\",\"\",\"0x10\",\".5\",\"1e3\"]}"
+  },
+  {
+   "type": null,
+   "result": "{\"type\":\"string\",\"values\":[\"true\",\"x\",\"1\"]}"
+  },
+  {
+   "type": "time",
+   "result": "{\"type\":\"time\",\"values\":[1700000000000,1700000060000,null]}"
+  },
+  {
+   "type": "time",
+   "result": "{\"type\":\"time\",\"values\":[1700000000000,null]}"
+  },
+  {
+   "type": "time",
+   "result": "{\"type\":\"time\",\"values\":[1700000000,1700000000000]}"
+  },
+  {
+   "type": "time",
+   "result": "{\"type\":\"time\",\"values\":[1704133800000,1704171600000,1704171615123,1704191400000,1704173400000,\"NaN\",null]}"
+  },
+  {
+   "type": "time",
+   "result": "{\"error\":\"Unsupported time property\"}"
+  },
+  {
+   "type": "time",
+   "result": "{\"type\":\"time\",\"values\":[0,null,1700000000000]}"
+  },
+  {
+   "type": "time",
+   "result": "{\"type\":\"time\",\"values\":[1704047400000,1717180200000,1718389800000,1702146600000,1703961000000]}"
+  },
+  {
+   "type": "number",
+   "result": "{\"type\":\"number\",\"values\":[1.5,\"NaN\",null,1,\"NaN\",-400]}"
+  },
+  {
+   "type": "number",
+   "result": "{\"type\":\"number\",\"values\":[1,2]}"
+  },
+  {
+   "type": "string",
+   "result": "{\"type\":\"string\",\"values\":[\"1\",\"true\",null,\"[1,\\\"a\\\",null]\",\"{\\\"b\\\":\\\"c\\\",\\\"a\\\":{\\\"d\\\":null}}\",\"1e+21\",\"0.1\"]}"
+  },
+  {
+   "type": "boolean",
+   "result": "{\"type\":\"boolean\",\"values\":[true,false,false,null,true]}"
+  },
+  {
+   "type": "boolean",
+   "result": "{\"error\":\"Found non-boolean values in a field of type boolean: yes\"}"
+  },
+  {
+   "type": "other",
+   "result": "{\"error\":\"Unsupported field type\"}"
+  },
+  {
+   "type": "enum",
+   "result": "{\"error\":\"Unsupported field type\"}"
+  }
+ ]
+}

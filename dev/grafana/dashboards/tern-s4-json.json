@@ -1,22 +1,56 @@
 {
   "uid": "tern-s4-json",
   "title": "Tern S4 JSON API",
-  "description": "Gauges on marcusolsson-json-datasource: GET, empty urlPath, one JSONPath field; the datasource appends a fake appid from jsonData.queryParams.",
+  "description": "JSON API panels: gauges on per-city datasources (GET, empty urlPath, one JSONPath field, a fake appid in jsonData.queryParams), and on one base-URL datasource a query variable (text and value fields), a urlPath with a variable, params with macros, groupBy/metric fields, an epoch-seconds time field and a missing document.",
   "tags": [
     "tern",
     "s4"
   ],
   "editable": false,
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "refresh": "",
   "time": {
-    "from": "now-6h",
-    "to": "now"
+    "from": "2025-11-09T09:00:00.000Z",
+    "to": "2025-11-10T00:00:00.000Z"
   },
   "timezone": "browser",
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "city",
+        "label": "City",
+        "type": "query",
+        "datasource": {
+          "type": "marcusolsson-json-datasource",
+          "uid": "json-api"
+        },
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "Dallas",
+          "value": "dallas"
+        },
+        "query": {
+          "refId": "city",
+          "method": "GET",
+          "urlPath": "/cities.json",
+          "fields": [
+            {
+              "jsonPath": "$.cities[*].name",
+              "name": "name"
+            },
+            {
+              "jsonPath": "$.cities[*].id",
+              "name": "id"
+            }
+          ],
+          "experimentalVariableTextField": "name",
+          "experimentalVariableValueField": "id"
+        }
+      }
+    ]
   },
   "annotations": {
     "list": []
@@ -328,6 +362,252 @@
             {
               "jsonPath": "$.main.humidity",
               "name": "Humidity"
+            }
+          ],
+          "cacheDurationSeconds": 0
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Temperature in ${city}",
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "json-api"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 50
+              },
+              {
+                "color": "orange",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "json-api"
+          },
+          "refId": "A",
+          "method": "GET",
+          "urlPath": "/weather-${city}.json",
+          "fields": [
+            {
+              "jsonPath": "$.main.temp"
+            }
+          ],
+          "cacheDurationSeconds": 300
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Forecast by city",
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "json-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "json-api"
+          },
+          "refId": "A",
+          "method": "GET",
+          "urlPath": "/forecast.json",
+          "params": [
+            [
+              "from",
+              "$__unixEpochFrom()"
+            ],
+            [
+              "to",
+              "$__unixEpochTo()"
+            ],
+            [
+              "start",
+              "$__isoFrom()"
+            ]
+          ],
+          "fields": [
+            {
+              "jsonPath": "$.list[*].dt_iso",
+              "name": "time"
+            },
+            {
+              "jsonPath": "$.list[*].city",
+              "name": "city"
+            },
+            {
+              "jsonPath": "$.list[*].main.temp",
+              "name": "temp"
+            }
+          ],
+          "experimentalGroupByField": "city",
+          "experimentalMetricField": "temp",
+          "cacheDurationSeconds": 0
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Forecast table",
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "json-api"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "json-api"
+          },
+          "refId": "A",
+          "method": "GET",
+          "urlPath": "/forecast.json",
+          "fields": [
+            {
+              "jsonPath": "$.list[*].dt",
+              "type": "time",
+              "name": "Time"
+            },
+            {
+              "jsonPath": "$.list[*].dt_txt"
+            },
+            {
+              "jsonPath": "$.list[*].city",
+              "name": "City"
+            },
+            {
+              "jsonPath": "$.list[*].weather[0].main",
+              "name": "Condition"
+            },
+            {
+              "jsonPath": "$.list[*].main.temp",
+              "name": "Temp"
+            }
+          ],
+          "cacheDurationSeconds": 0
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Missing document",
+      "datasource": {
+        "type": "marcusolsson-json-datasource",
+        "uid": "json-api"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "marcusolsson-json-datasource",
+            "uid": "json-api"
+          },
+          "refId": "A",
+          "method": "GET",
+          "urlPath": "/missing.json",
+          "fields": [
+            {
+              "jsonPath": "$.main.temp"
             }
           ],
           "cacheDurationSeconds": 0

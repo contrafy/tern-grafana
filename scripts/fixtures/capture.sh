@@ -127,9 +127,10 @@ ext_for() {
 	esac
 }
 
-# Strip anything credential-shaped from a recorded URL (none of ours carry one; belt and braces).
+# Strip anything credential-shaped from a recorded URL (belt and braces; JSON API proxy URLs carry the
+# datasource's appid from jsonData.queryParams).
 redact_url() {
-	printf '%s' "$1" | sed -E 's/([?&](token|api_key|apikey|access_token|auth)=)[^&]*/\1REDACTED/g'
+	printf '%s' "$1" | sed -E 's/([?&](token|api_key|apikey|access_token|auth|appid)=)[^&]*/\1REDACTED/g'
 }
 
 row() {
@@ -538,21 +539,128 @@ capture_stat_fidelity() {
 	done
 }
 
+# capture_json_api: dashboard tern-s4-json's JSON API (marcusolsson-json-datasource) requests. The plugin
+# has no backend: its frontend GETs the datasource proxy URL plus the target's urlPath, then the target's
+# params and the datasource's jsonData.queryParams (each encodeURIComponent'ed; the dev values need no
+# escaping, so queryParams go as provisioned). They carry a fake appid, scrubbed from every fixture below.
+capture_json_api() {
+	get s4_json_frontend_settings /api/frontend/settings
+	qp() {
+		auth_conf | curl -fsS -K - --max-time 10 "$BASE/api/datasources/uid/$1" | jq -r '.jsonData.queryParams // ""'
+	}
+	dallas=$(qp json-dallas)
+	api=$(qp json-api)
+	proxy=/api/datasources/proxy/uid
+	get s4_json_dallas "$proxy/json-dallas?$dallas"
+	get s4_json_cities "$proxy/json-api/cities.json?$api"
+	get s4_json_city_chicago "$proxy/json-api/weather-chicago.json?$api"
+	# Panel 6: params from/to ($__unixEpochFrom/To()) and start ($__isoFrom()) over the dashboard's range.
+	get s4_json_forecast_params \
+		"$proxy/json-api/forecast.json?from=1762678800&to=1762732800&start=2025-11-09T09%3A00%3A00.000Z&$api"
+	get s4_json_forecast "$proxy/json-api/forecast.json?$api"
+	get s4_json_missing "$proxy/json-api/missing.json?$api"
+	req s4_json_post POST "$proxy/json-api/cities.json?$api" '{"query":"cities"}'
+	get s4_json_unknown_datasource "$proxy/json-no-such-uid"
+}
+
+# capture_zabbix: dashboard tern-s4-zabbix on the opt-in Zabbix 7.0 profile (skipped while it is down).
+# Metrics panels 1, 3, 4: their /api/ds/query as the Zabbix plugin's frontend sends it (targets migrated
+# to schema 13; the filters hold no variables). Triggers count (stat 5, piechart 6) and problems (7): the
+# Zabbix API calls the plugin's browser chains make through resources/zabbix-api for Zabbix 7.0
+# (getParamsKeyByVersion: with_hosts, selectHostGroups, proxy `name`), each with the ids of the answers
+# before it, as lib/datasources/zabbix_api.luau sends them.
+capture_zabbix() {
+	zpath=/api/datasources/uid/zabbix/resources/zabbix-api
+	if ! auth_conf | curl -fsS -K - --max-time 10 -H 'Content-Type: application/json' \
+		-d '{"method":"apiinfo.version","params":{}}' "$BASE$zpath" 2>/dev/null | jq -e '.result' >/dev/null; then
+		log "  zabbix profile not running (sh scripts/stack.sh zabbix): no Zabbix fixtures"
+		return 0
+	fi
+	zcall() { # zcall NAME METHOD PARAMS_JSON
+		req "zabbix_$1" POST "$zpath" "$(jq -cn --arg m "$2" --argjson p "$3" '{method: $m, params: $p}')"
+	}
+	dash=$ROOT/dev/grafana/dashboards/tern-s4-zabbix.json
+	for pid in 1 3 4; do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash" |
+			jq -c '.queries |= map(.datasource.uid = "zabbix" | .schema = 13)')
+		req "zabbix_ds_query_$pid" POST /api/ds/query "$body"
+	done
+	zcall version apiinfo.version '{}'
+	zcall groups hostgroup.get '{"output":["name","groupid"],"sortfield":"name","with_hosts":true}'
+	g_netbox=$(jq -c '[.result[] | select(.name == "Netbox Hosts") | .groupid]' "$LAST")
+	g_all=$(jq -c '[.result[].groupid]' "$LAST")
+	hosts='{"output":["hostid","name","host"],"sortfield":"name"}'
+	zcall hosts_netbox host.get "$(jq -cn --argjson b "$hosts" --argjson g "$g_netbox" '$b + {groupids: $g}')"
+	h_netbox=$(jq -c '[.result[].hostid]' "$LAST")
+	zcall hosts_all host.get "$(jq -cn --argjson b "$hosts" --argjson g "$g_all" '$b + {groupids: $g}')"
+	h_all=$(jq -c '[.result[].hostid]' "$LAST")
+	zcall proxies proxy.get '{"output":["proxyid","name"]}'
+	zcall users user.get '{"output":["userid","username","name","surname"]}'
+	# 7.0 has no proxy `host` any more (the plugin asks for `name`): the API's error answer.
+	zcall error_invalid_params proxy.get '{"output":["proxyid","host"]}'
+	problems='{"output":"extend","selectAcknowledges":"extend","selectSuppressionData":"extend","selectTags":"extend",
+		"source":"0","object":"0","sortfield":["eventid"],"sortorder":"DESC","evaltype":"0"}'
+	by_ids='{"output":"extend","expandDescription":true,"expandData":true,"expandComment":true,"expandExpression":true,
+		"monitored":true,"skipDependent":true,"selectHostGroups":["name","groupid"],
+		"selectHosts":["hostid","name","host","maintenance_status","description","proxyid"],
+		"selectItems":["itemid","name","key_","lastvalue","value_type"],"preservekeys":"1"}'
+	pc='{"output":"extend","filter":{"value":1},"expandDescription":true,"expandData":true,"expandComment":true,
+		"monitored":true,"skipDependent":true,"selectLastEvent":"extend","selectHostGroups":"extend",
+		"selectHosts":["host","name"],"selectItems":["name","key_"]}'
+	# chain NAME GROUPS HOSTS PROBLEM_EXTRA TRIGGER_FILTER PC_EXTRA: getCProblems (problem.get, the trigger
+	# filter, trigger.get by ids, joined in problem order) then getHostPCAlerts.
+	chain() {
+		zcall "problems_$1" problem.get "$(jq -cn --argjson b "$problems" --argjson g "$2" --argjson x "$4" '$b + {groupids: $g} + $x')"
+		ids=$(jq -c --arg f "$5" '[.result[] | select($f == "/.*/" or .name == $f) | .objectid]' "$LAST")
+		zcall "triggers_$1" trigger.get "$(jq -cn --argjson b "$by_ids" --argjson ids "$ids" '$b + {triggerids: $ids}')"
+		tids=$(jq -c --argjson ids "$ids" '.result as $t | [$ids[] | select(. as $id | $t | type == "object" and has($id))]' "$LAST")
+		zcall "pc_$1" trigger.get "$(jq -cn --argjson b "$pc" --argjson h "$3" --argjson t "$tids" --argjson x "$6" \
+			'$b + {hostids: $h, triggerids: $t} + $x')"
+	}
+	# Stat 5: Netbox Hosts, severities 2..5, unacknowledged (no countOutput: counted after the ack filter).
+	chain unacked "$g_netbox" "$h_netbox" '{"severities":[2,3,4,5],"acknowledged":false,"limit":1001}' '/.*/' \
+		'{"min_severity":2}'
+	# Piechart 6: one count per severity over every group; target "Information" has an empty trigger filter,
+	# which matches no problem name.
+	for s in 0 1 2 3 4 5; do
+		sev=$([ "$s" = 0 ] && echo '{}' || echo "{\"severities\":[$s]}")
+		filter=$([ "$s" = 1 ] && echo '' || echo '/.*/')
+		chain "severity_$s" "$g_all" "$h_all" "$(printf '%s' "$sev" | jq -c '. + {limit: 1001}')" "$filter" \
+			"{\"min_severity\":$s,\"countOutput\":true}"
+	done
+	# Problems 7: target B (legacy tags filter Priority:1, migrated to an Equals problem tag) and A (severities,
+	# limit 5), then their triggers by id.
+	for t in 'priority|{"recent":false,"tags":[{"tag":"Priority","value":"1","operator":1}],"limit":1001}' \
+		'severities|{"recent":false,"severities":[0,2,3,4,5],"limit":5}'; do
+		list=${t%%|*}
+		zcall "problems_list_$list" problem.get "$(jq -cn --argjson b "$problems" --argjson g "$g_all" --argjson x "${t#*|}" '$b + {groupids: $g} + $x')"
+		ids=$(jq -c '[.result[].objectid]' "$LAST")
+		zcall "triggers_list_$list" trigger.get "$(jq -cn --argjson b "$by_ids" --argjson ids "$ids" '$b + {triggerids: $ids}')"
+	done
+}
+
 capture_grafana "$G12" "$TOK12"
 capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_json_api
+capture_zabbix
 capture_grafana "$G11" "$TOK11"
 capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_json_api
+capture_zabbix
 capture_grafana "$G13" "$TOK13"
 capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_json_api
+capture_zabbix
 
 # ---------------------------------------------------------------------------------------------
 # Alertmanager (+ amtool from the same image)
@@ -706,9 +814,11 @@ get metrics_query_range "/api/metrics/query_range?q=$(enc '{} | rate() by (resou
 
 log "scrubbing"
 find "$TMP/out" -type f ! -name '*.png' | while IFS= read -r f; do
-	sed -E 's/glsa_[A-Za-z0-9_]+/<redacted>/g' "$f" >"$f.scrub" && mv "$f.scrub" "$f"
+	sed -E -e 's/glsa_[A-Za-z0-9_]+/<redacted>/g' -e 's/tern-fake-appid[A-Za-z0-9-]*/redacted-appid/g' "$f" >"$f.scrub" &&
+		mv "$f.scrub" "$f"
 done
-leaks=$(grep -rIil -e 'glsa_' -e 'authorization' -e 'bearer ' -e 'set-cookie' -e 'grafana_session' "$TMP/out" || true)
+leaks=$(grep -rIil -e 'glsa_' -e 'authorization' -e 'bearer ' -e 'set-cookie' -e 'grafana_session' -e 'tern-fake-appid' \
+	"$TMP/out" "$ROWS" || true)
 for tf in "$TOK12" "$TOK11" "$TOK13"; do
 	more=$(grep -rlF -f "$tf" "$TMP/out" || true)
 	leaks="$leaks $more"

@@ -309,8 +309,9 @@ describe("queries for other datasource plugins", function()
 	end
 
 	it("says why frontend-only plugins and browser-side query paths stay off the native rung", function()
+		-- Ported (lib/datasources/json_api): this catalog lists no proxy URL for it, as for browser access.
 		expect(reason("js", { urlPath = "" })).toBe(
-			"marcusolsson-json-datasource queries run in the browser (a frontend datasource plugin)"
+			"JSON API datasources with browser (direct) access are queried by the browser"
 		)
 		-- Ported (lib/datasources/cardinality): only a direct-access target stays off.
 		expect(reason("card", { cardinalityType = "labels", targetDatasource = "Metrics" })).toBeNil()
