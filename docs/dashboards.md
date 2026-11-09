@@ -62,6 +62,8 @@ queries change.
 | Type | Supported |
 | --- | --- |
 | Query (Prometheus) | `label_values(metric_or_selector, label)`, `label_values(label)`, `label_names()`, `metrics(regex)`, `query_result(expr)`; the variable's regex (a capture group or named groups `text`/`value` pick the value, as in Grafana), sort modes, multi-value, include All with or without a custom all value, refresh on load or on time range change |
+| Query (Grafana Incident) | `labels`, `severities`, `statuses` (listed through Grafana's `/api/ds/query`, as the plugin's frontend lists them; `roles` shows the plugin's error); regex, sort, multi-value and All as above |
+| Query (JSON API) | the variable's JSON API query, run as its panels run (see [JSON API](#json-api-marcusolsson-json-datasource)); text from `experimentalVariableTextField`, value from `experimentalVariableValueField`, else the first field; regex, sort, multi-value and All as above |
 | Custom | comma-separated values, `\,` for a literal comma, `text : value` pairs |
 | Constant | used in queries, not shown |
 | Interval | the listed values and `auto` (computed from the range with the variable's step count and minimum) |
@@ -72,6 +74,17 @@ Variables are resolved in dependency order: a variable that references another (
 instance)`, a query on datasource `${ds}`) waits for it and is refreshed when it changes. Query variables of other
 datasource types (Loki, Tempo, SQL, ...) and ad hoc filters show as not supported, and panels referencing them keep
 the reference as written.
+
+Grafana Incident query strings are interpolated as the plugin's frontend does: "All" with the custom all value
+`$__all` goes in as `$__all` (the plugin's backend accepts it); picked values become filters, `label:'<v>'`,
+`severity:'<v>'`, `status:<v>` or `role:<v>` joined by spaces (an empty result sends the target's
+`originalQueryString`). Which filter depends on your Grafana version, because the plugin keys on what Grafana hands
+its formatter: Grafana 12 and later (scenes dashboards) pass only the variable's name, so the filter follows the
+name (`labels`, `severities`, `statuses`, `roles`; any other name gives `unsupported query name`, which the plugin's
+backend rejects with "Invalid query string"); Grafana 11 passes the variable's query too, so its query type
+(`labels`, `severities`, `statuses`) wins, then the name. Tern follows the server's version, so a panel that fails
+in Grafana (for example a variable named `severity` with a value picked) fails the same way in Tern, with Grafana's
+error.
 
 Interpolation follows Grafana: `$x`, `${x}`, `${x:format}` and `[[x]]` with the formats `regex`, `pipe`, `csv`,
 `json`, `glob`, `raw`, `text`, `queryparam`, `singlequote`, `doublequote`, `sqlstring`, `lucene` and
@@ -89,10 +102,13 @@ Each panel takes the first rung that works and says why it is not on a higher on
 
 1. **Native.** Tern draws the panel itself when its type and options are supported (every core Grafana panel
    type and the clock panel; see [Native panels](#native-panels)) and every query runs natively: Prometheus, Loki
-   and TestData; Tempo for traces and table panels; and any other datasource whose plugin has a backend
-   (`meta.backend` in Grafana's frontend settings), such as PostgreSQL, MySQL, MSSQL, Elasticsearch, Infinity or
-   Grafana Incident. Queries go to Grafana's `/api/ds/query`, one request per panel, so they run with your
-   Grafana user's permissions. Each target is sent as the datasource's own frontend sends it: SQL targets as
+   and TestData; Tempo for traces and table panels; Grafana Incident (with its query variables, see
+   [Variables](#variables)); the frontend datasource plugins Tern ports (see [Datasource
+   plugins](#datasource-plugins)); and any other datasource whose plugin has a backend (`meta.backend` in
+   Grafana's frontend settings), such as PostgreSQL, MySQL, MSSQL, Elasticsearch or Infinity. Queries go to
+   Grafana's `/api/ds/query`, one request per panel, so they run with your Grafana user's permissions (frontend
+   plugins: their own requests through Grafana's datasource proxy). Each target is sent
+   as the datasource's own frontend sends it: SQL targets as
    `rawSql` and `format` with SQL-quoted variables (a multi-value `$var` in `IN ($var)` becomes `'a','b'`;
    `$__timeFilter` and the other SQL macros stay for Grafana's backend), Elasticsearch's Lucene query with the
    `lucene` format, other plugins with every string field interpolated. Server-side expressions (`__expr__`) run
@@ -116,11 +132,13 @@ Typical reasons:
 | `panel type <type> is not rendered natively` | a panel type Tern does not draw (yet) |
 | `graph with xaxis.mode series migrates to barchart...` | a legacy graph Grafana turns into another panel type |
 | `<type> queries are not run natively` | a datasource Tern cannot send queries to: not listed in Grafana's frontend settings, `-- Grafana --`, or Tempo outside traces/table panels |
-| `<type> queries run in the browser (a frontend datasource plugin)` | the plugin has no backend (JSON API, Grafana Cloud cardinality): Grafana's frontend queries it |
-| `Zabbix queries are post-processed in the browser` | Zabbix applies functions and runs problem/text queries in Grafana's frontend |
+| `<type> queries run in the browser (a frontend datasource plugin)` | the plugin has no backend: Grafana's frontend queries it |
+| `JSON API JSONata expressions run in the browser`, `JSON API datasources with browser (direct) access are queried by the browser` | a JSON API field in the JSONata language (evaluated by the jsonata library in the browser), or a JSON API datasource Grafana does not proxy |
+| `the cardinality target data source "<name>" uses browser (direct) access, ...` | a Grafana Cloud cardinality target Prometheus datasource with browser access: only the browser reaches it |
+| `Zabbix ... are not reproduced`, `Zabbix reads history through a direct database connection ...` | Zabbix IT services, text and user macro queries, trigger counts by items, problems with item values at problem time and direct DB connections run only in Grafana's frontend (metrics, item ids, trigger counts and problems are native) |
 | `Graphite queries are sent by the browser through the datasource proxy`, `InfluxDB queries are built in the browser` | these frontends do not use `/api/ds/query` for panels |
 | `Infinity <type> queries with the <parser> parser run in the browser` | Infinity parses everything but its backend parsers (`backend`, `jq-backend`) in the frontend |
-| `Grafana Incident formats query variables in the browser` | an Incident query string with dashboard variables (they become `label:'...'` filters in the frontend) |
+| `server-side expressions cannot read <type> queries (run in the browser)` | a panel whose expressions read a datasource Tern queries the way its browser frontend does |
 | `the TestData scenario <s> runs in the browser only` | node_graph, trace, flame_graph and raw_frame are generated by Grafana's frontend |
 | `reuses panel <id>, whose queries are not run natively: ...` | a `-- Dashboard --` panel whose source panel cannot be queried natively (also: `with its transformations: ...`, annotations, ad hoc filters, a loop) |
 | `a -- Dashboard -- query among other queries is not run natively` | a mixed panel with a `-- Dashboard --` target |
@@ -142,7 +160,7 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 | stat, legacy singlestat | yes | reducers Tern cannot compute |
 | gauge | yes | see Gauge below |
 | bargauge | yes | `showUnfilled`, `sizing`/`minViz*`/`maxVizHeight` and the legend are not drawn |
-| table | yes | sparkline and image cells |
+| table | yes | sparkline, image, data-links, actions and custom cells |
 | text, logs | yes | |
 | piechart, barchart, histogram, trend, candlestick | yes | |
 | xychart | yes | the options from before Grafana 11.3 (`seriesMapping`, `dims`) |
@@ -169,14 +187,16 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 - **Time series drawing.** Every series is drawn with its own field config, from the defaults and overrides:
   `drawStyle` (line, bars, points), `lineWidth` (0 hides the line), `lineStyle` dash and dot, `lineInterpolation`
   (linear, smooth, step before/after), `fillOpacity` with `gradientMode` (see below), `showPoints` and
-  `pointSize` (auto shows points when the samples are at least two point sizes apart), `spanNulls` (true, or a gap
-  in ms up to which the line is joined), `fillBelowTo` (the fill runs down to the named series, 35% by default)
-  and the bar options (`barAlignment`, `barWidthFactor`, `barMaxWidth`). Value axes are ranged as Grafana ranges
-  them (uPlot's padded range: headroom above the data, a flat zero series on the floor of 0..100, soft bounds
-  and whole numbers with decimals 0). Series colors follow Grafana's classic palette in Grafana's order: the
-  position counts every number field of the graphable frames, hidden series included. A fixed color, and a
-  continuous scheme at the series' `seriesBy` value, color the series and its legend swatch in Grafana's color;
-  the thresholds mode uses the step's theme tone, like threshold lines.
+  `pointSize` (auto shows points when the samples are at least two point sizes apart), `insertNulls` (Grafana's
+  null insertion: where samples are further apart than it, or than the time field's interval when it is off, as
+  for Prometheus results, the line breaks; fields of one frame that disagree insert nothing, as in Grafana),
+  `spanNulls` (true, or a gap in ms up to which the line is joined), `fillBelowTo` (the fill runs down to the
+  named series, 35% by default) and the bar options (`barAlignment`, `barWidthFactor`, `barMaxWidth`). Value
+  axes are ranged as Grafana ranges them (uPlot's padded range: headroom above the data, a flat zero series on
+  the floor of 0..100, soft bounds and whole numbers with decimals 0). Series colors follow Grafana's classic
+  palette in Grafana's order: the position counts every number field of the graphable frames, hidden series
+  included. A fixed color, and a continuous scheme at the series' `seriesBy` value, color the series and its
+  legend swatch in Grafana's color; the thresholds mode uses the step's theme tone, like threshold lines.
 - **Time series gradients.** `gradientMode` opacity fades the fill to nothing at the bottom of the plot. `hue`
   colors line and fill from a lighter, hue-shifted top to a darker bottom of the series color (palette, fixed or
   by-value), as Grafana computes them per light and dark theme. `scheme` colors line and fill by value: threshold
@@ -190,7 +210,23 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   the field defaults' `noValue`, else "No data". Stat, gauge and bar gauge show one placeholder value
   (Grafana's `createNoValuesFieldDisplay`): its text is `noValue`, its color the base threshold step and its
   numeric value 0, never the `noValue` text, so a gauge's bar starts at the minimum (or at the `neutral` value,
-  below). A Prometheus target without an expression is not sent, as in Grafana.
+  below). A Prometheus target without an expression is not sent, as in Grafana. A table whose frame has fields
+  but no rows (say after `filterByValue`) keeps its header over Grafana 13's placeholder: `noValue`, else
+  "No rows".
+- **Stat.** `colorMode` `background` fills the value's tile with Grafana's gradient of its color (turned and
+  darkened per BigValue, lightened in a light theme) and `background_solid` with the plain color, threshold,
+  fixed (named or hex) and palette colors alike; named colors take the shade Grafana uses for Tern's current
+  theme (dark-blue is #1F60C4 dark, #1250B0 light). Text on the fill is white or near-black by the color's
+  brightness, as Grafana picks it. With a fixed color, palette or scheme, `colorMode` `value` draws the value in
+  that exact color; threshold colors stay theme tones. A box wider than 2.5 times its height lays name and value
+  side by side unless `wideLayout` is off, as in Grafana. Untitled panels have no header line (focus, expand and
+  pin work as on any card), and their stats
+  show each field's name above the value (`textMode` auto), as Grafana does. Values are drawn at the width of
+  Tern's font, so they shrink to a narrow tile instead of being cut, and field names wrap in full; in a
+  height-capped card a long name keeps to the lines left above the value. A short card (a 6x3 stat with a
+  description) still draws its value at least a line tall within the room under its head and chip lines; the
+  description and link chips keep to one line, and a sparkline that would leave the value less than a line is
+  left out, as Grafana drops the chart from a short stat.
 - **Gauge.** Grafana 12 with the `newGauge` feature toggle (read from Grafana's frontend settings; on in Grafana
   Cloud) draws the radial gauge: `shape` gauge (a 220 degree arc) or circle, `barWidthFactor`, `barShape`
   rounded, `segmentCount`/`segmentSpacing`, `neutral` (the bar runs between the neutral value and the value,
@@ -212,6 +248,15 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   mode never query a datasource. Panel types that read Grafana's API fetch it from the dashboard's Grafana with
   your credentials (the news panel's relative feed URL included); feeds on other hosts are fetched from their own
   URL without credentials.
+- **Text panels.** Markdown, HTML and code modes, variables filled in first. HTML is sanitized as Grafana does
+  (js-xss's allow list plus iframe and button): allowed tags draw natively (headings, paragraphs, lists, tables,
+  emphasis, code, `pre`, rules, links), tags outside the list (script, style, form, custom tags) show as plain
+  text with their content, comments and event attributes are dropped, and links keep only http(s), mailto, tel
+  and rooted paths, which open on your Grafana. In markdown mode, HTML blocks (a `<div>` wrapper, a lone tag line)
+  draw the same way between the Markdown parts and inline tags become Markdown links and emphasis. Images load
+  when Tern can fetch them (http(s) or rooted on the Grafana, shown at their natural size) and show their alt text
+  otherwise; iframes, videos and audio show as a link to their source. Inline styles only carry bold, italic and
+  text alignment; colors, boxes and sizes follow the Tern theme.
 - **Live panels.** Clocks redraw every second on one shared timer, only while they are shown (not inside a
   collapsed row, and only the expanded panel when one is expanded); a redraw never re-runs a query.
 - **Transformations.** Tern applies a panel's transformations in order, as Grafana 13 does (disabled ones
@@ -253,6 +298,135 @@ Tern draws `grafana-clock-panel` itself, following the plugin's 2.1.8 behavior, 
   colors map to classes; `transparent` and an empty background use the panel background.
 - **Not native.** The clock panel 3.x `digital` style falls back to the Grafana render or browser rung
   ("the digital clock style (clock panel 3.x) is not rendered natively").
+
+### Dynamic text (marcusolsson-dynamictext-panel)
+
+- **Template.** Handlebars 4 without partials: `{{x}}` escaped, `{{{x}}}` raw, comments, `~`, `if`/`else if`/
+  `unless`/`each`/`with`, `this`, `../`, `@index`/`@key`/`@first`/`@last`/`@root`, subexpressions and the plugin's
+  helpers (and, or, not, eq, unlessEq, gt, gte, lt, lte, contains, startsWith, endsWith, match, join, split,
+  toFixed, json, date, variable, variableValue, fieldStatusColor). `match` takes JavaScript regexes without groups
+  or lookarounds; others are a template error.
+- **Data.** renderMode everyRow (one bordered block per row), allRows (`data`), data (`data` per frame); a field
+  with a unit gives its formatted text, others the raw value; `status` adds `statusColor`; a frame without rows
+  shows `defaultContent`. Dashboard variables reach the content only through the variable helpers, as in Grafana.
+- **HTML and CSS.** markdown-it runs in inline mode when `wrap` is off, block mode otherwise; the result is
+  sanitized like the text panel and drawn as elements. Inline `style` attributes compile to classes of
+  `plugin/dynamictext.css`: exact colors (hex, rgb/hsl, named, transparent), lengths in px, %, em, rem, vh and vw
+  to 0.01 below 10000, layout, flex, alignment, text, border, radius, overflow, z-index, opacity, the first
+  box-shadow and linear-gradient with up to 3 stops (stop positions ignored, angle rounded to 5 degrees). Font
+  weights round to 50, font families to sans-serif (Inter), serif or monospace; `position: fixed` draws as
+  absolute. An element holds up to 10 lengths and 4 colors. What is not drawn (transforms, filters, `var()`,
+  `calc()`, background images) is listed under the panel. data: images (SVG, PNG, JPEG, GIF, WebP up to 256 KiB)
+  are drawn as images.
+- **Panel `styles`.** Plain declarations style the panel; CSS with selectors is skipped and named under the panel
+  (its selectors target Grafana's DOM).
+- **Not native.** `helpers` or `afterRender` JavaScript ("the panel runs its own JavaScript (...)"),
+  `contentPartials` and `externalStyles` (templates or stylesheets from URLs) fall back to the Grafana render.
+
+## Datasource plugins
+
+Some datasource plugins do their work in Grafana's frontend (no backend, or results reshaped in the browser).
+Tern ports that frontend code (`plugin/lib/datasources/`) and sends the same requests through Grafana, so their
+panels and query variables are native.
+
+### JSON API (marcusolsson-json-datasource)
+
+Behavior of the plugin's 1.3.23 frontend, which fetches every target through the datasource proxy and builds the
+frame itself:
+
+- **Requests.** `GET` or `POST` (any other method fails with "Invalid method ..."). The URL is the datasource
+  proxy path plus `urlPath` (runs of `/` collapsed), then the target's params (non-empty keys, in order, repeats
+  allowed) and the datasource's `jsonData.queryParams`, each key and value `encodeURIComponent`'ed and ordered as
+  a JavaScript object orders keys (numeric keys first). urlPath, params, headers, body, field names and paths take
+  dashboard variables, then the macros `$__unixEpochFrom()`, `$__unixEpochTo()` (epoch seconds), `$__isoFrom()`
+  and `$__isoTo()`. A URL with `/..` at the end, `/../`, `/..?` or a tab (after decoding) fails with "URL path
+  contains unsafe characters", as in the plugin. Target headers are sent (an `Authorization` header as
+  `X-DS-Authorization`, which Grafana's proxy passes on as `Authorization`); the body only with `POST`.
+- **Fields.** JSONPath as jsonpath-plus 10.3.0 evaluates it without scripts: dot and bracket names, indexes, `*`,
+  `..`, unions, slices (`[-1:]` is the last item; `[-1]` selects nothing), `length` of arrays and strings, `^`,
+  `~`, `@string()` and the other type selectors; filters and script expressions fail with the library's "Eval
+  [?(expr)] prevented in JSONPath expression." The field type is the one set, else detected as the plugin does:
+  ISO 8601 date-times with an offset (`2025-11-09T12:00:00Z`) and `YYYY-MM-DD` dates are time, all numbers number,
+  all booleans boolean, anything else (a number field with a null too) string. Time values parse as dayjs does
+  (a date or a date-time without an offset is your local time; epoch numbers below 1e12 are seconds); a time
+  dayjs cannot parse is empty. Fields of different lengths fail ("Fields have different lengths"). The field name
+  is the one set, else the path's last part.
+- **Frames.** One frame per target named after its refId, or with `experimentalGroupByField` one frame per value
+  of that field (without it, named after the value); the `experimentalMetricField` field is shown under its
+  frame's name. One failed target fails the panel (no frames), with Grafana's message: the response's `message`
+  or `error`, else its text body, else `Query error: <status> <reason>`; an empty document is "Query returned
+  empty data".
+- **Variables.** A JSON API query variable runs its query the same way; see [Variables](#variables).
+- **Not native.** Fields in the JSONata language (the jsonata library runs in the browser with dashboard
+  variables bound) and datasources with browser (direct) access stay on the ladder. `cacheDurationSeconds` is not
+  honored: Tern fetches on every refresh, at most every `dashboard.min_refresh`.
+- **Secrets.** `jsonData.queryParams` often holds an API key (OpenWeatherMap's `appid`) and is part of every
+  request URL. Tern never writes these URLs to logs, saved state or compat output, and removes query strings and
+  the queryParams values from every error text.
+
+### Grafana Cloud cardinality (grafanacloud-cardinality-datasource)
+
+Behavior of the plugin's 2.6.1 frontend (the Cardinality management dashboards of Grafana Cloud):
+
+- **Requests.** Every query asks the target Prometheus datasource (`targetDatasource`, a uid or name, usually
+  `${datasource}`) through its datasource proxy: Mimir's `api/v1/cardinality/label_names` and `label_values`
+  (`count_method=active`, parameters sorted, `label_names[]`), and for list variables `api/v1/label/__name__/values`
+  or `api/v1/labels` over the last two hours (start and end rounded up to 15 minutes, limit 200).
+- **Queries.** Totals (metrics, label names, series, label value pairs), the metrics and labels top tables, a
+  metric's or label's details (with example values when `exampleCount` is set), subtotals, metric usage, and the
+  three variable kinds (metric names, label names, a label's values). Combinations the plugin does not handle give
+  an empty frame, as in Grafana.
+- **Selectors.** The `${filter}` ad hoc filters (once Tern resolves ad hoc variables; nothing until then, as when
+  Grafana leaves them unresolved), then the target's `selector` without its outer braces; details and series
+  subtotals put `__name__='<metric>'` first.
+- **Frames.** Field names, display names and config as the plugin builds them; the percentage columns of the top
+  tables carry the legacy `custom.displayMode: gradient-gauge`, drawn as gradient gauge cells.
+- **Usage data.** When the cardinality datasource's `unusedMetrics` uses `proxyType: insights` for the target
+  datasource, metrics top adds a Used column from its `/unused` list (none when the list is empty or fails;
+  "pending" while it is computed), and usage queries read `/usages/<metric>` and then each dashboard's title and
+  each Grafana alert rule's group and title (empty for one that no longer exists).
+- **Errors.** The plugin's own texts: "No target data source has been selected.", the target "could not be
+  found", "is not compatible" (not Prometheus), "does not have a URL", "does not support Cardinality management"
+  (the API answers 404), "Usage data only available for the metric instance of this stack", "No data found for
+  stack". The first failing target fails the panel, as in Grafana.
+- **Differences.** The plugin queues requests per target datasource and caches answers for 15 minutes; Tern sends
+  a refresh's distinct requests at once and does not cache. The plugin's `datasources.cardinalityApiServerProxy`
+  feature flag (off by default) is not followed.
+
+### Zabbix (alexanderzobnin-zabbix-datasource) and its Problems panel
+
+Behavior of the plugin's 6.10.2 frontend (alexanderzobnin-zabbix-app), which sends metrics to its backend and runs
+trigger and problem queries itself against the Zabbix API:
+
+- **Targets.** Every target is migrated to the plugin's schema 13 (old modes, `Metrics`, legacy trigger options and
+  tag filters) and its filters, tags, problem tags and function parameters take dashboard variables in the plugin's
+  format: values regex-escaped, several as `(a|b)`, item ids comma-joined, and a filter a variable changed that is
+  no `/regex/` becomes `/^...$/`. `$__range`, `$__range_ms`, `$__range_s` and `$__range_series` are set as the
+  plugin sets them. Hidden targets are not queried.
+- **Metrics and item ids.** Sent to `/api/ds/query` as the plugin's frontend sends them; Zabbix functions such as
+  `scale` run in the plugin's backend. On the answer, the Alias functions (`setAlias`, `replaceAlias`,
+  `setAliasByRegex`, with the series' `$__zbx_host_name`, `$__zbx_item` and other scoped variables) rename the
+  series, Zabbix units become Grafana units (`%` is percent with min 0 and max 100, `B` bytes, `Bps` binary bytes
+  per second, `b` and `bps` bits, `uptime` a duration, ...), and series whose first two times agree are merged into
+  one wide frame, as in Grafana. A failing target shows Grafana's error line, for example "A: request failed,
+  status: 500 Internal Server Error" when the Zabbix API behind the backend fails.
+- **Trigger counts and problems.** The plugin's Zabbix API calls (`apiinfo.version`, `hostgroup.get`, `host.get`,
+  `problem.get`, `trigger.get`, `proxy.get`, `user.get`) go through the datasource's `resources/zabbix-api`
+  route, with the parameters the plugin picks for the Zabbix version, and are filtered, joined and counted as it
+  does. A trigger count is a frame `Count <refId>`; several targets share one wide frame (the piechart legend
+  reads "Count High", ...). A failing call fails the panel with the Zabbix API's message.
+- **Problems panel** (alexanderzobnin-zabbix-triggers-panel). Read-only, in table or list layout: the columns the
+  panel's options turn on, problems filtered by acknowledgement and severity and sorted as the panel sorts them
+  (both targets' problems are listed, so a problem two targets return appears twice, as in Grafana), severity cells
+  in the severity color, tags as badges colored by tag name (the badges that do not fit end in an ellipsis), the
+  first page of `pageSize` rows. Acknowledging, scripts, problem details, the timeline and paging are left to
+  Grafana; `o` opens the dashboard there.
+- **Not native.** IT services, text and user macro queries, trigger counts by items, problems with item values at
+  problem time (`fetchHistoricalItemValue`), datasources reading history through a direct database connection,
+  annotation queries, and Problems panels saved before the panel's React migration stay on the ladder with these
+  reasons.
+- **Timeouts.** Grafana waits as long as the Zabbix backend takes; Tern stops at the context's `timeout_ms`
+  (default 15 s). Raise it for slow Zabbix servers and long ranges.
 
 ## Refresh and time range
 

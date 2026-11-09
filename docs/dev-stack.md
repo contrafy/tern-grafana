@@ -62,11 +62,17 @@ Changing `GF_INSTALL_PLUGINS` recreates the Grafana containers, which wipes thei
 ### Section 4 datasources and dashboards
 
 - JSON API: datasources `json-dallas`, `json-chicago`, `json-seattle` (`marcusolsson-json-datasource`,
-  url `http://jsonapi:8080/data/2.5/weather-<city>.json`). Each carries `lat`, `lon`, `units` and a fake
-  `appid=tern-fake-appid-0123456789abcdef` in non-secure `jsonData.queryParams`, the way the real API
-  key sits there, so redaction of proxy URLs, errors and fixtures is exercised (httpd ignores the query
-  string). Dashboard `tern-s4-json`: three temperature gauges (`$.main.temp`, GET, empty urlPath) and a
-  humidity gauge with a named field.
+  url `http://jsonapi:8080/data/2.5/weather-<city>.json`) and `json-api` (url `http://jsonapi:8080/data/2.5`,
+  documents picked by urlPath: `weather-<city>.json`, `forecast.json`, `cities.json`). Each carries a fake
+  `appid=tern-fake-appid-0123456789abcdef` (plus `lat`, `lon`, `units`) in non-secure
+  `jsonData.queryParams`, the way the real API key sits there, so redaction of proxy URLs, errors and
+  fixtures is exercised (httpd ignores the query string; the capture scrubs the appid to
+  `redacted-appid`). Dashboard `tern-s4-json` (absolute range 2025-11-09 09:00 to 2025-11-10 00:00 UTC,
+  query variable `city` from `cities.json` with text and value fields): 1-3 temperature gauges
+  (`$.main.temp`, GET, empty urlPath), 4 a humidity gauge with a named field, 5 a stat on
+  `/weather-${city}.json`, 6 a time series grouped by city (`experimentalGroupByField`, metric field,
+  params with the epoch and ISO macros), 7 a table with an epoch-seconds time field, 8 a missing document
+  (busybox's 404 page as the error). Fixtures `s4_json_*` (`capture_json_api`).
 - Dashboard `tern-s4-dynamictext` (TestData CSV): 1 HTML editor, everyRow, `{{#if}}`/`{{else}}`,
   `{{{triple}}}` and data-URI SVG `<img>`; 2 markdown editor with `{{{review_rows}}}` HTML from the
   query and a `formatTime` transformation; 3 three stat cards with bars from 16 fields; 4 renderMode
@@ -159,13 +165,18 @@ Changing `GF_INSTALL_PLUGINS` recreates the Grafana containers, which wipes thei
   cell types: 1 battery status (the user dashboards' pattern: percentunit 0..1 gradient and basic gauge
   overrides, color-background by mapping), 2 gauge modes (gradient with valueDisplayMode color by default,
   lcd, hidden, continuous-GrYlRd), 3 pill, markdown, json-view, color-text and an applyToRow
-  color-background. Fixtures `ds_query_cells_<panel>` (`capture_cells`).
+  color-background, 4 the user's MDU battery table (a percentunit gauge column between long text
+  columns), 5 and 6 a table a `filterByValue` leaves with fields and no rows (6 with `noValue`), 7 and 8
+  Prometheus `node_load1` for 5 minutes in every 10 (time series: 7 breaks at the gaps, the time field's
+  interval; 8 joins them, `insertNulls` 15m). Fixtures `ds_query_cells_<panel>` (`capture_cells`).
 - Dashboard `tern-stat-fidelity` (`dev/grafana/dashboards/tern-stat-fidelity.json`), stat panels over
   constant PromQL (`vector(...)`) reproducing the user dashboards' patterns: untitled stats with fixed
   colors (green, dark-blue, blue, purple, dark-purple) in `background`/`background_solid`, explicit text
   sizes, two long-named values side by side, "40239" and "$0" in narrow cards, a light fixed color (dark
   text), a hex color, a fixed color in `colorMode` value and three threshold-colored values with long
-  names. Fixtures `ds_query_stat_fidelity_<panel>` (`capture_stat_fidelity`).
+  names; and short stats with a description: a 6x3 one over a TestData number without time (Grafana
+  Cloud's cardinality tiles), a 6x4 one with a link and a sparkline, an untitled 12x4 named one.
+  Fixtures `ds_query_stat_fidelity_<panel>` (`capture_stat_fidelity`).
 
 ### Server behavior the fixtures pin down
 
