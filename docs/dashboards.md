@@ -270,6 +270,15 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   head line, as in Grafana's panel header (hover shows the description; the expanded panel shows it in full). Links
   open in the browser pane (variables and `${__url_time_range}` filled in; a path-only link opens on your Grafana).
   Panel titles keep to one line, cut short. Transparent panels have no card background or border.
+- **Alert states.** A panel linked to Grafana-managed alert rules (rule annotations `__dashboardUid__` and
+  `__panelId__`) shows Grafana's heart after its title: red and broken while a rule fires, yellow while one is
+  pending, green otherwise (the most severe linked rule wins). As in Grafana, only while the range ends at `now`.
+- **Annotations.** Time series draw the dashboard's enabled annotation layers as Grafana does: dashed lines, region
+  fills between two dashed lines and markers under the plot. Grafana's built-in "Annotations & Alerts" layer
+  (the dashboard's annotations and the alert state history of linked rules: pending yellow, alerting red, normal
+  green) and Prometheus layers (samples above 0, merged into regions by the query step) run natively; layer panel
+  filters and the panel's annotation line width and region opacity apply. Other layer types (tags, time regions,
+  other datasources) are not drawn.
 - **Panels without queries.** Text, dashboard list, annotation list, alert list, news and clock panels in input
   mode never query a datasource. Panel types that read Grafana's API fetch it from the dashboard's Grafana with
   your credentials (the news panel's relative feed URL included); feeds on other hosts are fetched from their own

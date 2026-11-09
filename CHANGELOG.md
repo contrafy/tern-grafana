@@ -7,6 +7,48 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-10
+
+### Added
+
+- Ad hoc filter variables: a picker to add, edit and remove filters with keys
+  and values from the datasource, applied to Prometheus and Loki queries the
+  way Grafana rewrites them, `${filter}` for datasources that read it (such as
+  the cardinality datasource), and `var-<name>` in links and saved state.
+- Panel alert state: a heart in the header of a panel linked to a Grafana
+  alert rule (firing, pending or normal), and the dashboard's annotation
+  layers (Annotations & Alerts with alert state history, and Prometheus
+  annotation queries) drawn on time series as in Grafana.
+- Table pagination with Grafana's page size, data links in table cells, and
+  columns sized by `custom.width` and `custom.minWidth`.
+
+### Fixed
+
+- Every absolute time on a native panel (axes, legends, cursor read-outs,
+  table time cells, stat time values) is formatted in the dashboard's time
+  zone (browser, utc or an IANA zone, per value across DST); they were UTC.
+- Grid cards take exactly their panel's grid height, and every chart sizes to
+  the card body it is given, so titles stay visible and charts are no longer
+  cut at the bottom; stats center their value as Grafana's BigValue does.
+- Panel titles show "All" for a variable's custom all value; descriptions and
+  links sit in the card head as in Grafana.
+- Bar gauges, bar charts and gauges draw Grafana's exact per-row and
+  threshold colors, thick bars with large values, rounded bar ends and the
+  full threshold ring; bar chart time labels use Grafana's format.
+- Time series range their y axis over the samples in view and draw one sample
+  beyond each edge cut at the plot, like uPlot, so a query returning years of
+  history no longer flattens the line; frames are drawn in time order; axes
+  with decimals 0 label only whole ticks.
+- Dynamic text and text panels use Grafana's body and heading styles and
+  unitless line heights; positioned and stacked content no longer overlaps.
+- Pie chart slices are filled with Grafana's exact radial gradient of their
+  color in each theme: a fixed blue-gray such as Zabbix's 'Not Classified'
+  no longer turns pale green with a purple rim in Tern's light theme.
+- Table panel columns are as wide as their content and a table wider than its
+  card scrolls sideways, as in Grafana 13, instead of squeezing every auto
+  column to an ellipsis; tables without fixed-width columns spread over the
+  card's leftover width.
+
 ## [0.6.0] - 2026-11-09
 
 ### Added
@@ -441,7 +483,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/contrafy/tern-grafana/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...v0.4.0
