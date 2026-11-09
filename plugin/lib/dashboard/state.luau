@@ -233,6 +233,8 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		Links.openPanelInBrowser(s, value, effects)
 	elseif act == "plink" then
 		Links.openPanelLink(s, value, env, effects)
+	elseif act == "dlink" then
+		Links.openDataLink(value, effects)
 	elseif act == "dashboard" then
 		local url = Links.grafanaUrl(s, env)
 		if url then

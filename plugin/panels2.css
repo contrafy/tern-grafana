@@ -451,3 +451,11 @@
 .tgp-stat-fit .tgp-stat-fs448 { font-size: 448px; }
 .tgp-stat-fit .tgp-stat-fs480 { font-size: 480px; }
 .tgp-stat-fit .tgp-stat-fs512 { font-size: 512px; }
+
+/* Treemap (lib/panels/treemap.luau, lib/render/svg_treemap.luau): a group
+   tile is the text color at 5% opacity, a leaf's label is the panel
+   background on its fill; leaves carry their tooltip and data link in the
+   image overlay. */
+.tgp-tm-group { fill: var(--t1); fill-opacity: 0.05; stroke: none; }
+.tg-label.tgp-tm-on-leaf { fill: var(--card); }
+.tgp-tm-link { cursor: pointer; }

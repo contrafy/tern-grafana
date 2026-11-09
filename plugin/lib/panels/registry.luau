@@ -317,6 +317,12 @@ local LAZY: { { types: { string }, load: () -> any } } = {
 			return require("./canvas")
 		end,
 	},
+	{
+		types = { "marcusolsson-treemap-panel" },
+		load = function(): any
+			return require("./treemap")
+		end,
+	},
 }
 M.LAZY = LAZY
 

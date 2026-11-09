@@ -133,6 +133,15 @@ function M.openPanelLink(s: State, value: string, env: Env, effects: { Effect })
 	end
 end
 
+-- Opens a panel's data link (`dlink=<percent-encoded URL>`, the treemap's
+-- tiles) in the browser pane.
+function M.openDataLink(value: string, effects: { Effect })
+	local url = Scheme.percentDecode(value, false)
+	if url and string.match(url, "^https?://") then
+		table.insert(effects, M.browse(url))
+	end
+end
+
 -- Opens the focused panel as its own panel block.
 function M.pin(s: State, effects: { Effect })
 	local inst = if s.focus then Core.find(s, s.focus :: string) else nil
