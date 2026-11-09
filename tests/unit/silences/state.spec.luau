@@ -11,6 +11,8 @@ local Render = require("../../../plugin/lib/silences/render")
 local State = require("../../../plugin/lib/silences/state")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -32,29 +34,11 @@ local function makeEnv(): any
 	return { now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null, config = CFG }
 end
 
-local function ok(path: string, status: number?): any
-	return { status = status or 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local ok = Support.response
 
-local function key(text: string, name: string?): any
-	return {
-		name = name or text,
-		text = if name then nil else text,
-		ctrl = false,
-		alt = false,
-		shift = false,
-		meta = false,
-	}
-end
+local key = Keys.press
 
-local function find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
+local find = Support.find
 
 -- Every write request among effects (anything but a GET).
 local function writes(effects: { any }): { any }

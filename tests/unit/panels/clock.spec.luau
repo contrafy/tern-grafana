@@ -373,58 +373,59 @@ local function allPanels(version: string, id: number): any
 	error("no panel " .. id)
 end
 
-for _, version in S.VERSIONS do
-	describe("clock on tern-all-panels, Grafana " .. version, function()
-		local o = opts({ timezone = "utc" })
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+describe("clock on tern-all-panels, Grafana " .. version, function()
+	local o = opts({ timezone = "utc" })
 
-		it("panel 37: Berlin time with date, offset and abbreviation, and description", function()
-			local r = Clock.compute(allPanels(version, 37), {}, env, o)
-			expect(r.date).toBe("2026-10-09")
-			expect(r.time).toBe("22:31:48")
-			expect(r.zone).toEqual({ "+02:00 CEST" })
-			expect(r.description).toBe("Berlin office")
-		end)
-
-		it("panel 38: countdown to 2100 on a dark-blue background", function()
-			local panel = allPanels(version, 38)
-			local r = Clock.compute(panel, {}, env, o)
-			expect(r.time).toBe("73 years, 2 months, 22 days, 3 hours, 28 minutes, 11 seconds")
-			expect(r.description).toBe("Until the 2100 launch")
-			local node: any = Clock.view(panel, {}, env, o)
-			expect(node.p.class).toBe("tgp-clock tgp-clock-bg-dark-blue")
-		end)
-
-		it("panel 39: countup since 2020 in monospace", function()
-			local panel = allPanels(version, 39)
-			expect(Clock.compute(panel, {}, env, o).time).toBe(
-				"6 years, 9 months, 7 days, 20 hours, 31 minutes, 48 seconds"
-			)
-			local node: any = Clock.view(panel, {}, env, o)
-			expect(node.p.class).toBe("tgp-clock tgp-clock-mono")
-		end)
-
-		it("panel 40: countdown to the soonest future deadline of the TestData frame", function()
-			local panel = allPanels(version, 40)
-			expect(Clock.queries(panel)).toBe(true)
-			local r = Clock.compute(panel, S.frames(version, "all_panels_40"), env, o)
-			expect(r.time).toBe("71 years, 2 months, 22 days, 3 hours, 28 minutes, 12 seconds")
-			expect(r.description).toBe("code freeze")
-		end)
-
-		it("panel 41: custom 12 hour New York time with a long date and the zone name", function()
-			local r = Clock.compute(allPanels(version, 41), {}, env, o)
-			expect(r.date).toBe("Friday, October 9")
-			expect(r.time).toBe("04:31:48 PM")
-			expect(r.zone).toEqual({ "America/New_York" })
-		end)
-
-		it("needs no query for input clocks and ticks every second", function()
-			for _, id in { 37, 38, 39, 41 } do
-				expect(Clock.queries(allPanels(version, id))).toBe(false)
-				expect(Clock.liveMs(allPanels(version, id), env)).toBe(1000)
-			end
-		end)
+	it("panel 37: Berlin time with date, offset and abbreviation, and description", function()
+		local r = Clock.compute(allPanels(version, 37), {}, env, o)
+		expect(r.date).toBe("2026-10-09")
+		expect(r.time).toBe("22:31:48")
+		expect(r.zone).toEqual({ "+02:00 CEST" })
+		expect(r.description).toBe("Berlin office")
 	end)
-end
+
+	it("panel 38: countdown to 2100 on a dark-blue background", function()
+		local panel = allPanels(version, 38)
+		local r = Clock.compute(panel, {}, env, o)
+		expect(r.time).toBe("73 years, 2 months, 22 days, 3 hours, 28 minutes, 11 seconds")
+		expect(r.description).toBe("Until the 2100 launch")
+		local node: any = Clock.view(panel, {}, env, o)
+		expect(node.p.class).toBe("tgp-clock tgp-clock-bg-dark-blue")
+	end)
+
+	it("panel 39: countup since 2020 in monospace", function()
+		local panel = allPanels(version, 39)
+		expect(Clock.compute(panel, {}, env, o).time).toBe(
+			"6 years, 9 months, 7 days, 20 hours, 31 minutes, 48 seconds"
+		)
+		local node: any = Clock.view(panel, {}, env, o)
+		expect(node.p.class).toBe("tgp-clock tgp-clock-mono")
+	end)
+
+	it("panel 40: countdown to the soonest future deadline of the TestData frame", function()
+		local panel = allPanels(version, 40)
+		expect(Clock.queries(panel)).toBe(true)
+		local r = Clock.compute(panel, S.frames(version, "all_panels_40"), env, o)
+		expect(r.time).toBe("71 years, 2 months, 22 days, 3 hours, 28 minutes, 12 seconds")
+		expect(r.description).toBe("code freeze")
+	end)
+
+	it("panel 41: custom 12 hour New York time with a long date and the zone name", function()
+		local r = Clock.compute(allPanels(version, 41), {}, env, o)
+		expect(r.date).toBe("Friday, October 9")
+		expect(r.time).toBe("04:31:48 PM")
+		expect(r.zone).toEqual({ "America/New_York" })
+	end)
+
+	it("needs no query for input clocks and ticks every second", function()
+		for _, id in { 37, 38, 39, 41 } do
+			expect(Clock.queries(allPanels(version, id))).toBe(false)
+			expect(Clock.liveMs(allPanels(version, id), env)).toBe(1000)
+		end
+	end)
+end)
 
 return nil

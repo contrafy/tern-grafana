@@ -19,7 +19,7 @@ local function captureNow(version: string): number
 	return tonumber(r.to) :: number
 end
 
-type Harness = { s: State.State, env: any, pending: { [string]: any } }
+type Harness = S.Harness
 
 local function fixtureFor(version: string, tag: string): string?
 	if string.match(tag, "^dash/") then
@@ -32,25 +32,16 @@ local function fixtureFor(version: string, tag: string): string?
 	return nil
 end
 
-local function apply(h: Harness, version: string, effects: { any })
-	for _, e in effects do
-		local path = if e.kind == "http" then fixtureFor(version, e.tag) else nil
-		if path then
-			local _, more = State.update(h.s, { kind = "http_done", tag = e.tag, response = S.response(path) }, h.env)
-			apply(h, version, more)
-		elseif e.kind == "http" or e.kind == "timer" then
-			h.pending[e.tag] = e
-		end
-	end
-end
-
 local function start(version: string, vars: string?): Harness
 	local env = S.env()
 	env.now_ms = captureNow(version)
 	local s, effects =
 		State.init({ "tern-grafana://dashboard?context=lab&uid=tern-all-panels" .. (vars or "") }, nil, env)
-	local h: Harness = { s = s, env = env, pending = {} }
-	apply(h, version, effects)
+	local h = S.harness(s, env, function(e: any): any
+		local path = fixtureFor(version, e.tag)
+		return if path then S.response(path) else nil
+	end, true)
+	S.drive(h, effects)
 	return h
 end
 

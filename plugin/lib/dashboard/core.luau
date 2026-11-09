@@ -223,8 +223,8 @@ function M.panelState(s: State, key: string): PanelState
 		ps = {
 			status = "idle",
 			decision = { mode = "native" },
-			gen = 0,
-			req_gen = 0,
+			gen = s.gen_floor,
+			req_gen = s.gen_floor,
 			req_tags = {},
 			extra_gen = 0,
 		}

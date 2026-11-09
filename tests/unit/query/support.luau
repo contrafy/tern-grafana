@@ -3,7 +3,8 @@
 -- Prometheus context and a Grafana-only context, an Env pinned to the end of
 -- the recorded fixture window, kv held in a table, and responses built from
 -- recorded fixtures.
-local Fixtures = require("../../lib/fixtures")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 
@@ -41,18 +42,7 @@ end
 -- Typed `any` so specs can hand it to machines expecting an Env (it lacks
 -- cols/rows, which the Query block never reads) and reach `kv` directly.
 function M.env(config: any?): any
-	local kv: { [string]: any } = {}
-	return {
-		now_ms = M.NOW_MS,
-		decode = json.decode,
-		encode = json.encode,
-		null = json.null,
-		config = config,
-		kv = kv,
-		kv_get = function(key: string): any
-			return kv[key]
-		end,
-	}
+	return Support.env({ now_ms = M.NOW_MS, config = config })
 end
 
 -- A mixed-type list (strict mode infers literal arrays from their first item).
@@ -60,53 +50,14 @@ function M.list(...: any): { any }
 	return { ... }
 end
 
--- Applies kv_set effects the way the runner would.
-function M.applyKv(env: any, effects: { any })
-	for _, e in effects do
-		if e.kind == "kv_set" then
-			env.kv[e.key] = e.value
-		end
-	end
-end
-
-function M.response(path: string, status: number?): any
-	return { status = status or 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
-
-function M.find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
-
-function M.all(effects: { any }, kind: string): { any }
-	local out = {}
-	for _, e in effects do
-		if e.kind == kind then
-			table.insert(out, e)
-		end
-	end
-	return out
-end
-
-function M.key(name: string, text: string?, mods: { [string]: boolean }?): any
-	local m: { [string]: boolean } = mods or {}
-	local t = text
-	if t == nil and #name == 1 then
-		t = name
-	end
-	return {
-		name = name,
-		text = t,
-		ctrl = m.ctrl == true,
-		alt = m.alt == true,
-		shift = m.shift == true,
-		meta = m.meta == true,
-	}
-end
+-- The shared helpers (tests/lib), under the names the Query specs use.
+M.applyKv = Support.applyKv
+M.response = Support.response
+M.find = Support.find
+M.all = Support.all
+M.key = Keys.key
+M.nodes = Support.nodes
+M.byKey = Support.byKey
 
 -- Types `s` one key per character.
 function M.type(state: any, s: string, env: any, State: any): { any }
@@ -119,29 +70,6 @@ function M.type(state: any, s: string, env: any, State: any): { any }
 		end
 	end
 	return effects
-end
-
--- Depth-first search of a view tree for nodes matching `pred`.
-function M.nodes(node: any, pred: (any) -> boolean, out: { any }?): { any }
-	local acc = out or {}
-	if type(node) ~= "table" then
-		return acc
-	end
-	if pred(node) then
-		table.insert(acc, node)
-	end
-	if node.c then
-		for _, child in node.c do
-			M.nodes(child, pred, acc)
-		end
-	end
-	return acc
-end
-
-function M.byKey(node: any, key: string): any
-	return M.nodes(node, function(n)
-		return n.p ~= nil and n.p.key == key
-	end)[1]
 end
 
 return M

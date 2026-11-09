@@ -57,7 +57,7 @@ Registry.register({
 	end,
 })
 
-type Harness = { s: State.State, env: any, pending: { [string]: any }, opened: { string } }
+type Harness = S.Harness
 
 local function answer(version: string, e: any): string?
 	local tag = e.tag
@@ -75,23 +75,6 @@ local function answer(version: string, e: any): string?
 	return nil
 end
 
-local function apply(h: Harness, version: string, effects: { any })
-	for _, e in effects do
-		if e.kind == "open" then
-			table.insert(h.opened, e.target)
-		elseif e.kind == "http" or e.kind == "timer" then
-			local path = if e.kind == "http" then answer(version, e) else nil
-			if path then
-				local _, more =
-					State.update(h.s, { kind = "http_done", tag = e.tag, response = S.response(path) }, h.env)
-				apply(h, version, more)
-			else
-				h.pending[e.tag] = e
-			end
-		end
-	end
-end
-
 local LINK = "tern-grafana://dashboard?context=lab&uid=tern-panels"
 
 -- Loads tern-panels with `edit` applied to the dashboard model first (panel
@@ -99,8 +82,11 @@ local LINK = "tern-grafana://dashboard?context=lab&uid=tern-panels"
 local function start(version: string, edit: (panels: { [number]: any }) -> ()): Harness
 	local env = S.env()
 	local s, effects = State.init({ LINK }, nil, env)
-	local h: Harness = { s = s, env = env, pending = {}, opened = {} }
-	apply(h, version, effects)
+	local h = S.harness(s, env, function(e: any): any
+		local path = answer(version, e)
+		return if path then S.response(path) else nil
+	end, true)
+	S.drive(h, effects)
 	local byId: { [number]: any } = {}
 	for _, sec in (h.s.dashboard :: any).sections do
 		for _, p in sec.panels do
@@ -114,7 +100,7 @@ local function start(version: string, edit: (panels: { [number]: any }) -> ()): 
 		{ kind = "key", key = { name = "r", text = "r", ctrl = false, alt = false, shift = false, meta = false } } :: any,
 		h.env
 	)
-	apply(h, version, more)
+	S.drive(h, more)
 	return h
 end
 

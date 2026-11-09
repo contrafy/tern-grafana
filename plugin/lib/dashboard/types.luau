@@ -160,6 +160,9 @@ export type State = {
 	sources: { [number]: Repeat.Instance },
 	collapsed: { [string]: boolean },
 	panels: { [string]: PanelState },
+	-- Every gen and req_gen a pruned panel state reached: new panel states
+	-- start there, so no request tag is ever issued twice.
+	gen_floor: number,
 	-- Visible panel keys in reading order.
 	order: { string },
 	focus: string?,
@@ -240,6 +243,7 @@ function M.new(env: Env): State
 		sources = {},
 		collapsed = {},
 		panels = {},
+		gen_floor = 0,
 		order = {},
 		focus = nil,
 		expanded = false,

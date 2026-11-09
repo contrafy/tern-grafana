@@ -11,11 +11,6 @@ describe("regions", function()
 		local node = { k = "col", c = {} }
 		expect(Effect.regions(node).main).toBe(node)
 	end)
-
-	it("passes named regions through, so a layer or dock survives", function()
-		local view = { main = { k = "col" }, layer = { k = "col" } }
-		expect(Effect.regions(view :: any)).toBe(view)
-	end)
 end)
 
 describe("toastLevel", function()

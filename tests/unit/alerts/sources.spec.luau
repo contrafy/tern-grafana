@@ -9,6 +9,7 @@ local Scheme = require("../../../plugin/lib/links/scheme")
 local Sources = require("../../../plugin/lib/alerts/sources")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -27,9 +28,7 @@ local CFG = config([[{"default_context": "am", "contexts": {
 	"prom": {"prometheus": {"url": "http://p:9090"}},
 	"logs": {"loki": {"url": "http://l"}}}}]])
 
-local function ok(body: string): any
-	return { status = 200, headers = {}, body = body, timed_out = false }
-end
+local ok = Support.body
 
 local function paths(plan: any): { string }
 	local out = {}

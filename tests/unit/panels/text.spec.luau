@@ -9,39 +9,40 @@ local describe, it, expect = t.describe, t.it, t.expect
 
 local env = S.env
 
-for _, version in S.VERSIONS do
-	describe("text on tern-panels, Grafana " .. version, function()
-		-- Panel 10 "About these fixtures": markdown.
-		it("renders markdown content as an md node", function()
-			local panel = S.panel(version, 10)
-			local node: any = Text.view(panel, env, { key = "x" })
-			expect(node.k).toBe("md")
-			expect(node.p.text).toBe(panel.options.content)
-		end)
-
-		it("interpolates dashboard variables into the content", function()
-			local panel = S.clone(S.panel(version, 10))
-			panel.options.content = "Env: $env"
-			local node: any = Text.view(panel, env, {
-				key = "x",
-				interpolate = function(s: string): string
-					return (string.gsub(s, "%$env", "prod"))
-				end,
-			})
-			expect(node.p.text).toBe("Env: prod")
-		end)
-
-		it("shows code mode in a code node with the panel's language", function()
-			local panel = S.clone(S.panel(version, 10))
-			panel.options.mode = "code"
-			panel.options.code.language = "json"
-			panel.options.content = '{"a": 1}'
-			local node: any = Text.view(panel, env, { key = "x" })
-			expect(node.k).toBe("code")
-			expect(node.p.lang).toBe("json")
-		end)
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+describe("text on tern-panels, Grafana " .. version, function()
+	-- Panel 10 "About these fixtures": markdown.
+	it("renders markdown content as an md node", function()
+		local panel = S.panel(version, 10)
+		local node: any = Text.view(panel, env, { key = "x" })
+		expect(node.k).toBe("md")
+		expect(node.p.text).toBe(panel.options.content)
 	end)
-end
+
+	it("interpolates dashboard variables into the content", function()
+		local panel = S.clone(S.panel(version, 10))
+		panel.options.content = "Env: $env"
+		local node: any = Text.view(panel, env, {
+			key = "x",
+			interpolate = function(s: string): string
+				return (string.gsub(s, "%$env", "prod"))
+			end,
+		})
+		expect(node.p.text).toBe("Env: prod")
+	end)
+
+	it("shows code mode in a code node with the panel's language", function()
+		local panel = S.clone(S.panel(version, 10))
+		panel.options.mode = "code"
+		panel.options.code.language = "json"
+		panel.options.content = '{"a": 1}'
+		local node: any = Text.view(panel, env, { key = "x" })
+		expect(node.k).toBe("code")
+		expect(node.p.lang).toBe("json")
+	end)
+end)
 
 describe("text html mode", function()
 	it("keeps the text of HTML and its line structure", function()

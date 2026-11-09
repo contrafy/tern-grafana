@@ -17,6 +17,7 @@ local S = require("../dashboard/support")
 local Scheme = require("../../../plugin/lib/links/scheme")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Keys = require("../../lib/keys")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -24,9 +25,7 @@ local function key(name: string, text: string?, shift: boolean?): any
 	return { name = name, text = text, ctrl = false, alt = false, shift = shift == true, meta = false }
 end
 
-local function char(c: string): any
-	return key(c, c, string.upper(c) == c and string.lower(c) ~= c)
-end
+local char = Keys.char
 
 local DASHBOARDS = {
 	{ uid = "tern-panels", fs = "frontend_settings.json" },

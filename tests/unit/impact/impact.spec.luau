@@ -14,6 +14,7 @@ local Signals = require("../../../plugin/lib/impact/signals")
 local State = require("../../../plugin/lib/impact/state")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -38,7 +39,7 @@ local FINISH = 1791582520000
 local NOW = 1791583500000
 
 local function env(cfg: any, now: number?): any
-	return { now_ms = now or NOW, decode = json.decode, encode = json.encode, null = json.null, config = cfg }
+	return Support.env({ now_ms = now or NOW, config = cfg })
 end
 
 local function link(params: { [string]: string }?): string
@@ -56,9 +57,7 @@ local function link(params: { [string]: string }?): string
 	return Scheme.encode({ action = "impact", params = p, vars = {} })
 end
 
-local function ok(path: string): any
-	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local ok = Support.response
 
 local function kinds(effects: { any }, kind: string): { any }
 	local out = {}

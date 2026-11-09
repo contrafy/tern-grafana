@@ -14,6 +14,8 @@ local State: any = require("../../../plugin/lib/trace/state")
 local Validate = require("../../../plugin/lib/config/validate")
 local View = require("../../../plugin/lib/trace/view")
 local json = require("../../lib/json")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -38,16 +40,7 @@ local function response(path: string, status: number?): any
 	return { status = status or 200, headers = {}, body = Fixtures.read(path), timed_out = false }
 end
 
-local function key(text: string, name: string?): any
-	return {
-		name = name or text,
-		text = if name then nil else text,
-		ctrl = false,
-		alt = false,
-		shift = false,
-		meta = false,
-	}
-end
+local key = Keys.press
 
 local function https(effects: { any }): { any }
 	local out = {}
@@ -59,14 +52,7 @@ local function https(effects: { any }): { any }
 	return out
 end
 
-local function find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
+local find = Support.find
 
 local function link(params: { [string]: string }): { string }
 	return { Scheme.encode({ action = "trace", params = params, vars = {} }) }

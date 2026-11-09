@@ -348,8 +348,11 @@ end
 -- instances that no longer exist (a repeat value deselected), with the
 -- data, answers and drawn nodes they hold. Collapsed rows keep theirs.
 local function prune(s: State)
-	for key in s.panels do
+	for key, ps in s.panels do
 		if s.index[Core.instanceKey(key)] == nil then
+			-- Instance keys are positional (p3.2): a later instance under the
+			-- same key starts above these gens, so their late answers stay stale.
+			s.gen_floor = math.max(s.gen_floor, ps.gen, ps.req_gen)
 			s.panels[key] = nil
 		end
 	end

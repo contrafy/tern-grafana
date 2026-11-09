@@ -22,44 +22,45 @@ local function allPanels(version: string, id: number): any
 	error("no panel " .. id)
 end
 
-for _, version in S.VERSIONS do
-	describe("flame graph " .. version, function()
-		-- A row starts where its previous sibling ends; children start at
-		-- their parent.
-		it("lays out the nested set as levels", function()
-			local p = Flamegraph.profile(S.frames(version, "all_panels_26"))
-			assert(p, "profile")
-			expect(p.levels).toBe(4)
-			expect(p.total).toBe(1000)
-			local by: { [string]: Flamegraph.Item } = {}
-			for _, item in p.items do
-				by[item.label] = item
-			end
-			expect(by.checkout.start).toBe(0)
-			expect(by.payments.start).toBe(600)
-			expect(by.render.start).toBe(350)
-			expect(by.template.start).toBe(350)
-			expect(by.charge.start).toBe(600)
-			expect((by.template.parent :: Flamegraph.Item).label).toBe("render")
-		end)
-
-		it("draws labeled bars with Grafana's package colors and the top table", function()
-			local node, assets = Flamegraph.view(allPanels(version, 26), S.frames(version, "all_panels_26"), env, {
-				key = "fg",
-				size = { w = 1000, h = 440 },
-			})
-			local svg = (assets :: any).fg.bytes
-			expect(string.find(svg, ">total (1000)</text>", 1, true) ~= nil).toBe(true)
-			-- murmur3("db.") % 24 = 18: #65c5db, as in Grafana's render.
-			expect(string.find(svg, 'fill="#65c5db"', 1, true) ~= nil).toBe(true)
-			expect(S.text(node)).toContain("1000 | 1 K samples (Count)")
-			local top = S.find(node, function(n)
-				return n.p and n.p.role == "tern-grafana.flamegraph-top"
-			end)
-			expect(S.text(top)).toContain("db.query350350")
-		end)
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+describe("flame graph " .. version, function()
+	-- A row starts where its previous sibling ends; children start at
+	-- their parent.
+	it("lays out the nested set as levels", function()
+		local p = Flamegraph.profile(S.frames(version, "all_panels_26"))
+		assert(p, "profile")
+		expect(p.levels).toBe(4)
+		expect(p.total).toBe(1000)
+		local by: { [string]: Flamegraph.Item } = {}
+		for _, item in p.items do
+			by[item.label] = item
+		end
+		expect(by.checkout.start).toBe(0)
+		expect(by.payments.start).toBe(600)
+		expect(by.render.start).toBe(350)
+		expect(by.template.start).toBe(350)
+		expect(by.charge.start).toBe(600)
+		expect((by.template.parent :: Flamegraph.Item).label).toBe("render")
 	end)
-end
+
+	it("draws labeled bars with Grafana's package colors and the top table", function()
+		local node, assets = Flamegraph.view(allPanels(version, 26), S.frames(version, "all_panels_26"), env, {
+			key = "fg",
+			size = { w = 1000, h = 440 },
+		})
+		local svg = (assets :: any).fg.bytes
+		expect(string.find(svg, ">total (1000)</text>", 1, true) ~= nil).toBe(true)
+		-- murmur3("db.") % 24 = 18: #65c5db, as in Grafana's render.
+		expect(string.find(svg, 'fill="#65c5db"', 1, true) ~= nil).toBe(true)
+		expect(S.text(node)).toContain("1000 | 1 K samples (Count)")
+		local top = S.find(node, function(n)
+			return n.p and n.p.role == "tern-grafana.flamegraph-top"
+		end)
+		expect(S.text(top)).toContain("db.query350350")
+	end)
+end)
 
 describe("flame graph colors", function()
 	-- Hashes from Grafana's murmurhash3_32_gc.
