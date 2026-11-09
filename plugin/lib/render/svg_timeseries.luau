@@ -85,8 +85,8 @@ export type Options = {
 	-- Visible time range (default: the data's extent).
 	from_ms: number?,
 	to_ms: number?,
-	-- Tick labels' fixed offset, minutes east of UTC.
-	offset_min: number?,
+	-- Tick labels' timezone (Range.Offset).
+	offset_min: Axis.Offset?,
 	-- Grafana legendFormat for series names.
 	legend: string?,
 	-- Exemplar markers (any order); those in the time range are drawn, at

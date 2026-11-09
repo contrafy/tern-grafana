@@ -539,6 +539,18 @@ capture_stat_fidelity() {
 	done
 }
 
+# capture_fid2_table: fixtures for dashboard tern-fid2-table (a custom `$__all` all value in titles,
+# a newest-first time column, a paginated table with data links and a gradient gauge), each panel's
+# /api/ds/query as the frontend builds it.
+capture_fid2_table() {
+	dash=$ROOT/dev/grafana/dashboards/tern-fid2-table.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_fid2_table_$pid" POST /api/ds/query "$body"
+	done
+}
+
 # capture_json_api: dashboard tern-s4-json's JSON API (marcusolsson-json-datasource) requests. The plugin
 # has no backend: its frontend GETs the datasource proxy URL plus the target's urlPath, then the target's
 # params and the datasource's jsonData.queryParams (each encodeURIComponent'ed; the dev values need no
@@ -645,6 +657,7 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_fid2_table
 capture_json_api
 capture_zabbix
 capture_grafana "$G11" "$TOK11"
@@ -652,6 +665,7 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_fid2_table
 capture_json_api
 capture_zabbix
 capture_grafana "$G13" "$TOK13"
@@ -659,6 +673,7 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_fid2_table
 capture_json_api
 capture_zabbix
 

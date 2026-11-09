@@ -260,3 +260,290 @@
 .tgx-center { text-align: center; }
 .tgx-right { text-align: right; }
 .tgx-alt { color: var(--sf-c-muted); }
+
+/* Table columns (lib/panels/table.luau) as TableNG sizes them: an auto column
+   fits its content (tgp-cv, at most 400px) and never shrinks below it, so a
+   table wider than the card scrolls sideways (tg-wrap); custom.width fixes a
+   column (tgp-cw-N, N x 10px), custom.minWidth floors it (tgp-cmin-N). */
+.tgp-table .tg-c,
+.tgp-table .tg-h { min-width: min-content; }
+.tgp-cv { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tgp-table .tg-c[class*="tgp-cw-"] .tgp-cv { max-width: 100%; }
+.tgp-table .tg-h[class*="tgp-cw-"] { min-width: 0; }
+
+/* Data links: the cell reads as a link. */
+.tgp-dlink { color: var(--sf-c-link); cursor: pointer; }
+.tgp-dlink .sf-text { color: inherit; }
+.tgp-dlink:hover { text-decoration: underline; }
+
+/* Gradient gauge cells (BarGauge getBarGradient): runs fading from their own
+   stop class color (--tgp-from) to their child's; transparent steps fade out. */
+.tgp-gbar { flex: 1 1 auto; width: 10em; min-width: 3em; height: 14px; border-radius: 3px; overflow: hidden; display: flex; background: var(--l2); }
+.tgp-gfill { display: flex; height: 100%; }
+.tgp-gseg { flex: none; height: 100%; --tgp-from: var(--tg-c); }
+.tgp-gseg.tgp-gseg-last { flex: 1 1 auto; }
+.tgp-gseg.tg-gx,
+.tgp-gseg-to.tg-gx { --tg-c: transparent; }
+.tgp-gseg-to { height: 100%; background: linear-gradient(90deg, var(--tgp-from), var(--tg-c)); }
+
+/* Table pager (usePaginatedRows): previous, pages, next, the row range. */
+.tgp-pager { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 0; }
+.tgp-pg-b { min-width: 1.6em; padding: 0 6px; border-radius: 3px; background: var(--l1); text-align: center; cursor: pointer; }
+.tgp-pg-b.tgp-pg-on { background: var(--t1); color: var(--page); }
+.tgp-pg-b.tgp-pg-off { opacity: 0.5; cursor: default; }
+.tgp-pg-e { color: var(--t3); }
+.tgp-pg-sum { color: var(--t3); margin-left: 8px; }
+
+.tgp-w-0 { width: 0%; }
+.tgp-w-1 { width: 1%; }
+.tgp-w-2 { width: 2%; }
+.tgp-w-3 { width: 3%; }
+.tgp-w-4 { width: 4%; }
+.tgp-w-5 { width: 5%; }
+.tgp-w-6 { width: 6%; }
+.tgp-w-7 { width: 7%; }
+.tgp-w-8 { width: 8%; }
+.tgp-w-9 { width: 9%; }
+.tgp-w-10 { width: 10%; }
+.tgp-w-11 { width: 11%; }
+.tgp-w-12 { width: 12%; }
+.tgp-w-13 { width: 13%; }
+.tgp-w-14 { width: 14%; }
+.tgp-w-15 { width: 15%; }
+.tgp-w-16 { width: 16%; }
+.tgp-w-17 { width: 17%; }
+.tgp-w-18 { width: 18%; }
+.tgp-w-19 { width: 19%; }
+.tgp-w-20 { width: 20%; }
+.tgp-w-21 { width: 21%; }
+.tgp-w-22 { width: 22%; }
+.tgp-w-23 { width: 23%; }
+.tgp-w-24 { width: 24%; }
+.tgp-w-25 { width: 25%; }
+.tgp-w-26 { width: 26%; }
+.tgp-w-27 { width: 27%; }
+.tgp-w-28 { width: 28%; }
+.tgp-w-29 { width: 29%; }
+.tgp-w-30 { width: 30%; }
+.tgp-w-31 { width: 31%; }
+.tgp-w-32 { width: 32%; }
+.tgp-w-33 { width: 33%; }
+.tgp-w-34 { width: 34%; }
+.tgp-w-35 { width: 35%; }
+.tgp-w-36 { width: 36%; }
+.tgp-w-37 { width: 37%; }
+.tgp-w-38 { width: 38%; }
+.tgp-w-39 { width: 39%; }
+.tgp-w-40 { width: 40%; }
+.tgp-w-41 { width: 41%; }
+.tgp-w-42 { width: 42%; }
+.tgp-w-43 { width: 43%; }
+.tgp-w-44 { width: 44%; }
+.tgp-w-45 { width: 45%; }
+.tgp-w-46 { width: 46%; }
+.tgp-w-47 { width: 47%; }
+.tgp-w-48 { width: 48%; }
+.tgp-w-49 { width: 49%; }
+.tgp-w-50 { width: 50%; }
+.tgp-w-51 { width: 51%; }
+.tgp-w-52 { width: 52%; }
+.tgp-w-53 { width: 53%; }
+.tgp-w-54 { width: 54%; }
+.tgp-w-55 { width: 55%; }
+.tgp-w-56 { width: 56%; }
+.tgp-w-57 { width: 57%; }
+.tgp-w-58 { width: 58%; }
+.tgp-w-59 { width: 59%; }
+.tgp-w-60 { width: 60%; }
+.tgp-w-61 { width: 61%; }
+.tgp-w-62 { width: 62%; }
+.tgp-w-63 { width: 63%; }
+.tgp-w-64 { width: 64%; }
+.tgp-w-65 { width: 65%; }
+.tgp-w-66 { width: 66%; }
+.tgp-w-67 { width: 67%; }
+.tgp-w-68 { width: 68%; }
+.tgp-w-69 { width: 69%; }
+.tgp-w-70 { width: 70%; }
+.tgp-w-71 { width: 71%; }
+.tgp-w-72 { width: 72%; }
+.tgp-w-73 { width: 73%; }
+.tgp-w-74 { width: 74%; }
+.tgp-w-75 { width: 75%; }
+.tgp-w-76 { width: 76%; }
+.tgp-w-77 { width: 77%; }
+.tgp-w-78 { width: 78%; }
+.tgp-w-79 { width: 79%; }
+.tgp-w-80 { width: 80%; }
+.tgp-w-81 { width: 81%; }
+.tgp-w-82 { width: 82%; }
+.tgp-w-83 { width: 83%; }
+.tgp-w-84 { width: 84%; }
+.tgp-w-85 { width: 85%; }
+.tgp-w-86 { width: 86%; }
+.tgp-w-87 { width: 87%; }
+.tgp-w-88 { width: 88%; }
+.tgp-w-89 { width: 89%; }
+.tgp-w-90 { width: 90%; }
+.tgp-w-91 { width: 91%; }
+.tgp-w-92 { width: 92%; }
+.tgp-w-93 { width: 93%; }
+.tgp-w-94 { width: 94%; }
+.tgp-w-95 { width: 95%; }
+.tgp-w-96 { width: 96%; }
+.tgp-w-97 { width: 97%; }
+.tgp-w-98 { width: 98%; }
+.tgp-w-99 { width: 99%; }
+.tgp-w-100 { width: 100%; }
+.tg-table .tgp-cw-5 { width: 50px; min-width: 50px; max-width: 50px; }
+.tg-table .tgp-cw-6 { width: 60px; min-width: 60px; max-width: 60px; }
+.tg-table .tgp-cw-7 { width: 70px; min-width: 70px; max-width: 70px; }
+.tg-table .tgp-cw-8 { width: 80px; min-width: 80px; max-width: 80px; }
+.tg-table .tgp-cw-9 { width: 90px; min-width: 90px; max-width: 90px; }
+.tg-table .tgp-cw-10 { width: 100px; min-width: 100px; max-width: 100px; }
+.tg-table .tgp-cw-11 { width: 110px; min-width: 110px; max-width: 110px; }
+.tg-table .tgp-cw-12 { width: 120px; min-width: 120px; max-width: 120px; }
+.tg-table .tgp-cw-13 { width: 130px; min-width: 130px; max-width: 130px; }
+.tg-table .tgp-cw-14 { width: 140px; min-width: 140px; max-width: 140px; }
+.tg-table .tgp-cw-15 { width: 150px; min-width: 150px; max-width: 150px; }
+.tg-table .tgp-cw-16 { width: 160px; min-width: 160px; max-width: 160px; }
+.tg-table .tgp-cw-17 { width: 170px; min-width: 170px; max-width: 170px; }
+.tg-table .tgp-cw-18 { width: 180px; min-width: 180px; max-width: 180px; }
+.tg-table .tgp-cw-19 { width: 190px; min-width: 190px; max-width: 190px; }
+.tg-table .tgp-cw-20 { width: 200px; min-width: 200px; max-width: 200px; }
+.tg-table .tgp-cw-21 { width: 210px; min-width: 210px; max-width: 210px; }
+.tg-table .tgp-cw-22 { width: 220px; min-width: 220px; max-width: 220px; }
+.tg-table .tgp-cw-23 { width: 230px; min-width: 230px; max-width: 230px; }
+.tg-table .tgp-cw-24 { width: 240px; min-width: 240px; max-width: 240px; }
+.tg-table .tgp-cw-25 { width: 250px; min-width: 250px; max-width: 250px; }
+.tg-table .tgp-cw-26 { width: 260px; min-width: 260px; max-width: 260px; }
+.tg-table .tgp-cw-27 { width: 270px; min-width: 270px; max-width: 270px; }
+.tg-table .tgp-cw-28 { width: 280px; min-width: 280px; max-width: 280px; }
+.tg-table .tgp-cw-29 { width: 290px; min-width: 290px; max-width: 290px; }
+.tg-table .tgp-cw-30 { width: 300px; min-width: 300px; max-width: 300px; }
+.tg-table .tgp-cw-31 { width: 310px; min-width: 310px; max-width: 310px; }
+.tg-table .tgp-cw-32 { width: 320px; min-width: 320px; max-width: 320px; }
+.tg-table .tgp-cw-33 { width: 330px; min-width: 330px; max-width: 330px; }
+.tg-table .tgp-cw-34 { width: 340px; min-width: 340px; max-width: 340px; }
+.tg-table .tgp-cw-35 { width: 350px; min-width: 350px; max-width: 350px; }
+.tg-table .tgp-cw-36 { width: 360px; min-width: 360px; max-width: 360px; }
+.tg-table .tgp-cw-37 { width: 370px; min-width: 370px; max-width: 370px; }
+.tg-table .tgp-cw-38 { width: 380px; min-width: 380px; max-width: 380px; }
+.tg-table .tgp-cw-39 { width: 390px; min-width: 390px; max-width: 390px; }
+.tg-table .tgp-cw-40 { width: 400px; min-width: 400px; max-width: 400px; }
+.tg-table .tgp-cw-41 { width: 410px; min-width: 410px; max-width: 410px; }
+.tg-table .tgp-cw-42 { width: 420px; min-width: 420px; max-width: 420px; }
+.tg-table .tgp-cw-43 { width: 430px; min-width: 430px; max-width: 430px; }
+.tg-table .tgp-cw-44 { width: 440px; min-width: 440px; max-width: 440px; }
+.tg-table .tgp-cw-45 { width: 450px; min-width: 450px; max-width: 450px; }
+.tg-table .tgp-cw-46 { width: 460px; min-width: 460px; max-width: 460px; }
+.tg-table .tgp-cw-47 { width: 470px; min-width: 470px; max-width: 470px; }
+.tg-table .tgp-cw-48 { width: 480px; min-width: 480px; max-width: 480px; }
+.tg-table .tgp-cw-49 { width: 490px; min-width: 490px; max-width: 490px; }
+.tg-table .tgp-cw-50 { width: 500px; min-width: 500px; max-width: 500px; }
+.tg-table .tgp-cw-51 { width: 510px; min-width: 510px; max-width: 510px; }
+.tg-table .tgp-cw-52 { width: 520px; min-width: 520px; max-width: 520px; }
+.tg-table .tgp-cw-53 { width: 530px; min-width: 530px; max-width: 530px; }
+.tg-table .tgp-cw-54 { width: 540px; min-width: 540px; max-width: 540px; }
+.tg-table .tgp-cw-55 { width: 550px; min-width: 550px; max-width: 550px; }
+.tg-table .tgp-cw-56 { width: 560px; min-width: 560px; max-width: 560px; }
+.tg-table .tgp-cw-57 { width: 570px; min-width: 570px; max-width: 570px; }
+.tg-table .tgp-cw-58 { width: 580px; min-width: 580px; max-width: 580px; }
+.tg-table .tgp-cw-59 { width: 590px; min-width: 590px; max-width: 590px; }
+.tg-table .tgp-cw-60 { width: 600px; min-width: 600px; max-width: 600px; }
+.tg-table .tgp-cw-61 { width: 610px; min-width: 610px; max-width: 610px; }
+.tg-table .tgp-cw-62 { width: 620px; min-width: 620px; max-width: 620px; }
+.tg-table .tgp-cw-63 { width: 630px; min-width: 630px; max-width: 630px; }
+.tg-table .tgp-cw-64 { width: 640px; min-width: 640px; max-width: 640px; }
+.tg-table .tgp-cw-65 { width: 650px; min-width: 650px; max-width: 650px; }
+.tg-table .tgp-cw-66 { width: 660px; min-width: 660px; max-width: 660px; }
+.tg-table .tgp-cw-67 { width: 670px; min-width: 670px; max-width: 670px; }
+.tg-table .tgp-cw-68 { width: 680px; min-width: 680px; max-width: 680px; }
+.tg-table .tgp-cw-69 { width: 690px; min-width: 690px; max-width: 690px; }
+.tg-table .tgp-cw-70 { width: 700px; min-width: 700px; max-width: 700px; }
+.tg-table .tgp-cw-71 { width: 710px; min-width: 710px; max-width: 710px; }
+.tg-table .tgp-cw-72 { width: 720px; min-width: 720px; max-width: 720px; }
+.tg-table .tgp-cw-73 { width: 730px; min-width: 730px; max-width: 730px; }
+.tg-table .tgp-cw-74 { width: 740px; min-width: 740px; max-width: 740px; }
+.tg-table .tgp-cw-75 { width: 750px; min-width: 750px; max-width: 750px; }
+.tg-table .tgp-cw-76 { width: 760px; min-width: 760px; max-width: 760px; }
+.tg-table .tgp-cw-77 { width: 770px; min-width: 770px; max-width: 770px; }
+.tg-table .tgp-cw-78 { width: 780px; min-width: 780px; max-width: 780px; }
+.tg-table .tgp-cw-79 { width: 790px; min-width: 790px; max-width: 790px; }
+.tg-table .tgp-cw-80 { width: 800px; min-width: 800px; max-width: 800px; }
+.tg-table .tgp-cmin-5 { min-width: 50px; }
+.tg-table .tgp-cmin-6 { min-width: 60px; }
+.tg-table .tgp-cmin-7 { min-width: 70px; }
+.tg-table .tgp-cmin-8 { min-width: 80px; }
+.tg-table .tgp-cmin-9 { min-width: 90px; }
+.tg-table .tgp-cmin-10 { min-width: 100px; }
+.tg-table .tgp-cmin-11 { min-width: 110px; }
+.tg-table .tgp-cmin-12 { min-width: 120px; }
+.tg-table .tgp-cmin-13 { min-width: 130px; }
+.tg-table .tgp-cmin-14 { min-width: 140px; }
+.tg-table .tgp-cmin-15 { min-width: 150px; }
+.tg-table .tgp-cmin-16 { min-width: 160px; }
+.tg-table .tgp-cmin-17 { min-width: 170px; }
+.tg-table .tgp-cmin-18 { min-width: 180px; }
+.tg-table .tgp-cmin-19 { min-width: 190px; }
+.tg-table .tgp-cmin-20 { min-width: 200px; }
+.tg-table .tgp-cmin-21 { min-width: 210px; }
+.tg-table .tgp-cmin-22 { min-width: 220px; }
+.tg-table .tgp-cmin-23 { min-width: 230px; }
+.tg-table .tgp-cmin-24 { min-width: 240px; }
+.tg-table .tgp-cmin-25 { min-width: 250px; }
+.tg-table .tgp-cmin-26 { min-width: 260px; }
+.tg-table .tgp-cmin-27 { min-width: 270px; }
+.tg-table .tgp-cmin-28 { min-width: 280px; }
+.tg-table .tgp-cmin-29 { min-width: 290px; }
+.tg-table .tgp-cmin-30 { min-width: 300px; }
+.tg-table .tgp-cmin-31 { min-width: 310px; }
+.tg-table .tgp-cmin-32 { min-width: 320px; }
+.tg-table .tgp-cmin-33 { min-width: 330px; }
+.tg-table .tgp-cmin-34 { min-width: 340px; }
+.tg-table .tgp-cmin-35 { min-width: 350px; }
+.tg-table .tgp-cmin-36 { min-width: 360px; }
+.tg-table .tgp-cmin-37 { min-width: 370px; }
+.tg-table .tgp-cmin-38 { min-width: 380px; }
+.tg-table .tgp-cmin-39 { min-width: 390px; }
+.tg-table .tgp-cmin-40 { min-width: 400px; }
+.tg-table .tgp-cmin-41 { min-width: 410px; }
+.tg-table .tgp-cmin-42 { min-width: 420px; }
+.tg-table .tgp-cmin-43 { min-width: 430px; }
+.tg-table .tgp-cmin-44 { min-width: 440px; }
+.tg-table .tgp-cmin-45 { min-width: 450px; }
+.tg-table .tgp-cmin-46 { min-width: 460px; }
+.tg-table .tgp-cmin-47 { min-width: 470px; }
+.tg-table .tgp-cmin-48 { min-width: 480px; }
+.tg-table .tgp-cmin-49 { min-width: 490px; }
+.tg-table .tgp-cmin-50 { min-width: 500px; }
+.tg-table .tgp-cmin-51 { min-width: 510px; }
+.tg-table .tgp-cmin-52 { min-width: 520px; }
+.tg-table .tgp-cmin-53 { min-width: 530px; }
+.tg-table .tgp-cmin-54 { min-width: 540px; }
+.tg-table .tgp-cmin-55 { min-width: 550px; }
+.tg-table .tgp-cmin-56 { min-width: 560px; }
+.tg-table .tgp-cmin-57 { min-width: 570px; }
+.tg-table .tgp-cmin-58 { min-width: 580px; }
+.tg-table .tgp-cmin-59 { min-width: 590px; }
+.tg-table .tgp-cmin-60 { min-width: 600px; }
+.tg-table .tgp-cmin-61 { min-width: 610px; }
+.tg-table .tgp-cmin-62 { min-width: 620px; }
+.tg-table .tgp-cmin-63 { min-width: 630px; }
+.tg-table .tgp-cmin-64 { min-width: 640px; }
+.tg-table .tgp-cmin-65 { min-width: 650px; }
+.tg-table .tgp-cmin-66 { min-width: 660px; }
+.tg-table .tgp-cmin-67 { min-width: 670px; }
+.tg-table .tgp-cmin-68 { min-width: 680px; }
+.tg-table .tgp-cmin-69 { min-width: 690px; }
+.tg-table .tgp-cmin-70 { min-width: 700px; }
+.tg-table .tgp-cmin-71 { min-width: 710px; }
+.tg-table .tgp-cmin-72 { min-width: 720px; }
+.tg-table .tgp-cmin-73 { min-width: 730px; }
+.tg-table .tgp-cmin-74 { min-width: 740px; }
+.tg-table .tgp-cmin-75 { min-width: 750px; }
+.tg-table .tgp-cmin-76 { min-width: 760px; }
+.tg-table .tgp-cmin-77 { min-width: 770px; }
+.tg-table .tgp-cmin-78 { min-width: 780px; }
+.tg-table .tgp-cmin-79 { min-width: 790px; }
+.tg-table .tgp-cmin-80 { min-width: 800px; }

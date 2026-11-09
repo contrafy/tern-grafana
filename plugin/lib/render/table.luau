@@ -17,7 +17,7 @@ export type Options = {
 	unit: string?,
 	decimals: number?,
 	key: string?,
-	offset_min: number?,
+	offset_min: Range.Offset?,
 	-- Default true.
 	show_time: boolean?,
 	-- Click action name for a row, from its 1-based index and labels.

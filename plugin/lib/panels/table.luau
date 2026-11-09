@@ -16,7 +16,15 @@
 --   sparkline, image, data-links, actions and custom cells ladder
 --   (`unsupported`). custom.align and custom.hidden apply;
 -- - options.sortBy sorts rows; the footer (options.footer.show with its
---   reducer, or per-field custom.footer.reducers) adds a reduced row.
+--   reducer, or per-field custom.footer.reducers) adds a reduced row;
+-- - columns are sized as TableNG does: custom.width exactly, the others to
+--   their content (at least custom.minWidth, at most 400px) without
+--   shrinking, so a wide table scrolls sideways instead of squeezing;
+-- - field data links (links, from the frame or fieldConfig) draw the cell
+--   as a link that opens the first one in the browser pane;
+-- - options.enablePagination (footer.enablePagination before Grafana 12.2)
+--   pages rows with usePaginatedRows' page size for the panel's Grafana
+--   height and cellHeight; the pager flips pages (`tpage`).
 -- Grafana shows one frame at a time with a frame picker; Tern shows the
 -- first and says how many more there are.
 
@@ -26,8 +34,12 @@ local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
 local Gauge = require("./gauge")
 local Grid = require("../render/grid")
+local Html = require("./html")
+local Interpolate = require("../dashboard/interpolate")
 local Json = require("./json")
 local Reduce = require("./reduce")
+local TsGradient = require("../render/ts_gradient")
+local Url = require("../url")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -47,17 +59,25 @@ export type Cell = {
 	class: string?,
 	percent: number,
 	-- gauge: mode ("basic", "gradient", "lcd"), valueDisplayMode ("text",
-	-- "color", "hidden") and, for lcd, the threshold bands.
+	-- "color", "hidden"), for lcd the threshold bands and for gradient the
+	-- bar's color runs (getBarGradient).
 	gauge_mode: string?,
 	value_mode: string?,
 	parts: { Gauge.Part }?,
+	segments: { Segment }?,
 	-- A filled background (the cell's own color-background or its row's
 	-- applyToRow color): tone or palette class, and "basic" or "gradient".
 	bg_tone: string?,
 	bg_class: string?,
 	bg_mode: string?,
 	pills: { Pill }?,
+	-- The first data link's URL (resolved against the Grafana's base URL).
+	href: string?,
 }
+
+-- One run of a gradient bar: `width` of the filled part (0..1), fading
+-- from one color stop class (lib/render/ts_gradient stopClass) to another.
+export type Segment = { width: number, from: string, to: string }
 
 export type Column = {
 	head: string,
@@ -66,6 +86,17 @@ export type Column = {
 	-- Gauge columns: the longest shown value in characters (0 with
 	-- valueDisplayMode hidden), capped at MAX_VALUE_WIDTH.
 	value_width: number?,
+	-- custom.width and custom.minWidth in px.
+	width: number?,
+	min_width: number?,
+}
+
+export type Pager = {
+	-- 1-based page, page count, rows per page and rows in all pages.
+	page: number,
+	pages: number,
+	size: number,
+	total: number,
 }
 
 export type Table = {
@@ -77,6 +108,7 @@ export type Table = {
 	more_frames: number,
 	-- Columns beyond the grid's limit.
 	more_columns: number,
+	pager: Pager?,
 }
 
 local M = {}
@@ -85,6 +117,10 @@ M.MAX_ROWS = 500
 
 -- panels.css has tgp-gw-0 .. tgp-gw-<MAX_VALUE_WIDTH>.
 M.MAX_VALUE_WIDTH = 24
+
+-- panels.css has tgp-cw-5 .. tgp-cw-<MAX_WIDTH_CLASS> (custom.width) and
+-- tgp-cmin-5 .. (custom.minWidth), in 10px steps.
+M.MAX_WIDTH_CLASS = 80
 
 -- Cell types drawn natively; the others ladder with their reason.
 local UNSUPPORTED: { [string]: string } = {
@@ -326,28 +362,228 @@ local function jsonText(env: Env, value: any, displayed: string): string
 	return displayed
 end
 
--- A continuous scheme's colors along the field range up to `fill`, in
--- thirds (the schemes run through at most three hues).
-local function schemeParts(item: Item, fill: number, disp: FieldConfig.Options): { Gauge.Part }
-	local lo, hi = item.range_min or 0, item.range_max or 100
-	local parts: { Gauge.Part } = {}
-	for k = 0, 2 do
-		local a = k / 3
-		if a >= fill then
-			break
-		end
-		local tone = FieldConfig.display(item, lo + (k + 0.5) / 3 * (hi - lo), disp).tone
-		local base: string = Common.token(tone :: any)
-		local token = if base ~= "" then base else "muted"
-		local width = math.min((k + 1) / 3, fill) - a
-		local last = parts[#parts]
-		if last and last.token == token then
-			last.value += width
-		else
-			table.insert(parts, { value = width, token = token })
+type Stop = { at: number, class: string }
+
+-- Runs between CSS gradient stops (positions ascending, 0..1).
+local function runs(stops: { Stop }): { Segment }
+	local out: { Segment } = {}
+	for j = 1, #stops - 1 do
+		local a, b = stops[j], stops[j + 1]
+		if b.at > a.at then
+			table.insert(out, { width = b.at - a.at, from = a.class, to = b.class })
 		end
 	end
-	return parts
+	return out
+end
+
+-- getBarGradient over the filled part (`fill` of the bar): thresholds keep
+-- the base color, then fade into each passed step's color from halfway
+-- between the step positions, reaching the last at the bar's end; a
+-- continuous scheme spans the whole bar and is cut at the fill. Other
+-- color modes draw the value's color (nil).
+local function gradientSegments(item: Item, numeric: number?, fill: number, theme: any): { Segment }?
+	local mode = item.config.color_mode
+	if fill <= 0 then
+		return nil
+	end
+	if mode == "thresholds" then
+		local t = item.config.thresholds
+		local lo, hi = item.range_min or 0, item.range_max or 100
+		local percentage = t.mode == "percentage"
+		local passed: { Stop } = {}
+		local last = 0
+		for i, step in t.steps do
+			local class = TsGradient.stopClass(step.color, theme)
+			if i == 1 then
+				table.insert(passed, { at = 0, class = class })
+				continue
+			end
+			local sv = step.value
+			if type(sv) ~= "number" then
+				continue
+			end
+			local at = if percentage then sv / 100 elseif hi > lo then (sv - lo) / (hi - lo) else 0
+			local threshold = if percentage then lo + (hi - lo) * at else sv
+			if numeric == nil or numeric < threshold then
+				break
+			end
+			table.insert(passed, { at = math.clamp((at - (at - last) / 2) / fill, 0, 1), class = class })
+			last = at
+		end
+		if #passed == 0 then
+			return nil
+		end
+		-- "c0, c0 q1, c1 q2, ..., cN": each color holds until the next offset.
+		local stops: { Stop } = { { at = 0, class = passed[1].class } }
+		for j = 2, #passed do
+			table.insert(stops, { at = math.max(passed[j].at, stops[#stops].at), class = passed[j - 1].class })
+		end
+		table.insert(stops, { at = 1, class = passed[#passed].class })
+		return runs(stops)
+	elseif string.sub(mode, 1, 11) == "continuous-" then
+		local stops: { Stop } = {}
+		for k = 0, 3 do
+			local x = fill * k / 3
+			local color = TsGradient.schemeColor(mode, x, theme)
+			if color == nil then
+				return nil
+			end
+			table.insert(stops, { at = k / 3, class = TsGradient.stopClass(color, theme) })
+		end
+		return runs(stops)
+	end
+	return nil
+end
+
+-- Data links -------------------------------------------------------------------
+
+-- A field's data links (getLinks): the frame's own, else the defaults',
+-- replaced by each matching override's.
+local function fieldLinks(panel: any, env: Env, item: Item, frames: { Frame }): { any }
+	local own = item.field.config and (item.field.config :: any).links
+	local links = if type(own) == "table" and #own > 0
+		then own
+		else Json.list(env, Json.path(env, panel, "fieldConfig", "defaults", "links"))
+	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
+		local match = FieldConfig.matcherFor(env, Json.path(env, o, "matcher"))
+		if match and match(item.field, item.frame, frames) then
+			for _, p in Json.list(env, Json.path(env, o, "properties")) do
+				if Json.str(env, Json.path(env, p, "id")) == "links" then
+					links = Json.list(env, Json.path(env, p, "value"))
+				end
+			end
+		end
+	end
+	return links
+end
+
+-- getFieldDisplayValuesProxy: a field of the row by name, display name,
+-- index, then config displayName.
+local function rowField(items: { Item }, key: string): Item?
+	for _, it in items do
+		if it.field.name == key then
+			return it
+		end
+	end
+	for _, it in items do
+		if it.name == key then
+			return it
+		end
+	end
+	local n = tonumber(key)
+	if n and items[n + 1] then
+		return items[n + 1]
+	end
+	for _, it in items do
+		if it.config.display_name == key then
+			return it
+		end
+	end
+	return nil
+end
+
+local function jsString(v: any): string
+	if type(v) == "number" then
+		if v == math.floor(v) and math.abs(v) < 1e15 then
+			return string.format("%d", v)
+		end
+		return tostring(v)
+	end
+	return if v == nil or Frame.isNull(v) then "" else tostring(v)
+end
+
+-- The data macros (`${__data.fields.x}`, `${__value.raw|numeric|text}`,
+-- `${__field.name}`, `${__series.name}`, `${__data.name|refId}`) of one cell.
+local function cellMacro(
+	item: Item,
+	items: { Item },
+	row: number,
+	disp: FieldConfig.Options
+): (string, string?) -> Interpolate.Var?
+	return function(name: string, path: string?): Interpolate.Var?
+		if name == "__data" and path then
+			if path == "name" then
+				return Interpolate.value(item.frame.name or "")
+			elseif path == "refId" then
+				return Interpolate.value(item.frame.refId or "")
+			end
+			local key = string.match(path, "^fields%.(.+)$")
+				or string.match(path, "^fields%[(%d+)%]$")
+				or string.match(path, '^fields%["(.-)"%]$')
+				or string.match(path, "^fields%['(.-)'%]$")
+			local it = if key then rowField(items, key) else nil
+			if it then
+				return Interpolate.value(FieldConfig.joined(FieldConfig.display(it, it.field.values[row], disp)))
+			end
+		elseif name == "__value" then
+			local raw = item.field.values[row]
+			if path == "raw" then
+				return Interpolate.value(jsString(raw))
+			end
+			local d = FieldConfig.display(item, raw, disp)
+			if path == "numeric" then
+				return Interpolate.value(jsString(d.numeric or 0 / 0))
+			elseif path == "text" or path == nil then
+				return Interpolate.value(d.text)
+			end
+		elseif name == "__field" and path == "name" then
+			return Interpolate.value(item.name)
+		elseif name == "__series" and path == "name" then
+			return Interpolate.value(item.frame.name or "")
+		end
+		return nil
+	end
+end
+
+local URI = Interpolate.named("uriencode")
+
+-- The cell's first data link as the browser opens it (getDataLinkUIModel:
+-- the URL `uriencode`d, Grafana's <base href> resolving a relative path).
+local function cellHref(
+	link: any,
+	env: Env,
+	macro: (string, string?) -> Interpolate.Var?,
+	opts: Common.Options
+): string?
+	local url = Json.str(env, Json.path(env, link, "url"))
+	if url == nil or url == "" then
+		return nil
+	end
+	local href = Interpolate.replace(url, {}, { format = URI, macro = macro })
+	if opts.replace then
+		href = opts.replace(href)
+	end
+	href = string.gsub(href, "\n", "")
+	if not string.match(href, "^%a[%w+.-]*:") and string.sub(href, 1, 1) ~= "/" then
+		href = "/" .. href
+	end
+	return Html.resolve(href, opts.base_url)
+end
+
+-- Pagination --------------------------------------------------------------------
+
+-- TableNG's row heights per options.cellHeight (sm by default), its header
+-- and pagination chrome, and the panel chrome above the table (header and
+-- padding) in px.
+local ROW_PX: { [string]: number } = { sm = 36, md = 42, lg = 48 }
+local HEADER_PX = 36
+local PAGER_PX = 38
+local PANEL_CHROME_PX = 40
+
+-- usePaginatedRows: rows that fit the panel's Grafana height, at least one.
+function M.pageSize(panel: any, env: Env, heightPx: number): number
+	local cell = Json.str(env, Json.path(env, panel, "options", "cellHeight")) or "sm"
+	local header = if Json.bool(env, Json.path(env, panel, "options", "showHeader")) == false then 0 else HEADER_PX
+	local area = heightPx - PANEL_CHROME_PX - header - PAGER_PX
+	return math.max(1, math.floor(area / (ROW_PX[cell] or ROW_PX.sm)))
+end
+
+local function paginated(panel: any, env: Env): boolean
+	local own = Json.bool(env, Json.path(env, panel, "options", "enablePagination"))
+	if own ~= nil then
+		return own
+	end
+	return Json.bool(env, Json.path(env, panel, "options", "footer", "enablePagination")) == true
 end
 
 local function compare(a: any, b: any): boolean
@@ -368,14 +604,26 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "thresholds" }, true)
 	local first = frames[1]
 	local columns: { Column } = {}
+	-- Every field of the shown frame, hidden ones too: `${__data.fields.x}`.
+	local frameItems: { Item } = {}
 	for _, item in items do
-		if item.frame == first and not FieldConfig.hidden(item) then
-			local align = item.config.custom.align
+		if item.frame ~= first then
+			continue
+		end
+		table.insert(frameItems, item)
+		if not FieldConfig.hidden(item) then
+			local custom = item.config.custom
+			local align = custom.align
 			local numeric = if align == "right"
 				then true
 				elseif align == "left" or align == "center" then false
 				else item.field.type == "number"
-			table.insert(columns, { head = item.name, numeric = numeric, item = item })
+			local width = if type(custom.width) == "number" and custom.width > 0 then custom.width else nil
+			local minWidth = if type(custom.minWidth) == "number" and custom.minWidth > 0 then custom.minWidth else nil
+			table.insert(
+				columns,
+				{ head = item.name, numeric = numeric, item = item, width = width, min_width = minWidth }
+			)
 		end
 	end
 	local moreColumns = math.max(0, #columns - Grid.MAX_COLUMNS)
@@ -431,8 +679,21 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			rowCol = c
 		end
 	end
+	local links: { any? } = table.create(#columns)
+	for c, col in columns do
+		links[c] = fieldLinks(panel, env, col.item, frames)[1]
+	end
+	local pager: Pager? = nil
+	local firstRow, lastRow = 1, math.min(n, M.MAX_ROWS)
+	if paginated(panel, env) and opts.size and n > 0 then
+		local size = M.pageSize(panel, env, opts.size.h)
+		local pages = math.max(1, math.ceil(n / size))
+		local page = math.clamp(opts.page or 1, 1, pages)
+		pager = { page = page, pages = pages, size = size, total = n }
+		firstRow, lastRow = (page - 1) * size + 1, math.min(n, page * size)
+	end
 	local rows: { { Cell } } = {}
-	for r = 1, math.min(n, M.MAX_ROWS) do
+	for r = firstRow, lastRow do
 		local idx = order[r]
 		local cells: { Cell } = table.create(#columns)
 		for c, col in columns do
@@ -454,19 +715,19 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 				class = d.class,
 				percent = d.percent,
 			}
+			local link = links[c]
+			if link then
+				cell.href = cellHref(link, env, cellMacro(item, frameItems, idx, disp), opts)
+			end
 			if kind == "gauge" then
 				cell.gauge_mode = co.mode or "gradient"
 				cell.value_mode = co.value_mode or "text"
-				-- gradient runs through the colors up to the value (BarGauge
-				-- getBarGradient: threshold steps, or the continuous scheme),
-				-- lcd lights cells in their band's color: both as bands.
-				if cell.gauge_mode ~= "basic" then
-					local fill = math.clamp(d.percent, 0, 1)
-					if item.config.color_mode == "thresholds" then
-						cell.parts = Gauge.bandParts(item, fill, d.tone)
-					elseif string.sub(item.config.color_mode, 1, 11) == "continuous-" then
-						cell.parts = schemeParts(item, fill, disp)
-					end
+				local fill = math.clamp(if d.percent == d.percent then d.percent else 0, 0, 1)
+				if cell.gauge_mode == "gradient" then
+					cell.segments = gradientSegments(item, d.numeric, fill, opts.theme)
+				elseif cell.gauge_mode == "lcd" and item.config.color_mode == "thresholds" then
+					-- lcd lights cells in their threshold band's color.
+					cell.parts = Gauge.bandParts(item, fill, d.tone)
 				end
 			elseif kind == "color-background" then
 				cell.bg_tone, cell.bg_class, cell.bg_mode = d.tone, d.class, co.mode or "gradient"
@@ -541,9 +802,34 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		columns = columns,
 		rows = rows,
 		footer = footer,
-		more_rows = math.max(0, n - M.MAX_ROWS),
+		more_rows = if pager then 0 else math.max(0, n - M.MAX_ROWS),
 		more_frames = math.max(0, #frames - 1),
 		more_columns = moreColumns,
+		pager = pager,
+	}
+end
+
+-- A gradient bar (BarGauge gradient mode): the filled part a row of runs,
+-- each fading between two stop classes (tgp-gseg carries the first color
+-- down to its tgp-gseg-to child as --tgp-from), the rest the empty track.
+local function gradientBar(cell: Cell): Node
+	local fill = math.clamp(if cell.percent == cell.percent then cell.percent else 0, 0, 1)
+	local fills: { Node } = {}
+	local segs: { Segment } = cell.segments or {}
+	for i, s in segs do
+		local width = if i == #segs then " tgp-gseg-last" else " tgp-w-" .. math.floor(s.width * 100 + 0.5)
+		fills[i] = {
+			k = "el",
+			p = { tag = "div", key = "s" .. i, class = "tgp-gseg " .. s.from .. width },
+			c = { { k = "el", p = { tag = "div", class = "tgp-gseg-to " .. s.to } } },
+		}
+	end
+	return {
+		k = "el",
+		p = { tag = "div", key = "m", class = "tgp-gbar" },
+		c = {
+			{ k = "el", p = { tag = "div", class = "tgp-gfill tgp-w-" .. math.floor(fill * 100 + 0.5) }, c = fills },
+		},
 	}
 end
 
@@ -553,20 +839,26 @@ end
 -- value box is `width` characters wide (getAlignmentFactor: the column's
 -- longest value), so the bar shrinks first and the value is never cut.
 local function gaugeNode(cell: Cell, width: number): Node
-	local p: { [string]: any } = {
-		key = "m",
-		value = math.clamp(if cell.percent == cell.percent then cell.percent else 0, 0, 1),
-		style = if cell.gauge_mode == "lcd" then "blocks" else "bar",
-		size = "sm",
-		grow = 1,
-	}
-	if cell.parts then
-		p.parts = cell.parts
+	local bar: Node
+	if cell.segments then
+		bar = gradientBar(cell)
 	else
-		-- `neutral` would yield to the accent default; Grafana's fallback is gray.
-		p.tone = if cell.tone == "neutral" then "muted" else cell.tone
+		local p: { [string]: any } = {
+			key = "m",
+			value = math.clamp(if cell.percent == cell.percent then cell.percent else 0, 0, 1),
+			style = if cell.gauge_mode == "lcd" then "blocks" else "bar",
+			size = "sm",
+			grow = 1,
+		}
+		if cell.parts then
+			p.parts = cell.parts
+		else
+			-- `neutral` would yield to the accent default; Grafana's fallback is gray.
+			p.tone = if cell.tone == "neutral" then "muted" else cell.tone
+		end
+		bar = { k = "meter", p = p }
 	end
-	local children: { Node } = { { k = "meter", p = p } }
+	local children: { Node } = { bar }
 	if cell.value_mode ~= "hidden" then
 		local token = if cell.value_mode == "color" then Common.token(cell.tone :: any) else ""
 		table.insert(children, {
@@ -605,8 +897,17 @@ local function contentNode(cell: Cell, width: number): Node
 	return Grid.text(cell.text)
 end
 
+-- The content in a box at most MAX_AUTO_WIDTH wide (tgp-cv): an auto
+-- column is as wide as its widest box. A data link makes the box a link
+-- that opens it on click.
 local function cellNode(cell: Cell, width: number): Node
-	local content = contentNode(cell, width)
+	local box: { [string]: any } = { tag = "div", class = "tgp-cv" }
+	if cell.href then
+		box.class = "tgp-cv tgp-dlink"
+		box.title = cell.href
+		box.actions = { click = "dlink=" .. Url.percentEncode(cell.href :: string) }
+	end
+	local content: Node = { k = "el", p = box, c = { contentNode(cell, width) } }
 	if cell.bg_tone == nil then
 		return content
 	end
@@ -616,6 +917,79 @@ local function cellNode(cell: Cell, width: number): Node
 		.. (cell.bg_class or Common.toneClass(cell.bg_tone :: any))
 		.. (if cell.bg_mode == "basic" then "" else " tgp-cbg-grad")
 	return { k = "el", p = { tag = "div", class = class }, c = { content } }
+end
+
+-- The page buttons Grafana's Pagination shows: all up to 8 pages, else
+-- seven around the current one with the first or last behind an ellipsis
+-- (0 marks the ellipsis).
+function M.pageButtons(page: number, pages: number): { number }
+	local out: { number } = {}
+	if pages <= 8 then
+		for i = 1, pages do
+			table.insert(out, i)
+		end
+		return out
+	end
+	if page < 5 then
+		for i = 1, 7 do
+			table.insert(out, i)
+		end
+		table.insert(out, 0)
+		table.insert(out, pages)
+	elseif page > pages - 4 then
+		table.insert(out, 1)
+		table.insert(out, 0)
+		for i = pages - 6, pages do
+			table.insert(out, i)
+		end
+	else
+		table.insert(out, 1)
+		table.insert(out, 0)
+		for i = page - 2, page + 2 do
+			table.insert(out, i)
+		end
+		table.insert(out, 0)
+		table.insert(out, pages)
+	end
+	return out
+end
+
+-- The pager under a paginated table: previous, the page buttons, next and
+-- "first - last of total rows"; buttons send `tpage=<page>:<panel key>`.
+local function pagerNode(p: Pager, key: string): Node
+	local function button(id: string, label: string, target: number?, class: string): Node
+		local props: { [string]: any } = { tag = "span", key = id, class = "tgp-pg-b " .. class, text = label }
+		if target then
+			props.actions = { click = "tpage=" .. target .. ":" .. key }
+		end
+		return { k = "el", p = props }
+	end
+	local children: { Node } = {
+		button("prev", "<", if p.page > 1 then p.page - 1 else nil, if p.page > 1 then "" else "tgp-pg-off"),
+	}
+	for i, n in M.pageButtons(p.page, p.pages) do
+		if n == 0 then
+			table.insert(children, { k = "el", p = { tag = "span", key = "e" .. i, class = "tgp-pg-e", text = "..." } })
+		else
+			table.insert(children, button("p" .. n, tostring(n), n, if n == p.page then "tgp-pg-on" else ""))
+		end
+	end
+	table.insert(
+		children,
+		button("next", ">", if p.page < p.pages then p.page + 1 else nil, if p.page < p.pages then "" else "tgp-pg-off")
+	)
+	local first = (p.page - 1) * p.size + 1
+	local last = math.min(p.total, p.page * p.size)
+	table.insert(children, {
+		k = "el",
+		p = {
+			tag = "span",
+			key = "sum",
+			class = "tgp-pg-sum",
+			text = string.format("%d - %d of %d rows", first, last, p.total),
+		},
+	})
+	return { k = "el", p = { tag = "div", key = "pager", class = "tgp-pager" }, c = children }
 end
 
 -- No frame with fields is PanelDataErrorView; a frame with fields and no
@@ -629,11 +1003,20 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	local showHeader = Json.bool(env, Json.path(env, panel, "options", "showHeader")) ~= false
 	local columns: { Grid.Column } = table.create(#t.columns)
 	for i, c in t.columns do
+		local classes: { string } = {}
+		-- Gauge columns do not shrink below the bar's minimum and the value.
+		if c.value_width then
+			table.insert(classes, "tgp-gcw-" .. c.value_width)
+		end
+		if c.width then
+			table.insert(classes, "tgp-cw-" .. math.clamp(math.floor(c.width / 10 + 0.5), 5, M.MAX_WIDTH_CLASS))
+		elseif c.min_width then
+			table.insert(classes, "tgp-cmin-" .. math.clamp(math.floor(c.min_width / 10 + 0.5), 5, M.MAX_WIDTH_CLASS))
+		end
 		columns[i] = {
 			head = if showHeader then c.head else "",
 			numeric = c.numeric,
-			-- Gauge columns do not shrink below the bar's minimum and the value.
-			class = if c.value_width then "tgp-gcw-" .. c.value_width else nil,
+			class = if #classes > 0 then table.concat(classes, " ") else nil,
 		}
 	end
 	local gridRows: { Grid.Row } = table.create(#t.rows)
@@ -661,6 +1044,9 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if #t.rows == 0 then
 		local text = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "noValue")) or "No rows"
 		table.insert(children, { k = "el", p = { tag = "div", key = "empty", class = "tgp-table-empty", text = text } })
+	end
+	if t.pager then
+		table.insert(children, pagerNode(t.pager :: Pager, opts.key))
 	end
 	local notes: { string } = {}
 	if t.more_rows > 0 then

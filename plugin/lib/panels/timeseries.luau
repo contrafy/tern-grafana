@@ -32,6 +32,7 @@
 local Assets = require("../render/assets")
 local Axis = require("../render/axis")
 local ChartView = require("../render/chart_view")
+local Charts = require("./charts")
 local Common = require("./common")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
@@ -473,6 +474,13 @@ local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.O
 end
 
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
+	-- preparePlotFrame joins on time, which sorts a frame whose times run
+	-- backwards (a newest-first table from Grafana Incident).
+	local sorted: { Frame } = table.create(#frames)
+	for i, f in frames do
+		sorted[i] = Charts.sortByTime(f)
+	end
+	frames = sorted
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "palette-classic" })
 	local render = M.renderOptions(panel, env, opts)
 	-- Frames with their time field and the visible number fields, baked.

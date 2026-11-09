@@ -9,6 +9,7 @@ local t = require("../../lib/test")
 local S = require("./support")
 local Table = require("../../../plugin/lib/panels/table")
 local Transform = require("../../../plugin/lib/panels/transform")
+local TsGradient = require("../../../plugin/lib/render/ts_gradient")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local env = S.env
@@ -151,12 +152,17 @@ local function col(tbl: Table.Table, head: string): number
 	return idx
 end
 
-local function tokens(parts: any): { string }
+-- A gradient cell's runs as "from>to@width%".
+local function runs(segments: any): { string }
 	local out: { string } = {}
-	for _, p in parts do
-		table.insert(out, p.token)
+	for _, s in segments do
+		table.insert(out, string.format("%s>%s@%d", s.from, s.to, math.floor(s.width * 100 + 0.5)))
 	end
 	return out
+end
+
+local function stop(color: string): string
+	return TsGradient.stopClass(color, nil)
 end
 
 -- The gauge cells of a view (their wrappers), row by row.
@@ -183,8 +189,18 @@ for _, version in S.VERSIONS do
 			expect(c.kind).toBe("gauge")
 			expect(c.gauge_mode).toBe("gradient")
 			expect(c.value_mode).toBe("text")
-			-- The gradient runs red, orange, green up to 83%.
-			expect(tokens(c.parts)).toEqual({ "error", "warning", "success" })
+			-- getBarGradient up to 83% of 0..1: red until halfway to the
+			-- orange step (0.15 of the bar), fading into orange by halfway to
+			-- the green step (0.5), then into green at the bar's end; offsets
+			-- are of the full bar, the runs of the filled 83%.
+			local red, orange, green = stop("red"), stop("orange"), stop("green")
+			expect(runs(c.segments)).toEqual({
+				red .. ">" .. red .. "@18",
+				red .. ">" .. orange .. "@42",
+				orange .. ">" .. green .. "@40",
+			})
+			-- 21% has not reached the orange step: plain red.
+			expect(runs(tbl.rows[4][charge].segments)).toEqual({ red .. ">" .. red .. "@100" })
 			local load = tbl.rows[1][col(tbl, "Load")]
 			expect(load.gauge_mode).toBe("basic")
 			expect(load.parts).toBeNil()
@@ -192,9 +208,11 @@ for _, version in S.VERSIONS do
 			local node = Table.view(panel, frames, env, OPTS)
 			local gauges = gaugeCells(node)
 			expect(#gauges).toBe(10)
-			local meter = gauges[1].c[1]
+			local bar = gauges[1].c[1]
+			expect(bar.p.class).toBe("tgp-gbar")
+			expect(bar.c[1].p.class).toBe("tgp-gfill tgp-w-100")
+			local meter = gauges[2].c[1]
 			expect(meter.k).toBe("meter")
-			expect(meter.p.value).toBe(1)
 			expect(meter.p.label).toBeNil()
 			-- valueDisplayMode text: the value in the plain text color.
 			local value = gauges[1].c[2]
@@ -264,8 +282,13 @@ for _, version in S.VERSIONS do
 			expect(tbl.rows[1][col(tbl, "LCD")].gauge_mode).toBe("lcd")
 			local mttr = tbl.rows[1][col(tbl, "MTTR")]
 			expect(mttr.text).toBe("2 hours")
-			expect(tokens(mttr.parts)).toEqual({ "success", "warning", "error" })
-			expect(tokens(tbl.rows[4][col(tbl, "MTTR")].parts)).toEqual({ "success" })
+			-- continuous-GrYlRd spans the whole bar: the runs end at the
+			-- scheme's color at the value.
+			local mttrRuns = mttr.segments :: { any }
+			expect(mttrRuns[1].from).toBe(stop(TsGradient.schemeColor("continuous-GrYlRd", 0) :: string))
+			expect(mttrRuns[#mttrRuns].to).toBe(
+				stop(TsGradient.schemeColor("continuous-GrYlRd", math.clamp(mttr.percent, 0, 1)) :: string)
+			)
 			local node = Table.view(panel, frames, env, OPTS)
 			local gauges = gaugeCells(node)
 			-- Four gauge columns, four rows; hidden draws no value.
