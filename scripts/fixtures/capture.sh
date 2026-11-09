@@ -551,6 +551,30 @@ capture_fid2_table() {
 	done
 }
 
+# capture_v08_tsbar: fixtures for dashboard tern-v08-tsbar (SQL rows long before the range, a newest-first
+# time x bar chart, a stepped series whose first sample precedes the range, integer bars with decimals 0),
+# each panel's /api/ds/query as the frontend builds it.
+capture_v08_tsbar() {
+	dash=$ROOT/dev/grafana/dashboards/tern-v08-tsbar.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_v08_tsbar_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_v08_pietable: fixtures for dashboard tern-v08-pietable (a Zabbix-like severity donut with fixed
+# byName colors and no legend, a narrow table in a wide panel, a wide incident list with fixed-width and
+# gauge columns), each panel's /api/ds/query as the frontend builds it.
+capture_v08_pietable() {
+	dash=$ROOT/dev/grafana/dashboards/tern-v08-pietable.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_v08_pietable_$pid" POST /api/ds/query "$body"
+	done
+}
+
 # capture_json_api: dashboard tern-s4-json's JSON API (marcusolsson-json-datasource) requests. The plugin
 # has no backend: its frontend GETs the datasource proxy URL plus the target's urlPath, then the target's
 # params and the datasource's jsonData.queryParams (each encodeURIComponent'ed; the dev values need no
@@ -658,6 +682,8 @@ capture_sql
 capture_cells
 capture_stat_fidelity
 capture_fid2_table
+capture_v08_tsbar
+capture_v08_pietable
 capture_json_api
 capture_zabbix
 capture_grafana "$G11" "$TOK11"
@@ -666,6 +692,8 @@ capture_sql
 capture_cells
 capture_stat_fidelity
 capture_fid2_table
+capture_v08_tsbar
+capture_v08_pietable
 capture_json_api
 capture_zabbix
 capture_grafana "$G13" "$TOK13"
@@ -674,6 +702,8 @@ capture_sql
 capture_cells
 capture_stat_fidelity
 capture_fid2_table
+capture_v08_tsbar
+capture_v08_pietable
 capture_json_api
 capture_zabbix
 

@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"Count Not Classified,Count High,Count Average,Count Warning\n37,12,15,10","intervalMs":1200000,"maxDataPoints":480}],"from":"1793659871000","to":"1794264671000"}
