@@ -45,7 +45,8 @@ export type RangeQuery = {
 	legend: string?,
 }
 
-export type ListOptions = { from_ms: number?, to_ms: number? }
+-- `query`: a stream selector the labels or values are narrowed to.
+export type ListOptions = { from_ms: number?, to_ms: number?, query: string? }
 
 export type Result =
 	{
@@ -135,6 +136,9 @@ local function listQuery(opts: ListOptions?): { { string } }
 	end
 	if opts and opts.to_ms then
 		table.insert(query, { "end", M.ns(opts.to_ms) })
+	end
+	if opts and opts.query then
+		table.insert(query, { "query", opts.query })
 	end
 	return query
 end

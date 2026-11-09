@@ -1,0 +1,131 @@
+{
+  "uid": "tern-fid2-adhoc",
+  "title": "Tern fid2 ad hoc filters",
+  "description": "Ad hoc filter variables: a Prometheus one on a datasource variable (as Grafana Cloud's cardinality dashboards have it) and a Loki one, each with a saved filter, over panels on their datasources, a mixed panel the filters skip, and a text panel showing the filter expression.",
+  "tags": ["tern-grafana"],
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "regex": "/Prometheus 3/",
+        "current": { "text": "Prometheus 3", "value": "prom3" },
+        "hide": 0,
+        "refresh": 1
+      },
+      {
+        "name": "filter",
+        "label": "Filter",
+        "type": "adhoc",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "filters": [{ "key": "job", "operator": "=", "value": "prometheus" }],
+        "hide": 0
+      },
+      {
+        "name": "logfilter",
+        "label": "Log filter",
+        "type": "adhoc",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "filters": [{ "key": "service_name", "operator": "=", "value": "checkout" }],
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Targets up",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "count(up == 1)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Mixed: targets up",
+      "description": "A -- Mixed -- panel: Grafana hands its queries no ad hoc filters.",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prom3" },
+          "expr": "count(up == 1)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "Filter expression",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 4 },
+      "options": { "mode": "markdown", "content": "Prometheus: ${filter}\n\nLoki: ${logfilter}" }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Scraped samples by job",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (job) (scrape_samples_scraped) / on(job) group_left count by (job) (up)",
+          "legendFormat": "{{job}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Log lines (5m)",
+      "gridPos": { "x": 12, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({env=~\".+\"}[5m]))",
+          "queryType": "instant"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Parsed logs",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{env=~\".+\"} | logfmt",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@
 -- that references another one (`label_values(up{job=~"$job"}, instance)`,
 -- datasource `${ds}`) is fetched after it and refetched when it changes.
 
+local Adhoc = require("./adhoc")
 local DsTypes = require("../datasources/types")
 local Env = require("../env")
 local Frame = require("../frame/types")
@@ -33,7 +34,7 @@ M.ALL = "$__all"
 
 export type Option = { text: string, value: string }
 
-export type Kind = "query" | "custom" | "constant" | "interval" | "datasource" | "textbox" | "unsupported"
+export type Kind = "query" | "custom" | "constant" | "interval" | "datasource" | "textbox" | "adhoc" | "unsupported"
 
 export type Status = "pending" | "loading" | "ready" | "error"
 
@@ -73,6 +74,8 @@ export type Variable = {
 	error: string?,
 	-- Variables this one references (query, regex, datasource).
 	deps: { string },
+	-- Ad hoc filters (kind "adhoc"); `values` hold their URL forms.
+	adhoc: Adhoc.Set?,
 }
 
 -- What a query variable asks the metrics source for.
@@ -89,6 +92,7 @@ local KINDS: { [string]: Kind } = {
 	interval = "interval",
 	datasource = "datasource",
 	textbox = "textbox",
+	adhoc = "adhoc",
 }
 
 local function str(env: Env, v: any): string?
@@ -266,6 +270,7 @@ local function variableOf(env: Env, raw: any): Variable?
 		status = "ready",
 		error = nil,
 		deps = {},
+		adhoc = if kind == "adhoc" then Adhoc.fromModel(raw, env) else nil,
 	}
 	if v.all_value == "" then
 		v.all_value = nil
@@ -334,6 +339,22 @@ local function validate(v: Variable)
 	end
 end
 
+-- An ad hoc variable's filters; its values are their URL forms.
+function M.setFilters(v: Variable, filters: { Adhoc.Filter })
+	local set = v.adhoc
+	if set == nil then
+		return
+	end
+	set.filters = filters
+	local urls: { string } = table.create(#filters)
+	local texts: { string } = table.create(#filters)
+	for i, f in filters do
+		urls[i] = Adhoc.toUrl(f)
+		texts[i] = Adhoc.describe(f)
+	end
+	v.values, v.texts = urls, texts
+end
+
 local function initLocal(v: Variable)
 	if v.kind == "custom" then
 		v.options = M.customOptions(v.query)
@@ -351,6 +372,8 @@ local function initLocal(v: Variable)
 		v.options = { { text = v.values[1], value = v.values[1] } }
 	elseif v.kind == "query" or v.kind == "datasource" then
 		v.status = "pending"
+	elseif v.kind == "adhoc" then
+		M.setFilters(v, (v.adhoc :: Adhoc.Set).filters)
 	end
 end
 
@@ -417,11 +440,28 @@ local function isAllText(s: string): boolean
 	return s == M.ALL or s == "All" or s == "$__all"
 end
 
--- `var-<name>` values from a link override the dashboard's saved selection.
+local function filtersFromUrl(values: { string }): { Adhoc.Filter }
+	local out: { Adhoc.Filter } = {}
+	for _, s in values do
+		local f = Adhoc.fromUrl(s)
+		if f then
+			table.insert(out, f)
+		end
+	end
+	return out
+end
+
+-- `var-<name>` values from a link override the dashboard's saved selection
+-- (an ad hoc variable's `key|op|value` filters replace its own; an empty
+-- `var-<name>=` clears them).
 function M.applyUrl(vars: { Variable }, overrides: { [string]: { string } })
 	for name, values in overrides do
 		local v = M.find(vars, name)
 		if v == nil or v.kind == "constant" or #values == 0 then
+			continue
+		end
+		if v.kind == "adhoc" then
+			M.setFilters(v, filtersFromUrl(values))
 			continue
 		end
 		if v.include_all and #values == 1 and isAllText(values[1]) then
@@ -482,7 +522,9 @@ local function intervalValue(v: Variable, ctx: ScopeContext?): string
 	return value
 end
 
--- Interpolation scope of every resolved variable.
+-- Interpolation scope of every resolved variable. An ad hoc variable's
+-- value is its filter expression (`key="value",...`), as scenes'
+-- AdHocFiltersVariable.getValue gives it.
 function M.scope(vars: { Variable }, ctx: ScopeContext?): Interpolate.Scope
 	local scope: Interpolate.Scope = {}
 	for _, v in vars do
@@ -492,6 +534,12 @@ function M.scope(vars: { Variable }, ctx: ScopeContext?): Interpolate.Scope
 		if v.kind == "interval" then
 			local value = intervalValue(v, ctx)
 			scope[v.name] = { values = { value }, texts = { value } }
+			continue
+		end
+		local set = v.adhoc
+		if set then
+			local expr = Adhoc.expression(set.filters)
+			scope[v.name] = { values = { expr }, texts = { expr }, name = v.name }
 			continue
 		end
 		local isAll = #v.values == 1 and v.values[1] == M.ALL
@@ -509,10 +557,15 @@ function M.scope(vars: { Variable }, ctx: ScopeContext?): Interpolate.Scope
 	return scope
 end
 
--- `var-x` values for links and Grafana URLs (constants are not synced).
+-- `var-x` values for links and Grafana URLs (constants are not synced; an
+-- ad hoc variable without filters is `var-x=`, as Grafana writes it).
 function M.urlValues(vars: { Variable }): { [string]: { string } }
 	local out: { [string]: { string } } = {}
 	for _, v in vars do
+		if v.kind == "adhoc" then
+			out[v.name] = if #v.values > 0 then Tbl.copy(v.values) else { "" }
+			continue
+		end
 		if v.kind == "constant" or v.kind == "unsupported" or #v.values == 0 then
 			continue
 		end
@@ -966,8 +1019,29 @@ function M.normalizeDatasource(v: Variable)
 	validate(v)
 end
 
--- The user picked values. `values` = { M.ALL } selects All.
+-- The ad hoc variables queries read (Queries.Context.adhoc): each one's
+-- datasource, interpolated, and its filters.
+function M.adhocVars(
+	vars: { Variable },
+	scope: Interpolate.Scope
+): { { datasource: string?, filters: { Adhoc.Filter } } }
+	local out: { { datasource: string?, filters: { Adhoc.Filter } } } = {}
+	for _, v in vars do
+		local set = v.adhoc
+		if set then
+			table.insert(out, { datasource = M.datasourceUid(v, scope), filters = set.filters })
+		end
+	end
+	return out
+end
+
+-- The user picked values. `values` = { M.ALL } selects All; an ad hoc
+-- variable takes its filters' URL forms.
 function M.select(v: Variable, values: { string })
+	if v.kind == "adhoc" then
+		M.setFilters(v, filtersFromUrl(values))
+		return
+	end
 	if not v.multi and #values > 1 then
 		values = { values[1] }
 	end
@@ -1080,6 +1154,9 @@ end
 
 -- The variable's selection as shown on its chip.
 function M.display(v: Variable): string
+	if v.kind == "adhoc" then
+		return if #v.texts == 0 then "+ Add filter" else table.concat(v.texts, ", ")
+	end
 	if v.kind == "interval" and #v.values == 1 and string.sub(v.values[1], 1, 17) == "$__auto_interval_" then
 		return "auto"
 	end

@@ -78,8 +78,20 @@ export type Picker = {
 	name: string?,
 	query: string,
 	selected: string?,
-	-- Working selection of a multi-value variable.
+	-- Working selection of a multi-value variable (or of a one-of ad hoc
+	-- filter's values).
 	chosen: { string }?,
+	-- An ad hoc variable's picker: the step, the filter edited (its index;
+	-- nil adds one), the key and operator picked so far, and the keys or
+	-- values listed with their load state (`list_gen` tags the request).
+	step: ("filters" | "key" | "op" | "value")?,
+	edit: number?,
+	key: string?,
+	op: string?,
+	list: { Variables.Option }?,
+	list_status: ("loading" | "ready" | "error")?,
+	list_error: string?,
+	list_gen: number?,
 }
 
 export type PickerItem = { id: string, label: string, detail: string? }
@@ -195,6 +207,8 @@ export type State = {
 	refresh_ms: number?,
 	auto: boolean,
 	picker: Picker?,
+	-- Bumped by every ad hoc key or value list request (Picker.list_gen).
+	picker_gen: number,
 	search: SearchState,
 	updated_ms: number?,
 	-- View id of each panel card in the grid, recorded by the view, so a
@@ -202,6 +216,8 @@ export type State = {
 	card_ids: { [string]: string },
 	-- Logs panels whose label toggle (`l`) overrides the panel's showLabels.
 	labels: { [string]: boolean },
+	-- Table panels flipped past their first page (Table pager `tpage`).
+	pages: { [string]: number },
 	-- View memo (lib/dashboard/view.luau): rendered native panels by key.
 	memo: { [string]: any },
 	-- Selected exemplar of the focused time series (single view): index
@@ -271,9 +287,11 @@ function M.new(env: Env): State
 		refresh_ms = nil,
 		auto = true,
 		picker = nil,
+		picker_gen = 0,
 		search = { gen = 0, status = "ready", hits = {} },
 		updated_ms = nil,
 		labels = {},
+		pages = {},
 		card_ids = {},
 		memo = {},
 		exemplar = nil,

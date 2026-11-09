@@ -60,6 +60,8 @@ export type Datasource = {
 	backend: boolean?,
 	url: string?,
 	json_data: { [string]: any }?,
+	-- The plugin offers multi-value ad hoc operators (meta.multiValueFilterOperators).
+	multi_value_filters: boolean?,
 }
 
 -- A panel's results: frames in target order, "A: <message>" per failed

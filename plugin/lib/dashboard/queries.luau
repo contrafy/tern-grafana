@@ -56,7 +56,16 @@
 -- Exemplars: time series panels ask Prometheus range targets for exemplars
 -- when config `query.exemplars` is on (and never when it is off, whatever the
 -- target says); the exemplar frames come back apart from the series frames.
+--
+-- Ad hoc filters (lib/dashboard/adhoc.luau): a panel whose datasource (its
+-- own, else its first target's; never `-- Mixed --`) is an ad hoc
+-- variable's gets that variable's filters, as scenes' SceneQueryRunner hands
+-- them to the datasource: Prometheus adds them to every selector of `expr`
+-- (then interpolates the expression again, as applyTemplateVariables does,
+-- with or without filters), Loki to its stream selectors or after its
+-- parsers.
 
+local Adhoc = require("./adhoc")
 local DsRegistry = require("../datasources/registry")
 local DsTypes = require("../datasources/types")
 local Env = require("../env")
@@ -152,7 +161,15 @@ export type Context = {
 	resolved: Resolved?,
 	-- Grafana's major version (frontend settings buildInfo); nil: unknown.
 	grafana_major: number?,
+	-- Ad hoc filter variables, in dashboard order.
+	adhoc: { AdhocVar }?,
+	-- Grafana's frontend feature toggles that are on.
+	features: { [string]: boolean }?,
 }
+
+-- An ad hoc filter variable: its datasource (uid or name, interpolated) and
+-- its filters.
+export type AdhocVar = { datasource: string?, filters: { Adhoc.Filter } }
 
 -- Queries.resolve answers by panel JSON table, all for one scope and
 -- datasource list (one panel instance): the ladder and the query build of
@@ -556,7 +573,16 @@ end
 -- expressions (`expr`) the expression datasource uses each datasource's
 -- interpolateVariablesInQueries instead of applyTemplateVariables: SQL
 -- targets then go whole, with rawSql interpolated and rawQuery set.
-local function shape(ref: DsRef, t: { [string]: any }, scope: Scope, expr: boolean, env: Env): { [string]: any }
+-- `filters`: the panel's ad hoc filters (Prometheus and Loki apply them).
+local function shape(
+	ref: DsRef,
+	t: { [string]: any },
+	scope: Scope,
+	expr: boolean,
+	env: Env,
+	filters: { Adhoc.Filter }?,
+	promOpts: Adhoc.PromOptions?
+): { [string]: any }
 	local kind = ref.type
 	local sql = M.SQL_TYPES[kind]
 	if sql then
@@ -587,7 +613,29 @@ local function shape(ref: DsRef, t: { [string]: any }, scope: Scope, expr: boole
 	local fmt = { format = formatterFor(kind) }
 	local promExpr = str(env, t.expr)
 	if promExpr then
-		q.expr = Interpolate.replace(promExpr, scope, fmt)
+		local e = Interpolate.replace(promExpr, scope, fmt)
+		if kind == "prometheus" then
+			-- applyTemplateVariables interpolates again after adding the
+			-- filters (whose values may hold variables).
+			e = Interpolate.replace(Adhoc.promApply(e, filters or {}, promOpts), scope, fmt)
+		elseif kind == "loki" and filters then
+			e = Adhoc.lokiApply(e, filters)
+			-- Grafana 12.1+ with lokiQuerySplitting applies the filters in
+			-- runSplitQuery and again in DataSourceWithBackend.query for the
+			-- queries it splits (not instant, no `$__range`): a filter added
+			-- after a parser shows twice, as in Grafana's request.
+			local o: Adhoc.PromOptions = promOpts or {}
+			local queryType = Env.value(env, t.queryType)
+			if
+				(o.major or 0) >= 12
+				and o.loki_split
+				and queryType ~= "instant"
+				and not string.find(promExpr, "$__range", 1, true)
+			then
+				e = Adhoc.lokiApply(e, filters)
+			end
+		end
+		q.expr = e
 	end
 	local query = str(env, t.query)
 	if query then
@@ -635,6 +683,59 @@ type JobGroup = {
 	ref_ids: { string },
 }
 
+-- The ad hoc filters a panel's queries get and the datasource uid they are
+-- for: the filters of every variable whose datasource is the panel's
+-- (SceneQueryRunner.findAndSubscribeToDrilldowns on the panel datasource,
+-- else the first query's; a `-- Mixed --` panel gets none), merged in
+-- order without repeats (DrilldownDependenciesManager.getFilters). A
+-- variable without a datasource is on the default one (Grafana's schema
+-- migration gives it that reference).
+local function panelFilters(
+	panel: { [string]: any },
+	refs: { DsRef },
+	ctx: Context,
+	env: Env
+): ({ Adhoc.Filter }?, string?)
+	local vars = ctx.adhoc
+	if vars == nil or #vars == 0 then
+		return nil, nil
+	end
+	local raw = Env.value(env, panel.datasource)
+	local ref: DsRef? = refs[1]
+	if raw ~= nil then
+		ref = resolveRef(raw, ctx.scope, ctx.datasources, env)
+	end
+	if ref == nil or ref.uid == M.MIXED then
+		return nil, nil
+	end
+	local out: { Adhoc.Filter } = {}
+	local seen: { [string]: boolean } = {}
+	for _, v in vars do
+		local ds = if v.datasource and v.datasource ~= ""
+			then findDs(ctx.datasources, v.datasource :: string)
+			else defaultDs(ctx.datasources)
+		local uid = if ds then ds.uid else v.datasource
+		if uid ~= ref.uid then
+			continue
+		end
+		for _, f in Adhoc.applied(v.filters) do
+			local id = f.key
+				.. "\0"
+				.. f.operator
+				.. "\0"
+				.. (if f.values then table.concat(f.values, "\1") else f.value)
+			if not seen[id] then
+				seen[id] = true
+				table.insert(out, f)
+			end
+		end
+	end
+	if #out == 0 then
+		return nil, nil
+	end
+	return out, ref.uid
+end
+
 -- The /api/ds/query objects for a panel, and the jobs of its frontend
 -- datasources; nil when it has nothing to query (a `-- Dashboard --` panel
 -- gets its frames from the source panel).
@@ -647,6 +748,13 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 	if #ts == 0 or (refs[1] and refs[1].uid == M.DASHBOARD) then
 		return nil, nil
 	end
+	local filters, filtersUid = panelFilters(panel, refs, ctx, env)
+	local features: { [string]: boolean } = ctx.features or {}
+	local promOpts: Adhoc.PromOptions = {
+		major = ctx.grafana_major,
+		special = features.prometheusSpecialCharsInLabelValues == true,
+		loki_split = features.lokiQuerySplitting == true,
+	}
 	local mdp = Env.value(env, panel.maxDataPoints)
 	local maxPoints = if type(mdp) == "number" and mdp > 0 then mdp else ctx.max_points
 	local panelMin = minInterval(str(env, panel.interval), ctx.scope)
@@ -754,7 +862,7 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 				table.insert((pg :: PostGroup).targets, q)
 			end
 		else
-			q = shape(ref, t, scope, expr, env)
+			q = shape(ref, t, scope, expr, env, if ref.uid == filtersUid then filters else nil, promOpts)
 		end
 		q.refId = refId
 		q.datasource = { uid = ref.uid, type = ref.type }
@@ -965,6 +1073,7 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 			end
 			local meta = Env.value(env, ds.meta)
 			local backend = if type(meta) == "table" then Env.value(env, meta.backend) else nil
+			local multi = if type(meta) == "table" then Env.value(env, meta.multiValueFilterOperators) else nil
 			table.insert(out, {
 				uid = uid,
 				type = typ,
@@ -974,6 +1083,7 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 				backend = if type(backend) == "boolean" then backend else nil,
 				url = str(env, ds.url),
 				json_data = if type(jsonData) == "table" then Tbl.copy(jsonData) else nil,
+				multi_value_filters = if multi == true then true else nil,
 			})
 		end
 	end
