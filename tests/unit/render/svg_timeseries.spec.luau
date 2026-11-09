@@ -389,6 +389,29 @@ describe("svg_timeseries.render scales", function()
 		expect(has(r.svg, ">110<")).toBe(false)
 	end)
 
+	-- The triangle 0,2,..,10,..,0: rangeNum pads 10 by 1 to 11, as
+	-- Grafana's 0..11 axis. Whether 11 gets a label is the tick spacing
+	-- (calculateSpace: 30 px, 15 px up to 150 px plots): a plot as tall as
+	-- Grafana's 1000x500 render labels every unit to 11, a ~200 px one
+	-- steps by 2 and labels 10 last, keeping the headroom.
+	it("ranges a 0..10 series to 0..11 and labels ticks by plot height", function()
+		local tri = series(11, function(i)
+			return ({ 0, 2, 4, 6, 8, 10, 8, 6, 4, 2, 0 })[i]
+		end)
+		local function labels(height: number): { string }
+			local r = Svg.render({ tri }, { width = 1000, height = height })
+			expect(r.layout.y_min).toBe(0)
+			expect(r.layout.y_max).toBe(11)
+			local out: { string } = {}
+			for text in string.gmatch(r.svg, 'text%-anchor="end">([^<]*)<') do
+				table.insert(out, text)
+			end
+			return out
+		end
+		expect(labels(410)).toEqual({ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11" })
+		expect(labels(230)).toEqual({ "0", "2", "4", "6", "8", "10" })
+	end)
+
 	-- rangeNum on flat 0 data (delta 1e-24) snaps both ends to the soft 0,
 	-- and an empty range becomes 0..100: the line lies on the floor.
 	it("puts an all-zero series on the floor of a 0..100 axis", function()

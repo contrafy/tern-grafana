@@ -17,11 +17,11 @@
 --   as off);
 -- - overrides (lib/panels/fieldconfig) for display names, colors and
 --   hidden series (custom.hideFrom.viz, .legend, .tooltip);
--- - series colors: palette-classic keeps the chart palette; fixed and
---   by-value modes (thresholds, continuous) paint the whole series in the
---   tone of its `seriesBy` value (getFieldSeriesColor); gradientMode hue
---   and scheme paint line and fill through a gradient (lib/render/
---   ts_gradient);
+-- - series colors: palette-classic keeps the chart palette; a fixed color
+--   and a continuous scheme paint the series (and its swatch) in Grafana's
+--   color at the series' `seriesBy` value, thresholds in its step's tone
+--   (getFieldSeriesColor); gradientMode hue and scheme paint line and fill
+--   through a gradient (lib/render/ts_gradient);
 -- - options.legend: showLegend, displayMode list|table|hidden, calcs (any
 --   lib/panels/reduce reducer, formatted with the series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
@@ -266,6 +266,24 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 	}
 end
 
+-- The class a series and its legend swatch are painted with
+-- (getFieldSeriesColor): the palette class; a fixed color (or shades) and
+-- a continuous scheme's color at the series' `seriesBy` value as the
+-- nearest Grafana color class; thresholds in their step's tone, as
+-- threshold lines and areas are drawn.
+local function seriesClass(item: FieldConfig.Item, color: FieldConfig.Scale, opts: Common.Options): string
+	local mode = item.config.color_mode
+	if mode == "fixed" or mode == "shades" then
+		return TsGradient.stopClass(item.config.fixed_color or "", opts.theme)
+	elseif string.sub(mode, 1, 11) == "continuous-" then
+		local c = TsGradient.schemeColor(mode, color.percent, opts.theme)
+		if c then
+			return TsGradient.stopClass(c, opts.theme)
+		end
+	end
+	return color.class or (FieldConfig.paletteClass(item.series_index) .. " tgp-fx " .. Common.toneClass(color.tone))
+end
+
 -- gradientMode hue and scheme stops for one series (UPlotSeriesBuilder
 -- getLineColor/getFill). Hue shifts the series color; scheme runs through
 -- the color mode's thresholds or scheme colors, and with a fixed color (or
@@ -432,8 +450,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		item.series_index = palette[item.field] or item.series_index
 		local st = M.seriesStyle(item, env)
 		local color = FieldConfig.seriesColor(item, { theme = opts.theme })
-		st.class = color.class
-			or (FieldConfig.paletteClass(item.series_index) .. " tgp-fx " .. Common.toneClass(color.tone))
+		st.class = seriesClass(item, color, opts)
 		gradientStops(st, item, color, opts)
 		local below = Json.str(env, item.config.custom.fillBelowTo)
 		if below and below ~= "" then

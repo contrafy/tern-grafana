@@ -174,7 +174,9 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   and the bar options (`barAlignment`, `barWidthFactor`, `barMaxWidth`). Value axes are ranged as Grafana ranges
   them (uPlot's padded range: headroom above the data, a flat zero series on the floor of 0..100, soft bounds
   and whole numbers with decimals 0). Series colors follow Grafana's classic palette in Grafana's order: the
-  position counts every number field of the graphable frames, hidden series included.
+  position counts every number field of the graphable frames, hidden series included. A fixed color, and a
+  continuous scheme at the series' `seriesBy` value, color the series and its legend swatch in Grafana's color;
+  the thresholds mode uses the step's theme tone, like threshold lines.
 - **Time series gradients.** `gradientMode` opacity fades the fill to nothing at the bottom of the plot. `hue`
   colors line and fill from a lighter, hue-shifted top to a darker bottom of the series color (palette, fixed or
   by-value), as Grafana computes them per light and dark theme. `scheme` colors line and fill by value: threshold

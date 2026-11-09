@@ -1,15 +1,17 @@
 --!strict
--- Colors of time series gradientMode hue and scheme as stop classes
--- (packages/grafana-ui/src/components/uPlot/config/gradientFills.ts).
+-- Time series colors as classes: the stops of gradientMode hue and scheme
+-- (packages/grafana-ui/src/components/uPlot/config/gradientFills.ts) and
+-- the plain color of a fixed or continuous-scheme series.
 --
 -- Tern drops inline styles and resolves no var() in SVG attributes, so every
--- gradient stop is a class: `tg-gc<n>` (a stop-color from STOPS, generated
--- into tern-grafana.css), `tg-gt-<tone>` (a threshold tone, theme-colored as
+-- color is a class: `tg-gc<n>` (a color from STOPS, generated into
+-- tern-grafana.css as stop-color, stroke, fill and `color` for legend
+-- swatches), `tg-gt-<tone>` (a threshold tone stop, theme-colored as
 -- threshold colors are everywhere else), `tg-gc-bg` (panel-bg) and `tg-gx`
--- (a transparent threshold step). STOPS holds the colors Grafana computes
--- for the named colors, their hue variants, the classic palette and the
+-- (transparent). STOPS holds the colors Grafana computes for the named
+-- colors in both themes, their hue variants, the classic palette and the
 -- continuous schemes, so those map exactly; any other color maps to its
--- nearest stop.
+-- nearest entry.
 
 local Data = require("./ts_data")
 local Thresholds = require("../units/thresholds")

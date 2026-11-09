@@ -81,20 +81,24 @@ for _, version in S.VERSIONS do
 			expect(string.find(legend, "idle" .. LAST_IDLE[version] .. MAX_IDLE[version], 1, true) ~= nil).toBe(true)
 		end)
 
-		-- A fixed-color override paints that series (and its swatch) in the
-		-- color's tone; other series keep the palette.
+		-- A fixed-color override paints that series and its swatch in
+		-- Grafana's color (panel 4: purple, #B877D9 in the dark theme, not a
+		-- theme tone); other series keep the palette.
 		it("paints fixed-color overrides on the series and its swatch", function()
+			local TsGradient = require("../../../plugin/lib/render/ts_gradient")
 			local panel = S.clone(S.panel(version, 4))
 			panel.fieldConfig.overrides[1].matcher.options = "user"
 			local node, assets = Timeseries.view(panel, S.refFrames(version, "prom_range", "A"), env, { key = "p" })
-			expect(count(assets.p.bytes, "tgp-fx tgp-accent tg-line")).toBe(1)
+			local class = string.match(assets.p.bytes, '<path class="(tg%-gc%d+) tg%-line"') :: string
+			expect(TsGradient.STOPS[tonumber(string.sub(class, 6)) :: number]).toBe("#b877d9")
+			expect(count(assets.p.bytes, class .. " tg-line")).toBe(1)
 			local swatches = S.findAll(node, function(n)
 				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tg-swatch", 1, true) ~= nil
 			end)
 			expect(#swatches).toBe(8)
 			local fixed = 0
 			for _, s in swatches do
-				if string.find(s.p.class, "tgp-accent", 1, true) then
+				if string.find(" " .. s.p.class .. " ", " " .. class .. " ", 1, true) then
 					fixed += 1
 				end
 			end
@@ -476,13 +480,30 @@ describe("timeseries gradient modes", function()
 		expect(stops(svg, area, "fill")).toEqual({ "#56a64b", "#f2cc0c", "#e02f44" })
 	end)
 
-	-- Scheme with a fixed color falls through to a plain fill.
+	-- Scheme with a fixed color falls through to the plain color (red).
 	it("draws scheme with a fixed color plainly", function()
 		local _, assets =
 			Timeseries.view(panel("scheme", { mode = "fixed", fixedColor = "red" }), frames, env, { key = "p" })
 		local svg = assets.p.bytes
 		expect((string.find(svg, "linearGradient", 1, true))).toBeNil()
-		expect(pathTag(svg, "tgp-error", "tg-line") ~= nil).toBe(true)
+		local class = string.match(svg, '<path class="(tg%-gc%d+) tg%-line"') :: string
+		expect(TsGradient.STOPS[tonumber(string.sub(class, 6)) :: number]).toBe("#f2495c")
+	end)
+
+	-- getFieldSeriesColor: a continuous scheme colors the series, and its
+	-- legend swatch, at its seriesBy value (the series climbs 0..10: min is
+	-- green, last red).
+	it("colors a continuous-scheme series and its swatch at its seriesBy value", function()
+		for by, want in { min = "#56a64b", last = "#e02f44" } do
+			local p = panel("none", { mode = "continuous-GrYlRd", seriesBy = by })
+			local node, assets = Timeseries.view(p, frames, env, { key = "p", theme = "light" })
+			local class = string.match(assets.p.bytes, '<path class="(tg%-gc%d+) tg%-line"') :: string
+			expect(TsGradient.STOPS[tonumber(string.sub(class, 6)) :: number]).toBe(want)
+			local swatch = S.find(node, function(n)
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tg-swatch", 1, true) ~= nil
+			end)
+			expect(string.find(" " .. swatch.p.class .. " ", " " .. class .. " ", 1, true) ~= nil).toBe(true)
+		end
 	end)
 end)
 
