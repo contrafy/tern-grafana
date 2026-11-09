@@ -172,8 +172,30 @@ local function queryModel(env: Env, raw: any): any
 	return if type(q) == "table" then Tbl.copy(q) else q
 end
 
+-- Every string of a datasource's query object, keys sorted (scenes'
+-- QueryVariable watches its whole `query` state for references).
+local function modelTexts(model: any, out: { string }, depth: number)
+	if type(model) == "string" then
+		table.insert(out, model)
+	elseif type(model) == "table" and depth < 8 then
+		local keys: { any } = {}
+		for k in model do
+			table.insert(keys, k)
+		end
+		table.sort(keys, function(a: any, b: any): boolean
+			return tostring(a) < tostring(b)
+		end)
+		for _, k in keys do
+			modelTexts(model[k], out, depth + 1)
+		end
+	end
+end
+
 local function depsOf(v: Variable): { string }
 	local texts = { v.query, v.regex, v.datasource_uid or "" }
+	if type(v.query_model) == "table" then
+		modelTexts(v.query_model, texts, 0)
+	end
 	local seen: { [string]: boolean } = {}
 	local out: { string } = {}
 	for _, t in texts do

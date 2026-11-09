@@ -1,0 +1,161 @@
+{
+  "meta": {
+    "slug": "cardinality-management-label-detail"
+  },
+  "dashboard": {
+    "uid": "cardinality-management-label-detail",
+    "title": "Cardinality management - 3 - labels",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "cardinality",
+          "type": "constant",
+          "query": "card",
+          "hide": 2
+        },
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "Metrics",
+            "value": "prom"
+          },
+          "regex": "",
+          "refresh": 1
+        },
+        {
+          "name": "label",
+          "type": "query",
+          "datasource": {
+            "type": "grafanacloud-cardinality-datasource",
+            "uid": "Cardinality"
+          },
+          "refresh": 1,
+          "multi": false,
+          "includeAll": false,
+          "current": {
+            "text": null,
+            "value": null
+          },
+          "query": {
+            "cardinalityType": "labels",
+            "resultType": "list",
+            "targetDatasource": "${datasource}",
+            "refreshQueryWhenFilterChanges": "${filter}"
+          },
+          "definition": "labels list {\"targetDatasource\":\"${datasource}\"}"
+        },
+        {
+          "name": "labelValues",
+          "type": "query",
+          "datasource": {
+            "type": "grafanacloud-cardinality-datasource",
+            "uid": "Cardinality"
+          },
+          "refresh": 1,
+          "multi": true,
+          "includeAll": true,
+          "hide": 2,
+          "current": {
+            "text": null,
+            "value": null
+          },
+          "query": {
+            "cardinalityType": "labels",
+            "resultType": "details",
+            "limit": 16,
+            "parameterList": [
+              "${label}"
+            ],
+            "targetDatasource": "${datasource}",
+            "refreshQueryWhenFilterChanges": "${filter}"
+          },
+          "options": [],
+          "regex": "",
+          "definition": "{\"targetDatasource\":\"${datasource}\"}"
+        },
+        {
+          "name": "filter",
+          "type": "adhoc",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "filters": []
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 22,
+        "type": "stat",
+        "title": "Total values for label: $label",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 4
+        },
+        "datasource": {
+          "type": "grafanacloud-cardinality-datasource",
+          "uid": "Cardinality"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "cardinalityType": "labels",
+            "resultType": "subtotal",
+            "parameterList": [
+              "${label}"
+            ],
+            "targetDatasource": "${datasource}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "filterFieldsByName",
+            "options": {
+              "include": {
+                "names": [
+                  "Subtotal"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "type": "table",
+        "title": "${label} = ${labelValues}",
+        "repeat": "labelValues",
+        "repeatDirection": "h",
+        "maxPerRow": 4,
+        "gridPos": {
+          "x": 0,
+          "y": 4,
+          "w": 6,
+          "h": 8
+        },
+        "datasource": {
+          "type": "grafanacloud-cardinality-datasource",
+          "uid": "Cardinality"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "cardinalityType": "pairs",
+            "resultType": "details",
+            "selector": "{${label}='${labelValues}'}",
+            "targetDatasource": "${datasource}"
+          }
+        ]
+      }
+    ]
+  }
+}

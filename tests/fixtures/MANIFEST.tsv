@@ -24,6 +24,26 @@ amtool/0.34.1/silence_query.txt	CLI	amtool --alertmanager.url=http://alertmanage
 amtool/0.34.1/silence_query_extended.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o extended silence query	0	2026-10-09T21:33:26Z	0.34.1	-
 amtool/0.34.1/silence_query_json.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 -o json silence query	0	2026-10-09T20:31:54Z	0.34.1	-
 amtool/0.34.1/silence_query_quiet.txt	CLI	amtool --alertmanager.url=http://alertmanager:9093 silence query -q	0	2026-10-09T21:33:26Z	0.34.1	-
+cardinality/alert_rule.json	GET	/api/v1/provisioning/alert-rules/rule-a1 (synthetic subset)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/alert_rule_not_found.json	GET	/api/v1/provisioning/alert-rules/rule-gone (synthetic)	404	2026-11-09T00:00:00Z	synthetic	-
+cardinality/dashboard.json	GET	/api/dashboards/uid/shop-overview (synthetic subset)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/dashboard_labels.json	GET	/api/dashboards/uid/cardinality-management-label-detail (synthetic, shape of the cardinality management label detail dashboard)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/dashboard_not_found.json	GET	/api/dashboards/uid/retired-board (synthetic)	404	2026-11-09T00:00:00Z	synthetic	-
+cardinality/frontend_settings.json	GET	/api/frontend/settings (synthetic subset: a cardinality datasource and its Mimir target)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/label_names.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_names?count_method=active&selector=%7B%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/label_subtotal.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_values?count_method=active&label_names%5B%5D=service&limit=0&selector=%7B%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/label_values_service.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_values?count_method=active&label_names%5B%5D=service&limit=500&selector=%7B%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/list_labels.json	GET	/api/datasources/proxy/uid/prom/api/v1/labels?end=...&limit=200&start=... (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/list_metrics.json	GET	/api/datasources/proxy/uid/prom/api/v1/label/__name__/values?end=...&limit=200&start=... (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/metric_examples.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_values?count_method=active&label_names%5B%5D=route&label_names%5B%5D=region&label_names%5B%5D=status&label_names%5B%5D=__name__&limit=3&selector=%7B__name__%3D%27checkout_requests_total%27%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/metric_label_names.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_names?count_method=active&limit=500&selector=%7B__name__%3D%27checkout_requests_total%27%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/metric_subtotal.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_values?count_method=active&label_names%5B%5D=__name__&selector=%7B__name__%3D%27checkout_requests_total%27%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/metrics_names.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_values?count_method=active&label_names%5B%5D=__name__&selector=%7B%7D (synthetic, recorded shape of Mimir's cardinality API)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/pairs_details.json	GET	/api/datasources/proxy/uid/prom/api/v1/cardinality/label_values?count_method=active&label_names%5B%5D=__name__&selector=%7Bservice%3D%27checkout%27%7D (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/unused.json	GET	/api/datasources/proxy/uid/card/unused (synthetic, recorded shape: no unused map)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/unused_map.json	GET	/api/datasources/proxy/uid/card/unused (synthetic, the map grafanacloud-cardinality-datasource 2.6.1 reads)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/usage.json	GET	/api/datasources/proxy/uid/card/usages/checkout_requests_total (synthetic, recorded shape)	200	2026-11-09T00:00:00Z	synthetic	-
+cardinality/usage_rules.json	GET	/api/datasources/proxy/uid/card/usages/checkout_requests_total (synthetic, with the grafana_rules and mimir_rules 2.6.1 reads)	200	2026-11-09T00:00:00Z	synthetic	-
 curl/8.22.0/prom_include_error.txt	CLI	curl -si http://prometheus3:9090/api/v1/query?query=sum(rate(up%5B5m%5D)	0	2026-10-09T21:45:07Z	8.22.0	-
 curl/8.22.0/prom_verbose.txt	CLI	curl -sv http://prometheus3:9090/api/v1/query?query=up	0	2026-10-09T21:45:07Z	8.22.0	-
 curl/8.22.0/prom_writeout.txt	CLI	curl -s -w %{http_code} http://prometheus3:9090/api/v1/query?query=up	0	2026-10-09T21:45:07Z	8.22.0	-

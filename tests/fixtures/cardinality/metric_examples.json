@@ -1,0 +1,69 @@
+{
+  "series_count_total": 40,
+  "labels": [
+    {
+      "label_name": "route",
+      "label_values_count": 5,
+      "series_count": 40,
+      "cardinality": [
+        {
+          "label_value": "/cart",
+          "series_count": 16
+        },
+        {
+          "label_value": "/pay",
+          "series_count": 12
+        },
+        {
+          "label_value": "/ship",
+          "series_count": 8
+        }
+      ]
+    },
+    {
+      "label_name": "region",
+      "label_values_count": 3,
+      "series_count": 40,
+      "cardinality": [
+        {
+          "label_value": "eu-west",
+          "series_count": 20
+        },
+        {
+          "label_value": "us-east",
+          "series_count": 12
+        },
+        {
+          "label_value": "ap-south",
+          "series_count": 8
+        }
+      ]
+    },
+    {
+      "label_name": "status",
+      "label_values_count": 2,
+      "series_count": 40,
+      "cardinality": [
+        {
+          "label_value": "200",
+          "series_count": 30
+        },
+        {
+          "label_value": "500",
+          "series_count": 10
+        }
+      ]
+    },
+    {
+      "label_name": "__name__",
+      "label_values_count": 1,
+      "series_count": 40,
+      "cardinality": [
+        {
+          "label_value": "checkout_requests_total",
+          "series_count": 40
+        }
+      ]
+    }
+  ]
+}

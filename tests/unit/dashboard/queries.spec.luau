@@ -312,9 +312,8 @@ describe("queries for other datasource plugins", function()
 		expect(reason("js", { urlPath = "" })).toBe(
 			"marcusolsson-json-datasource queries run in the browser (a frontend datasource plugin)"
 		)
-		expect(reason("card", { cardinalityType = "labels" })).toBe(
-			"grafanacloud-cardinality-datasource queries run in the browser (a frontend datasource plugin)"
-		)
+		-- Ported (lib/datasources/cardinality): only a direct-access target stays off.
+		expect(reason("card", { cardinalityType = "labels", targetDatasource = "Metrics" })).toBeNil()
 		expect(reason("zbx", { queryType = "0" })).toBe("Zabbix queries are post-processed in the browser")
 		expect(reason("gr", { target = "a.b" })).toBe(
 			"Graphite queries are sent by the browser through the datasource proxy"

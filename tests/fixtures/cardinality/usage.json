@@ -1,0 +1,20 @@
+{
+  "metric_name": "checkout_requests_total",
+  "query_logs": {
+    "count": 7,
+    "intervals": [
+      {
+        "interval": "1793318400-1793404800",
+        "count": 3
+      },
+      {
+        "interval": "1793404800-1793491200",
+        "count": 4
+      }
+    ]
+  },
+  "dashboards": [
+    "shop-overview",
+    "retired-board"
+  ]
+}

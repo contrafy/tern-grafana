@@ -1,0 +1,7 @@
+{
+  "uid": "rule-a1",
+  "title": "Checkout errors",
+  "ruleGroup": "checkout",
+  "folderUID": "shop",
+  "condition": "C"
+}

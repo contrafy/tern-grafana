@@ -1,0 +1,11 @@
+{
+  "metric_name": "checkout_requests_total",
+  "dashboards": [
+    "shop-overview"
+  ],
+  "grafana_rules": [
+    "rule-a1",
+    "rule-gone"
+  ],
+  "mimir_rules": 2
+}

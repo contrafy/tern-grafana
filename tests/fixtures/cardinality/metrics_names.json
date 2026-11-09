@@ -1,0 +1,28 @@
+{
+  "series_count_total": 88,
+  "labels": [
+    {
+      "label_name": "__name__",
+      "label_values_count": 4,
+      "series_count": 88,
+      "cardinality": [
+        {
+          "label_value": "checkout_requests_total",
+          "series_count": 40
+        },
+        {
+          "label_value": "checkout_latency_seconds_bucket",
+          "series_count": 30
+        },
+        {
+          "label_value": "queue_depth",
+          "series_count": 12
+        },
+        {
+          "label_value": "worker_up",
+          "series_count": 6
+        }
+      ]
+    }
+  ]
+}

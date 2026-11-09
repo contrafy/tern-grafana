@@ -37,6 +37,7 @@ function M.register(mod: DsModule)
 end
 
 M.register(require("./incident"))
+M.register(require("./cardinality"))
 
 function M.module(dsType: string): DsModule?
 	return byType[dsType]

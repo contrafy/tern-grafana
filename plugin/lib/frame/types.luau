@@ -19,6 +19,8 @@ export type FieldConfig = {
 	max: number?,
 	-- Grafana's sample interval of a time field, ms.
 	interval: number?,
+	-- The text for a missing value.
+	noValue: string?,
 	-- Grafana's field config `custom` (hidden, drawStyle, ...), verbatim.
 	custom: { [string]: any }?,
 	-- Grafana field config thresholds, mappings and color, in Grafana's JSON
