@@ -334,8 +334,60 @@ describe("tail", function()
 		local gen = s.tail_gen
 		press(s, env, "t")
 		expect(s.tail).toBe(false)
-		local _, tick = State.update(s, { kind = "tick", tag = State.TAIL_TAG .. gen }, env)
+		local _, tick, changed = State.update(s, { kind = "tick", tag = State.TAIL_TAG .. gen }, env)
 		expect(#tick).toBe(0)
+		expect(changed).toBe(false)
+	end)
+
+	-- A poll answer always repaints (the spinner goes away); a tick that
+	-- finds a poll running, or an answer for an old query, changes nothing.
+	it("skips the paint only when nothing changed", function()
+		local s, env = loaded()
+		local poll = https(press(s, env, "t"), State.POLL_TAG)[1]
+		local _, again, quiet = State.update(s, { kind = "tick", tag = State.TAIL_TAG .. s.tail_gen }, env)
+		expect(#https(again, State.POLL_TAG)).toBe(0)
+		expect(quiet).toBe(false)
+		local lines = s.lines
+		local _, _, changed = State.update(
+			s,
+			{ kind = "http_done", tag = poll.tag, response = Q.response("loki/3.7.8/query_range_streams.json") },
+			env
+		)
+		expect(changed).toBeNil()
+		expect(s.tail_inflight).toBe(false)
+		expect(s.lines).toBe(lines)
+		local _, _, stale = State.update(
+			s,
+			{ kind = "http_done", tag = poll.tag, response = Q.response("loki/3.7.8/query_range_streams.json") },
+			env
+		)
+		expect(stale).toBe(false)
+	end)
+
+	-- Rows drawn last time are reused: the view must be the one drawing
+	-- every row afresh gives, through selection, detail and tail merges.
+	it("draws the same rows as drawing every line afresh", function()
+		local s, env = loaded("loki/3.7.8/query_range_streams_forward.json")
+		local function afresh(): any
+			local copy = table.clone(s)
+			copy.lines = {}
+			for i, l in s.lines do
+				copy.lines[i] = table.clone(l)
+			end
+			return (View.view(copy, env) :: any).main
+		end
+		local function main(): any
+			return (View.view(s, env) :: any).main
+		end
+		main()
+		press(s, env, "j")
+		expect(main()).toEqual(afresh())
+		press(s, env, "enter")
+		expect(main()).toEqual(afresh())
+		press(s, env, "j")
+		done(s, env, https(press(s, env, "t"), State.POLL_TAG)[1].tag, "loki/3.7.8/query_range_streams.json")
+		expect(s.tail_added > 0).toBe(true)
+		expect(main()).toEqual(afresh())
 	end)
 
 	it("makes an absolute range live, keeping its span", function()

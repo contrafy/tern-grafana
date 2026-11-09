@@ -297,6 +297,22 @@ describe("line ids", function()
 		expect(FrameLoki.hash("foobar")).toBe("bf9cf968")
 	end)
 
+	-- Ids are compared across polls and sessions: hashing a stream's labels
+	-- once per stream must give the ids hashing every line in full gave.
+	it("hash the stream labels and the text as one string", function()
+		local files: { { any } } = {
+			{ direct, "loki/3.7.8/query_range_streams.json" },
+			{ viaGrafana, "grafana/12.4.12/ds_query_loki_logs.json" },
+		}
+		for _, f in files do
+			local r: any = Loki.parse(f[1], S.response(f[2]), S.env)
+			expect(#r.lines > 0).toBe(true)
+			for _, l in r.lines do
+				expect(l.id).toBe(l.ts_ns .. "_" .. FrameLoki.hash(FrameLoki.labelsKey(l.labels) .. "\n" .. l.line))
+			end
+		end
+	end)
+
 	it("compare nanosecond timestamps beyond double precision", function()
 		expect(FrameLoki.compareNs("1791577897000000001", "1791577897000000000")).toBe(1)
 		expect(FrameLoki.compareNs("999", "1000")).toBe(-1)

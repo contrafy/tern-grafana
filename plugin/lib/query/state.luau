@@ -1,14 +1,14 @@
 --!strict
 -- The Query block (`tern-grafana.query`): a PromQL scratchpad over one
 -- context's metrics, as a pure state machine (lib/effect.luau) that
--- plugin/query_host.luau registers through block_runner.
+-- plugin/host.luau registers through block_runner.
 --
 -- - Args are one canonical `tern-grafana://query?...` link; save() keeps the
 --   link of what is on screen plus the mode and chart cursor, never results.
 -- - Every query bumps a generation; an answer for an older generation is
 --   dropped, so a slow query never overwrites a newer one.
 -- - Suggestions are fetched lazily, the first time a context needs a list,
---   and cached per context for TTL_MS.
+--   and cached per context for TTL_MS (lib/suggest_cache.luau).
 -- - The chart SVG is rendered once per result; the keyboard cursor only moves
 --   an overlay, so stepping through samples mints no new blob.
 -- - Range queries also fetch exemplars (`x` selects, `enter` opens the
@@ -37,6 +37,8 @@ local Route = require("../config/route")
 local Scheme = require("../links/scheme")
 local Step = require("../time/step")
 local Shared = require("../time/shared")
+local Str = require("../str")
+local SuggestCache = require("../suggest_cache")
 local Suggest = require("./suggest")
 local Svg = require("../render/svg_timeseries")
 local TimeRange = require("./timerange")
@@ -68,12 +70,7 @@ export type Run = {
 	route: RouteT,
 }
 
-export type Entry = {
-	status: "pending" | "ok" | "error",
-	at_ms: number,
-	values: { string }?,
-	metadata: { [string]: Suggest.Meta }?,
-}
+export type Entry = SuggestCache.Entry
 
 type Pending = { context: string, key: string, kind: "values" | "labels" | "metadata", route: RouteT }
 
@@ -119,7 +116,7 @@ export type State = {
 	refresh_ms: number?,
 	timer_gen: number,
 	suggest: Suggestions?,
-	cache: { [string]: { [string]: Entry } },
+	cache: SuggestCache.Cache,
 	pending: { [string]: Pending },
 	seq: number,
 	overlay: ("help" | "history")?,
@@ -152,8 +149,8 @@ export type Answer = {
 local M = {}
 
 M.INPUT_ID = "main.q"
-M.TTL_MS = 5 * 60 * 1000
-M.ERROR_TTL_MS = 30 * 1000
+M.TTL_MS = SuggestCache.TTL_MS
+M.ERROR_TTL_MS = SuggestCache.ERROR_TTL_MS
 M.QUERY_TAG = "q:"
 M.SUGGEST_TAG = "s:"
 M.EXEMPLAR_TAG = "e:"
@@ -164,16 +161,12 @@ M.FAST_STEP = 10
 local NO_CONFIG = "No tern-grafana config found: create ~/.config/tern-grafana/config.json "
 	.. "(see docs/configuration.md) or open tern-grafana://settings"
 
+-- Metric names and metadata serve every expression position: never evicted.
+local PINNED = table.freeze({ [Suggest.valuesKey("__name__", nil)] = true, [Suggest.METADATA_KEY] = true })
+
 local function sortedContexts(env: Env): { string }
-	local names: { string } = {}
 	local cfg = env.config
-	if cfg then
-		for name in cfg.contexts do
-			table.insert(names, name)
-		end
-	end
-	table.sort(names)
-	return names
+	return if cfg then Route.contextNames(cfg) else {}
 end
 
 -- Where metrics for the block's context are read. A link's datasource uid
@@ -210,9 +203,7 @@ local function resolve(s: State, env: Env): (Range.Range?, string?)
 	return Range.resolve(s.from, s.to, { now_ms = env.now_ms })
 end
 
-local function trim(text: string): string
-	return string.match(text, "^%s*(.-)%s*$") or ""
-end
+local trim = Str.trim
 
 -- Starts the query for the current expression, range and mode.
 local function run(s: State, env: Env, effects: { Effect })
@@ -410,31 +401,10 @@ end
 
 -- Suggestions --------------------------------------------------------------
 
-local function contextCache(s: State): { [string]: Entry }?
-	local name = s.context
-	if name == nil then
-		return nil
-	end
-	local c = s.cache[name]
-	if c == nil then
-		c = {}
-		s.cache[name] = c
-	end
-	return c
-end
-
-local function fresh(e: Entry, now: number): boolean
-	if e.status == "pending" then
-		return true
-	end
-	local ttl = if e.status == "ok" then M.TTL_MS else M.ERROR_TTL_MS
-	return now - e.at_ms < ttl
-end
-
 local function fetch(s: State, env: Env, need: Suggest.Need, effects: { Effect }): Entry?
-	local cache = contextCache(s)
+	local context = s.context
 	local route = M.route(s, env)
-	if cache == nil or route == nil then
+	if context == nil or route == nil then
 		return nil
 	end
 	local range = resolve(s, env)
@@ -451,17 +421,17 @@ local function fetch(s: State, env: Env, need: Suggest.Need, effects: { Effect }
 	else
 		request = Metrics.metadataRequest(route)
 	end
-	local old = cache[need.key]
+	local old = SuggestCache.get(s.cache, context, need.key)
 	local e: Entry = {
 		status = "pending",
 		at_ms = env.now_ms,
 		values = if old then old.values else nil,
 		metadata = if old then old.metadata else nil,
 	}
-	cache[need.key] = e
+	SuggestCache.put(s.cache, context, need.key, e)
 	s.seq += 1
 	local tag = M.SUGGEST_TAG .. s.seq
-	s.pending[tag] = { context = s.context :: string, key = need.key, kind = need.kind, route = route }
+	s.pending[tag] = { context = context, key = need.key, kind = need.kind, route = route }
 	table.insert(effects, { kind = "http", tag = tag, route = route, request = request })
 	return e
 end
@@ -478,12 +448,12 @@ local function suggest(s: State, env: Env, effects: { Effect }, force: boolean)
 		s.suggest = nil
 		return
 	end
-	local cache = contextCache(s)
+	local context = s.context
 	local data: Suggest.Data = { lists = {} }
 	local loading = false
 	for _, need in Suggest.needs(ctx) do
-		local e = if cache then cache[need.key] else nil
-		if e == nil or not fresh(e, env.now_ms) then
+		local e = if context then SuggestCache.get(s.cache, context, need.key) else nil
+		if e == nil or not SuggestCache.fresh(e, env.now_ms) then
 			e = fetch(s, env, need, effects)
 		end
 		if e then
@@ -510,8 +480,7 @@ local function suggestionDone(s: State, env: Env, tag: string, response: any, ef
 		return
 	end
 	s.pending[tag] = nil
-	local cache = s.cache[p.context]
-	local e = if cache then cache[p.key] else nil
+	local e = SuggestCache.get(s.cache, p.context, p.key)
 	if e == nil then
 		return
 	end
@@ -531,7 +500,7 @@ local function suggestionDone(s: State, env: Env, tag: string, response: any, ef
 			next.status = "error"
 		end
 	end
-	(cache :: { [string]: Entry })[p.key] = next
+	SuggestCache.put(s.cache, p.context, p.key, next)
 	if s.suggest and p.context == s.context then
 		suggest(s, env, effects, true)
 	end
@@ -678,7 +647,7 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		refresh_ms = nil,
 		timer_gen = 0,
 		suggest = nil,
-		cache = {},
+		cache = SuggestCache.new(PINNED),
 		pending = {},
 		seq = 0,
 		overlay = nil,
@@ -845,10 +814,7 @@ end
 
 -- Publishes the range and cursor when sync is on.
 local function share(s: State, env: Env, effects: { Effect })
-	local e = Shared.share(s.sync, { from = s.from, to = s.to }, s.cursor_t, env)
-	if e then
-		table.insert(effects, e)
-	end
+	Shared.shareInto(effects, s.sync, { from = s.from, to = s.to }, s.cursor_t, env)
 end
 
 local function setRange(s: State, env: Env, from: string?, to: string?, effects: { Effect }): boolean
@@ -1170,7 +1136,7 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 	end
 end
 
-function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local tag = msg.tag
@@ -1178,20 +1144,26 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			local gen = tonumber(string.sub(tag, #M.QUERY_TAG + 1))
 			if gen == s.gen and s.inflight and s.inflight.gen == gen then
 				finish(s, env, msg.response)
+			else
+				return s, effects, false
 			end
 		elseif string.sub(tag, 1, #M.SUGGEST_TAG) == M.SUGGEST_TAG then
 			suggestionDone(s, env, tag, msg.response, effects)
 		elseif string.sub(tag, 1, #M.EXEMPLAR_TAG) == M.EXEMPLAR_TAG then
 			local gen = tonumber(string.sub(tag, #M.EXEMPLAR_TAG + 1))
-			if gen then
-				exemplarsDone(s, env, gen, msg.response)
+			local r = s.inflight or s.ran
+			if gen == nil or r == nil or r.gen ~= gen then
+				return s, effects, false
 			end
+			exemplarsDone(s, env, gen, msg.response)
 		end
 	elseif msg.kind == "tick" then
+		local changed = false
 		if Shared.isTick(s.sync, msg.tag) then
 			local r, cursor = Shared.poll(s.sync, env)
 			if r then
 				adoptShared(s, env, r, cursor, effects)
+				changed = true
 			end
 			table.insert(effects, Shared.timer(s.sync))
 		end
@@ -1199,13 +1171,15 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			if Visibility.isHidden(env) then
 				-- Background tab: look again shortly, run once shown.
 				table.insert(effects, { kind = "timer", tag = msg.tag, ms = Visibility.POLL_MS })
-				return s, effects
+				return s, effects, if changed then nil else false
 			end
 			if s.status ~= "loading" then
 				run(s, env, effects)
+				changed = true
 			end
 			armTimer(s, effects)
 		end
+		return s, effects, if changed then nil else false
 	elseif msg.kind == "event" then
 		event(s, msg.ev, env, effects)
 	elseif msg.kind == "key" then

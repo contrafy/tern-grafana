@@ -1,7 +1,7 @@
 --!strict
 -- The Logs block (`tern-grafana.logs`): LogQL over one context's logs (Loki
 -- direct or Grafana's Loki datasource) as a pure state machine
--- (lib/effect.luau) that plugin/logs_host.luau registers through
+-- (lib/effect.luau) that plugin/host.luau registers through
 -- block_runner.
 --
 -- - Args are one canonical `tern-grafana://logs?...` link; save() keeps the
@@ -13,7 +13,7 @@
 -- - Chips (line detail fields, level chips over the lines) add or remove a
 --   LogQL filter (lib/logs/logql.luau) and run the query again.
 -- - Label and value suggestions are fetched lazily per context and cached
---   for TTL_MS.
+--   for TTL_MS (lib/suggest_cache.luau).
 
 local Correlate = require("./correlate")
 local Edit = require("../query/edit")
@@ -32,6 +32,8 @@ local Scheme = require("../links/scheme")
 local Step = require("../time/step")
 local Svg = require("../render/svg_timeseries")
 local Shared = require("../time/shared")
+local Str = require("../str")
+local SuggestCache = require("../suggest_cache")
 local Tail = require("./tail")
 local TimeRange = require("../query/timerange")
 local Volume = require("./volume")
@@ -65,7 +67,7 @@ export type Run = {
 	route: RouteT,
 }
 
-export type Entry = { status: "pending" | "ok" | "error", at_ms: number, values: { string }? }
+export type Entry = SuggestCache.Entry
 
 export type Suggestions = { ctx: LogQL.Ctx, items: { LogQL.Item }, selected: number?, loading: boolean }
 
@@ -105,12 +107,14 @@ export type State = {
 	-- Lines the last tail polls added since tailing started.
 	tail_added: number,
 	suggest: Suggestions?,
-	cache: { [string]: { [string]: Entry } },
+	cache: SuggestCache.Cache,
 	pending: { [string]: { context: string, key: string, route: RouteT } },
 	seq: number,
 	overlay: "help"?,
-	-- Trace id per line id (lines that name one), see Correlate.traceId.
+	-- Trace id per line id, for the lines that name one (Correlate.traceId).
 	trace_ids: { [string]: string },
+	-- Ids of `lines` (Tail.merge keeps it across polls).
+	seen: { [string]: boolean },
 	-- Shared time range (lib/time/shared.luau), key `S`.
 	sync: Shared.Sync,
 	-- `logs.trace_id_pattern`, compiled.
@@ -120,8 +124,8 @@ export type State = {
 local M = {}
 
 M.INPUT_ID = "main.q"
-M.TTL_MS = 5 * 60 * 1000
-M.ERROR_TTL_MS = 30 * 1000
+M.TTL_MS = SuggestCache.TTL_MS
+M.ERROR_TTL_MS = SuggestCache.ERROR_TTL_MS
 M.QUERY_TAG = "q:"
 M.VOLUME_TAG = "v:"
 M.TAIL_TAG = "t:"
@@ -134,20 +138,14 @@ M.VOLUME_TAIL_MS = 10000
 local NO_CONFIG = "No tern-grafana config found: create ~/.config/tern-grafana/config.json "
 	.. "(see docs/configuration.md) or open tern-grafana://settings"
 
-local function trim(text: string): string
-	return string.match(text, "^%s*(.-)%s*$") or ""
-end
+-- Label names serve every selector: never evicted.
+local PINNED = table.freeze({ labels = true })
+
+local trim = Str.trim
 
 local function sortedContexts(env: Env): { string }
-	local names: { string } = {}
 	local cfg = env.config
-	if cfg then
-		for name in cfg.contexts do
-			table.insert(names, name)
-		end
-	end
-	table.sort(names)
-	return names
+	return if cfg then Route.contextNames(cfg) else {}
 end
 
 -- Where logs for the block's context are read. A link's datasource uid names
@@ -186,7 +184,7 @@ end
 local function clearResult(s: State)
 	s.lines, s.frames, s.chart, s.volume = {}, nil, nil, nil
 	s.sel, s.detail, s.field_sel = nil, nil, 1
-	s.trace_ids = {}
+	s.trace_ids, s.seen = {}, {}
 	s.warnings = {}
 end
 
@@ -244,10 +242,7 @@ local function run(s: State, env: Env, effects: { Effect })
 	local step: number? = nil
 	local sent = expr
 	if metric then
-		local points = Volume.BUCKETS * 5
-		step = Step.promStep(span, points)
-		local interval = Step.interval(span, points).interval_ms
-		sent = Step.interpolate(expr, Step.macros(span, step :: number, interval))
+		sent, step = Step.expand(expr, span, Volume.BUCKETS * 5)
 	end
 	local r: Run = {
 		gen = s.gen,
@@ -300,6 +295,7 @@ local function finish(s: State, env: Env, response: any)
 		s.status = "error"
 		s.failure = { kind = e.kind, message = e.message, status = e.status }
 		s.lines, s.frames, s.chart, s.sel, s.detail = {}, nil, nil, nil, nil
+		s.trace_ids, s.seen = {}, {}
 		s.warnings = {}
 		return
 	end
@@ -314,6 +310,7 @@ local function finish(s: State, env: Env, response: any)
 		end
 	end
 	s.sel = indexOf(s.lines, keep)
+	s.seen = Tail.ids(s.lines)
 	M.indexTraceIds(s)
 	if indexOf(s.lines, s.detail) == nil then
 		s.detail = nil
@@ -403,13 +400,33 @@ local function pollDone(s: State, env: Env, response: any)
 		end
 		return
 	end
+	local seen = s.seen
+	local incoming: { Line } = result.lines
+	local fresh: { Line } = {}
+	for _, l in incoming do
+		if not seen[l.id] then
+			table.insert(fresh, l)
+		end
+	end
 	local keep = selectedId(s)
-	local merged, added = Tail.merge(s.lines, result.lines, s.options.limit)
+	local merged, added, dropped = Tail.merge(s.lines, incoming, s.options.limit, seen)
+	if added == 0 then
+		return
+	end
+	local ids = s.trace_ids
+	for _, l in dropped do
+		ids[l.id] = nil
+	end
+	local matcher = s.trace_matcher
+	for _, l in fresh do
+		if seen[l.id] then
+			ids[l.id] = Correlate.traceId(l.line, l.metadata, l.parsed, l.labels, matcher) :: any
+		end
+	end
 	s.lines = merged
 	s.tail_added += added
 	s.sel = indexOf(s.lines, keep)
-	M.indexTraceIds(s)
-	if indexOf(s.lines, s.detail) == nil then
+	if s.detail and not seen[s.detail] then
 		s.detail = nil
 	end
 end
@@ -440,26 +457,24 @@ end
 
 -- Publishes the block's range when sync is on.
 local function shareRange(s: State, env: Env, effects: { Effect })
-	local e = Shared.share(s.sync, { from = s.from, to = s.to }, nil, env)
-	if e then
-		table.insert(effects, e)
-	end
+	Shared.shareInto(effects, s.sync, { from = s.from, to = s.to }, nil, env)
 end
 
 -- Takes a range another block shared: tail follows now, so an absolute
--- range stops it.
-local function adoptRange(s: State, r: Shared.Range?, env: Env, effects: { Effect })
+-- range stops it. False when there was nothing to take.
+local function adoptRange(s: State, r: Shared.Range?, env: Env, effects: { Effect }): boolean
 	if r == nil or (r.from == s.from and r.to == s.to) then
-		return
+		return false
 	end
 	if (Range.resolve(r.from, r.to, { now_ms = env.now_ms })) == nil then
-		return
+		return false
 	end
 	s.from, s.to = r.from, r.to
 	if s.tail and r.to ~= "now" then
 		setTail(s, env, false, effects)
 	end
 	run(s, env, effects)
+	return true
 end
 
 local function toggleSync(s: State, env: Env, effects: { Effect })
@@ -477,41 +492,21 @@ end
 
 -- Suggestions -------------------------------------------------------------------------
 
-local function contextCache(s: State): { [string]: Entry }?
-	local name = s.context
-	if name == nil then
-		return nil
-	end
-	local c = s.cache[name]
-	if c == nil then
-		c = {}
-		s.cache[name] = c
-	end
-	return c
-end
-
-local function fresh(e: Entry, now: number): boolean
-	if e.status == "pending" then
-		return true
-	end
-	return now - e.at_ms < (if e.status == "ok" then M.TTL_MS else M.ERROR_TTL_MS)
-end
-
 local function fetchList(s: State, env: Env, key: string, label: string?, effects: { Effect }): Entry?
-	local cache = contextCache(s)
+	local context = s.context
 	local route = M.route(s, env)
-	if cache == nil or route == nil then
+	if context == nil or route == nil then
 		return nil
 	end
 	local range = resolve(s, env)
 	local opts = if range then { from_ms = range.from_ms, to_ms = range.to_ms } else nil
 	local request = if label then Loki.labelValuesRequest(route, label, opts) else Loki.labelsRequest(route, opts)
-	local old = cache[key]
+	local old = SuggestCache.get(s.cache, context, key)
 	local e: Entry = { status = "pending", at_ms = env.now_ms, values = if old then old.values else nil }
-	cache[key] = e
+	SuggestCache.put(s.cache, context, key, e)
 	s.seq += 1
 	local tag = M.SUGGEST_TAG .. s.seq
-	s.pending[tag] = { context = s.context :: string, key = key, route = route }
+	s.pending[tag] = { context = context, key = key, route = route }
 	table.insert(effects, { kind = "http", tag = tag, route = route, request = request })
 	return e
 end
@@ -531,9 +526,8 @@ local function suggest(s: State, env: Env, effects: { Effect })
 	if ctx.kind == "label" or ctx.kind == "value" then
 		local label = if ctx.kind == "value" then (ctx :: any).label :: string else nil
 		local key = if label then "values:" .. label else "labels"
-		local cache = contextCache(s)
-		local e = if cache then cache[key] else nil
-		if e == nil or not fresh(e, env.now_ms) then
+		local e = if s.context then SuggestCache.get(s.cache, s.context, key) else nil
+		if e == nil or not SuggestCache.fresh(e, env.now_ms) then
 			e = fetchList(s, env, key, label, effects)
 		end
 		if e then
@@ -555,17 +549,16 @@ local function suggestionDone(s: State, env: Env, tag: string, response: any, ef
 		return
 	end
 	s.pending[tag] = nil
-	local cache = s.cache[p.context]
-	local e = if cache then cache[p.key] else nil
-	if cache == nil or e == nil then
+	local e = SuggestCache.get(s.cache, p.context, p.key)
+	if e == nil then
 		return
 	end
 	local r: any = Loki.parseList(p.route, response, env)
-	cache[p.key] = {
+	SuggestCache.put(s.cache, p.context, p.key, {
 		status = if r.ok then "ok" else "error",
 		at_ms = env.now_ms,
 		values = if r.ok then r.values else e.values,
-	}
+	})
 	if s.suggest and p.context == s.context then
 		suggest(s, env, effects)
 	end
@@ -606,8 +599,14 @@ end
 
 -- Level chips for the lines shown: per level, the label that carries it
 -- (an indexed `level` label when the lines have one, Loki's detected_level
--- otherwise) and how many lines have it.
+-- otherwise) and how many lines have it. Lines are never changed in place
+-- once shown, so the chips of the last list asked for are kept.
+local chipsOf: { lines: { Line }?, chips: { LevelChip } } = { lines = nil, chips = {} }
+
 function M.levelChips(lines: { Line }): { LevelChip }
+	if chipsOf.lines == lines then
+		return chipsOf.chips
+	end
 	local byLevel: { [string]: LevelChip } = {}
 	for _, l in lines do
 		local chip = byLevel[l.level]
@@ -635,6 +634,7 @@ function M.levelChips(lines: { Line }): { LevelChip }
 			table.insert(out, byLevel[level])
 		end
 	end
+	chipsOf.lines, chipsOf.chips = lines, out
 	return out
 end
 
@@ -746,20 +746,19 @@ end
 
 -- Jumps --------------------------------------------------------------------------------
 
--- Finds the trace id of every line not looked at yet ("" when it names
--- none); ids of lines no longer shown are dropped.
+-- Finds the trace id of every line shown that names one (lines already
+-- indexed keep theirs); ids of lines no longer shown are dropped.
 function M.indexTraceIds(s: State)
 	local ids: { [string]: string } = {}
 	local matcher = s.trace_matcher
 	for _, l in s.lines do
-		ids[l.id] = s.trace_ids[l.id] or Correlate.traceId(l.line, l.metadata, l.parsed, l.labels, matcher) or ""
+		ids[l.id] = s.trace_ids[l.id] or Correlate.traceId(l.line, l.metadata, l.parsed, l.labels, matcher) :: any
 	end
 	s.trace_ids = ids
 end
 
 function M.traceIdOf(s: State, line: Line): string?
-	local id = s.trace_ids[line.id]
-	return if id and id ~= "" then id else nil
+	return s.trace_ids[line.id]
 end
 
 -- `tern-grafana://trace?context=..&id=..` for a line's trace id.
@@ -896,11 +895,12 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		tail_inflight = false,
 		tail_added = 0,
 		suggest = nil,
-		cache = {},
+		cache = SuggestCache.new(PINNED),
 		pending = {},
 		seq = 0,
 		overlay = nil,
 		trace_ids = {},
+		seen = {},
 		sync = Shared.new("logs", env.now_ms, savedTable.sync == true),
 		trace_matcher = (Correlate.traceMatcher(options.trace_id_pattern) or Correlate.traceMatcher(nil)) :: any,
 	}
@@ -1250,7 +1250,7 @@ local function tagGen(tag: string, prefix: string): string?
 	return string.sub(tag, #prefix + 1)
 end
 
-function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local tag = msg.tag
@@ -1261,27 +1261,42 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			local gen = tonumber(q)
 			if gen == s.gen and s.inflight and s.inflight.gen == gen then
 				finish(s, env, msg.response)
+			else
+				return s, effects, false
 			end
 		elseif v then
 			local gen, step = string.match(v, "^(%d+):(%d+)$")
 			if tonumber(gen) == s.gen and s.volume_loading then
 				volumeDone(s, env, tonumber(step) :: number, msg.response)
+			else
+				return s, effects, false
 			end
 		elseif p then
 			if tonumber(p) == s.gen and s.tail_inflight then
 				pollDone(s, env, msg.response)
+			else
+				return s, effects, false
 			end
 		elseif tagGen(tag, M.SUGGEST_TAG) then
 			suggestionDone(s, env, tag, msg.response, effects)
 		end
 	elseif msg.kind == "tick" then
 		if msg.tag == M.TAIL_TAG .. s.tail_gen and s.tail then
+			local before = #effects
 			poll(s, env, effects)
 			armTail(s, effects)
+			if #effects == before + 1 then
+				-- No poll went out (one is still running): only the re-arm.
+				return s, effects, false
+			end
 		elseif Shared.isTick(s.sync, msg.tag) then
-			local r = Shared.poll(s.sync, env)
-			adoptRange(s, r, env, effects)
+			local adopted = adoptRange(s, Shared.poll(s.sync, env), env, effects)
 			table.insert(effects, Shared.timer(s.sync))
+			if not adopted then
+				return s, effects, false
+			end
+		else
+			return s, effects, false
 		end
 	elseif msg.kind == "event" then
 		event(s, msg.ev, env, effects)

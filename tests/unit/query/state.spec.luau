@@ -354,17 +354,20 @@ describe("Query block keys", function()
 		expect(S.find(tickFx, "timer").tag).toBe(timer.tag)
 		press(s, env, "a")
 		expect(s.refresh_ms).toBeNil()
-		local _, stale = State.update(s, { kind = "tick", tag = timer.tag }, env)
+		-- Nothing to draw or save: the runner skips the paint (contract 3.1).
+		local _, stale, changed = State.update(s, { kind = "tick", tag = timer.tag }, env)
 		expect(#stale).toBe(0)
+		expect(changed).toBe(false)
 	end)
 
 	it("does not stack queries when a refresh tick finds one running", function()
 		local s, env = ready()
 		local timer = S.find(press(s, env, "a"), "timer")
 		press(s, env, "r")
-		local _, tickFx = State.update(s, { kind = "tick", tag = timer.tag }, env)
+		local _, tickFx, changed = State.update(s, { kind = "tick", tag = timer.tag }, env)
 		expect(S.find(tickFx, "http")).toBeNil()
 		expect(S.find(tickFx, "timer") ~= nil).toBe(true)
+		expect(changed).toBe(false)
 	end)
 
 	-- Tern keeps every distinct chart blob: a refresh that brought the same
@@ -392,8 +395,9 @@ describe("Query block keys", function()
 			return if k == Visibility.KEY then Visibility.record({ 9 }, if shown then { 9 } else {}) else nil
 		end
 		local timer = S.find(press(s, env, "a"), "timer")
-		local _, hidden = State.update(s, { kind = "tick", tag = timer.tag }, env)
+		local _, hidden, quiet = State.update(s, { kind = "tick", tag = timer.tag }, env)
 		expect(hidden).toEqual({ { kind = "timer", tag = timer.tag, ms = Visibility.POLL_MS } })
+		expect(quiet).toBe(false)
 		shown = true
 		local _, tickFx = State.update(s, { kind = "tick", tag = timer.tag }, env)
 		expect(S.find(tickFx, "http") ~= nil).toBe(true)

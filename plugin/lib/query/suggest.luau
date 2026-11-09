@@ -80,28 +80,52 @@ end
 
 type Candidate = { label: string, kind: ItemKind }
 
+-- One list ranked as `kind`, minus the names in `skip`.
+type Source = { list: { string }, kind: ItemKind, skip: { [string]: boolean }? }
+
+-- Lower-cased copies of the lists ranked so far (a context's metric names
+-- are ranked again on every keystroke), dropped with their list.
+local lowered: { [{ string }]: { string } } = setmetatable({} :: any, { __mode = "k" })
+
+local function lowerOf(list: { string }): { string }
+	local l = lowered[list]
+	if l == nil then
+		l = table.create(#list)
+		for i, v in list do
+			l[i] = string.lower(v)
+		end
+		lowered[list] = l
+	end
+	return l
+end
+
 -- Prefix matches first, then other substring matches, case-insensitive,
--- each group in candidate order. The text being replaced itself is left out
+-- each group in source order. The text being replaced itself is left out
 -- (accepting it changes nothing).
-local function rank(cands: { Candidate }, prefix: string, keepExact: { [ItemKind]: boolean }): { Candidate }
+local function rank(sources: { Source }, prefix: string, keepExact: { [ItemKind]: boolean }): { Candidate }
 	local needle = string.lower(prefix)
 	local front: { Candidate }, back: { Candidate } = {}, {}
-	for _, c in cands do
-		if c.label == prefix and not keepExact[c.kind] then
-			continue
-		end
-		if needle == "" then
-			table.insert(front, c)
-		else
-			local at = string.find(string.lower(c.label), needle, 1, true)
-			if at == 1 then
-				table.insert(front, c)
-			elseif at then
-				table.insert(back, c)
+	for _, src in sources do
+		local kind: ItemKind, skip, list = src.kind, src.skip, src.list
+		local dropExact = not keepExact[kind]
+		local lower = if needle == "" then list else lowerOf(list)
+		for i, label in list do
+			if (skip and skip[label]) or (dropExact and label == prefix) then
+				continue
 			end
-		end
-		if #front >= M.MAX_ITEMS then
-			break
+			if needle == "" then
+				table.insert(front, { label = label, kind = kind })
+			else
+				local at = string.find(lower[i], needle, 1, true)
+				if at == 1 then
+					table.insert(front, { label = label, kind = kind })
+				elseif at and #back < M.MAX_ITEMS then
+					table.insert(back, { label = label, kind = kind })
+				end
+			end
+			if #front >= M.MAX_ITEMS then
+				return front
+			end
 		end
 	end
 	for _, c in back do
@@ -113,13 +137,9 @@ local function rank(cands: { Candidate }, prefix: string, keepExact: { [ItemKind
 	return front
 end
 
-local function add(cands: { Candidate }, list: { string }?, kind: ItemKind, skip: { [string]: boolean }?)
+local function add(sources: { Source }, list: { string }?, kind: ItemKind, skip: { [string]: boolean }?)
 	if list then
-		for _, v in list do
-			if not (skip and skip[v]) then
-				table.insert(cands, { label = v, kind = kind })
-			end
-		end
+		table.insert(sources, { list = list, kind = kind, skip = skip })
 	end
 end
 
@@ -134,32 +154,32 @@ end
 local KEEP_CALLS: { [ItemKind]: boolean } = { ["function"] = true, aggregation = true }
 
 function M.items(ctx: Context, data: Data): { Item }
-	local cands: { Candidate } = {}
+	local sources: { Source } = {}
 	local keep: { [ItemKind]: boolean } = {}
 	local prefix = ctx.prefix
 	local k = ctx.kind
 	if k == "expr" then
 		keep = KEEP_CALLS
-		add(cands, Promql.AGGREGATIONS, "aggregation")
-		add(cands, Promql.FUNCTIONS, "function")
-		add(cands, Promql.KEYWORDS, "keyword")
-		add(cands, data.lists[M.valuesKey("__name__", nil)], "metric")
+		add(sources, Promql.AGGREGATIONS, "aggregation")
+		add(sources, Promql.FUNCTIONS, "function")
+		add(sources, Promql.KEYWORDS, "keyword")
+		add(sources, data.lists[M.valuesKey("__name__", nil)], "metric")
 	elseif k == "label_name" then
 		local skip = set(ctx.used)
 		skip.__name__ = ctx.metric ~= nil
-		add(cands, data.lists[M.labelsKey(ctx.metric)], "label", skip)
+		add(sources, data.lists[M.labelsKey(ctx.metric)], "label", skip)
 	elseif k == "grouping" then
 		local skip = set(ctx.used)
 		skip.__name__ = true
-		add(cands, data.lists[M.labelsKey(nil)], "label", skip)
+		add(sources, data.lists[M.labelsKey(nil)], "label", skip)
 	elseif k == "label_value" then
 		local label = ctx.label or ""
 		local key = if label == "__name__" then M.valuesKey("__name__", nil) else M.valuesKey(label, ctx.metric)
-		add(cands, data.lists[key], "value")
+		add(sources, data.lists[key], "value")
 	elseif k == "duration" then
-		add(cands, Promql.DURATIONS, "duration")
+		add(sources, Promql.DURATIONS, "duration")
 	end
-	local ranked = rank(cands, prefix, keep)
+	local ranked = rank(sources, prefix, keep)
 	local items: { Item } = table.create(#ranked)
 	local metadata = data.metadata
 	for i, c in ranked do

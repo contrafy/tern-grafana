@@ -19,6 +19,7 @@
 
 local Env = require("../env")
 local Frame = require("./types")
+local Hash = require("../hash")
 local LogsPanel = require("../panels/logs")
 local Tbl = require("../tbl")
 
@@ -49,15 +50,20 @@ local M = {}
 M.FRAME_TYPE = "LabeledTimeValues"
 
 -- 32-bit FNV-1a of `s` as 8 hex digits.
-function M.hash(s: string): string
-	local h = 2166136261
+M.hash = Hash.fnv1a32hex
+
+-- FNV-1a 32-bit state `h` continued over `s`: fnv(a .. b) is
+-- continue(fnv(a), b), so a stream's prefix is hashed once for all its lines.
+local function continueFnv(h: number, s: string): number
 	for i = 1, #s do
 		h = bit32.bxor(h, string.byte(s, i))
-		-- h * 16777619 mod 2^32 without leaving exact double range.
 		h = (bit32.lshift(h, 24) + h * 403) % 4294967296
 	end
-	return string.format("%08x", h)
+	return h
 end
+
+-- Lines without structured metadata or parsed labels share this table.
+local EMPTY: Labels = table.freeze({})
 
 -- Labels as `k="v"` sorted by name, the stable identity of a stream.
 function M.labelsKey(labels: Labels): string
@@ -137,10 +143,10 @@ local function makeLine(
 	metadata: Labels,
 	parsed: Labels,
 	categorized: boolean,
-	streamKey: string
+	streamState: number
 ): Line
 	return {
-		id = ns .. "_" .. M.hash(streamKey .. "\n" .. text),
+		id = ns .. "_" .. string.format("%08x", continueFnv(streamState, text)),
 		ts_ns = ns,
 		time_ms = M.nsToMs(ns),
 		line = text,
@@ -196,19 +202,25 @@ function M.streams(data: any, env: Env): { Line }
 		if type(values) ~= "table" then
 			continue
 		end
-		local streamKey = M.labelsKey(labels)
+		local streamState = Hash.fnv1a32(M.labelsKey(labels) .. "\n")
 		for _, v in values do
 			if type(v) ~= "table" or not isNs(v[1]) or type(v[2]) ~= "string" then
 				continue
 			end
 			local extra = Env.value(env, v[3])
-			local metadata: Labels = {}
-			local parsed: Labels = {}
+			local metadata: Labels = EMPTY
+			local parsed: Labels = EMPTY
 			if type(extra) == "table" then
 				metadata = strings(env, Env.value(env, extra.structuredMetadata))
 				parsed = strings(env, Env.value(env, extra.parsed))
+				if next(metadata) == nil then
+					metadata = EMPTY
+				end
+				if next(parsed) == nil then
+					parsed = EMPTY
+				end
 			end
-			table.insert(lines, makeLine(v[1], v[2], labels, metadata, parsed, categorized, streamKey))
+			table.insert(lines, makeLine(v[1], v[2], labels, metadata, parsed, categorized, streamState))
 		end
 	end
 	M.sort(lines)
@@ -275,12 +287,18 @@ function M.fromFrames(frames: { Frame }, env: Env): { Line }
 			end
 			local types = strings(env, if typesField then typesField.values[j] else nil)
 			local categorized = typesField ~= nil and next(types) ~= nil
-			local labels: Labels, metadata: Labels, parsed: Labels = {}, {}, {}
+			local labels: Labels, metadata: Labels, parsed: Labels = {}, EMPTY, EMPTY
 			for k, v in all do
 				local kind = types[k]
 				if kind == "S" then
+					if metadata == EMPTY then
+						metadata = {}
+					end
 					metadata[k] = v
 				elseif kind == "P" then
+					if parsed == EMPTY then
+						parsed = {}
+					end
 					parsed[k] = v
 				else
 					labels[k] = v
@@ -288,7 +306,15 @@ function M.fromFrames(frames: { Frame }, env: Env): { Line }
 			end
 			table.insert(
 				lines,
-				makeLine(ns :: string, text, labels, metadata, parsed, categorized, M.labelsKey(labels))
+				makeLine(
+					ns :: string,
+					text,
+					labels,
+					metadata,
+					parsed,
+					categorized,
+					Hash.fnv1a32(M.labelsKey(labels) .. "\n")
+				)
 			)
 		end
 	end
