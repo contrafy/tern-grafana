@@ -295,6 +295,10 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		Answers.onQuery(s, key, msg.response, env)
 	elseif kind == "x" then
 		return Answers.onExtra(s, parts, msg.response, env)
+	elseif kind == "ds" then
+		return Answers.onJob(s, parts, msg.response, env, effects)
+	elseif kind == "dsv" then
+		return Answers.onVariableJob(s, parts, msg.response, env, effects)
 	elseif kind == "png" then
 		return Answers.onPng(s, msg.tag, msg.response, env, effects)
 	else

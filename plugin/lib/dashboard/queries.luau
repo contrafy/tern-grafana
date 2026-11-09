@@ -7,12 +7,20 @@
 -- means "per target"; `${ds}` resolves through the variables; a missing
 -- reference is the instance default; a bare string is a legacy name or uid.
 --
--- Which datasources run natively (`resolve`): Prometheus, Loki and TestData
--- as before; Tempo for the panels that draw its frames; and every other
--- backend datasource plugin (frontend settings `meta.backend`, else a known
--- list) through the generic path below. Frontend-only plugins, and backend
--- ones whose frontends query or post-process in the browser (CLIENT_SIDE,
--- and the per-target rules of targetBlocker), keep a precise reason.
+-- Which datasources run natively (`resolve`): a type with a datasource
+-- module (lib/datasources/registry.luau) is decided by its module alone;
+-- otherwise Prometheus, Loki and TestData as before; Tempo for the panels
+-- that draw its frames; and every other backend datasource plugin (frontend
+-- settings `meta.backend`, else a known list) through the generic path
+-- below. Frontend-only plugins, and backend ones whose frontends query or
+-- post-process in the browser (CLIENT_SIDE, and the per-target rules of
+-- targetBlocker), keep a precise reason.
+--
+-- Datasource modules: backend ones shape their targets (`shape`, else the
+-- generic shaping with their `format`) and post-process their frames
+-- (`postprocess`); frontend ones run jobs (`start`/`step`), one per
+-- datasource instance, whose requests the Dashboard block sends and whose
+-- results join the /api/ds/query ones in target order (`combine`).
 --
 -- Each target is shaped as its datasource's frontend shapes it before
 -- DataSourceWithBackend.query (packages/grafana-runtime/src/utils/
@@ -49,6 +57,8 @@
 -- when config `query.exemplars` is on (and never when it is off, whatever the
 -- target says); the exemplar frames come back apart from the series frames.
 
+local DsRegistry = require("../datasources/registry")
+local DsTypes = require("../datasources/types")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local FrameGrafana = require("../frame/grafana")
@@ -95,7 +105,6 @@ M.KNOWN_BACKEND = table.freeze({
 	mssql = true,
 	elasticsearch = true,
 	["yesoreyeram-infinity-datasource"] = true,
-	["grafana-incident-datasource"] = true,
 })
 
 -- Backend plugins whose frontends query or post-process in the browser in
@@ -127,18 +136,7 @@ M.EXPRESSION = "__expr__"
 -- Default `maxLines` for Loki log queries (Grafana's datasource default).
 M.LOKI_MAX_LINES = 1000
 
--- manage_alerts: the data source manages alert rules (Grafana's
--- isDataSourceManagingAlerts: jsonData.manageAlerts, else the
--- defaultDatasourceManageAlertsUiToggle of Grafana 12, else true).
--- backend: the plugin has a backend (frontend settings meta.backend).
-export type Datasource = {
-	uid: string,
-	type: string,
-	name: string,
-	is_default: boolean,
-	manage_alerts: boolean?,
-	backend: boolean?,
-}
+export type Datasource = DsTypes.Datasource
 
 export type DsRef = { uid: string, type: string }
 
@@ -156,6 +154,8 @@ export type Context = {
 	exemplars: boolean?,
 	-- Queries.resolve answers already computed for this scope (see Resolved).
 	resolved: Resolved?,
+	-- Grafana's major version (frontend settings buildInfo); nil: unknown.
+	grafana_major: number?,
 }
 
 -- Queries.resolve answers by panel JSON table, all for one scope and
@@ -163,22 +163,36 @@ export type Context = {
 -- one advance resolve each panel once.
 export type Resolved = { [any]: { refs: { DsRef }?, err: string? } }
 
+-- A frontend datasource job of a panel: the visible refIds it answers, its
+-- run, and the requests of its first step (part of the query's identity).
+export type PanelJob = { ref_ids: { string }, run: DsRegistry.Run, first: { DsTypes.DsRequest } }
+
+-- Frames of a backend datasource module's targets, post-processed together
+-- (one group per datasource instance, as Grafana calls the plugin's query).
+export type PostGroup = {
+	module: DsTypes.DsModule,
+	ref_ids: { string },
+	targets: { { [string]: any } },
+	ctx: DsTypes.DsContext,
+}
+
 export type PanelQuery = {
+	-- The /api/ds/query objects (none when every target runs as a job).
 	queries: { { [string]: any } },
 	-- The refIds whose results the panel shows (hidden ones are not).
 	ref_ids: { string },
 	interval_ms: number,
 	max_points: number,
+	jobs: { PanelJob }?,
+	-- With jobs: the order results combine in (0: the /api/ds/query
+	-- answer, i: jobs[i]), by each part's first target, and the parsed
+	-- /api/ds/query answer once it arrived.
+	parts: { number }?,
+	dsq: PanelData?,
+	post: { PostGroup }?,
 }
 
-export type PanelData = {
-	frames: { Frame },
-	-- "A: parse error ..." per failed target.
-	errors: { string },
-	warnings: { string },
-	-- Exemplars of time series targets, sorted by time.
-	exemplars: { FrameProm.Exemplar }?,
-}
+export type PanelData = DsTypes.PanelData
 
 -- A `-- Dashboard --` query: the source panel and whether its
 -- transformations apply.
@@ -202,6 +216,9 @@ local function findDs(list: { Datasource }, key: string): Datasource?
 	end
 	return nil
 end
+
+-- A datasource of `list` by uid, else by name.
+M.findDatasource = findDs
 
 local function defaultDs(list: { Datasource }): Datasource?
 	for _, ds in list do
@@ -325,18 +342,8 @@ local function typeBlocker(ref: DsRef, list: { Datasource }, panelType: string):
 	return string.format("%s queries are not run natively", kind)
 end
 
--- Variables of `scope` that `text` references.
-local function referencesScope(text: string, scope: Scope): boolean
-	for _, name in Interpolate.references(text) do
-		if scope[name] then
-			return true
-		end
-	end
-	return false
-end
-
 -- Rules for one target of a supported datasource.
-local function targetBlocker(ref: DsRef, t: { [string]: any }, scope: Scope, env: Env): string?
+local function targetBlocker(ref: DsRef, t: { [string]: any }, env: Env): string?
 	local kind = ref.type
 	if kind == "grafana-testdata-datasource" or kind == "testdata" then
 		local scenario = str(env, t.scenarioId) or "random_walk"
@@ -355,22 +362,49 @@ local function targetBlocker(ref: DsRef, t: { [string]: any }, scope: Scope, env
 		then
 			return string.format("Infinity %s queries with the %s parser run in the browser", qt, parser or "default")
 		end
-	elseif kind == "grafana-incident-datasource" then
-		-- Its interpolateVariable writes `label:'..'`/`severity:'..'` filters
-		-- by variable query type and drops "All" in the browser.
-		local q = str(env, t.queryString)
-		if q and referencesScope(q, scope) then
-			return "Grafana Incident formats query variables in the browser"
-		end
 	end
 	return nil
 end
 
+-- A target of a datasource module's type: the instance must be one
+-- Grafana lists (its url and settings come from there); then the module's
+-- blocker decides. Server-side expressions cannot read a job's results.
+local function moduleBlocker(
+	mod: DsTypes.DsModule,
+	ref: DsRef,
+	t: { [string]: any },
+	scope: Scope,
+	list: { Datasource },
+	expr: boolean,
+	major: number?,
+	env: Env
+): string?
+	local ds = findDs(list, ref.uid)
+	if ds == nil then
+		return string.format("%s queries are not run natively", ref.type)
+	end
+	if expr and mod.start then
+		return string.format("server-side expressions cannot read %s queries (run in the browser)", ref.type)
+	end
+	local blocker = mod.blocker
+	if blocker == nil then
+		return nil
+	end
+	return blocker(t, { scope = scope, datasources = list, ds = ds :: Datasource, grafana_major = major }, env)
+end
+
 -- The datasource of each target Grafana sends, or why the panel cannot be
 -- queried natively. Panels without targets (text) need no query. A
--- `-- Dashboard --` panel resolves to that one reference.
-function M.resolve(panel: { [string]: any }, scope: Scope, list: { Datasource }, env: Env): ({ DsRef }?, string?)
-	local ts = targets(panel, env)
+-- `-- Dashboard --` panel resolves to that one reference. `major`: Grafana's
+-- major version, for datasource modules whose rules depend on it.
+function M.resolve(
+	panel: { [string]: any },
+	scope: Scope,
+	list: { Datasource },
+	env: Env,
+	major: number?
+): ({ DsRef }?, string?)
+	local ts, expr = targets(panel, env)
 	local panelRef, panelErr = resolveRef(panel.datasource, scope, list, env)
 	if panelRef and panelRef.uid == M.DASHBOARD then
 		return { panelRef }, nil
@@ -393,7 +427,10 @@ function M.resolve(panel: { [string]: any }, scope: Scope, list: { Datasource },
 		if ref.uid == M.MIXED then
 			return nil, "a target has no datasource of its own in a mixed panel"
 		end
-		local blocker = typeBlocker(ref, list, panelType) or targetBlocker(ref, t, scope, env)
+		local mod = DsRegistry.module(ref.type)
+		local blocker = if mod
+			then moduleBlocker(mod, ref, t, scope, list, expr, major, env)
+			else typeBlocker(ref, list, panelType) or targetBlocker(ref, t, env)
 		if blocker then
 			return nil, blocker
 		end
@@ -408,14 +445,15 @@ function M.resolveIn(
 	panel: { [string]: any },
 	scope: Scope,
 	list: { Datasource },
-	env: Env
+	env: Env,
+	major: number?
 ): ({ DsRef }?, string?)
 	if resolved == nil then
-		return M.resolve(panel, scope, list, env)
+		return M.resolve(panel, scope, list, env, major)
 	end
 	local hit = resolved[panel]
 	if hit == nil then
-		local refs, err = M.resolve(panel, scope, list, env)
+		local refs, err = M.resolve(panel, scope, list, env, major)
 		hit = { refs = refs, err = err }
 		resolved[panel] = hit
 	end
@@ -570,10 +608,42 @@ local function shape(ref: DsRef, t: { [string]: any }, scope: Scope, expr: boole
 	return q
 end
 
--- The /api/ds/query objects for a panel; nil when it has nothing to query
--- (a `-- Dashboard --` panel gets its frames from the source panel).
+-- What a datasource module sees for targets of instance `ds`.
+local function dsContext(
+	ctx: Context,
+	ds: Datasource,
+	scope: Scope,
+	interval_ms: number,
+	maxPoints: number,
+	env: Env
+): DsTypes.DsContext
+	return {
+		scope = scope,
+		from_ms = ctx.from_ms,
+		to_ms = ctx.to_ms,
+		interval_ms = interval_ms,
+		max_points = maxPoints,
+		now_ms = env.now_ms,
+		datasources = ctx.datasources,
+		ds = ds,
+		grafana_major = ctx.grafana_major,
+		dashboard_uid = ctx.dashboard_uid,
+	}
+end
+
+-- Targets of one frontend datasource instance, in target order.
+type JobGroup = {
+	module: DsTypes.DsModule,
+	ctx: DsTypes.DsContext,
+	targets: { DsTypes.Target },
+	ref_ids: { string },
+}
+
+-- The /api/ds/query objects for a panel, and the jobs of its frontend
+-- datasources; nil when it has nothing to query (a `-- Dashboard --` panel
+-- gets its frames from the source panel).
 function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?, string?)
-	local refs, err = M.resolveIn(ctx.resolved, panel, ctx.scope, ctx.datasources, env)
+	local refs, err = M.resolveIn(ctx.resolved, panel, ctx.scope, ctx.datasources, env, ctx.grafana_major)
 	if refs == nil then
 		return nil, err
 	end
@@ -589,6 +659,11 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 	local queries: { { [string]: any } } = {}
 	local refIds: { string } = {}
 	local smallest: number? = nil
+	local parts: { number } = {}
+	local groups: { JobGroup } = {}
+	local groupOf: { [string]: number } = {}
+	local post: { PostGroup } = {}
+	local postOf: { [string]: PostGroup } = {}
 	for i, t in ts do
 		local ref = refs[i]
 		local refId = str(env, t.refId) or string.char(64 + math.min(i, 26))
@@ -606,6 +681,9 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 			table.insert(queries, q)
 			if not hidden then
 				table.insert(refIds, refId)
+			end
+			if table.find(parts, 0) == nil then
+				table.insert(parts, 0)
 			end
 			continue
 		end
@@ -637,7 +715,48 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 			}),
 			ctx.scope
 		)
-		local q = shape(ref, t, scope, expr, env)
+		local mod = DsRegistry.module(ref.type)
+		local ds = if mod then findDs(ctx.datasources, ref.uid) else nil
+		if mod and ds and mod.start then
+			local gi = groupOf[ref.uid]
+			if gi == nil then
+				table.insert(groups, {
+					module = mod,
+					ctx = dsContext(ctx, ds, scope, interval.interval_ms, maxPoints, env),
+					targets = {},
+					ref_ids = {},
+				})
+				gi = #groups
+				groupOf[ref.uid] = gi
+				table.insert(parts, gi)
+			end
+			local g = groups[gi :: number]
+			table.insert(g.targets, t)
+			if not hidden then
+				table.insert(g.ref_ids, refId)
+			end
+			continue
+		end
+		local q: { [string]: any }
+		if mod and ds then
+			local dctx = dsContext(ctx, ds, scope, interval.interval_ms, maxPoints, env)
+			local shapeFn = mod.shape
+			q = if shapeFn
+				then shapeFn(t, dctx, env)
+				else interpolateAll(t, scope, { format = DsRegistry.formatter(mod, dctx) }, env)
+			if mod.postprocess then
+				local pg = postOf[ref.uid]
+				if pg == nil then
+					pg = { module = mod, ref_ids = {}, targets = {}, ctx = dctx }
+					postOf[ref.uid] = pg
+					table.insert(post, pg :: PostGroup)
+				end
+				table.insert((pg :: PostGroup).ref_ids, refId)
+				table.insert((pg :: PostGroup).targets, q)
+			end
+		else
+			q = shape(ref, t, scope, expr, env)
+		end
 		q.refId = refId
 		q.datasource = { uid = ref.uid, type = ref.type }
 		q.intervalMs = interval.interval_ms
@@ -654,15 +773,75 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 		if not hidden then
 			table.insert(refIds, refId)
 		end
+		if table.find(parts, 0) == nil then
+			table.insert(parts, 0)
+		end
 	end
-	if #queries == 0 then
+	if #queries == 0 and #groups == 0 then
 		return nil, nil
 	end
-	return { queries = queries, ref_ids = refIds, interval_ms = smallest or 0, max_points = maxPoints }, nil
+	local pq: PanelQuery = { queries = queries, ref_ids = refIds, interval_ms = smallest or 0, max_points = maxPoints }
+	if #post > 0 then
+		pq.post = post
+	end
+	if #groups > 0 then
+		local jobs: { PanelJob } = {}
+		for gi, g in groups do
+			local start = g.module.start :: ({ DsTypes.Target }, DsTypes.DsContext, Env) -> DsTypes.Job
+			local run, first = DsRegistry.begin(g.module, start(g.targets, g.ctx, env), g.ref_ids, env)
+			jobs[gi] = { ref_ids = g.ref_ids, run = run, first = first }
+		end
+		pq.jobs = jobs
+		pq.parts = parts
+	end
+	return pq, nil
+end
+
+-- What identifies a panel query: its /api/ds/query objects and its jobs'
+-- first requests.
+function M.identity(pq: PanelQuery, env: Env): string
+	local jobs = pq.jobs
+	if jobs == nil then
+		return env.encode(pq.queries)
+	end
+	local first: { any } = {}
+	for i, j in jobs do
+		first[i] = j.first
+	end
+	return env.encode(pq.queries) .. "\31" .. env.encode(first)
 end
 
 function M.request(route: Route.Route, pq: PanelQuery, ctx: Context, env: Env): Request
 	return GrafanaSource.dsQueryRequest(route, pq.queries, { from_ms = ctx.from_ms, to_ms = ctx.to_ms }, env)
+end
+
+-- Each post-processing group's frames replaced by its module's output, at
+-- the place of the group's first frame.
+local function postprocess(frames: { Frame }, groups: { PostGroup }, env: Env): { Frame }
+	for _, g in groups do
+		local mine: { [string]: boolean } = {}
+		for _, refId in g.ref_ids do
+			mine[refId] = true
+		end
+		local own: { Frame } = {}
+		local at: number? = nil
+		local rest: { Frame } = {}
+		for _, f in frames do
+			if f.refId and mine[f.refId :: string] then
+				table.insert(own, f)
+				at = at or #rest + 1
+			else
+				table.insert(rest, f)
+			end
+		end
+		local out = (g.module.postprocess :: any)(own, g.targets, g.ctx, env) :: { Frame }
+		local pos = at or #rest + 1
+		for k, f in out do
+			table.insert(rest, pos + k - 1, f)
+		end
+		frames = rest
+	end
+	return frames
 end
 
 -- Frames of every target in target order; a failed target is an error line
@@ -698,15 +877,70 @@ function M.parse(response: TransportTypes.Response, pq: PanelQuery, env: Env): (
 			table.insert(data.errors, refId .. ": " .. (res :: any).error.message)
 		end
 	end
+	if pq.post then
+		data.frames = postprocess(data.frames, pq.post :: { PostGroup }, env)
+	end
 	if data.exemplars then
 		FrameProm.sortExemplars(data.exemplars :: { FrameProm.Exemplar })
 	end
 	return data, nil
 end
 
+-- The /api/ds/query part of a query with jobs, from its answer: a failed
+-- request is an error line per target, so the jobs' results still show.
+function M.setAnswer(pq: PanelQuery, response: TransportTypes.Response, env: Env)
+	local data, err = M.parse(response, pq, env)
+	if data == nil then
+		local errors: { string } = {}
+		for _, refId in pq.ref_ids do
+			table.insert(errors, refId .. ": " .. (err or "the query failed"))
+		end
+		data = { frames = {}, errors = errors, warnings = {} }
+	end
+	pq.dsq = data
+end
+
+-- A query with jobs, once every part answered: the parts' results in
+-- target order (frames, error lines, warnings, exemplars); nil while one is
+-- pending.
+function M.combine(pq: PanelQuery): PanelData?
+	local jobs: { PanelJob } = pq.jobs or {}
+	if #pq.queries > 0 and pq.dsq == nil then
+		return nil
+	end
+	for _, j in jobs do
+		if j.run.outcome == nil then
+			return nil
+		end
+	end
+	local out: PanelData = { frames = {}, errors = {}, warnings = {} }
+	local parts: { number } = pq.parts or { 0 }
+	for _, part in parts do
+		local d = if part == 0 then pq.dsq else DsRegistry.panelData(jobs[part].run)
+		if d == nil then
+			continue
+		end
+		local src = d :: PanelData
+		table.move(src.frames, 1, #src.frames, #out.frames + 1, out.frames)
+		table.move(src.errors, 1, #src.errors, #out.errors + 1, out.errors)
+		table.move(src.warnings, 1, #src.warnings, #out.warnings + 1, out.warnings)
+		if src.exemplars then
+			local list = out.exemplars or {}
+			table.move(src.exemplars :: { FrameProm.Exemplar }, 1, #(src.exemplars :: any), #list + 1, list)
+			out.exemplars = list
+		end
+	end
+	if out.exemplars then
+		FrameProm.sortExemplars(out.exemplars :: { FrameProm.Exemplar })
+	end
+	return out
+end
+
 -- Grafana's datasource catalog for the signed-in user, from the frontend
 -- settings body (`datasources` by name, `defaultDatasource` by name). Unlike
--- /api/datasources it needs no admin rights.
+-- /api/datasources it needs no admin rights. Each keeps its `url` and a copy
+-- of its `jsonData` for datasource modules: they may hold credentials
+-- (lib/datasources/types.luau), so they never leave memory.
 function M.frontendDatasources(response: TransportTypes.Response, env: Env): { Datasource }
 	local doc = Response.json(response, env, "frontend settings")
 	local out: { Datasource } = {}
@@ -739,6 +973,8 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 				is_default = Env.value(env, ds.isDefault) == true or name == defaultName,
 				manage_alerts = manage,
 				backend = if type(backend) == "boolean" then backend else nil,
+				url = str(env, ds.url),
+				json_data = if type(jsonData) == "table" then Tbl.copy(jsonData) else nil,
 			})
 		end
 	end
@@ -770,7 +1006,7 @@ function M.frontendFeatures(response: TransportTypes.Response, env: Env): { [str
 	end
 	local build = Env.value(env, doc.buildInfo)
 	local version = if type(build) == "table" then Env.value(env, build.version) else nil
-	local major = tonumber(if type(version) == "string" then string.match(version, "^(%d+)%.") else nil)
+	local major = M.major(if type(version) == "string" then version else nil)
 	if major then
 		for name, since in GA_FEATURES do
 			if major >= since then
@@ -779,6 +1015,11 @@ function M.frontendFeatures(response: TransportTypes.Response, env: Env): { [str
 		end
 	end
 	return out
+end
+
+-- The major version of a Grafana version string ("12.4.0" -> 12).
+function M.major(version: string?): number?
+	return tonumber(if version then string.match(version, "^(%d+)%.") else nil)
 end
 
 return M

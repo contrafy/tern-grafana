@@ -30,6 +30,10 @@ export type Var = {
 	-- One value of a repeated panel or row: a plain string even when the
 	-- variable is multi-value (Grafana's scopedVars).
 	single: boolean?,
+	-- The variable's name and raw query (a string or the datasource's query
+	-- object), for datasource formatters that key on them.
+	name: string?,
+	query: any,
 }
 
 export type Scope = { [string]: Var }

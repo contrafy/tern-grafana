@@ -424,6 +424,14 @@ grafana/13.3.0/search_tag.json	GET	/api/search?tag=fixtures&type=dash-db&limit=1
 grafana/13.3.0/user.json	GET	/api/user	200	2026-11-09T15:56:02Z	13.3.0	-
 grafana/13.3.0/user_bad_token.json	GET	/api/user	401	2026-11-09T15:56:02Z	13.3.0	-
 grafana/13.3.0/user_unauthorized.json	GET	/api/user	401	2026-11-09T15:56:02Z	13.3.0	-
+incident/dashboard.json	GET	/api/dashboards/uid/incident-insights (synthetic, shape of an Incident Insights dashboard)	200	2026-11-09T00:00:00Z	synthetic	-
+incident/ds_query_incidents.json	POST	/api/ds/query queryType incidents (synthetic, recorded schema of grafana-incident-datasource 0.133.0)	200	2026-11-09T00:00:00Z	synthetic	-
+incident/ds_query_invalid.json	POST	/api/ds/query queryString "or(unsupported query name)" (synthetic, recorded error of 0.133.0)	400	2026-11-09T00:00:00Z	synthetic	-
+incident/frontend_settings.json	GET	/api/frontend/settings (synthetic subset: datasources, buildInfo)	200	2026-11-09T00:00:00Z	synthetic	-
+incident/var_labels.json	POST	/api/ds/query queryType labels refId metricFindQuery-labels (synthetic, recorded schema)	200	2026-11-09T00:00:00Z	synthetic	-
+incident/var_roles_error.json	POST	/api/ds/query queryType roles (synthetic, recorded error of 0.133.0)	400	2026-11-09T00:00:00Z	synthetic	-
+incident/var_severities.json	POST	/api/ds/query queryType severities (synthetic, recorded schema)	200	2026-11-09T00:00:00Z	synthetic	-
+incident/var_statuses.json	POST	/api/ds/query queryType statuses (synthetic, recorded schema)	200	2026-11-09T00:00:00Z	synthetic	-
 irm/0.128.0/grafana_permissions.json	GET	/api/access-control/user/permissions (irm and plugins actions only)	200	2026-10-19T19:30:00Z	0.128.0	-
 irm/0.128.0/grafana_user.json	GET	/api/user (service account)	200	2026-10-19T19:30:00Z	0.128.0	-
 irm/0.128.0/incident_activity.json	POST	/api/plugins/grafana-irm-app/resources/api/v1/ActivityService.QueryActivity	200	2026-10-19T19:30:00Z	0.128.0	-

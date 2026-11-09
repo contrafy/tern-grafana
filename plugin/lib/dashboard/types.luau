@@ -3,6 +3,7 @@
 -- and the fresh state `init` starts from.
 
 local DashConfig = require("./config")
+local DsRegistry = require("../datasources/registry")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Ladder = require("./ladder")
@@ -98,8 +99,14 @@ export type Settings = {
 	datasources: { Queries.Datasource },
 	-- Grafana's frontend feature toggles that are on.
 	features: { [string]: boolean },
+	-- Grafana's major version (buildInfo.version); nil while unknown.
+	major: number?,
 	error: string?,
 }
+
+-- A query variable answered by a datasource module's job
+-- (lib/datasources): the variable generation (`var_gen`) it was started in.
+export type VarRun = { gen: number, run: DsRegistry.Run }
 
 export type Phase = "search" | "loading" | "ready" | "error"
 
@@ -142,6 +149,8 @@ export type State = {
 	vars: { Variables.Variable },
 	vars_error: string?,
 	var_gen: number,
+	-- Datasource module jobs of the variables loading, by name.
+	var_runs: { [string]: VarRun },
 	-- Bumped by every change to the variables or the dashboard model: keys
 	-- the scope memo and the repeat expansion.
 	rev: number,
@@ -231,6 +240,7 @@ function M.new(env: Env): State
 		vars = {},
 		vars_error = nil,
 		var_gen = 0,
+		var_runs = {},
 		rev = 0,
 		scope_memo = nil,
 		settings = { status = "loading", renderer = nil, datasources = {}, features = {} },

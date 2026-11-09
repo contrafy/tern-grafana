@@ -7,6 +7,7 @@
 local Advance = require("./advance")
 local Core = require("./core")
 local DashConfig = require("./config")
+local DsRegistry = require("../datasources/registry")
 local Effect = require("../effect")
 local Env = require("../env")
 local GrafanaSource = require("../source/grafana")
@@ -39,6 +40,7 @@ function M.startLoad(s: State, effects: { Effect })
 	s.error = nil
 	s.dashboard = nil
 	s.vars = {}
+	s.var_runs = {}
 	Core.changed(s)
 	s.panels = {}
 	s.memo = {}
@@ -120,11 +122,13 @@ function M.onSettings(s: State, response: any, env: Env, effects: { Effect })
 	local route = s.route :: Route
 	local r = GrafanaSource.parseFrontendSettings(route, response, env)
 	if r.ok then
+		local fs = (r :: any).settings :: GrafanaSource.FrontendSettings
 		s.settings = {
 			status = "ready",
-			renderer = (r :: any).settings.renderer_available == true,
+			renderer = fs.renderer_available == true,
 			datasources = Queries.frontendDatasources(response, env),
 			features = Queries.frontendFeatures(response, env),
+			major = Queries.major(fs.version),
 		}
 	else
 		s.settings = {
@@ -212,31 +216,82 @@ local function readAnswer(s: State, key: string, response: any, env: Env)
 	if pq == nil or Core.find(s, Core.instanceKey(key)) == nil then
 		return
 	end
+	if pq.jobs then
+		-- One part of several: shown once the jobs answered too.
+		Queries.setAnswer(pq, response, env)
+		local all = Queries.combine(pq)
+		if all then
+			Core.showData(s, key, ps, all, env)
+		end
+		return
+	end
 	local data, err = Queries.parse(response, pq, env)
 	if data == nil then
 		ps.status, ps.error = "error", err
 		return
 	end
-	ps.data = data
-	if key == s.focus then
-		-- The selection indexes the old answer's exemplars.
-		s.exemplar, s.ex_anchor = nil, nil
-	end
-	ps.error = nil
-	ps.status = if #data.frames == 0 and #data.errors > 0 then "error" else "ready"
-	if ps.status == "error" then
-		ps.error = table.concat(data.errors, "; ")
-	end
-	ps.drawn = ps.asked
+	Core.showData(s, key, ps, data, env)
 	ps.answer = if body and ps.signature
 		then { sig = ps.signature :: string, status = response.status, body = body, panel_status = ps.status }
 		else nil
-	s.updated_ms = env.now_ms
 end
 
 function M.onQuery(s: State, key: string, response: any, env: Env)
 	readAnswer(s, key, response, env)
 	Advance.syncShared(s, env)
+end
+
+-- A panel's datasource job answer: tag ds/<gen>/<panel gen>/<job>/<request
+-- tag>/<panel key>. Answers to a superseded query, or that the job does
+-- not wait for, are dropped.
+function M.onJob(s: State, parts: { string }, response: any, env: Env, effects: { Effect }): boolean
+	local key = table.concat(parts, "/", 6)
+	local ps = s.panels[key]
+	if ps == nil or tonumber(parts[3] or "") ~= ps.gen or Core.find(s, Core.instanceKey(key)) == nil then
+		return false
+	end
+	local pq = ps.pq
+	local jobs = if pq then pq.jobs else nil
+	local index = tonumber(parts[4] or "") or 0
+	local job = if jobs then jobs[index] else nil
+	if job == nil then
+		return false
+	end
+	local ok, more = DsRegistry.answer(job.run, parts[5] or "", response, env)
+	if not ok then
+		return false
+	end
+	Core.jobRequests(s, ps, key, index, more, effects)
+	local data = Queries.combine(pq :: Queries.PanelQuery)
+	if data then
+		Core.showData(s, key, ps, data, env)
+		Advance.syncShared(s, env)
+	end
+	return true
+end
+
+-- A query variable's datasource job answer: tag dsv/<gen>/<var gen>/<request
+-- tag>/<name>.
+function M.onVariableJob(s: State, parts: { string }, response: any, env: Env, effects: { Effect }): boolean
+	local name = table.concat(parts, "/", 5)
+	local entry = s.var_runs[name]
+	local v = Variables.find(s.vars, name)
+	if entry == nil or v == nil or v.status ~= "loading" or entry.gen ~= tonumber(parts[3] or "") then
+		return false
+	end
+	local ok, more = DsRegistry.answer(entry.run, parts[4] or "", response, env)
+	if not ok then
+		return false
+	end
+	Core.variableRequests(s, entry.gen, name, more, effects)
+	local outcome = entry.run.outcome
+	if outcome then
+		s.var_runs[name] = nil
+		Variables.applyOutcome(v, outcome, Core.scopeOf(s))
+		Core.changed(s)
+		Advance.advance(s, env, false, effects)
+	end
+	return true
 end
 
 -- A module request's answer: tag x/<gen>/<req_gen>/<index>/<panel key>.

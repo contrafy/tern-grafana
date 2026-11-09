@@ -347,13 +347,20 @@ describe("queries for other datasource plugins", function()
 		)
 	end)
 
-	it("runs Grafana Incident queries unless the query string uses a dashboard variable", function()
+	it("runs Grafana Incident queries with dashboard variables, through its datasource module", function()
 		expect(reason("inc", { queryType = "incidents", queryString = "status:active" })).toBeNil()
-		expect(reason("inc", { queryType = "incidents", queryString = "or($hosts) or(status:active)" })).toBe(
-			"Grafana Incident formats query variables in the browser"
-		)
-		-- Not a variable of this dashboard: Grafana leaves it as written too.
-		expect(reason("inc", { queryType = "incidents", queryString = "label:'$x'" })).toBeNil()
+		expect(reason("inc", { queryType = "incidents", queryString = "or($hosts) or(status:active)" })).toBeNil()
+		-- The module needs the instance from Grafana's list (its url and settings).
+		local _, unlisted = Queries.resolve({
+			type = "table",
+			datasource = { uid = "gone", type = "grafana-incident-datasource" },
+			targets = { { refId = "A", queryString = "status:active" } },
+		}, scope, catalog, env)
+		expect(unlisted).toBe("grafana-incident-datasource queries are not run natively")
+		local pq =
+			assert(Queries.build(panelOf("inc", { queryType = "incidents", queryString = "or($hosts)" }), c(), env))
+		-- Grafana 12+ keys Incident's formatter on the variable name; `hosts` is none of its names.
+		expect(pq.queries[1].queryString).toBe("or(unsupported query name)")
 	end)
 
 	it("interpolates every string of a generic backend plugin's target with the default format", function()

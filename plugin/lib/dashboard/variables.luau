@@ -11,6 +11,7 @@
 -- that references another one (`label_values(up{job=~"$job"}, instance)`,
 -- datasource `${ds}`) is fetched after it and refetched when it changes.
 
+local DsTypes = require("../datasources/types")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local Interpolate = require("./interpolate")
@@ -49,6 +50,9 @@ export type Variable = {
 	all_value: string?,
 	-- The query as a string (query variables: the classic function form).
 	query: string,
+	-- The saved query as written: a string, or the datasource's query object
+	-- (Grafana Incident's {queryType}); datasource modules read it.
+	query_model: any,
 	datasource_uid: string?,
 	datasource_type: string?,
 	regex: string,
@@ -163,6 +167,11 @@ local function queryString(env: Env, raw: any): string
 	return str(env, q) or str(env, raw.definition) or ""
 end
 
+local function queryModel(env: Env, raw: any): any
+	local q = Env.value(env, raw.query)
+	return if type(q) == "table" then Tbl.copy(q) else q
+end
+
 local function depsOf(v: Variable): { string }
 	local texts = { v.query, v.regex, v.datasource_uid or "" }
 	local seen: { [string]: boolean } = {}
@@ -219,6 +228,7 @@ local function variableOf(env: Env, raw: any): Variable?
 		include_all = Env.value(env, raw.includeAll) == true,
 		all_value = str(env, raw.allValue),
 		query = queryString(env, raw),
+		query_model = queryModel(env, raw),
 		datasource_uid = dsUid,
 		datasource_type = dsType,
 		regex = str(env, raw.regex) or "",
@@ -470,6 +480,8 @@ function M.scope(vars: { Variable }, ctx: ScopeContext?): Interpolate.Scope
 			include_all = v.include_all,
 			is_all = isAll,
 			all_value = if isAll then v.all_value else nil,
+			name = v.name,
+			query = v.query_model,
 		}
 	end
 	return scope
@@ -774,8 +786,16 @@ function M.sortOptions(options: { Option }, mode: number): { Option }
 end
 
 -- Raw values -> options: the variable's regex (Grafana's
--- metricNamesToVariableValues), duplicates dropped by value, then sorted.
-function M.optionsFrom(v: Variable, values: { string }, scope: Interpolate.Scope): ({ Option }, string?)
+-- metricNamesToVariableValues, applied to the value), duplicates dropped by
+-- value, then sorted. `texts[i]`: the display text of `values[i]` when the
+-- datasource names one (a datasource module's options); the regex's groups
+-- replace it as they replace the value.
+function M.optionsFrom(
+	v: Variable,
+	values: { string },
+	scope: Interpolate.Scope,
+	texts: { string }?
+): ({ Option }, string?)
 	local re: Regex.Regex? = nil
 	if v.regex ~= "" then
 		local source = Interpolate.replace(v.regex, scope, { format = Interpolate.named("regex") })
@@ -793,9 +813,10 @@ function M.optionsFrom(v: Variable, values: { string }, scope: Interpolate.Scope
 			table.insert(out, { text = text, value = value })
 		end
 	end
-	for _, value in values do
+	for i, value in values do
+		local text = if texts then texts[i] or value else value
 		if re == nil then
-			add(value, value)
+			add(text, value)
 			continue
 		end
 		local matches: { Regex.Match } = {}
@@ -837,7 +858,7 @@ function M.optionsFrom(v: Variable, values: { string }, scope: Interpolate.Scope
 		elseif firstGroup then
 			add(firstGroup, firstGroup)
 		else
-			add(value, value)
+			add(text, value)
 		end
 	end
 	return M.sortOptions(out, v.sort), nil
@@ -858,19 +879,31 @@ function M.setError(v: Variable, message: string)
 	v.from_url = false
 end
 
+-- A datasource module's answer to a query variable (lib/datasources): its
+-- options through the variable's regex and sort, or its error.
+function M.applyOutcome(v: Variable, outcome: DsTypes.Outcome, scope: Interpolate.Scope)
+	local opts = outcome.options
+	if opts == nil then
+		M.setError(v, outcome.error or "no values")
+		return
+	end
+	local values: { string } = table.create(#opts)
+	local texts: { string } = table.create(#opts)
+	for i, o in opts do
+		values[i], texts[i] = o.value, o.text
+	end
+	local options, err = M.optionsFrom(v, values, scope, texts)
+	if err then
+		M.setError(v, err)
+	else
+		M.setOptions(v, options)
+	end
+end
+
 -- Options of a datasource variable from Grafana's datasource list.
 function M.datasourceOptions(
 	v: Variable,
-	datasources: {
-		{
-			uid: string,
-			type: string,
-			name: string,
-			is_default: boolean,
-			manage_alerts: boolean?,
-			backend: boolean?,
-		}
-	},
+	datasources: { DsTypes.Datasource },
 	scope: Interpolate.Scope
 ): ({ Option }, string?)
 	local re: Regex.Regex? = nil
