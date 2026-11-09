@@ -249,9 +249,9 @@ for _, version in S.VERSIONS do
 			end)
 			expect(title.p.truncate).toBeNil()
 			local p2, f2 = fidelity(2)
-			-- gridPos 6x5 (480x182 px), card body 136 px: titleSize 23 (22 px class)
-			-- and valueSize 70 leave two title lines in the head-less card.
-			local capped = Stat.view(p2, f2, env, { key = "s", size = { w = 480, h = 182 }, card_height = 136 })
+			-- gridPos 6x5 (480x182 px), head-less card body 152 px (View.cardHeight):
+			-- titleSize 23 (22 px class) and valueSize 70 leave two title lines.
+			local capped = Stat.view(p2, f2, env, { key = "s", size = { w = 480, h = 182 }, card_height = 152 })
 			local head = S.find(capped, function(n)
 				return n.p and n.p.key == "t"
 			end)
@@ -261,6 +261,36 @@ for _, version in S.VERSIONS do
 				return n.p and n.p.key == "t"
 			end)
 			expect(u.p.class).toBe("tgp-stat-title tgp-stat-fs22")
+		end)
+
+		-- The tile's padding stands in for BigValue's inside a capped card, so
+		-- the value gets the whole room (6x3 with a description: card body
+		-- 32 px, 20 px in the tile, a 16 px value); a sparkline that would
+		-- leave the value less than a line is left out, as BigValue drops its
+		-- chart from a short box.
+		it("fills a short capped card's room with the value, without a sparkline that leaves none", function()
+			local series, sframes = fidelity(12)
+			local node, assets =
+				Stat.view(series, sframes, env, { key = "s", size = { w = 400, h = 106 }, card_height = 32 })
+			local svg = assets["s.v1"].bytes
+			expect(string.match(svg, 'font%-size="(%d+)"')).toBe("16")
+			expect(S.find(node, function(n)
+				return n.k == "image"
+			end).p.h).toBe(20)
+			local requests, rframes = fidelity(13)
+			local function sparks(cardHeight: number): boolean
+				local n = Stat.view(
+					requests,
+					rframes,
+					env,
+					{ key = "s", size = { w = 400, h = 144 }, card_height = cardHeight }
+				)
+				return S.find(n, function(x)
+					return x.k == "chart"
+				end) ~= nil
+			end
+			expect(sparks(80)).toBe(true)
+			expect(sparks(32)).toBe(false)
 		end)
 	end)
 end

@@ -74,6 +74,9 @@ export type Fit = {
 	-- Lines a wrapped title may take in the height-capped card
 	-- (panels2.css tgp-stat-clamp<N>), nil when uncapped.
 	title_lines: number?,
+	-- The capped card has no room for the sparkline row under a line of
+	-- value: the tiles leave it out.
+	no_spark: boolean?,
 }
 
 local M = {}
@@ -208,9 +211,11 @@ local PANEL_PADDING_PX = 8
 M.TILE_PAD_X = 16
 M.TILE_PAD_Y = 12
 M.SPARK_PX = 34
--- Tern's text line, px: image max heights are given in lines, and an
--- untitled card has no head line.
+-- Tern's text line, px: image max heights are given in lines.
 local LINE_PX = 16
+-- The smallest fitted value: one Tern line tall (valueSvg's 13 px text is
+-- a 16 px image).
+M.MIN_VALUE_PX = math.floor(LINE_PX / LINE_HEIGHT)
 
 -- Font size classes, px (panels2.css tgp-stat-fs<N>).
 M.FONT_SIZES = table.freeze({
@@ -507,16 +512,11 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 	for _, t in tiles do
 		spark = spark or t.spark ~= nil
 	end
-	-- Grafana's panel content box, its height bounded by what the Tern card
-	-- body has under the card's height cap (less the tile's padding and
-	-- Tern's sparkline row). The width needs no bound: the value is an SVG
-	-- that scales down to the tile (tileNode); Tern's cx.cols counts cells,
-	-- not px.
+	-- Grafana's panel content box. The width needs no bound: the value is
+	-- an SVG that scales down to the tile (tileNode); Tern's cx.cols counts
+	-- cells, not px.
 	local w = size.w - PANEL_PADDING_PX * 2
 	local h = size.h - (if hasTitle then HEADER_PX else 0) - PANEL_PADDING_PX * 2
-	if opts.card_height then
-		h = math.min(h, opts.card_height - M.TILE_PAD_Y - (if spark then M.SPARK_PX else 0))
-	end
 	local orientation = Json.str(env, options.orientation) or "auto"
 	local cols, bw, bh = M.grid(#tiles, math.max(w, 1), math.max(h, 1), orientation)
 	local value, title = "", ""
@@ -530,11 +530,38 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		end
 		change = change or t.change ~= nil
 	end
+	local noSpark = false
+	local capped = false
+	-- The px a tile has for its name, value and percent change in the capped
+	-- card: its share of the card body less its padding and sparkline row.
+	local room: number? = nil
+	if opts.card_height then
+		-- Like BigValue dropping its chart from a short box, the sparkline
+		-- goes when it would leave less than a line for the value.
+		local rows = math.ceil(#tiles / cols)
+		local r = (opts.card_height + ITEM_SPACING) / rows - ITEM_SPACING - M.TILE_PAD_Y
+		if spark and r - M.SPARK_PX < LINE_PX then
+			spark, noSpark = false, true
+		end
+		if spark then
+			r -= M.SPARK_PX
+		end
+		room = r
+		-- BigValue pads its box (8 px, 12 px above 100 px) where the tile
+		-- already has its own padding: a value without a name gets the room
+		-- plus that padding. Named tiles keep it for the name, which wraps
+		-- more in a Tern tile, often narrower than Grafana's box.
+		local box = if title ~= "" then r else r + (if r + 16 > 100 then 24 else 16)
+		if box < bh then
+			bh, capped = math.max(box, 1), true
+		end
+	end
 	local text = Json.obj(env, options.text)
 	local positive = function(v: any): number?
 		local n = Json.num(env, v)
 		return if n and n > 0 then n else nil
 	end
+	local valueSize = positive(text.valueSize)
 	local fit = M.fit({
 		w = bw,
 		h = bh,
@@ -543,26 +570,39 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		title = if title ~= "" then title else nil,
 		spark = spark,
 		change = change,
-		value_size = positive(text.valueSize),
+		value_size = valueSize,
 		title_size = positive(text.titleSize),
 		percent_size = positive(text.percentSize),
 		justify = Json.str(env, options.justifyMode),
 		no_wide = Json.bool(env, options.wideLayout) == false,
 	})
-	if opts.card_height and title ~= "" then
-		-- The lines a wrapped title has in a tile of the capped card (an
-		-- untitled card has no head line) above the value and the percent
-		-- change: a Tern tile is often narrower than Grafana's, so titles
-		-- wrap more.
-		local rows = math.ceil(#tiles / cols)
-		local body = opts.card_height
-			+ (if hasTitle then 0 else LINE_PX)
-			- M.TILE_PAD_Y
-			- (if spark then M.SPARK_PX else 0)
-		local tileH = (body + ITEM_SPACING) / rows - ITEM_SPACING
-		local rest = tileH
-			- math.ceil(math.floor(fit.value_px + 0.5) * LINE_HEIGHT)
-			- (if change then M.sizeClass(fit.change_px) * LINE_HEIGHT else 0)
+	fit.no_spark = if noSpark then true else nil
+	local changeH = if change then M.sizeClass(fit.change_px) * LINE_HEIGHT else 0
+	if room and valueSize == nil and fit.wide and title ~= "" then
+		-- A Tern tile is often narrower than Grafana's box: the wide layout
+		-- then wraps the name above the value (panels2.css tgp-stat-wide), so
+		-- the value leaves the tile a line of the name, at most 0.7 of the
+		-- value's size as in the wide layouts.
+		local lines = (room - changeH) / LINE_HEIGHT
+		local px = lines / 1.7
+		if px * 0.7 > fit.title_px then
+			px = lines - fit.title_px
+		end
+		if px < fit.value_px then
+			fit.value_px, capped = px, true
+			fit.title_px = math.min(fit.title_px, px * 0.7)
+		end
+	end
+	if valueSize == nil then
+		-- Rounded down in a capped box so the drawn value (valueSvg) is not
+		-- taller than the room; never below a line.
+		fit.value_px = math.max(if capped then math.floor(fit.value_px) else fit.value_px, M.MIN_VALUE_PX)
+	end
+	if room and title ~= "" then
+		-- The lines a wrapped name has in the tile above the value and the
+		-- percent change: a Tern tile is often narrower than Grafana's, so
+		-- names wrap more.
+		local rest = room - math.ceil(math.floor(fit.value_px + 0.5) * LINE_HEIGHT) - changeH
 		fit.title_lines = math.max(1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
 	end
 	return fit, cols
@@ -689,7 +729,7 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 		})
 	end
 	local children: { Node } = { { k = "el", p = { tag = "div", key = "l", class = lineClass }, c = line } }
-	if tile.spark then
+	if tile.spark and not (fit and fit.no_spark) then
 		table.insert(children, tile.spark :: Node)
 	end
 	return { k = "el", p = { tag = "div", key = key, class = table.concat(classes, " ") }, c = children }

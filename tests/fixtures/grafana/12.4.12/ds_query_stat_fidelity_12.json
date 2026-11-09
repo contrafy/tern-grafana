@@ -1,0 +1,1 @@
+{"results":{"A":{"status":200,"frames":[{"schema":{"refId":"A","fields":[{"name":"values","type":"number","typeInfo":{"frame":"int64","nullable":true}}]},"data":{"values":[[22]]}}]}}}

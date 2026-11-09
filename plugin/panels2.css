@@ -26,7 +26,8 @@
 .tgg-label { fill: var(--t3); }
 .tgg-dot { fill: var(--page); }
 
-/* Panel description marker and panel link chips. */
+/* Panel description marker and panel link chips: one line in a capped card,
+   a link title cut short rather than wrapped (lib/dashboard/view metaRow). */
 .tgp2-info {
 	display: inline-flex;
 	align-items: center;
@@ -37,6 +38,7 @@
 	border: 1px solid var(--l3);
 	font-style: italic;
 	cursor: help;
+	flex-shrink: 0;
 }
 
 .tgp2-link {
@@ -44,6 +46,9 @@
 	border-radius: 4px;
 	background: var(--l1);
 	cursor: pointer;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
 }
 
 .tgp2-link:hover { background: var(--l2); }

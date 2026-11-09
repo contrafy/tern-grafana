@@ -41,8 +41,9 @@ M.MIN_PANEL_WIDTH = "18ch"
 -- Bases are scaled down this much so a band's gaps fit and it only wraps on a narrow pane;
 -- flex-grow hands the slack back.
 M.BASIS_SLACK = 0.96
--- Card chrome in px: the head line with the card's top and bottom padding;
--- a panel with a description or links has a chip line under the head.
+-- Card chrome in px: the head line with the card's top and bottom padding
+-- (a card without a head, an untitled panel's, has the padding only); a
+-- panel with a description or links has a chip line under the head.
 M.CARD_CHROME_PX = 40
 M.CHIP_LINE_PX = 24
 
@@ -53,9 +54,11 @@ function M.heightLines(h: number): number
 	return math.max(4, math.floor(px / M.LINE_PX))
 end
 
--- The card body's height in px under the card's height cap (heightLines).
-function M.cardHeight(h: number, chips: boolean): number
-	return math.max(M.heightLines(h) * M.LINE_PX - M.CARD_CHROME_PX - (if chips then M.CHIP_LINE_PX else 0), 0)
+-- The card body's height in px under the card's height cap (heightLines),
+-- below the chip line when the card has one.
+function M.cardHeight(h: number, chips: boolean, head: boolean): number
+	local chrome = M.CARD_CHROME_PX - (if head then 0 else M.LINE_PX) + (if chips then M.CHIP_LINE_PX else 0)
+	return math.max(M.heightLines(h) * M.LINE_PX - chrome, 0)
 end
 
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
@@ -93,14 +96,17 @@ local function clickable(text: string, act: string, key: string): Node
 	}
 end
 
--- The rendered native panel, memoized on its inputs.
+-- The rendered native panel, memoized on its inputs; `chips` and `head`
+-- when the card draws a chip line (metaRow) and a head line above it.
 local function nativeBody(
 	s: State,
 	inst: Repeat.Instance,
 	ps: State.PanelState,
 	env: Env,
 	assets: Assets.Assets,
-	single: boolean
+	single: boolean,
+	chips: boolean,
+	head: boolean
 ): Node
 	local data = ps.data
 	if data == nil then
@@ -144,10 +150,8 @@ local function nativeBody(
 	local scope = State.panelScope(s, inst)
 	local pw, ph = RenderPng.size(if single then 24 else inst.panel.grid.w, inst.panel.grid.h)
 	local json = inst.panel.json
-	local chips = (type(json.description) == "string" and json.description ~= "")
-		or (type(json.links) == "table" and next(json.links) ~= nil)
 	-- An expanded panel is not height-capped.
-	local cardH = if single then nil else M.cardHeight(inst.panel.grid.h, chips)
+	local cardH = if single then nil else M.cardHeight(inst.panel.grid.h, chips, head)
 	local d = s.dashboard
 	local ok, node, own = pcall(Registry.view, panelJson, data.frames, env, {
 		key = inst.key,
@@ -276,6 +280,8 @@ local function description(s: State, inst: Repeat.Instance): string?
 end
 
 -- Info marker and link chips above the body; nil when the panel has neither.
+-- In a capped card they keep to one line (cardHeight's chip line), link
+-- titles cut short; the expanded panel wraps them in full.
 local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolean): Node?
 	local chips: { Node } = {}
 	local desc = description(s, inst)
@@ -296,13 +302,13 @@ local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolea
 				title = l.url,
 				actions = { click = "plink=" .. i .. ":" .. inst.key },
 			},
-			c = { ui.text({ ui.span(l.title, "accent") }) },
+			c = { ui.text({ ui.span(l.title, "accent") }, if single then nil else { truncate = "end" }) },
 		})
 	end
 	if #chips == 0 then
 		return nil
 	end
-	return ui.row(chips, { key = "meta", gap = "xs", wrap = true })
+	return ui.row(chips, { key = "meta", gap = "xs", wrap = single })
 end
 
 local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Assets.Assets, single: boolean): Node
@@ -317,11 +323,15 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	if name ~= "" then
 		addHead(name, "strong")
 	end
+	local info = if ps and ps.time then ps.time.info else ""
+	-- Built before the body: a capped body's height counts its chip and head
+	-- lines.
+	local meta = metaRow(s, inst, env, single)
 	local body: Node
 	if ps == nil then
 		body = muted("Waiting", "wait")
 	elseif ps.decision.mode == "native" then
-		body = nativeBody(s, inst, ps, env, assets, single)
+		body = nativeBody(s, inst, ps, env, assets, single, meta ~= nil, name ~= "" or info ~= "")
 		-- Not on an untitled panel: a head line coming and going would shift it.
 		if ps.status == "loading" and ps.data and name ~= "" then
 			addHead("refreshing", "muted")
@@ -331,7 +341,6 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	else
 		body = browserBody(inst, ps)
 	end
-	local info = if ps and ps.time then ps.time.info else ""
 	if info ~= "" then
 		addHead(info, "info")
 	end
@@ -340,7 +349,6 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 		addHead(badge[1], "muted")
 	end
 	local children: { Node } = {}
-	local meta = metaRow(s, inst, env, single)
 	if meta then
 		table.insert(children, meta)
 	end
