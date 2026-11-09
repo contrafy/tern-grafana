@@ -231,6 +231,20 @@ for _, version in S.VERSIONS do
 			expect(tiles[1].tone).toBe("success")
 		end)
 
+		-- fixedColor "text" is the theme's text color (getColorByName): its
+		-- dark shade (rgb 204 204 220) drew the value pale lavender on Tern's
+		-- light theme where Grafana draws near-black.
+		it("draws fixedColor text in Tern's own text color", function()
+			local panel, frames = fidelity(8)
+			local p = S.clone(panel)
+			p.fieldConfig.defaults.color.fixedColor = "text"
+			p.options.graphMode = "area"
+			local textTile = Stat.tiles(p, frames, env, OPTS)[1]
+			expect(textTile.color_class).toBeNil()
+			local _, assets = Stat.view(p, frames, env, { key = "s", size = { w = 160, h = 144 } })
+			expect(string.find(assets["s.v1"].bytes, 'class="tgg-text"', 1, true) ~= nil).toBe(true)
+		end)
+
 		-- StatPanel getTextMode: auto shows the name when the panel has no
 		-- title, so untitled tiles say what they count.
 		it("names the field above the value of an untitled stat, not of a titled one", function()

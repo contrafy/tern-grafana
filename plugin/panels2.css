@@ -1,18 +1,14 @@
-/* Native panels v2 (plugin/lib/panels, lib/render/svg_gauge): radial gauge
-   SVG classes, panel metadata chips and transparent panels. Colors are Tern
-   theme variables, so a theme switch recolors without new SVG blobs. */
+/* Native panels v2 (plugin/lib/panels, lib/render/svg_gauge, svg_bargauge):
+   gauge SVG classes, panel metadata chips and transparent panels. Colors are
+   Tern theme variables or exact color classes (tern-grafana.css tg-gc<n>), so
+   a theme switch recolors without new SVG blobs. */
 
-/* Radial gauge: strokes (arcs) and fills (text, sparkline area) by tone. */
+/* Gauges: arcs and bars take exact color classes; text fills by tone (stat
+   values) or the text colors. */
 .tgg { color: var(--t1); font-family: var(--sans); }
 .tgg-track { stroke: var(--l2); }
-.tgg-s-success { stroke: var(--ok); }
-.tgg-s-error { stroke: var(--bad); }
-.tgg-s-warning { stroke: var(--warn); }
-.tgg-s-info { stroke: var(--accent); }
-.tgg-s-accent,
-.tgg-s-pending { stroke: var(--live); }
-.tgg-s-neutral { stroke: var(--t3); }
-.tgg-s-muted { stroke: var(--t4); }
+/* BarGauge's empty bar: the panel background emphasized by 7%. */
+.tgb-empty { fill: color-mix(in oklab, var(--t1) 7%, var(--page)); stroke: none; }
 .tgg-f-success { fill: var(--ok); }
 .tgg-f-error { fill: var(--bad); }
 .tgg-f-warning { fill: var(--warn); }
@@ -347,6 +343,7 @@
 .tgp-stat-g23 { grid-template-columns: repeat(23, minmax(0, 1fr)); }
 .tgp-stat-g24 { grid-template-columns: repeat(24, minmax(0, 1fr)); }
 .tgp-stat.tgp-stat-fit { min-width: 0; justify-content: center; }
+.tgp-stat.tgp-stat-tight { padding-top: 0; padding-bottom: 0; }
 .tgp-stat-fit .tgp-stat-line { display: flex; flex-direction: column; min-width: 0; }
 /* Wide layouts: title left, value right, wrapping onto lines of their own
    when they do not fit side by side (BigValue's flexWrap). */
@@ -406,6 +403,7 @@
    (Fit.title_lines), so the card's height cap never cuts the value. */
 .tgp-stat-fit .tgp-stat-clamp { overflow: hidden; }
 .tgp-stat-fit .tgp-stat-clamp .sf-text { line-height: 1.2; }
+.tgp-stat-fit .tgp-stat-clamp0 { max-height: 0; }
 .tgp-stat-fit .tgp-stat-clamp1 { max-height: 1.2em; }
 .tgp-stat-fit .tgp-stat-clamp2 { max-height: 2.4em; }
 .tgp-stat-fit .tgp-stat-clamp3 { max-height: 3.6em; }
@@ -468,3 +466,7 @@
 .tgp-tm-group { fill: var(--t1); fill-opacity: 0.05; stroke: none; }
 .tg-label.tgp-tm-on-leaf { fill: var(--card); }
 .tgp-tm-link { cursor: pointer; }
+
+/* Theme-only SVG shapes (svg_pie gradient bands per theme). */
+:where(:root[data-theme='dark']) .tgv-light { display: none; }
+:where(:root:not([data-theme='dark'])) .tgv-dark { display: none; }

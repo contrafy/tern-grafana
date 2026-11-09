@@ -235,6 +235,11 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		Links.openPanelLink(s, value, env, effects)
 	elseif act == "dlink" then
 		Links.openDataLink(value, effects)
+	elseif act == "tpage" then
+		local page, key = string.match(value, "^(%d+):(.+)$")
+		if page and key and Core.find(s, key) then
+			s.pages[key] = tonumber(page) :: number
+		end
 	elseif act == "dashboard" then
 		local url = Links.grafanaUrl(s, env)
 		if url then
@@ -303,6 +308,8 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		return Answers.onVariableJob(s, parts, msg.response, env, effects)
 	elseif kind == "png" then
 		return Answers.onPng(s, msg.tag, msg.response, env, effects)
+	elseif kind == "adhoc" then
+		return Picker.onList(s, parts, msg.response, env)
 	else
 		return false
 	end

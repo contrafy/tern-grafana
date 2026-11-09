@@ -40,6 +40,15 @@
 	min-width: 0;
 }
 
+/* Grafana's panel header keeps the title to one line, cut short: a wrapped
+   head would push a height-capped card's body out of the card. */
+[data-role="tern-grafana.dashboard"] .sf-card .sf-head {
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 [data-role="tern-grafana.dashboard"] .sf-card .sf-image {
 	max-width: 100%;
 }

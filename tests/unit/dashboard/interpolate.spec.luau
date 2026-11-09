@@ -29,6 +29,7 @@ describe("interpolate formats (Grafana's variable syntax docs)", function()
 		expect(fmt("sqlstring")).toBe("'test1','test2'")
 		expect(fmt("text")).toBe("test1 + test2")
 		expect(fmt("queryparam")).toBe("var-servers=test1&var-servers=test2")
+		expect(fmt("uriencode")).toBe("%7Btest1,test2%7D")
 	end)
 
 	it("escapes single values the way each format needs", function()
@@ -87,6 +88,18 @@ describe("interpolate Prometheus formatting", function()
 	it("formats a repeated copy's single value as that value, not a list", function()
 		local s: Interpolate.Scope = { job = { values = { "node" }, multi = true, include_all = true, single = true } }
 		expect(Interpolate.replace("${job:glob} ${job:json}", s)).toBe('node "node"')
+	end)
+
+	-- Incident Insights titles ("Status of $labels", allValue `$__all`): scenes
+	-- titles interpolate with the text format, where CustomAllValue yields
+	-- "All"; descriptions and link titles use the default and keep it raw.
+	it("titles a custom all value as All, while the default and uriencode keep it raw", function()
+		local s: Interpolate.Scope = {
+			labels = { values = { "a", "b" }, multi = true, include_all = true, is_all = true, all_value = "$__all" },
+		}
+		expect(Interpolate.replace("Status of $labels", s, { format = Interpolate.text })).toBe("Status of All")
+		expect(Interpolate.replace("Status of $labels", s)).toBe("Status of $__all")
+		expect(Interpolate.replace("/d/x?l=${labels:uriencode}", s)).toBe("/d/x?l=$__all")
 	end)
 end)
 

@@ -118,7 +118,7 @@ for _, version in S.VERSIONS do
 						continue
 					end
 					local n = 0
-					for _, gh in { 3, 4 } do
+					for _, gh in { 2, 3, 4 } do
 						for _, gw in { 6, 12 } do
 							for _, meta in META do
 								n += 1
@@ -139,7 +139,7 @@ for _, version in S.VERSIONS do
 				end
 				d.panels = panels
 			end)
-			expect(#variants).toBe(48)
+			expect(#variants).toBe(72)
 			for _, v in variants do
 				local key = "p" .. v.id
 				expect(h.s.panels[key].status).toBe("ready")
@@ -151,8 +151,17 @@ for _, version in S.VERSIONS do
 				local spark = find(c, function(n)
 					return n.k == "chart" and n.p.kind == "spark"
 				end) ~= nil
-				local room = View.cardHeight(v.h, chips, #c.p.head > 0)
-					- Stat.TILE_PAD_Y
+				-- Grafana's panel header holds the info icon and links: the chips
+				-- sit at the card head's end, never on a line of their own.
+				local endId = c.p["end"]
+				expect(if endId then string.sub(endId, -5) == ".meta" else false).toBe(chips)
+				-- A tile too short for its padding and a line of value drops the
+				-- padding (Grafana still draws a 2-row stat's value).
+				local tight = find(c, function(n)
+					return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-stat-tight", 1, true)
+				end) ~= nil
+				local room = View.cardHeight(v.h, false, #c.p.head > 0 or chips)
+					- (if tight then 0 else Stat.TILE_PAD_Y)
 					- (if spark then Stat.SPARK_PX else 0)
 				local image = find(c, function(n)
 					return n.k == "image"
@@ -162,7 +171,7 @@ for _, version in S.VERSIONS do
 					return n.p and n.p.key == "t"
 				end)
 				local nameH = 0
-				if name then
+				if name and not string.find(name.p.class, "tgp-stat-clamp0", 1, true) then
 					nameH = assert(tonumber(string.match(name.p.class, "tgp%-stat%-fs(%d+)"))) * 1.2
 				end
 				expect(image.p.h >= View.LINE_PX).toBe(true)

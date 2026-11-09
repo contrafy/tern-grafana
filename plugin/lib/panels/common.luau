@@ -10,6 +10,7 @@ local Env = require("../env")
 local Frame = require("../frame/types")
 local Json = require("./json")
 local Lttb = require("../time/lttb")
+local Range = require("../time/range")
 local Thresholds = require("../units/thresholds")
 local TransportTypes = require("../transport/types")
 local ui = require("../ui")
@@ -28,8 +29,8 @@ export type Options = {
 	height: number?,
 	from_ms: number?,
 	to_ms: number?,
-	-- Minutes east of UTC for times.
-	offset_min: number?,
+	-- The dashboard timezone for times (Range.offsetAt per value).
+	offset_min: Range.Offset?,
 	-- Dashboard variable interpolation for text content and titles.
 	interpolate: ((string) -> string)?,
 	-- Dashboard variable interpolation in Grafana's default format (glob), as
@@ -47,6 +48,8 @@ export type Options = {
 	-- (lib/dashboard/view cardHeight), often less than size.h; nil when the
 	-- card is not capped (an expanded panel).
 	card_height: number?,
+	-- Table: the page the user flipped to (1-based; nil is the first).
+	page: number?,
 	-- The panel's query range after its own time overrides (timeFrom,
 	-- timeShift); from_ms/to_ms carry the same range.
 	time: { from_ms: number, to_ms: number }?,

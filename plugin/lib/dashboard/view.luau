@@ -11,6 +11,7 @@
 -- chips, and transparent panels without card chrome.
 
 local Assets = require("../render/assets")
+local ClockZone = require("../panels/clock_zone")
 local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
@@ -118,6 +119,7 @@ local function nativeBody(
 	local cursor = if single then s.cursor else nil
 	local exemplar = if single then s.exemplar else nil
 	local labels = s.labels[inst.key]
+	local page = s.pages[inst.key]
 	-- Text panels interpolate variables into their content.
 	local signature = Core.signature(s)
 	local memo = s.memo[inst.key]
@@ -131,6 +133,7 @@ local function nativeBody(
 		and memo.exemplar == exemplar
 		and memo.single == single
 		and memo.labels == labels
+		and memo.page == page
 		and memo.signature == signature
 		and memo.json == inst.panel.json
 		and memo.title == title(s, inst)
@@ -163,9 +166,15 @@ local function nativeBody(
 		time = if pr then { from_ms = pr.from_ms, to_ms = pr.to_ms } else nil,
 		size = { w = pw, h = ph },
 		card_height = cardH,
+		page = page,
 		extra = ps.extra,
 		timezone = if d then d.timezone else nil,
 		local_offset_min = env.local_offset_min,
+		offset_min = ClockZone.dashboardOffset(
+			if d then d.timezone else nil,
+			env.local_offset_min or 0,
+			env.local_offset_at
+		),
 		base_url = Core.browserBase(s),
 		features = s.settings.features,
 		show_labels = labels,
@@ -173,7 +182,7 @@ local function nativeBody(
 		-- migration cache key.
 		source = json,
 		interpolate = function(text: string): string
-			return Interpolate.replace(text, scope, { format = Interpolate.text })
+			return Interpolate.replace(text, scope, { format = Interpolate.content })
 		end,
 		replace = function(text: string): string
 			return Interpolate.replace(text, scope)
@@ -200,6 +209,7 @@ local function nativeBody(
 		exemplar = exemplar,
 		single = single,
 		labels = labels,
+		page = page,
 		signature = signature,
 		json = inst.panel.json,
 		title = title(s, inst),
@@ -258,8 +268,9 @@ local MODE_BADGE: { [string]: { string } } = {
 	browser = { "browser", "neutral" },
 }
 
--- The panel description (Markdown in Grafana), interpolated; kept in the
--- scope memo per instance.
+-- The panel description (Markdown in Grafana), interpolated with the
+-- default format as VizPanel.getDescription does; kept in the scope memo
+-- per instance.
 local function description(s: State, inst: Repeat.Instance): string?
 	local raw = inst.panel.json.description
 	if type(raw) ~= "string" then
@@ -268,10 +279,7 @@ local function description(s: State, inst: Repeat.Instance): string?
 	local descriptions = Core.memo(s).descriptions
 	local cached: string | false | nil = descriptions[inst]
 	if cached == nil then
-		local text = string.match(
-			Interpolate.replace(raw, State.panelScope(s, inst), { format = Interpolate.text }),
-			"^%s*(.-)%s*$"
-		)
+		local text = string.match(Interpolate.replace(raw, State.panelScope(s, inst)), "^%s*(.-)%s*$")
 		local found: string | false = if text and text ~= "" then text else false
 		descriptions[inst] = found
 		cached = found
@@ -279,9 +287,9 @@ local function description(s: State, inst: Repeat.Instance): string?
 	return if cached then cached else nil
 end
 
--- Info marker and link chips above the body; nil when the panel has neither.
--- In a capped card they keep to one line (cardHeight's chip line), link
--- titles cut short; the expanded panel wraps them in full.
+-- Info marker and link chips; nil when the panel has neither. A grid card
+-- draws them at its head's end on one line, link titles cut short; the
+-- expanded panel wraps them in full above the body.
 local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolean): Node?
 	local chips: { Node } = {}
 	local desc = description(s, inst)
@@ -311,7 +319,16 @@ local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolea
 	return ui.row(chips, { key = "meta", gap = "xs", wrap = single })
 end
 
-local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Assets.Assets, single: boolean): Node
+-- `id` is the card's view id in a dashboard grid (nil for the expanded
+-- panel): the head's `end` names its chip row by id.
+local function panelCard(
+	s: State,
+	inst: Repeat.Instance,
+	env: Env,
+	assets: Assets.Assets,
+	single: boolean,
+	id: string?
+): Node
 	local ps = s.panels[inst.key]
 	-- Empty for an untitled panel without time info or a ladder badge: no
 	-- header line, as in Grafana.
@@ -325,13 +342,25 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	end
 	local info = if ps and ps.time then ps.time.info else ""
 	-- Built before the body: a capped body's height counts its chip and head
-	-- lines.
+	-- lines. A capped card draws the chips at its head's end, the way
+	-- Grafana's panel header holds the info icon and links next to the title.
 	local meta = metaRow(s, inst, env, single)
+	local transparent = inst.panel.json.transparent == true
+	local metaInHead = meta ~= nil and id ~= nil and not single and not transparent
 	local body: Node
 	if ps == nil then
 		body = muted("Waiting", "wait")
 	elseif ps.decision.mode == "native" then
-		body = nativeBody(s, inst, ps, env, assets, single, meta ~= nil, name ~= "" or info ~= "")
+		body = nativeBody(
+			s,
+			inst,
+			ps,
+			env,
+			assets,
+			single,
+			meta ~= nil and not metaInHead,
+			name ~= "" or info ~= "" or metaInHead
+		)
 		-- Not on an untitled panel: a head line coming and going would shift it.
 		if ps.status == "loading" and ps.data and name ~= "" then
 			addHead("refreshing", "muted")
@@ -359,7 +388,7 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	table.insert(children, body)
 	local actions = { click = "focus=" .. inst.key, dblclick = "expand=" .. inst.key }
 	local selected = s.focus == inst.key and not single
-	if inst.panel.json.transparent == true then
+	if transparent then
 		-- Grafana's transparent panels have no background or border.
 		if #head > 0 then
 			table.insert(children, 1, ui.text(head, { key = "head", truncate = "end" }))
@@ -375,7 +404,13 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 			c = children,
 		}
 	end
-	return ui.card(head, children, { key = inst.key, selected = selected, actions = actions })
+	local props: { [string]: any } = {
+		key = inst.key,
+		selected = selected,
+		actions = actions,
+		["end"] = if metaInHead then (id :: string) .. ".meta" else nil,
+	}
+	return ui.card(head, children, props)
 end
 
 -- `parent` is the view id of the node this one goes in: Tern names every
@@ -392,7 +427,8 @@ local function layoutNode(
 	if n.kind == "gap" then
 		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis * M.BASIS_SLACK, grow = 0, shrink = 1 } }
 	elseif n.kind == "panel" then
-		local card = panelCard(s, byKey[n.key], env, assets, false)
+		local id = parent .. "." .. n.key
+		local card = panelCard(s, byKey[n.key], env, assets, false, id)
 		local p = card.p :: { [string]: any }
 		-- Like Grafana's narrow-screen layout, a band wraps once a panel would get
 		-- narrower than MIN_PANEL_WIDTH, and a wrapped panel takes the full width.
@@ -402,7 +438,7 @@ local function layoutNode(
 		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
 		p.max = { h = string.format("%dlines", M.heightLines(n.h)) }
-		s.card_ids[n.key] = parent .. "." .. n.key
+		s.card_ids[n.key] = id
 		return card
 	end
 	local key = n.kind .. idx
@@ -566,7 +602,33 @@ local function pickerNode(s: State): Node?
 	else
 		local v = Variables.find(s.vars, p.name or "")
 		props.title = if v then (v.label or v.name) else p.name
-		if v and v.kind == "textbox" then
+		if v and v.adhoc then
+			local step = p.step or "filters"
+			if step ~= "filters" then
+				-- The filter so far: `key`, `key op`.
+				props.title = (v.label or v.name)
+					.. ": "
+					.. (p.key or "")
+					.. (if step == "value" then " " .. (p.op or "") else "")
+			end
+			props.placeholder = if step == "filters"
+				then "Filters; enter edits"
+				elseif step == "key" then "Key"
+				elseif step == "op" then "Operator"
+				elseif p.chosen then "Values; space toggles, enter applies"
+				else "Value"
+			if p.list_status then
+				props.state = p.list_status
+				props.message = p.list_error
+			end
+			if p.chosen then
+				local ids = table.create(#(p.chosen :: { string }))
+				for i, x in p.chosen :: { string } do
+					ids[i] = "v:" .. x
+				end
+				props.current = ids
+			end
+		elseif v and v.kind == "textbox" then
 			props.placeholder = "Type a value, enter to apply"
 		elseif v and v.multi then
 			props.placeholder = "Filter; space toggles, enter applies"

@@ -367,6 +367,8 @@ function M.queryContext(
 		exemplars = s.exemplars_on,
 		resolved = resolved,
 		grafana_major = s.settings.major,
+		adhoc = Variables.adhocVars(s.vars, scope),
+		features = s.settings.features,
 	}
 end
 

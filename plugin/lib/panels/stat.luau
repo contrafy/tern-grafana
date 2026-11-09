@@ -77,6 +77,10 @@ export type Fit = {
 	-- The capped card has no room for the sparkline row under a line of
 	-- value: the tiles leave it out.
 	no_spark: boolean?,
+	-- The capped card is too short for the tile's vertical padding and a
+	-- line of value: the tile drops it (panels2.css tgp-stat-tight), as
+	-- Grafana's 2-row stat still draws its value.
+	tight: boolean?,
 }
 
 local M = {}
@@ -117,13 +121,14 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		local fixed: string? = if cfg and (cfg.color_mode == "fixed" or cfg.color_mode == "shades")
 			then cfg.fixed_color
 			else nil
-		local colorClass = d.class
-			or (
-				if fixed
-					then TsGradient.fixedClass(fixed, opts.theme)
-					elseif d.color ~= "" then TsGradient.stopClass(d.color, opts.theme)
-					else nil
-			)
+		-- fixedColor "text" is the theme's text color (getColorByName): the
+		-- value keeps Tern's own text color in either theme.
+		local colorClass = if fixed == "text" and not filled
+			then nil
+			else d.class or (if fixed
+				then TsGradient.fixedClass(fixed, opts.theme)
+				elseif d.color ~= "" then TsGradient.stopClass(d.color, opts.theme)
+				else nil)
 		-- The light theme's shade of a named color (the class switches to it
 		-- in CSS); the ink follows it.
 		local light: string? = nil
@@ -530,7 +535,7 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		end
 		change = change or t.change ~= nil
 	end
-	local noSpark = false
+	local noSpark, tightTile = false, false
 	local capped = false
 	-- The px a tile has for its name, value and percent change in the capped
 	-- card: its share of the card body less its padding and sparkline row.
@@ -546,7 +551,12 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		if spark then
 			r -= M.SPARK_PX
 		end
+		local tight = r < LINE_PX
+		if tight then
+			r += M.TILE_PAD_Y
+		end
 		room = r
+		tightTile = tight
 		-- BigValue pads its box (8 px, 12 px above 100 px) where the tile
 		-- already has its own padding: a value without a name gets the room
 		-- plus that padding. Named tiles keep it for the name, which wraps
@@ -577,6 +587,7 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		no_wide = Json.bool(env, options.wideLayout) == false,
 	})
 	fit.no_spark = if noSpark then true else nil
+	fit.tight = if tightTile then true else nil
 	local changeH = if change then M.sizeClass(fit.change_px) * LINE_HEIGHT else 0
 	if room and valueSize == nil and fit.wide and title ~= "" then
 		-- A Tern tile is often narrower than Grafana's box: the wide layout
@@ -601,9 +612,10 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 	if room and title ~= "" then
 		-- The lines a wrapped name has in the tile above the value and the
 		-- percent change: a Tern tile is often narrower than Grafana's, so
-		-- names wrap more.
+		-- names wrap more. A tight tile keeps its line of value over the name.
 		local rest = room - math.ceil(math.floor(fit.value_px + 0.5) * LINE_HEIGHT) - changeH
-		fit.title_lines = math.max(1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
+		fit.title_lines =
+			math.max(if tightTile then 0 else 1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
 	end
 	return fit, cols
 end
@@ -683,7 +695,7 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 		lineClass ..= " " .. inkClass(tile)
 	end
 	if fit then
-		table.insert(classes, "tgp-stat-fit")
+		table.insert(classes, if fit.tight then "tgp-stat-fit tgp-stat-tight" else "tgp-stat-fit")
 		titleClass ..= " " .. fsClass(fit.title_px)
 		local titleLines = fit.title_lines
 		if titleLines and titleLines <= 6 then

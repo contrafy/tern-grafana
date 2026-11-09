@@ -70,6 +70,15 @@ local function percentEncode(s: string): string
 	)
 end
 
+-- encodeURI plus !'()* (scenes' encodeURIStrict, the `uriencode` format).
+local function uriEncode(s: string): string
+	return (
+		string.gsub(s, "[^%w;,/%?:@&=%+%$%-_%.~#]", function(c: string): string
+			return string.format("%%%02X", string.byte(c))
+		end)
+	)
+end
+
 local function jsonString(s: string): string
 	local escaped = string.gsub(s, '[%c"\\]', function(c: string): string
 		if c == '"' then
@@ -163,6 +172,12 @@ local FORMATS: { [string]: (values: { string }, list: boolean) -> string } = {
 	percentencode = function(values, _list)
 		return percentEncode(table.concat(values, ","))
 	end,
+	uriencode = function(values, list)
+		if list then
+			return uriEncode("{" .. table.concat(values, ",") .. "}")
+		end
+		return uriEncode(single(values))
+	end,
 }
 
 M.FORMATS = table.freeze((function()
@@ -191,6 +206,13 @@ function M.text(values: { string }, var: Var, _list: boolean): string
 		return M.ALL_TEXT
 	end
 	return table.concat(var.texts or values, " + ")
+end
+
+-- Display texts for panel content (the text panel's own formatter): a
+-- custom all value stays raw, as scenes' CustomAllValue only answers the
+-- `text` format with "All".
+function M.content(values: { string }, var: Var, list: boolean): string
+	return M.text(values, var, list)
 end
 
 -- Prometheus datasource escaping (prometheusRegularEscape and
@@ -296,11 +318,8 @@ local function formatVar(name: string, var: Var, fmt: string?, opts: Options?): 
 	if fmtName == "date" then
 		return dateFormat(var, fmtArg)
 	end
-	if fmtName == "text" then
-		if var.is_all then
-			return M.ALL_TEXT
-		end
-		return table.concat(var.texts or values, " + ")
+	if fmtName == "text" or (fmtName == nil and opts and opts.format == M.text) then
+		return M.text(values, var, list)
 	end
 	local queryParam = fmtName == "queryparam"
 	if var.is_all and var.all_value and fmtName ~= "percentencode" then
