@@ -91,6 +91,13 @@ end
 
 export type Scale = Axis.Scale
 
+-- `v` printed by `pattern` ("%.12g") and read back, without a negative
+-- zero.
+local function clean(v: number, pattern: string): number
+	local n = tonumber(fmt(pattern, v)) :: number
+	return if n == 0 then 0 else n
+end
+
 -- A value scale whose ticks are at least `space` px apart on an axis `px`
 -- long; hardMin/hardMax are kept exactly, free ends round to whole steps.
 function M.scale(lo: number, hi: number, px: number, space: number, hardMin: number?, hardMax: number?): Scale
@@ -108,15 +115,11 @@ function M.scale(lo: number, hi: number, px: number, space: number, hardMin: num
 		end
 	end
 	local step = Axis.niceStep(b - a, math.max(1, math.floor(px / math.max(space, 1))))
-	local function clean(v: number): number
-		local n = tonumber(fmt("%.12g", v)) :: number
-		return if n == 0 then 0 else n
-	end
-	local lo2 = if hardMin then a else clean(math.floor(a / step + 1e-9) * step)
-	local hi2 = if hardMax then b else clean(math.ceil(b / step - 1e-9) * step)
+	local lo2 = if hardMin then a else clean(math.floor(a / step + 1e-9) * step, "%.12g")
+	local hi2 = if hardMax then b else clean(math.ceil(b / step - 1e-9) * step, "%.12g")
 	local ticks: { number } = {}
 	for i = math.ceil(lo2 / step - 1e-9), math.floor(hi2 / step + 1e-9) do
-		table.insert(ticks, clean(i * step))
+		table.insert(ticks, clean(i * step, "%.12g"))
 	end
 	return { min = lo2, max = hi2, step = step, ticks = ticks }
 end
@@ -136,12 +139,8 @@ function M.padRange(lo: number, hi: number): (number, number)
 	local base = 10 ^ math.floor(math.log10(nonZero))
 	local padding = nonZero * (if delta == 0 then (if lo == 0 then 0.1 else 1) else 0.1)
 	local incr = base / 10
-	local function clean(v: number): number
-		local n = tonumber(fmt("%.9g", v)) :: number
-		return if n == 0 then 0 else n
-	end
-	local a = clean(math.floor((lo - padding) / incr + 1e-9) * incr)
-	local b = clean(math.ceil((hi + padding) / incr - 1e-9) * incr)
+	local a = clean(math.floor((lo - padding) / incr + 1e-9) * incr, "%.9g")
+	local b = clean(math.ceil((hi + padding) / incr - 1e-9) * incr, "%.9g")
 	if lo >= 0 and a < 0 then
 		a = 0
 	end
@@ -159,9 +158,29 @@ function M.vScalePadded(lo: number, hi: number, px: number, hardMin: number?, ha
 	return s
 end
 
+local function trimmed(s: string): string
+	if string.find(s, ".", 1, true) then
+		s = string.gsub(string.gsub(s, "0+$", ""), "%.$", "")
+	end
+	return s
+end
+
+-- The fewest decimals (up to MAX_TICK_DECIMALS) that print `v` exactly in
+-- its display unit, or nil when none does.
+local function exactDecimals(v: number, unit: string?): number?
+	local exact = trimmed(Format.format(v, unit, 10).text)
+	for d = 0, MAX_TICK_DECIMALS do
+		if trimmed(Format.format(v, unit, d).text) == exact then
+			return d
+		end
+	end
+	return nil
+end
+
 -- Tick labels sharing one decimals count: the fewest that print every tick
--- exactly in its unit (lib/render/svg_timeseries yLabels).
-function M.tickLabels(ticks: { number }, unit: string?, decimals: number?): { string }
+-- exactly in its unit. `perTick` (ticks a magnitude apart, log scales):
+-- each tick prints with its own exact decimals instead.
+function M.tickLabels(ticks: { number }, unit: string?, decimals: number?, perTick: boolean?): { string }
 	local function render(d: number?): { string }
 		local out: { string } = table.create(#ticks)
 		for i, v in ticks do
@@ -172,20 +191,19 @@ function M.tickLabels(ticks: { number }, unit: string?, decimals: number?): { st
 	if decimals ~= nil then
 		return render(decimals)
 	end
-	local function trimmed(s: string): string
-		if string.find(s, ".", 1, true) then
-			s = string.gsub(string.gsub(s, "0+$", ""), "%.$", "")
+	if perTick then
+		local out: { string } = table.create(#ticks)
+		for i, v in ticks do
+			out[i] = Format.text(v, unit, exactDecimals(v, unit))
 		end
-		return s
+		return out
 	end
 	local common = 0
 	for _, v in ticks do
-		local exact = trimmed(Format.format(v, unit, 10).text)
-		local d = 0
-		while d <= MAX_TICK_DECIMALS and trimmed(Format.format(v, unit, d).text) ~= exact do
-			d += 1
-		end
-		if d > MAX_TICK_DECIMALS then
+		local d = exactDecimals(v, unit)
+		if d == nil then
+			-- Not a short decimal in this unit (1500 B = 1.46484375 KiB):
+			-- Grafana's automatic three significant digits.
 			return render(nil)
 		end
 		common = math.max(common, d)

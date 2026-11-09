@@ -89,8 +89,76 @@ local function paths(svg: string, class: string): { string }
 	return out
 end
 
+-- Path data with every vertex accumulated to absolute coordinates, written
+-- one command per segment as "%.1f" absolute path data ("M1.0 2.0L3.0
+-- 4.0H5.0Z"). The renderer writes relative segments between vertices
+-- rounded to 0.1 px, so the sums are kept in whole tenths: exact, no drift.
+local ARGS = { M = 2, L = 2, H = 1, V = 1, C = 6, Z = 0 }
+local function absolute(d: string): string
+	local tokens: { any } = {}
+	local i = 1
+	while i <= #d do
+		local c = string.sub(d, i, i)
+		if string.match(c, "%a") then
+			table.insert(tokens, c)
+			i += 1
+		elseif c == " " then
+			i += 1
+		else
+			local s, e = string.find(d, "^%-?%d*%.?%d+", i)
+			assert(s and e, "bad path number in " .. d)
+			table.insert(tokens, math.floor((tonumber(string.sub(d, s, e)) :: number) * 10 + 0.5))
+			i = e + 1
+		end
+	end
+	local out: { string } = {}
+	local function put(cmd: string, ...: number)
+		local parts: { string } = {}
+		for k, v in { ... } do
+			parts[k] = string.format("%.1f", v / 10)
+		end
+		table.insert(out, cmd .. table.concat(parts, " "))
+	end
+	local x, y, sx, sy = 0, 0, 0, 0
+	local cmd = "M"
+	i = 1
+	while i <= #tokens do
+		if type(tokens[i]) == "string" then
+			cmd = tokens[i]
+			i += 1
+			if string.upper(cmd) == "Z" then
+				table.insert(out, "Z")
+				x, y = sx, sy
+				continue
+			end
+		end
+		local up = string.upper(cmd)
+		local ox, oy = if cmd == up then 0 else x, if cmd == up then 0 else y
+		local a: { number } = table.move(tokens, i, i + ARGS[up] - 1, 1, {})
+		i += ARGS[up]
+		if up == "M" or up == "L" then
+			x, y = ox + a[1], oy + a[2]
+			put(up, x, y)
+			if up == "M" then
+				sx, sy = x, y
+				cmd = if cmd == "m" then "l" else "L"
+			end
+		elseif up == "H" then
+			x = ox + a[1]
+			put("H", x)
+		elseif up == "V" then
+			y = oy + a[1]
+			put("V", y)
+		else
+			put("C", ox + a[1], oy + a[2], ox + a[3], oy + a[4], ox + a[5], oy + a[6])
+			x, y = ox + a[5], oy + a[6]
+		end
+	end
+	return table.concat(out)
+end
+
 local function subpaths(d: string): number
-	local _, n = string.gsub(d, "M", "")
+	local _, n = string.gsub(absolute(d), "M", "")
 	return n
 end
 
@@ -228,6 +296,78 @@ describe("svg_timeseries.render nulls", function()
 		local r = Svg.render(frames, { point_budget = 200 })
 		expect(#r.layout.series[1].times <= 210).toBe(true)
 		expect(subpaths(paths(r.svg, "tg-line")[1])).toBe(2)
+	end)
+end)
+
+-- Path data is relative (each vertex a delta from the previous one, rounded
+-- positions only) to stay far under Tern's 256 KiB cap; the picture must not
+-- move: every vertex lands exactly where its absolute "%.1f" position is.
+describe("svg_timeseries.render path data", function()
+	local Layout = require("../../../plugin/lib/render/layout")
+	local render = (Svg.render :: any) :: (frames: { Frame.Frame }, options: any) -> Svg.Result
+	local function at(r: Svg.Result, time: number, v: number): string
+		local l = r.layout
+		local x = math.clamp(Layout.xOfTime(l, time), l.plot_left, l.plot_right)
+		local y = math.clamp(Layout.yOfValue(l, v), l.plot_top, l.plot_bottom)
+		return string.format("%.1f %.1f", x, y)
+	end
+	local gappy = series(300, function(i)
+		if i == 40 or (i >= 100 and i <= 120) or i == 199 or i == 201 then
+			return NULL
+		end
+		return 1000 + 400 * math.sin(i / 13) + (i * 7919 % 13) * 3.37
+	end)
+
+	it("puts every line vertex and every lone dot at its absolute position", function()
+		local r = render({ gappy }, { series = { { show_points = "auto" } } })
+		local s = r.layout.series[1]
+		local line: { string } = {}
+		local dots: { string } = {}
+		local run = 0
+		for k, time in s.times do
+			local v = Frame.finite(s.values[k])
+			if v then
+				local p = at(r, time, v)
+				table.insert(line, (if run == 0 then "M" else "L") .. p)
+				run += 1
+			else
+				if run == 1 then
+					local p = string.match(line[#line], "^M(%S+)") :: string
+					table.insert(line, "H" .. p)
+					table.insert(dots, line[#line - 1] .. "H" .. p)
+				end
+				run = 0
+			end
+		end
+		expect(absolute(paths(r.svg, "tg-line")[1])).toBe(table.concat(line))
+		expect(absolute(paths(r.svg, "tg-dots")[1])).toBe(table.concat(dots))
+	end)
+
+	it("puts every smoothed and stepped vertex where absolute coordinates put it", function()
+		for _, interp in { "stepAfter", "smooth" } do
+			local r = render({ gappy }, { series = { { interpolation = interp } } })
+			local s = r.layout.series[1]
+			local d = absolute(paths(r.svg, "tg-line")[1])
+			-- Each sample is a segment end: "H x V y" (stepAfter) or the last
+			-- pair of a "C" (smooth), after the run's "M x y".
+			local ends: { string } = {}
+			for x, y in string.gmatch(d, "([%d%.]+)V([%d%.]+)") do
+				table.insert(ends, (x :: string) .. " " .. (y :: string))
+			end
+			for x, y in string.gmatch(d, "C[%d%.]+ [%d%.]+ [%d%.]+ [%d%.]+ ([%d%.]+) ([%d%.]+)") do
+				table.insert(ends, (x :: string) .. " " .. (y :: string))
+			end
+			local want: { string } = {}
+			local run = 0
+			for k, time in s.times do
+				local v = Frame.finite(s.values[k])
+				if v and run > 0 then
+					table.insert(want, at(r, time, v))
+				end
+				run = if v then run + 1 else 0
+			end
+			expect(ends).toEqual(want)
+		end
 	end)
 end)
 
@@ -377,7 +517,7 @@ describe("svg_timeseries.render stacked bars", function()
 			expect(#d).toBe(1)
 			expect(subpaths(d[1])).toBe(slots)
 			-- Only the first series starts at the baseline; the others sit on it.
-			local onBase = has(d[1], " " .. baseline .. "V")
+			local onBase = has(absolute(d[1]), " " .. baseline .. "V")
 			expect(onBase).toBe(k == 1)
 		end
 		-- The legend still reads the samples as recorded.
@@ -490,7 +630,7 @@ end
 -- y of every vertex of a path's `d`.
 local function ys(d: string): { number }
 	local out: { number } = {}
-	for _, y in string.gmatch(d, "([%d%.%-]+) ([%d%.%-]+)") do
+	for _, y in string.gmatch(absolute(d), "([%d%.%-]+) ([%d%.%-]+)") do
 		table.insert(out, tonumber(y) :: number)
 	end
 	return out
@@ -743,7 +883,7 @@ describe("svg_timeseries.render transforms", function()
 		expect(subpaths(d)).toBe(1)
 		local Layout = require("../../../plugin/lib/render/layout")
 		local y = string.format("%.1f", Layout.yOfValue(r.layout, 7))
-		expect(d).toBe(string.format("M%.1f %sL%.1f %s", r.layout.plot_left, y, r.layout.plot_right, y))
+		expect(absolute(d)).toBe(string.format("M%.1f %sL%.1f %s", r.layout.plot_left, y, r.layout.plot_right, y))
 	end)
 end)
 
@@ -806,15 +946,15 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 	-- uPlot's stepped and spline path builders.
 	it("steps or smooths the line by lineInterpolation", function()
 		local r = render({ a, b }, { series = { { interpolation = "stepAfter" }, { interpolation = "smooth" } } })
-		local step = string.match(tag(r.svg, "tg-s1", "tg-line") :: string, ' d="([^"]*)"') :: string
+		local step = absolute(string.match(tag(r.svg, "tg-s1", "tg-line") :: string, ' d="([^"]*)"') :: string)
 		expect(step).toContain("H")
 		expect(has(step, "C")).toBe(false)
-		local smooth = string.match(tag(r.svg, "tg-s2", "tg-line") :: string, ' d="([^"]*)"') :: string
+		local smooth = absolute(string.match(tag(r.svg, "tg-s2", "tg-line") :: string, ' d="([^"]*)"') :: string)
 		expect(smooth).toContain("C")
 		-- stepAfter holds a value to the next sample: the first move is
 		-- horizontal (H), stepBefore's is vertical (V).
 		local before = render({ a }, { series = { { interpolation = "stepBefore" } } })
-		local d = string.match(tag(before.svg, "tg-s1", "tg-line") :: string, ' d="([^"]*)"') :: string
+		local d = absolute(string.match(tag(before.svg, "tg-s1", "tg-line") :: string, ' d="([^"]*)"') :: string)
 		expect(string.match(d, "^M[%d%.]+ [%d%.]+(%a)")).toBe("V")
 		expect(string.match(step, "^M[%d%.]+ [%d%.]+(%a)")).toBe("H")
 	end)
@@ -895,12 +1035,14 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		-- x and width of the third (middle) bar.
 		local function midX(style: Svg.SeriesStyle): (number, number)
 			local r = render({ five }, { series = { style } })
-			local d = string.match(tag(r.svg, "tg-line") :: string, ' d="([^"]*)"') :: string
+			local d = absolute(string.match(tag(r.svg, "tg-line") :: string, ' d="([^"]*)"') :: string)
 			local Layout = require("../../../plugin/lib/render/layout")
 			local top = string.format("%.1f", Layout.yOfValue(r.layout, 3))
-			for bx, y, bw in string.gmatch(d, "M([%d%.]+) [%d%.]+V([%d%.]+)h([%d%.]+)") do
+			for bx, y, right in string.gmatch(d, "M([%d%.]+) [%d%.]+V([%d%.]+)H([%d%.]+)") do
 				if y == top then
-					return tonumber(bx) :: number, tonumber(bw) :: number
+					local x10 = math.floor((tonumber(bx) :: number) * 10 + 0.5)
+					local r10 = math.floor((tonumber(right) :: number) * 10 + 0.5)
+					return x10 / 10, (r10 - x10) / 10
 				end
 			end
 			error("no bar for 3")

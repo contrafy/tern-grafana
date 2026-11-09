@@ -270,7 +270,7 @@ function M.render(opts: Options): string
 		table.insert(
 			rects,
 			fmt(
-				'<rect x="%.1f" y="%d" width="%.1f" height="%d" fill="%s" stroke="#ffffff" stroke-width="1"/>',
+				'<rect x="%.1f" y="%d" width="%.1f" height="%d" fill="%s"/>',
 				x + M.BAR_BORDER_WIDTH,
 				y,
 				width,
@@ -292,14 +292,19 @@ function M.render(opts: Options): string
 					Kit.text(x + M.BAR_TEXT_PADDING_LEFT, y + M.PIXELS_PER_LEVEL / 2 + 2, text, {
 						anchor = "start",
 						class = "tgf-text",
-						attrs = 'dominant-baseline="central" font-family="monospace" fill="#222222"',
+						attrs = 'dominant-baseline="central"',
 					})
 				)
 			end
 		end
 	end
-	table.insert(out, table.concat(rects))
-	table.insert(out, table.concat(texts))
+	-- Paint every bar and label shares, inherited from their group.
+	if #rects > 0 then
+		table.insert(out, '<g stroke="#ffffff" stroke-width="1">' .. table.concat(rects) .. "</g>")
+	end
+	if #texts > 0 then
+		table.insert(out, '<g font-family="monospace" fill="#222222">' .. table.concat(texts) .. "</g>")
+	end
 	return Kit.finish(out, "flamegraph")
 end
 

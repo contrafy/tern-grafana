@@ -158,6 +158,9 @@ times in the main session); the display was not affected.
   others refresh when the grid is shown again. Collapsed rows were already never queried.
 - **Cursor and hover are overlays.** The keyboard cursor and the hover columns are `image` children, not part of the
   SVG, so moving them sends no new bytes (docs/sdk-capability-matrix.md row "Overlay cursor").
+- **Relative path data.** Time series paths are relative segments between vertices rounded to 0.1 px (same
+  vertices as absolute `%.1f`), with an absolute vertex every 8 because Tern sums relative segments in single
+  precision: about 31% fewer bytes, at most 3 antialiased edge pixels differ (<= 13/255) on Tern Panels.
 
 ## What it cannot do
 

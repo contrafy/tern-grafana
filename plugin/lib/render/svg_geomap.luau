@@ -100,6 +100,63 @@ local function symbolPath(symbol: string, x: number, y: number, r: number): stri
 	return nil
 end
 
+-- The basemap path for one view: every ring of every world copy that
+-- shows, at whole px, one absolute move per ring then relative lines.
+local basemaps: { [string]: string } = {}
+local basemapCount = 0
+local BASEMAP_CACHE = 16
+
+local function basemap(W: number, H: number, cx: number, cy: number, world: number, copies: { number }): string
+	local key = fmt("%.17g|%.17g|%.17g|%.17g|%.17g", W, H, cx, cy, world)
+	local hit = basemaps[key]
+	if hit then
+		return hit
+	end
+	local parts: { string } = {}
+	local k = 0
+	for _, ring in outline() do
+		for _, copy in copies do
+			local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+			local pts: { number } = table.create(#ring)
+			for i = 1, #ring, 2 do
+				local x = W / 2 + (ring[i] + copy - cx) * world
+				local y = H / 2 + (ring[i + 1] - cy) * world
+				minX, maxX = math.min(minX, x), math.max(maxX, x)
+				minY, maxY = math.min(minY, y), math.max(maxY, y)
+				pts[i] = math.floor(x + 0.5)
+				pts[i + 1] = math.floor(y + 0.5)
+			end
+			if maxX >= 0 and minX <= W and maxY >= 0 and minY <= H then
+				local px, py = pts[1], pts[2]
+				parts[k + 1] = "M"
+				parts[k + 2] = tostring(px)
+				parts[k + 3] = " "
+				parts[k + 4] = tostring(py)
+				k += 4
+				for i = 3, #pts, 2 do
+					local dx, dy = pts[i] - px, pts[i + 1] - py
+					parts[k + 1] = if i == 3 then "l" elseif dx < 0 then "" else " "
+					parts[k + 2] = tostring(dx)
+					parts[k + 3] = if dy < 0 then "" else " "
+					parts[k + 4] = tostring(dy)
+					k += 4
+					px, py = pts[i], pts[i + 1]
+				end
+				k += 1
+				parts[k] = "Z"
+			end
+		end
+	end
+	local d = table.concat(parts, "", 1, k)
+	if basemapCount >= BASEMAP_CACHE then
+		table.clear(basemaps)
+		basemapCount = 0
+	end
+	basemaps[key] = d
+	basemapCount += 1
+	return d
+end
+
 function M.render(opts: Options): string
 	local W, H = math.max(80, opts.width), math.max(60, opts.height)
 	local world = opts.world_px
@@ -118,26 +175,28 @@ function M.render(opts: Options): string
 	end
 	local out: { string } = { Kit.open(W, H), fmt('<rect class="tgm-sea" x="0" y="0" width="%d" height="%d"/>', W, H) }
 	if opts.basemap ~= false then
-		local paths: { string } = {}
-		for _, ring in outline() do
-			for _, k in copies do
-				local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
-				local pts: { string } = table.create(#ring // 2)
-				for i = 1, #ring, 2 do
-					local x, y = px(ring[i] + k, ring[i + 1])
-					minX, maxX = math.min(minX, x), math.max(maxX, x)
-					minY, maxY = math.min(minY, y), math.max(maxY, y)
-					table.insert(pts, fmt("%d %d", math.floor(x + 0.5), math.floor(y + 0.5)))
-				end
-				if maxX >= 0 and minX <= W and maxY >= 0 and minY <= H then
-					table.insert(paths, "M" .. table.concat(pts, "L") .. "Z")
-				end
-			end
-		end
 		table.insert(
 			out,
-			'<path class="tgm-land" stroke-width="0.6" stroke-linejoin="round" d="' .. table.concat(paths) .. '"/>'
+			'<path class="tgm-land" stroke-width="0.6" stroke-linejoin="round" d="'
+				.. basemap(W, H, cx, cy, world, copies)
+				.. '"/>'
 		)
+	end
+	-- Markers in order; consecutive ones painted alike share one <g> that
+	-- carries their paint.
+	local paint: string? = nil
+	local shapes: { string } = {}
+	local function flush()
+		if paint == nil then
+			return
+		end
+		if #shapes == 1 then
+			table.insert(out, string.sub(shapes[1], 1, -3) .. " " .. (paint :: string) .. "/>")
+		else
+			table.insert(out, "<g " .. paint .. ">" .. table.concat(shapes) .. "</g>")
+		end
+		table.clear(shapes)
+		paint = nil
 	end
 	local texts: { string } = {}
 	for _, m in opts.markers do
@@ -149,34 +208,22 @@ function M.render(opts: Options): string
 			end
 			local symbol = m.symbol or "circle"
 			local d = symbolPath(symbol, x, y, m.radius)
-			if d then
-				local open = symbol == "cross" or symbol == "x"
-				table.insert(
-					out,
-					fmt(
-						'<path d="%s" fill="%s" fill-opacity="%.2f" stroke="%s" stroke-opacity="%.2f" stroke-width="1"/>',
-						d,
-						if open then "none" else m.color,
-						m.opacity,
-						m.color,
-						m.opacity
-					)
-				)
-			else
-				table.insert(
-					out,
-					fmt(
-						'<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s" fill-opacity="%.2f" stroke="%s" stroke-opacity="%.2f" stroke-width="1"/>',
-						x,
-						y,
-						m.radius,
-						m.color,
-						m.opacity,
-						m.color,
-						m.opacity
-					)
-				)
+			local open = symbol == "cross" or symbol == "x"
+			local style = fmt(
+				'fill="%s" fill-opacity="%.2f" stroke="%s" stroke-opacity="%.2f" stroke-width="1"',
+				if d and open then "none" else m.color,
+				m.opacity,
+				m.color,
+				m.opacity
+			)
+			if style ~= paint then
+				flush()
+				paint = style
 			end
+			table.insert(
+				shapes,
+				if d then fmt('<path d="%s"/>', d) else fmt('<circle cx="%.1f" cy="%.1f" r="%.1f"/>', x, y, m.radius)
+			)
 			if m.text and m.text ~= "" then
 				local align = m.text_align or "center"
 				local anchor = if align == "left" or align == "start"
@@ -197,6 +244,7 @@ function M.render(opts: Options): string
 			end
 		end
 	end
+	flush()
 	for _, t in texts do
 		table.insert(out, t)
 	end
