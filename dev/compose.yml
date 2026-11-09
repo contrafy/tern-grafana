@@ -141,7 +141,7 @@ services:
 
   # Pushes labeled, multi-level log lines to Loki, plus one line per recent Tempo trace (job tracegen).
   loggen:
-    image: quay.io/curl/curl:8.22.0
+    image: quay.io/curl/curl:8.23.0
     depends_on: [loki, tempo]
     entrypoint: ["/bin/sh", "/gen/loggen.sh"]
     environment:
