@@ -119,7 +119,7 @@ local function highlightOf(values: { any }, calc: string): number?
 end
 
 -- getSmartDisplayNameForRow.
-local function rowName(item: Item, items: { Item }, row: number, opts: Options): string
+local function rowName(item: Item, items: { Item }, row: number, opts: FieldConfig.Options): string
 	if item.config.display_name then
 		return item.config.display_name
 	end
@@ -166,7 +166,7 @@ function M.values(panel: any, items: { Item }, env: Env, opts: Options?): { Valu
 			return item.field.type == "number"
 		end
 	end
-	local disp = { theme = o.theme, offset_min = o.offset_min }
+	local disp: FieldConfig.Options = { theme = o.theme, offset_min = o.offset_min, now_ms = env.now_ms }
 	local out: { Value } = {}
 	for _, item in items do
 		if #out >= (limit :: number) then

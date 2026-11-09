@@ -53,6 +53,8 @@ local function jsString(n: number): string
 	return s
 end
 
+M.jsString = jsString
+
 -- Grafana's automatic decimals: integers get none, other values keep three
 -- significant digits (its "norm > 2.25" branch always fires).
 function M.decimalsFor(value: number): number

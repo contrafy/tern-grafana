@@ -60,9 +60,10 @@ describe("trend", function()
 		expect(count(svg, 'class="tg-s2 tg-line"')).toBe(1)
 		expect(count(svg, "tg-area")).toBe(2)
 		-- The defaults' unit applies to x too (Grafana formats the x axis with
-		-- the x field's display, watt scaling to kW); x spans the data's exact
-		-- range from 1000.
-		expect(string.find(svg, ">1.0 kW<", 1, true) ~= nil).toBe(true)
+		-- the x field's display, watt scaling to kW, each tick with its own
+		-- decimals on a whole step); x spans the data's exact range from 1000.
+		expect(string.find(svg, ">1 kW<", 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, ">1.50 kW<", 1, true) ~= nil).toBe(true)
 		expect((string.find(svg, ">500 W<", 1, true))).toBeNil()
 		expect(S.text(S.find(node, function(n)
 			return n.p and n.p.role == "tern-grafana.legend"

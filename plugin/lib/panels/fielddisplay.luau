@@ -3,6 +3,7 @@
 -- displayProcessor.ts, field/scale.ts, field/fieldColor.ts): one value as
 -- text and a color, and the resolved field config types.
 
+local ClockFormat = require("./clock_format")
 local Env = require("../env")
 local Format = require("../units/format")
 local Frame = require("../frame/types")
@@ -66,7 +67,9 @@ export type Display = {
 	icon: string?,
 }
 
-export type Options = { theme: Thresholds.Theme?, offset_min: number? }
+-- `now_ms` is the clock dateTimeFromNow and the NoDateIfToday units read;
+-- without it they show the full date.
+export type Options = { theme: Thresholds.Theme?, offset_min: number?, now_ms: number? }
 
 export type Defaults = { color_mode: string? }
 
@@ -77,15 +80,21 @@ M.PALETTE = 10
 
 -- Display processor -----------------------------------------------------------
 
-local DATE_UNITS: { [string]: boolean } = {
-	dateTimeAsIso = true,
-	dateTimeAsIsoNoDateIfToday = true,
-	dateTimeAsUS = true,
-	dateTimeAsUSNoDateIfToday = true,
-	dateTimeAsLocal = true,
-	dateTimeAsLocalNoDateIfToday = true,
-	dateTimeAsSystem = true,
-	dateTimeFromNow = true,
+local ISO = "YYYY-MM-DD HH:mm:ss"
+-- localTimeFormat (datetime/formats.ts) of an en-US browser.
+local LOCAL = "MM/DD/YYYY, hh:mm:ss A"
+
+-- dateTimeFormatters.ts: each unit's moment pattern, then its pattern for
+-- a time on today's date.
+local DATE_UNITS: { [string]: { string } } = {
+	dateTimeAsIso = { ISO },
+	dateTimeAsIsoNoDateIfToday = { ISO, "HH:mm:ss" },
+	dateTimeAsUS = { "MM/DD/YYYY h:mm:ss a" },
+	dateTimeAsUSNoDateIfToday = { "MM/DD/YYYY h:mm:ss a", "h:mm:ss a" },
+	dateTimeAsLocal = { LOCAL },
+	dateTimeAsLocalNoDateIfToday = { LOCAL, "hh:mm:ss A" },
+	dateTimeAsSystem = { ISO },
+	dateTimeFromNow = { ISO },
 }
 
 local BOOL_UNITS: { [string]: { string } } = {
@@ -95,7 +104,7 @@ local BOOL_UNITS: { [string]: { string } } = {
 }
 
 local function isDateUnit(unit: string?): boolean
-	return unit ~= nil and (DATE_UNITS[unit] == true or string.sub(unit, 1, 5) == "time:")
+	return unit ~= nil and (DATE_UNITS[unit] ~= nil or string.sub(unit, 1, 5) == "time:")
 end
 
 -- anyToNumber (packages/grafana-data/src/utils/anyToNumber.ts).
@@ -114,21 +123,102 @@ local function anyToNumber(v: any): number
 	return 0 / 0
 end
 
-local function formatDate(ms: number, unit: string, offsetMin: number?): string
-	local iso = Range.formatMs(ms, offsetMin)
-	if unit == "dateTimeAsUS" or unit == "dateTimeAsUSNoDateIfToday" then
-		-- MM/DD/YYYY h:mm:ss a
-		local Y, Mo, D = string.sub(iso, 1, 4), string.sub(iso, 6, 7), string.sub(iso, 9, 10)
-		local h = tonumber(string.sub(iso, 12, 13)) :: number
-		local rest = string.sub(iso, 14)
-		local ampm = if h >= 12 then "pm" else "am"
-		local h12 = h % 12
-		if h12 == 0 then
-			h12 = 12
-		end
-		return string.format("%s/%s/%s %d%s %s", Mo, D, Y, h12, rest, ampm)
+local DAY = 86400000
+
+local function civilDate(ms: number, offsetMin: number): (number, number, number)
+	local s = Range.formatMs(ms, offsetMin)
+	return tonumber(string.sub(s, 1, 4)) :: number,
+		tonumber(string.sub(s, 6, 7)) :: number,
+		tonumber(string.sub(s, 9, 10)) :: number
+end
+
+-- moment's add(n, "M") at a fixed offset: the day clamped to the target
+-- month's length, the time of day kept.
+local function addMonths(ms: number, n: number, offsetMin: number): number
+	local y, m, d = civilDate(ms, offsetMin)
+	local index = y * 12 + (m - 1) + n
+	local ty, tm = index // 12, index % 12 + 1
+	local nextY, nextM = if tm == 12 then ty + 1 else ty, if tm == 12 then 1 else tm + 1
+	local first = Range.parse(string.format("%04d-%02d-01", ty, tm), false, { now_ms = 0, offset_min = offsetMin })
+	local after =
+		Range.parse(string.format("%04d-%02d-01", nextY, nextM), false, { now_ms = 0, offset_min = offsetMin })
+	local length = ((after :: number) - (first :: number)) // DAY
+	local wall = ms + offsetMin * 60000
+	return (first :: number) + (math.min(d, length) - 1) * DAY + (wall - (wall // DAY) * DAY)
+end
+
+-- moment's from(now) (fromNow, en locale): the difference as calendar
+-- months plus milliseconds (momentsDifference), then Duration#humanize with
+-- the default thresholds.
+local function fromNow(ms: number, now: number, offsetMin: number): string
+	local base, other = math.min(ms, now), math.max(ms, now)
+	local by, bm = civilDate(base, offsetMin)
+	local oy, om = civilDate(other, offsetMin)
+	local months = (oy - by) * 12 + (om - bm)
+	if addMonths(base, months, offsetMin) > other then
+		months -= 1
 	end
-	return iso
+	local rest = other - addMonths(base, months, offsetMin)
+	local function round(x: number): number
+		return math.floor(x + 0.5)
+	end
+	local days = round(months * 146097 / 4800)
+	local monthsAll = months + rest / DAY * 4800 / 146097
+	local seconds = round(days * 86400 + rest / 1000)
+	local minutes = round(days * 1440 + rest / 60000)
+	local hours = round(days * 24 + rest / 3600000)
+	local wholeDays = round(days + rest / DAY)
+	local wholeMonths = round(monthsAll)
+	local years = round(monthsAll / 12)
+	local text
+	if seconds <= 44 then
+		text = "a few seconds"
+	elseif seconds < 45 then
+		text = seconds .. " seconds"
+	elseif minutes <= 1 then
+		text = "a minute"
+	elseif minutes < 45 then
+		text = minutes .. " minutes"
+	elseif hours <= 1 then
+		text = "an hour"
+	elseif hours < 22 then
+		text = hours .. " hours"
+	elseif wholeDays <= 1 then
+		text = "a day"
+	elseif wholeDays < 26 then
+		text = wholeDays .. " days"
+	elseif wholeMonths <= 1 then
+		text = "a month"
+	elseif wholeMonths < 11 then
+		text = wholeMonths .. " months"
+	elseif years <= 1 then
+		text = "a year"
+	else
+		text = years .. " years"
+	end
+	return if ms > now then "in " .. text else text .. " ago"
+end
+
+-- A date unit's text (dateTimeFormatters.ts) at the display offset: a
+-- "time:" moment pattern, the unit's pattern (its today pattern on the
+-- current day), moment's fromNow, or the system format with milliseconds
+-- for a time field spanning under a minute.
+local function formatDate(ms: number, unit: string, o: Options, showMs: boolean): string
+	local offset = o.offset_min or 0
+	local now = o.now_ms
+	local pattern: string
+	if string.sub(unit, 1, 5) == "time:" then
+		pattern = string.sub(unit, 6)
+	elseif unit == "dateTimeFromNow" and now then
+		return fromNow(ms, now, offset)
+	elseif unit == "dateTimeAsSystem" and showMs then
+		pattern = ISO .. ".SSS"
+	else
+		local p = DATE_UNITS[unit]
+		local sameDay = now ~= nil and Range.formatMs(ms, offset):sub(1, 10) == Range.formatMs(now, offset):sub(1, 10)
+		pattern = if p[2] and sameDay then p[2] else p[1]
+	end
+	return ClockFormat.format(pattern, ms, offset, "")
 end
 
 -- Grafana's continuous color schemes, read as severity along the scale.
@@ -201,9 +291,15 @@ function M.display(item: Item, value: any, opts: Options?): Display
 	local fieldType = item.field.type
 	local unit = cfg.unit
 	local hasDate = isDateUnit(unit)
+	local showMs = false
 	if fieldType == "time" and not hasDate then
 		unit = "dateTimeAsSystem"
 		hasDate = true
+		local values = item.field.values
+		local first, last = values[1], values[#values]
+		if #values > 1 and type(first) == "number" and type(last) == "number" then
+			showMs = math.abs(last - first) < 60000
+		end
 	elseif fieldType == "boolean" and (unit == nil or BOOL_UNITS[unit] == nil) then
 		unit = "bool"
 	elseif unit == nil and fieldType == "string" then
@@ -235,7 +331,7 @@ function M.display(item: Item, value: any, opts: Options?): Display
 		if text == nil and type(value) ~= "boolean" then
 			local u = unit :: string?
 			if u and hasDate then
-				text = formatDate(numeric, u, o.offset_min)
+				text = formatDate(numeric, u, o, showMs)
 			elseif u and BOOL_UNITS[u] then
 				local labels = BOOL_UNITS[u]
 				text = if numeric ~= 0 then labels[1] else labels[2]
