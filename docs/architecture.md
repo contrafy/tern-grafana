@@ -10,8 +10,8 @@ runs is described in [dev-stack.md](dev-stack.md).
 - `plugin/lib/**` is pure Luau. It never references the `tern` global. Whatever it needs (JSON decoder, the JSON
   null sentinel, clock values, pane size, config) is passed in through an `Env` table. It runs under the standalone
   `luau` binary, so every decision is unit tested in `tests/unit/` against recorded fixtures.
-- Only `plugin/host.luau`, `plugin/window.luau` and the `plugin/*_host.luau` adapters call `tern.*`. They execute
-  effects and feed results back; they decide nothing.
+- Only `plugin/host.luau`, `plugin/window.luau`, `plugin/block_runner.luau` and the `plugin/*_host.luau` /
+  `plugin/*_window.luau` adapters call `tern.*`. They execute effects and feed results back; they decide nothing.
 - Views are plain `{k, p, c}` tables built by `plugin/lib/ui.luau`, not `tern.ui` builders.
 
 ## Module map
@@ -19,35 +19,62 @@ runs is described in [dev-stack.md](dev-stack.md).
 ```
 plugin.toml                manifest: lenses, blocks, styles; entries under plugin/
 plugin/
-  host.luau                host half: registers blocks and lenses, starts pollers, command hooks
-  window.luau              window half: route.link (tern-grafana:// and Grafana URLs), palette commands,
-                           status segment, Carly exports, agent handoff
-  transport_host.luau      executes Http effects: auth resolution, tern.fetch or curl fallback
+  host.luau                host half: defines every block and lens lazily (a block's state and view modules are
+                           required when the first block of that kind opens), starts the pollers
+  block_runner.luau        runs a lib machine (lib/effect.luau) as a Tern block: Env, effects, messages, render,
+                           save; one host-wide liveness timer for all blocks
+  env_host.luau            builds the Env a machine sees (clock, pane size, cached config with the host default)
+  transport_host.luau      executes http effects: auth resolution, tern.fetch or curl fallback
+  credentials_host.luau    runs lib/auth's keychain and login-shell plans; secrets stay in VM memory
+  config_host.luau         reads and caches the config file
   blob_host.luau           turns view assets (SVG/PNG bytes) into blob ids, cached by content hash
-  visibility_window.luau   window half: writes which panes the active tab shows to kv (lib/visibility.luau)
-  <block>_host.luau        one adapter per block: runs lib/<block>/state effects
+  lens_host.luau           runs a lens (lib/lens/*) over a finished command's capture
+  poller_host.luau         shared scaffolding of the background pollers: timer loop, stuck guard, kv summary
+  alerts_poll_host.luau    alerts summary poller; watches_poll_host.luau, irm_poll_host.luau likewise
+  settings_host.luau, silence_host.luau, annotations_host.luau, irm_host.luau, hosts_host.luau
+                           adapters for blocks or hooks with host-side effects of their own (config writes,
+                           silence and annotation writes, command hooks, per-host default context)
+  window.luau              window half entry: requires the *_window modules below
+  links_window.luau        route.link (tern-grafana:// and Grafana URLs)
+  commands_window.luau     palette commands
+  alerts_window.luau       the one status formatter (alerts, IRM and watches segments) and its 5 s timer
+  watches_window.luau      watch toasts; carly_window.luau: Carly exports and context;
+                           investigate_window.luau: agent handoff; visibility_window.luau: visible panes to kv
   tern-grafana.css         styles, including chart series classes bound to theme variables
   lib/
+    effect.luau            the machine contract: Effect, Msg, Machine (see Effects)
     env.luau               Env type and helpers (no tern access)
     ui.luau                {k,p,c} node builders
-    config/                config schema, validation, defaults, context routing
+    block_kit.luau         context, link and one-line edit helpers the block machines share
+    suggest_cache.luau     bounded per-context suggestion lists for the Query and Logs blocks
+    audit.luau             audit lines for write decisions; visibility.luau: pane visibility records
+    str.luau hash.luau url.luau tbl.luau regex.luau read_file.luau   small shared helpers (trim/first line,
+                           FNV-1a hashes, percent-encoding, sorted keys, ...)
+    config/                config schema, validation, context routing (route.luau)
     auth/                  credential source descriptions (token_cmd/env/file), header building
     transport/             Request/Response types, URL joining, curl argv building, error classification
-    frame/                 Frame model, conversions (Prometheus, Grafana data frames, Loki, Tempo)
-    source/
-      prom.luau            Prometheus HTTP API request builders and parsers
-      grafana.luau         Grafana HTTP API request builders and parsers
-      alertmanager.luau    Alertmanager v2 (direct and Grafana-managed)
-      loki.luau            Loki HTTP API
-      tempo.luau           Tempo HTTP API
-    time/                  range parsing (now-6h), step/interval math, $__interval, $__rate_interval
+    frame/                 Frame model, conversions (Prometheus, Grafana data frames, Loki)
+    source/                request builders and parsers per backend: prom, metrics (direct or via Grafana),
+                           grafana, loki, tempo, ops, irm; response.luau shares error handling
+    time/                  range parsing (now-6h), step/interval math, LTTB, the shared time range (shared.luau)
     units/                 Grafana unit ids, value formatting, thresholds -> tones
-    render/                svg_timeseries, legend, stat, gauge, bargauge, table, logs, waterfall
-    panels/                panel registry: supports(panel) and view(panel, frames, env)
-    dashboard/             dashboard model, layout from gridPos, variables, interpolation, ladder
-    query/ alerts/ silences/ ops/ logs/ trace/ settings/ impact/ watches/ irm/   block state machines
+    render/                SVG builders: svg_timeseries (with ts_data for data preparation, svg_paths for path
+                           data, ts_gradient for fills), svg_bars, svg_pie, svg_gauge, svg_heatmap, svg_timeline,
+                           svg_xy, svg_geomap, svg_flame, svg_nodegraph, svg_canvas, svg_kit (shared pieces);
+                           legend, axis, grid, layout, cursor, series, table, chart_view; assets and blob_cache
+    panels/                panel registry (supports/view per Grafana panel type, modules required lazily), one
+                           module per panel type, field config (fieldconfig, fieldname, fieldmatch, fielddisplay),
+                           reducers, mappings, migrations; transforms/ holds Grafana's transformations
+    dashboard/             dashboard and panel blocks: model, layout from gridPos, variables, interpolation,
+                           repeat, ladder, queries; state.luau is the machine, split into types, core, advance,
+                           answers, keys, links, picker, png and search
+    query/ logs/ trace/ alerts/ silences/ ops/ settings/ impact/ watches/ irm/ annotations/ investigate/
+    compat/                block state machines (state.luau) with their views; compat is the dashboard
+                           compatibility scan, investigate the agent handoff
+    carly/                 Carly exports and context (compacted to a byte budget)
+    hosts/                 per-remote-host default context
     lens/                  promtool, amtool, logcli, curl capture parsers and views
-    links/                 tern-grafana:// encode/decode, Grafana URL recognition
+    links/                 tern-grafana:// encode/decode, Grafana URL recognition, route.link decisions
 ```
 
 ## Configuration
@@ -131,21 +158,29 @@ multi-frame time series uses, so Grafana and direct results flow into the same r
 Click action names are plugin-defined, except `copy`: Tern handles it itself and copies the clicked node's text,
 so buttons that copy something else use their own action name (`copy-matchers`, `copy-prompt`, `copy-config`).
 
-Every block and lens is a pure state machine in `lib/<feature>/state.luau`:
+Every block is a pure state machine (`Effect.Machine` in `lib/effect.luau`), with its state in
+`lib/<feature>/state.luau` and its view next to it:
 
 ```luau
 init(args: { string }, saved: any, env: Env) -> (State, { Effect })
-update(state: State, msg: Msg, env: Env) -> (State, { Effect })
-view(state: State, env: Env) -> (Node, Assets)
+update(state: State, msg: Msg, env: Env) -> (State, { Effect }, changed: boolean?)
+key(state: State, key: Key, env: Env) -> (State, { Effect }, changed: boolean)   -- optional fast path
+view(state: State, env: Env) -> (View, Assets?)   -- View: a node (the main region) or { main, dock, layer }
+title(state: State) -> string?
 save(state: State) -> any            -- JSON values, never secrets
 ```
 
-`Effect` is a tagged table executed by the adapter: `{kind = "http", tag, context, signal, request}`,
-`{kind = "timer", tag, ms}`, `{kind = "kv_set", key, value}`, `{kind = "toast", level, text, sub}`,
-`{kind = "open", target}`, `{kind = "copy", text}`, `{kind = "exit"}`, `{kind = "focus", id?}` and
-`{kind = "reveal", id, at}`. Results come back as messages (`{kind = "http_done", tag, response}`,
-`{kind = "tick", tag}`, key and UI events). A generation counter in state drops late responses after the user
-changed the query or range.
+`Effect` is a tagged table executed by `block_runner.luau`: `{kind = "http", tag, route, request}` (`route` from
+`lib/config/route.luau` names the context, endpoint and via), `{kind = "timer", tag, ms}`,
+`{kind = "kv_set", key, value}`, `{kind = "toast", level, text, sub}`, `{kind = "open", target}`,
+`{kind = "copy", text}`, `{kind = "exit"}`, `{kind = "focus", id?}` and `{kind = "reveal", id, at}`. Results come
+back as messages (`{kind = "http_done", tag, response}`, `{kind = "tick", tag}`, `{kind = "event", ev}`,
+`{kind = "key", key}`). A generation counter in state drops late responses after the user changed the query or
+range.
+
+No-op contract: `update` (and `key`) may return `changed = false` only when nothing `view` or `save` reads
+changed (a stale-generation answer, a hidden-tab re-arm tick, a poll that adopted nothing); the runner then skips
+render and save but still executes the effects. `nil` or `true` mean the state may have changed.
 
 A block's `main` region scrolls with the mouse wheel but not with keys, so a machine that moves a keyboard
 selection emits `reveal` with the selected node's view id (region name, then each ancestor's `key` or index, joined
@@ -153,7 +188,8 @@ with `.`), which the runner sends as the TSP `["reveal", id, at]` frame op.
 
 `Assets` maps an asset key to `{mime, bytes}`; `image` nodes reference assets by `p.asset`. `blob_host.luau`
 replaces `asset` with a blob id from `cx:blob`, reusing ids for unchanged bytes (Tern keeps every blob file, so
-an unchanged chart must never mint a new blob).
+an unchanged chart must never mint a new blob): `lib/render/blob_cache.luau` keeps the last bytes and id per asset
+key, plus a bounded LRU of ids by content hash.
 
 Block `init` is idempotent: Tern restores blocks after a restart by re-running `init` with the same args and saved
 state, so one-shot effects (opening panes, posting annotations, creating silences) only ever follow a user event.
