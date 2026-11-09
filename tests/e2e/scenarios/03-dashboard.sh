@@ -9,7 +9,8 @@ PANEL="Scrape duration symlog heatmap"
 
 open_block dashboard dashboard || return
 bwait dashboard "Open a Grafana dashboard" || return
-want=$(jq -sc 'map(.title) | sort' "$E2E_REPO"/dev/grafana/dashboards/*.json)
+# Grafana's search sorts titles case-insensitively.
+want=$(jq -sc 'map(.title) | sort_by(ascii_downcase)' "$E2E_REPO"/dev/grafana/dashboards/*.json)
 E2E_WAIT=15 wait_for "the dashboard list" has "$D .pk-row" "$(printf '%s' "$want" | jq length)" || return
 eq "picker lists the provisioned dashboards" "$(texts "$D .pk-row .pk-label")" "$want"
 shot picker
