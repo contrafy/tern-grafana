@@ -5,11 +5,14 @@
 -- refresh, range, shared-range and variable changes that start it.
 
 local Core = require("./core")
+local DsRegistry = require("../datasources/registry")
+local DsTypes = require("../datasources/types")
 local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Ladder = require("./ladder")
 local Layout = require("./layout")
+local Layers = require("./layers")
 local Model = require("./model")
 local PanelTime = require("./panel_time")
 local Png = require("./png")
@@ -33,6 +36,66 @@ type PanelState = Types.PanelState
 local tag, http = Core.tag, Core.http
 
 local M = {}
+
+-- A query variable answered by a datasource module (lib/datasources):
+-- the module and the datasource instance; `wait` while Grafana's
+-- datasource list (which says the type) is still loading.
+local function variableModule(
+	s: State,
+	v: Variables.Variable,
+	scope: Interpolate.Scope
+): (DsTypes.DsModule?, Queries.Datasource?, boolean)
+	local loading = s.settings.status == "loading"
+	local uid = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
+	local ds = if uid then Queries.findDatasource(s.settings.datasources, uid) else nil
+	local kind = v.datasource_type or (if ds then ds.type else nil)
+	if kind == nil then
+		return nil, nil, loading
+	end
+	local mod = DsRegistry.module(kind :: string)
+	if mod == nil or mod.variable == nil then
+		return nil, nil, false
+	end
+	return mod, ds, loading
+end
+
+-- Starts a module's variable job; true when it ended at once.
+local function startVariableJob(
+	s: State,
+	v: Variables.Variable,
+	mod: DsTypes.DsModule,
+	ds: Queries.Datasource,
+	scope: Interpolate.Scope,
+	env: Env,
+	effects: { Effect }
+): boolean
+	local r = s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
+	local d = s.dashboard
+	local ctx: DsTypes.DsContext = {
+		scope = Interpolate.merge(Core.builtinScope(s), scope),
+		from_ms = r.from_ms,
+		to_ms = r.to_ms,
+		interval_ms = 0,
+		max_points = s.cfg.max_points,
+		now_ms = env.now_ms,
+		datasources = s.settings.datasources,
+		ds = ds,
+		grafana_major = s.settings.major,
+		dashboard_uid = if d then d.uid else nil,
+	}
+	local variable = mod.variable :: (any, DsTypes.DsContext, Env) -> DsTypes.Job
+	local run, first = DsRegistry.begin(mod, variable(v.query_model, ctx, env), {}, env)
+	local outcome = run.outcome
+	if outcome then
+		Variables.applyOutcome(v, outcome, scope)
+		return true
+	end
+	s.var_gen += 1
+	v.status = "loading"
+	s.var_runs[v.name] = { gen = s.var_gen, run = run }
+	Core.variableRequests(s, s.var_gen, v.name, first, effects)
+	return false
+end
 
 -- Resolves datasource variables and starts every query variable whose
 -- references have settled. Datasource variables need the frontend settings.
@@ -60,6 +123,24 @@ local function advanceVariables(s: State, env: Env, effects: { Effect })
 				Core.changed(s)
 				progressed = true
 				break
+			end
+			local mod, ds, wait = variableModule(s, v, scope)
+			if wait then
+				continue
+			end
+			if mod then
+				if ds == nil then
+					Variables.setError(v, "no datasource for this variable")
+					Core.changed(s)
+					progressed = true
+					break
+				end
+				if startVariableJob(s, v, mod, ds :: Queries.Datasource, scope, env, effects) then
+					Core.changed(s)
+					progressed = true
+					break
+				end
+				continue
 			end
 			local fetch, err = Variables.fetchFor(v, scope, Core.builtinScope(s))
 			local uid = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
@@ -237,16 +318,31 @@ local function queryPanel(
 		return
 	end
 	local p = pq :: Queries.PanelQuery
-	local signature = env.encode(p.queries) .. "\31" .. pt.from .. "\31" .. pt.to
-	-- The answer of the query in flight is parsed against the query that
-	-- has this signature (the same queries and refIds).
-	ps.pq = p
+	local signature = Queries.identity(p, env) .. "\31" .. pt.from .. "\31" .. pt.to
 	if again or signature ~= ps.signature then
+		-- The answers in flight are read against the query with this
+		-- signature (the same queries and refIds, the same jobs).
+		ps.pq = p
 		ps.signature = signature
 		ps.gen += 1
 		ps.status = "loading"
 		ps.asked = { range = pt.range, interval_ms = p.interval_ms }
-		table.insert(effects, http(tag("q", s.gen, ps.gen, key), route, Queries.request(route, p, qctx, env)))
+		if #p.queries > 0 then
+			table.insert(effects, http(tag("q", s.gen, ps.gen, key), route, Queries.request(route, p, qctx, env)))
+		end
+		local jobs = p.jobs
+		if jobs then
+			for i, j in jobs do
+				Core.jobRequests(s, ps, key, i, j.first, effects)
+			end
+			local data = Queries.combine(p)
+			if data then
+				Core.showData(s, key, ps, data, env)
+			end
+		end
+	elseif ps.pq == nil or (ps.pq :: Queries.PanelQuery).jobs == nil then
+		-- An unchanged query: its jobs in flight keep their state.
+		ps.pq = p
 	end
 end
 
@@ -490,6 +586,7 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 	end
 	M.syncShared(s, env)
 	armLive(s, env, effects)
+	Layers.advance(s, env, force, effects)
 end
 
 function M.advance(s: State, env: Env, force: boolean, effects: { Effect })

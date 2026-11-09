@@ -2,7 +2,10 @@
 -- State types of the dashboard and panel blocks (lib/dashboard/state.luau)
 -- and the fresh state `init` starts from.
 
+local AlertStates = require("./alert_states")
+local Annotations = require("./annotations")
 local DashConfig = require("./config")
+local DsRegistry = require("../datasources/registry")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Ladder = require("./ladder")
@@ -15,6 +18,7 @@ local Repeat = require("./repeat")
 local Route = require("../config/route")
 local Search = require("./search")
 local Shared = require("../time/shared")
+local SvgAnnotations = require("../render/svg_annotations")
 local Variables = require("./variables")
 
 type Env = Env.Env
@@ -77,8 +81,20 @@ export type Picker = {
 	name: string?,
 	query: string,
 	selected: string?,
-	-- Working selection of a multi-value variable.
+	-- Working selection of a multi-value variable (or of a one-of ad hoc
+	-- filter's values).
 	chosen: { string }?,
+	-- An ad hoc variable's picker: the step, the filter edited (its index;
+	-- nil adds one), the key and operator picked so far, and the keys or
+	-- values listed with their load state (`list_gen` tags the request).
+	step: ("filters" | "key" | "op" | "value")?,
+	edit: number?,
+	key: string?,
+	op: string?,
+	list: { Variables.Option }?,
+	list_status: ("loading" | "ready" | "error")?,
+	list_error: string?,
+	list_gen: number?,
 }
 
 export type PickerItem = { id: string, label: string, detail: string? }
@@ -98,8 +114,14 @@ export type Settings = {
 	datasources: { Queries.Datasource },
 	-- Grafana's frontend feature toggles that are on.
 	features: { [string]: boolean },
+	-- Grafana's major version (buildInfo.version); nil while unknown.
+	major: number?,
 	error: string?,
 }
+
+-- A query variable answered by a datasource module's job
+-- (lib/datasources): the variable generation (`var_gen`) it was started in.
+export type VarRun = { gen: number, run: DsRegistry.Run }
 
 export type Phase = "search" | "loading" | "ready" | "error"
 
@@ -142,6 +164,8 @@ export type State = {
 	vars: { Variables.Variable },
 	vars_error: string?,
 	var_gen: number,
+	-- Datasource module jobs of the variables loading, by name.
+	var_runs: { [string]: VarRun },
 	-- Bumped by every change to the variables or the dashboard model: keys
 	-- the scope memo and the repeat expansion.
 	rev: number,
@@ -186,6 +210,8 @@ export type State = {
 	refresh_ms: number?,
 	auto: boolean,
 	picker: Picker?,
+	-- Bumped by every ad hoc key or value list request (Picker.list_gen).
+	picker_gen: number,
 	search: SearchState,
 	updated_ms: number?,
 	-- View id of each panel card in the grid, recorded by the view, so a
@@ -193,6 +219,8 @@ export type State = {
 	card_ids: { [string]: string },
 	-- Logs panels whose label toggle (`l`) overrides the panel's showLabels.
 	labels: { [string]: boolean },
+	-- Table panels flipped past their first page (Table pager `tpage`).
+	pages: { [string]: number },
 	-- View memo (lib/dashboard/view.luau): rendered native panels by key.
 	memo: { [string]: any },
 	-- Selected exemplar of the focused time series (single view): index
@@ -209,7 +237,43 @@ export type State = {
 	live_gen: number,
 	live_ms: number?,
 	live_tick: number,
+	-- Dashboard data layers: annotations and alert states.
+	layers: Layers,
 }
+
+-- An annotation layer of the dashboard (lib/dashboard/annotations.luau):
+-- a Prometheus layer's query (its answer is parsed against it), the
+-- events of its last answer (nil until one arrived) and why it failed.
+export type AnnotationLayer = {
+	def: Annotations.Def,
+	pq: Queries.PanelQuery?,
+	events: { Annotations.Event }?,
+	error: string?,
+}
+
+-- lib/dashboard/layers.luau.
+export type Layers = {
+	-- Bumped by every batch of layer requests; older answers are dropped.
+	gen: number,
+	-- Identity of the last batch (its requests).
+	sig: string?,
+	annotations: { AnnotationLayer },
+	-- Alert state per panel id; nil while unknown or when the range does
+	-- not end now.
+	alert_states: { [number]: AlertStates.State }?,
+	-- The dashboard has no rules linked to its panels: not asked again
+	-- until it loads anew (AlertStatesDataLayer hasAlertRules).
+	no_rules: boolean,
+	-- Marks by panel id from the answered layers, built on demand and kept
+	-- (same table) while they stay equal: the view memo keys on their
+	-- identity. `stamp` is bumped by every change to the events.
+	marks: { [number]: { stamp: number, list: { SvgAnnotations.Mark } } },
+	stamp: number,
+}
+
+function M.newLayers(): Layers
+	return { gen = 0, sig = nil, annotations = {}, alert_states = nil, no_rules = false, marks = {}, stamp = 0 }
+end
 
 function M.new(env: Env): State
 	local queryOptions = QueryOptions.read(if env.config then env.config.query else nil)
@@ -231,6 +295,7 @@ function M.new(env: Env): State
 		vars = {},
 		vars_error = nil,
 		var_gen = 0,
+		var_runs = {},
 		rev = 0,
 		scope_memo = nil,
 		settings = { status = "loading", renderer = nil, datasources = {}, features = {} },
@@ -261,9 +326,11 @@ function M.new(env: Env): State
 		refresh_ms = nil,
 		auto = true,
 		picker = nil,
+		picker_gen = 0,
 		search = { gen = 0, status = "ready", hits = {} },
 		updated_ms = nil,
 		labels = {},
+		pages = {},
 		card_ids = {},
 		memo = {},
 		exemplar = nil,
@@ -274,6 +341,7 @@ function M.new(env: Env): State
 		live_gen = 0,
 		live_ms = nil,
 		live_tick = 0,
+		layers = M.newLayers(),
 	}
 end
 

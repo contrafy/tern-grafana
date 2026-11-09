@@ -91,7 +91,9 @@ function M.openPanelInBrowser(s: State, key: string?, effects: { Effect })
 end
 
 -- The panel's links (panel.links) with variables, the time builtins and
--- `${__url_time_range}` interpolated; a path-only URL is on Grafana.
+-- `${__url_time_range}` interpolated as linkSrv.getDataLinkUIModel does (the
+-- URL `uriencode`, the title in the default format); a path-only URL is on
+-- Grafana.
 function M.panelLinks(s: State, inst: Repeat.Instance, env: Env): { PanelLink }
 	local out: { PanelLink } = {}
 	local links = Env.value(env, inst.panel.json.links)
@@ -110,12 +112,12 @@ function M.panelLinks(s: State, inst: Repeat.Instance, env: Env): { PanelLink }
 		if url == nil or url == "" then
 			continue
 		end
-		local u = Interpolate.replace(url :: string, scope, { format = Interpolate.text })
+		local u = Interpolate.replace(url :: string, scope, { format = Interpolate.named("uriencode") })
 		if string.sub(u, 1, 1) == "/" and base then
 			u = base .. u
 		end
 		local t = if type(l.title) == "string" and l.title ~= "" then l.title else u
-		table.insert(out, { title = Interpolate.replace(t, scope, { format = Interpolate.text }), url = u })
+		table.insert(out, { title = Interpolate.replace(t, scope), url = u })
 	end
 	return out
 end
@@ -130,6 +132,15 @@ function M.openPanelLink(s: State, value: string, env: Env, effects: { Effect })
 	local link = M.panelLinks(s, inst, env)[tonumber(idx) :: number]
 	if link and string.match(link.url, "^https?://") then
 		table.insert(effects, M.browse(link.url))
+	end
+end
+
+-- Opens a panel's data link (`dlink=<percent-encoded URL>`, the treemap's
+-- tiles) in the browser pane.
+function M.openDataLink(value: string, effects: { Effect })
+	local url = Scheme.percentDecode(value, false)
+	if url and string.match(url, "^https?://") then
+		table.insert(effects, M.browse(url))
 	end
 end
 

@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "data": [
+    "checkout_latency_seconds_bucket",
+    "checkout_requests_total",
+    "queue_depth",
+    "worker_up"
+  ]
+}

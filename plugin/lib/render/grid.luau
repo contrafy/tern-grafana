@@ -8,7 +8,8 @@ local ui = require("../ui")
 
 type Node = ui.Node
 
-export type Column = { head: string, numeric: boolean? }
+-- `class` is added to the column's header and cells.
+export type Column = { head: string, numeric: boolean?, class: string? }
 export type Row = { key: string, cells: { Node }, action: string? }
 
 local M = {}
@@ -27,11 +28,14 @@ function M.grid(key: string, columns: { Column }, rows: { Row }, role: string?):
 	local children: { Node } = table.create(n + #rows)
 	for i = 1, n do
 		local col = columns[i]
-		cellClass[i] = if col.numeric then "tg-c tg-num" else "tg-c"
-		children[i] = {
-			k = "el",
-			p = { tag = "div", key = "h" .. i, class = if col.numeric then "tg-h tg-num" else "tg-h", text = col.head },
-		}
+		local base = if col.numeric then "tg-c tg-num" else "tg-c"
+		local head = if col.numeric then "tg-h tg-num" else "tg-h"
+		if col.class then
+			base ..= " " .. col.class
+			head ..= " " .. col.class
+		end
+		cellClass[i] = base
+		children[i] = { k = "el", p = { tag = "div", key = "h" .. i, class = head, text = col.head } }
 	end
 	for _, row in rows do
 		local cells: { Node } = table.create(n)

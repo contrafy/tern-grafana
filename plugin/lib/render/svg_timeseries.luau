@@ -25,6 +25,11 @@
 -- across the time range (preparePlotData2, the Constant path builder); the
 -- legend and cursor keep reading the series' own values.
 --
+-- Like uPlot, y scales range over the samples in view only (setScales
+-- i0..i1), and each series is drawn through the nearest sample beyond each
+-- end of the range (getOuterIdxs), cut at the plot's edges (Tern drops
+-- clipPath, so svg_paths cuts the path data itself).
+--
 -- Exemplars are diamonds in one `tg-exemplar` path over the series, at most
 -- EXEMPLAR_CAP of them (thinned evenly over time); layout.exemplars lists
 -- the ones drawn so a block can select one by index. They share the first
@@ -33,6 +38,7 @@
 -- Series preparation (transforms, stacking, downsampling) lives in
 -- lib/render/ts_data, the series path data in lib/render/svg_paths.
 
+local Annotations = require("./svg_annotations")
 local Axis = require("./axis")
 local Data = require("./ts_data")
 local Frame = require("../frame/types")
@@ -85,13 +91,17 @@ export type Options = {
 	-- Visible time range (default: the data's extent).
 	from_ms: number?,
 	to_ms: number?,
-	-- Tick labels' fixed offset, minutes east of UTC.
-	offset_min: number?,
+	-- Tick labels' timezone (Range.Offset).
+	offset_min: Axis.Offset?,
 	-- Grafana legendFormat for series names.
 	legend: string?,
 	-- Exemplar markers (any order); those in the time range are drawn, at
 	-- most EXEMPLAR_CAP of them.
 	exemplars: { FrameProm.Exemplar }?,
+	-- Dashboard annotations (lib/render/svg_annotations): over the series,
+	-- under the exemplars, markers under the plot; at most
+	-- svg_annotations.CAP of them.
+	annotations: Annotations.Layer?,
 }
 
 export type Result = { svg: string, layout: Layout, dropped: number, points: number }
@@ -201,14 +211,18 @@ local function scaleSpecs(styles: { SeriesStyle }): ({ ScaleSpec }, { number })
 end
 
 -- The data extent of each scale: stacked tops and bases, or the full-
--- resolution values (so downsampling never moves an axis). `calcs` holds
--- the calcs of `list`, which a series drawn untransformed shares.
+-- resolution values (so downsampling never moves an axis), of the samples
+-- in view (uPlot ranges its y scales over i0..i1 only). `calcs` holds the
+-- calcs of `list`, which a series drawn untransformed and wholly in view
+-- shares; `view[i]` bounds the times in view of a series that has samples
+-- outside them.
 local function scaleRange(
 	shown: { Series.Series },
 	list: { Series.Series },
 	calcs: { Series.Calcs },
 	plot: Plot,
-	members: { number }
+	members: { number },
+	view: { [number]: { number } }
 ): (number?, number?)
 	local lo: number?, hi: number? = nil, nil
 	local function see(v: any)
@@ -223,13 +237,27 @@ local function scaleRange(
 		end
 	end
 	for _, i in members do
+		local bounds = view[i]
+		local t0, t1 = -math.huge, math.huge
+		if bounds then
+			t0, t1 = bounds[1], bounds[2]
+		end
 		if plot.stacked[i] then
-			for _, v in plot.tops[i] do
-				see(v)
+			local times, b = plot.times[i], plot.bottoms[i]
+			for j, v in plot.tops[i] do
+				local t = times[j]
+				if t >= t0 and t <= t1 then
+					see(v)
+					if b then
+						see(b[j])
+					end
+				end
 			end
-			local b = plot.bottoms[i]
-			if b then
-				for _, v in b do
+		elseif bounds then
+			local times = shown[i].times
+			for j, v in shown[i].values do
+				local t = times[j]
+				if t >= t0 and t <= t1 then
 					see(v)
 				end
 			end
@@ -298,7 +326,7 @@ local function buildScale(spec: ScaleSpec, lo: number?, hi: number?, plotPx: num
 		percent = spec.percent,
 		decimals = st.decimals,
 	})
-	return Axis.rangeScale(a, b, plotPx)
+	return Axis.rangeScale(a, b, plotPx, st.unit)
 end
 
 -- One decimals count for every tick, the fewest that print each tick
@@ -580,7 +608,7 @@ local function build(ctx: Ctx): (string, number)
 		local labels = ctx.labels[k]
 		local left = a.side == "left"
 		for i, v in scale.ticks do
-			if v >= scale.min and v <= scale.max then
+			if v >= scale.min and v <= scale.max and labels[i] ~= "" then
 				table.insert(
 					out,
 					Kit.text(
@@ -625,6 +653,7 @@ local function build(ctx: Ctx): (string, number)
 
 	-- Series: fills and bars first, lines and points on top
 	-- (UPlotSeriesBuilder: each series' own draw style, line, fill, points).
+	-- Samples just beyond the range are cut at the plot's edges (svg_paths).
 	local list = ctx.shown
 	local looks = ctx.looks
 	local function baseOf(i: number): number
@@ -786,8 +815,10 @@ local function build(ctx: Ctx): (string, number)
 		local all = pts == "always"
 		if pts == "auto" then
 			local n = 0
-			for _, v in plot.tops[i] do
-				if finite(v) then
+			local times = plot.times[i]
+			for j, v in plot.tops[i] do
+				local t = times[j]
+				if finite(v) and t >= layout.t_from and t <= layout.t_to then
 					n += 1
 				end
 			end
@@ -808,6 +839,20 @@ local function build(ctx: Ctx): (string, number)
 				)
 			)
 		end
+	end
+
+	-- Annotations: drawn after the series (AnnotationsPlugin's draw hook),
+	-- under the exemplar markers.
+	if opts.annotations then
+		Annotations.draw(out, opts.annotations, {
+			t_from = layout.t_from,
+			t_to = layout.t_to,
+			left = layout.plot_left,
+			right = layout.plot_right,
+			top = top,
+			bottom = bottom,
+			scale = M.LINE_SCALE,
+		})
 	end
 
 	-- Exemplars: one path of diamonds over the lines, on the first scale.
@@ -924,6 +969,23 @@ function M.render(frames: { Frame }, options: Options?): Result
 		table.insert(specs[scaleOf[i]].members, i)
 	end
 	local shown = Data.transformed(list, styles, tFrom_, tTo_)
+	-- The samples in view plus the nearest one beyond each end (Data.window):
+	-- `view` bounds the samples in view of a series with others outside
+	-- them, `outside` is set when a drawn sample lies outside the time range.
+	local view: { [number]: { number } } = {}
+	local outside = false
+	for i, s in shown do
+		local cut, t0, t1 = Data.window(s, tFrom_, tTo_)
+		local times = cut.times
+		local n = #times
+		if t0 and t1 and (t0 > s.times[1] or t1 < s.times[#s.times]) then
+			view[i] = { t0, t1 }
+		end
+		if n > 0 and (times[1] < tFrom_ or times[n] > tTo_) then
+			outside = true
+		end
+		shown[i] = cut
+	end
 	local looks: { Look } = table.create(#list)
 	local spans: { boolean | number } = table.create(#list)
 	for i = 1, #list do
@@ -953,6 +1015,9 @@ function M.render(frames: { Frame }, options: Options?): Result
 		marks, marksDropped = M.drawnExemplars(opts.exemplars, tFrom_, tTo_)
 	end
 	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
+	if opts.annotations then
+		fixed += math.min(#opts.annotations.marks, Annotations.CAP) * Annotations.BYTES
+	end
 	-- Gradient definitions: their stops, doubled for discrete edges.
 	for _, look in looks do
 		if look.hue then
@@ -980,6 +1045,10 @@ function M.render(frames: { Frame }, options: Options?): Result
 	if #barList > 0 then
 		local slots = math.floor((W - PAD_RIGHT - 36) / M.MIN_BAR_PX)
 		for k, s in Data.bucketBars(barList, tFrom_, tTo_, slots) do
+			if s ~= barList[k] then
+				-- Buckets hold only the samples in the range.
+				view[barAt[k]] = nil
+			end
 			shown[barAt[k]] = s
 		end
 	end
@@ -998,7 +1067,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 	local widths: { number } = table.create(#specs)
 	local leftW, rightW = 0, 0
 	for k, spec in specs do
-		local lo, hi = scaleRange(shown, list, calcs, plot, spec.members)
+		local lo, hi = scaleRange(shown, list, calcs, plot, spec.members, view)
 		-- Exemplars share the first scale (as in Grafana): a marker pinned
 		-- to the plot edge would misstate its value. Percent stacks keep 0..1.
 		if k == 1 and marks and not spec.percent then
@@ -1126,7 +1195,17 @@ function M.render(frames: { Frame }, options: Options?): Result
 		points += #plot.times[i]
 	end
 	layout.series = drawn
-	layout.times = Data.unionTimes(plot)
+	local stops = Data.unionTimes(plot)
+	if outside then
+		local inRange: { number } = {}
+		for _, t in stops do
+			if t >= tFrom_ and t <= tTo_ then
+				table.insert(inRange, t)
+			end
+		end
+		stops = inRange
+	end
+	layout.times = stops
 	return { svg = svg, layout = layout, dropped = dropped, points = points }
 end
 

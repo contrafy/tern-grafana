@@ -1,0 +1,10 @@
+{
+  "dashboard": {
+    "uid": "shop-overview",
+    "title": "Shop overview",
+    "panels": []
+  },
+  "meta": {
+    "slug": "shop-overview"
+  }
+}

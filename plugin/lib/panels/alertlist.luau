@@ -29,6 +29,7 @@
 
 local Assets = require("../render/assets")
 local Common = require("./common")
+local DsTypes = require("../datasources/types")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local Http = require("../transport/http")
@@ -182,14 +183,7 @@ end
 
 local GRAFANA_DATASOURCE_NAME = "-- Grafana --"
 
-export type Source = {
-	uid: string,
-	type: string,
-	name: string,
-	is_default: boolean,
-	manage_alerts: boolean?,
-	backend: boolean?,
-}
+export type Source = DsTypes.Datasource
 
 -- The rules sources the panel reads: whether Grafana-managed rules are read,
 -- the data sources to read and the ones left out by MAX_EXTERNAL; nil while

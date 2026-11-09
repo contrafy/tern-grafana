@@ -54,11 +54,39 @@ function M.localOffsetMin(): number
 	return offsetMin
 end
 
+-- The local offset at `ms`, cached per half hour (zones change offset on
+-- the hour or half hour).
+local offsetAtCache: { [number]: number } = {}
+local offsetAtSize = 0
+
+function M.localOffsetAt(ms: number): number
+	local t = ms // 1000
+	local slot = t // 1800
+	local hit = offsetAtCache[slot]
+	if hit then
+		return hit
+	end
+	local utc: any = os.date("!*t", t)
+	local here: any = os.date("*t", t)
+	if utc == nil or here == nil then
+		return M.localOffsetMin()
+	end
+	utc.isdst = here.isdst
+	local min = math.floor(os.difftime(t, os.time(utc)) / 60 + 0.5)
+	if offsetAtSize > 4096 then
+		offsetAtCache, offsetAtSize = {}, 0
+	end
+	offsetAtCache[slot] = min
+	offsetAtSize += 1
+	return min
+end
+
 function M.make(cx: BlockCx?): Env.Env
 	local config = HostsHost.apply((ConfigHost.current()))
 	return {
 		now_ms = M.nowMs(),
 		local_offset_min = M.localOffsetMin(),
+		local_offset_at = M.localOffsetAt,
 		cols = if cx then cx.cols else nil,
 		rows = if cx then cx.rows else nil,
 		pane = if cx then cx.pane else nil,

@@ -11,8 +11,8 @@
 --   0.3 rad;
 -- - colors: palette-classic by default; with all values each row takes the
 --   next palette color (setIndexForPaletteColor) unless a byName override
---   sets that row's color (lookupRowColorFromOverride); fixed colors as
---   tones;
+--   sets that row's color (lookupRowColorFromOverride); fixed and
+--   threshold colors exactly; every slice in its color's radial gradient;
 -- - legend: showLegend, displayMode list|table|hidden, placement
 --   bottom|right, values value/percent (defaults: list with percent when
 --   the panel has no legend options), custom.hideFrom.legend.
@@ -27,7 +27,7 @@ local Format = require("../units/format")
 local Frame = require("../frame/types")
 local Json = require("./json")
 local SvgPie = require("../render/svg_pie")
-local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 local Values = require("./values")
 local ui = require("../ui")
 
@@ -41,6 +41,7 @@ M.types = { "piechart" }
 
 M.WIDTH = 480
 M.HEIGHT = 300
+M.HEADER_PX = 32
 
 function M.supports(panel: any, env: Env): (boolean, string?)
 	local why = Values.unsupported(panel, env)
@@ -56,6 +57,8 @@ export type Entry = {
 	value: number?,
 	text: string,
 	class: string,
+	-- The slice color (name or hex) its gradient derives from.
+	color: string,
 	decimals: number?,
 	hide_legend: boolean,
 }
@@ -91,14 +94,22 @@ function M.entries(panel: any, frames: { Frame }, env: Env, opts: Common.Options
 			continue
 		end
 		local d = v.display
-		local class = Charts.displayClass(d)
+		local class = Charts.valueClass(item, d, opts)
+		local color = d.color
+		local mode = item.config.color_mode
+		if class == d.class and (mode == "palette-classic" or mode == "palette-classic-by-name") then
+			color = TsGradient.paletteColor(item.series_index)
+		elseif (mode == "fixed" or mode == "shades") and item.config.fixed_color then
+			color = item.config.fixed_color :: string
+		end
 		if allRows then
 			local override = rowOverrideColor(panel, env, v.title)
-			local mode = item.config.color_mode
 			if override then
-				class = Charts.toneClass(Thresholds.tone(override))
+				class = TsGradient.fixedClass(override, opts.theme)
+				color = override
 			elseif mode == "palette-classic" or mode == "palette-classic-by-name" then
 				class = FieldConfig.paletteClass(k)
+				color = TsGradient.paletteColor(k)
 			end
 		end
 		table.insert(out, {
@@ -106,6 +117,7 @@ function M.entries(panel: any, frames: { Frame }, env: Env, opts: Common.Options
 			value = d.numeric,
 			text = FieldConfig.joined(d),
 			class = class,
+			color = color,
 			decimals = item.config.decimals,
 			hide_legend = Charts.hiddenFromLegend(item),
 		})
@@ -175,7 +187,12 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		if labels.percent then
 			table.insert(lines, percentText(e, total))
 		end
-		table.insert(slices, { value = e.value :: number, class = e.class, labels = lines })
+		table.insert(slices, {
+			value = e.value :: number,
+			class = e.class,
+			color = if e.color ~= "" then e.color else nil,
+			labels = lines,
+		})
 	end
 
 	-- Legend (defaults when the panel has none: list, bottom, percent).
@@ -199,8 +216,15 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		shown = { "percent" }
 	end
 	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
+	-- The panel header row above the visualization (a capped card's body
+	-- height has none).
+	if opts.card_height == nil then
+		H = math.max(H - M.HEADER_PX, 40)
+	end
 	local legendNode: Node? = nil
 	local side = math.min(W, H)
+	-- The width the pie's labels may run into (the panel less a right legend).
+	local canvas = W
 	if legend.show then
 		local rows: { Charts.Row } = {}
 		local widest = 0
@@ -222,9 +246,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		legendNode = Charts.legend(opts.key .. ".legend", rows, heads, legend.mode)
 		-- Room the legend takes from the pie (VizLayout).
 		if legend.placement == "right" then
-			-- VizLayout gives a right legend its natural width; keep at least
-			-- half the panel for the pie.
-			side = math.min(H, math.max(W * 0.5, W - (widest + 12 * #shown + 4) * 7))
+			-- VizLayout gives a right legend its natural width up to its
+			-- maxWidth of 60%: the pie keeps at least 40% of the panel.
+			local legendW = (widest + 12 * #shown + 4) * 7
+			side = math.min(H, math.max(W * 0.4, W - legendW))
+			canvas = math.max(side, W - legendW)
 		elseif legend.mode == "table" then
 			side = math.min(W, H - (#rows + 1) * 22)
 		else
@@ -232,13 +258,15 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		end
 	end
 	side = math.max(120, side)
+	canvas = math.max(side, canvas)
 	local svg = SvgPie.render(slices, {
 		size = side,
+		width = canvas,
 		donut = Json.str(env, options.pieType) == "donut",
 		name_label = labels.name == true,
 	})
 	local chart, assets =
-		Charts.image(opts.key, svg, side, side, Charts.alt(panel, env, "Pie chart"), "tern-grafana.piechart")
+		Charts.image(opts.key, svg, canvas, side, Charts.alt(panel, env, "Pie chart"), "tern-grafana.piechart")
 	return Charts.compose(opts.key, chart, legendNode, legend.placement), assets
 end
 

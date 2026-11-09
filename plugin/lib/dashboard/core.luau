@@ -4,6 +4,7 @@
 -- and range, see Types.ScopeMemo), the panel instance index, panel states,
 -- the panel's range and query context.
 
+local DsTypes = require("../datasources/types")
 local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
@@ -42,6 +43,54 @@ end
 
 function M.http(t: string, route: Route, request: any): Effect
 	return { kind = "http", tag = t, route = route, request = request }
+end
+
+-- Effects for a panel's datasource job requests (lib/datasources): tag
+-- ds/<gen>/<panel gen>/<job index>/<request tag>/<panel state key>, sent to
+-- the dashboard's Grafana.
+function M.jobRequests(
+	s: State,
+	ps: PanelState,
+	key: string,
+	index: number,
+	requests: { DsTypes.DsRequest },
+	effects: { Effect }
+)
+	local route = s.route
+	if route == nil then
+		return
+	end
+	for _, r in requests do
+		table.insert(effects, M.http(M.tag("ds", s.gen, ps.gen, index, r.tag, key), route, r.request))
+	end
+end
+
+-- Effects for a query variable's datasource job requests: tag
+-- dsv/<gen>/<var gen>/<request tag>/<variable name>.
+function M.variableRequests(s: State, gen: number, name: string, requests: { DsTypes.DsRequest }, effects: { Effect })
+	local route = s.route
+	if route == nil then
+		return
+	end
+	for _, r in requests do
+		table.insert(effects, M.http(M.tag("dsv", s.gen, gen, r.tag, name), route, r.request))
+	end
+end
+
+-- Shows `data` as the answer to the panel's query in flight.
+function M.showData(s: State, key: string, ps: PanelState, data: Queries.PanelData, env: Env)
+	ps.data = data
+	if key == s.focus then
+		-- The selection indexes the old answer's exemplars.
+		s.exemplar, s.ex_anchor = nil, nil
+	end
+	ps.error = nil
+	ps.status = if #data.frames == 0 and #data.errors > 0 then "error" else "ready"
+	if ps.status == "error" then
+		ps.error = table.concat(data.errors, "; ")
+	end
+	ps.drawn = ps.asked
+	s.updated_ms = env.now_ms
 end
 
 function M.setError(s: State, message: string)
@@ -252,6 +301,7 @@ function M.ladderContext(s: State, scope: Interpolate.Scope): Ladder.Context
 		renderer_available = if s.settings.status == "loading" then nil else s.settings.renderer == true,
 		scope = scope,
 		datasources = s.settings.datasources,
+		grafana_major = s.settings.major,
 		source = function(id: number): Model.Panel?
 			local inst = M.sourceInstance(s, id)
 			return if inst then inst.panel else nil
@@ -316,6 +366,9 @@ function M.queryContext(
 		user_login = s.user.login,
 		exemplars = s.exemplars_on,
 		resolved = resolved,
+		grafana_major = s.settings.major,
+		adhoc = Variables.adhocVars(s.vars, scope),
+		features = s.settings.features,
 	}
 end
 

@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"vector(0)","legendFormat":"","instant":true,"range":false,"editorMode":"code","intervalMs":10000,"maxDataPoints":320}],"from":"1794250687000","to":"1794254287000"}

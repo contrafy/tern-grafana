@@ -369,18 +369,36 @@ local function classOfRgb(c: Rgb): string
 	return class
 end
 
--- The stop class of a Grafana color (name, hex or rgb()) in `theme`.
+-- The stop class of a Grafana color (name, hex or rgb()) in `theme`. The
+-- dark-theme named colors' classes take their light shade under Tern's
+-- light theme (tern-grafana.css), as Grafana resolves names per theme; a
+-- literal color that is not exactly one of them (it only has the nearest
+-- class) also gets `tg-hex`, which keeps it as it is in both themes.
 function M.stopClass(color: string, theme: Theme?): string
 	if color == "panel-bg" then
 		return "tg-gc-bg"
 	elseif color == "transparent" then
 		return "tg-gx"
 	end
-	local c = parse(Thresholds.color(color, theme))
+	local resolved = Thresholds.color(color, theme)
+	local c = parse(resolved)
 	if c == nil then
 		return classOfRgb({ 128, 128, 128 })
 	end
+	if resolved == color and Thresholds.lightOf(color) == color then
+		return classOfRgb(c) .. " tg-hex"
+	end
 	return classOfRgb(c)
+end
+
+-- A fixed color (fieldConfig color.fixedColor): a literal stays that color
+-- in both themes, even when it equals a named color's dark shade.
+function M.fixedClass(color: string, theme: Theme?): string
+	local class = M.stopClass(color, theme)
+	if Thresholds.color(color, theme) == color and string.find(class, " tg-hex", 1, true) == nil then
+		return class .. " tg-hex"
+	end
+	return class
 end
 
 -- gradientMode hue: the top and bottom stop classes for a series color.
@@ -388,6 +406,35 @@ function M.hue(color: string, theme: Theme?): { string }
 	local c = parse(Thresholds.color(color, theme)) or { 128, 128, 128 }
 	local top, bottom = hueStops(c, theme)
 	return { classOfRgb(top), classOfRgb(bottom) }
+end
+
+-- PieChart's radial slice gradient (getGradientColorFrom at the inner
+-- radius to getGradientColorTo at the outer one) in `theme`, sampled as the
+-- exact colors of `n` concentric rings (Tern's SVG drops radialGradient).
+-- They are literal fills, not stop classes: the light theme's lightened
+-- colors (a pale blue-gray, a pale orange) have no near stop, and the
+-- nearest one came out a different hue.
+function M.pieRings(color: string, theme: Theme?, n: number): { string }
+	local c = parse(Thresholds.color(color, theme)) or { 128, 128, 128 }
+	local k = if theme == "light" then -0.7 else 1
+	-- toRgbString: the gradient's ends are whole rgb values.
+	local from = parse(hexOf(spin(lighten(c, -20 * k), 4))) :: Rgb
+	local to = parse(hexOf(spin(lighten(c, -10 * k), -4))) :: Rgb
+	local out: { string } = table.create(n)
+	for i = 1, n do
+		local t = (i - 0.5) / n
+		local mix: Rgb = {}
+		for j = 1, 3 do
+			mix[j] = from[j] + (to[j] - from[j]) * t
+		end
+		out[i] = hexOf(mix)
+	end
+	return out
+end
+
+-- The color name of palette class tg-s<k> (getClassicPalette).
+function M.paletteColor(k: number): string
+	return CLASSIC[(k - 1) % #M.PALETTE_HEX + 1]
 end
 
 -- The colors a by-value scheme runs through, or nil when the mode has none

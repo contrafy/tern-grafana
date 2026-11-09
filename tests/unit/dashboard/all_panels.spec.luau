@@ -10,6 +10,8 @@ local S = require("./support")
 local State = require("../../../plugin/lib/dashboard/state")
 local View = require("../../../plugin/lib/dashboard/view")
 local json = require("../../lib/json")
+local Thresholds = require("../../../plugin/lib/units/thresholds")
+local TsGradient = require("../../../plugin/lib/render/ts_gradient")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -116,12 +118,12 @@ for _, version in S.VERSIONS do
 				-- neutral 6 on 0..16: the bar runs 0..6, red past the 2 step.
 				expect(g8.style).toBe("gauge")
 				expect(g8.fill_to).toBe(6 / 16)
-				expect(g8.bands[#g8.bands].tone).toBe("error")
+				expect(g8.bands[#g8.bands].class).toBe(TsGradient.stopClass(Thresholds.color("red")))
 				-- neutral 6 clamps to max 1: the whole circle, segments in
 				-- Grafana's fallback gray.
 				expect(g9.style).toBe("circle")
 				expect(g9.fill_to).toBe(1)
-				expect((g9.segment_tone :: (number) -> string)(0.5)).toBe("neutral")
+				expect((g9.segment_class :: (number) -> string)(0.5)).toBe("tgp-fx tgp-neutral")
 			else
 				-- The old gauge has no options.neutral: an empty bar at 0.
 				expect(g8.style).toBe("v1")
@@ -132,9 +134,10 @@ for _, version in S.VERSIONS do
 		end)
 
 		-- Grafana gives every panel its gridPos height whatever it shows; in
-		-- the grid every panel type is cut there (a wrapped countdown clock
-		-- never outgrows its row).
-		it("caps every grid panel to its Grafana height", function()
+		-- the grid every panel type is exactly that tall: cut there (a
+		-- wrapped countdown clock never outgrows its row) and never shorter
+		-- (a short stat keeps its slot, so bands line up as in Grafana).
+		it("sizes every grid panel to its Grafana height", function()
 			local h = start(version)
 			expect(View.heightLines(8)).toBe(18) -- 8 rows: 296 px of 16 px lines
 			local view = View.view(h.s, h.env) :: any
@@ -143,7 +146,9 @@ for _, version in S.VERSIONS do
 				local p = n.p
 				if p and type(p.key) == "string" and string.match(p.key, "^p%d+$") then
 					cards += 1
-					expect(p.max and p.max.h).toBe(string.format("%dlines", View.heightLines(8)))
+					local lines = string.format("%dlines", View.heightLines(8))
+					expect(p.max and p.max.h).toBe(lines)
+					expect(p.min and p.min.h).toBe(lines)
 					return
 				end
 				for _, c in n.c or {} do
@@ -237,7 +242,8 @@ for _, version in S.VERSIONS do
 				local px = assert(tonumber(string.match(assets[image.p.asset].bytes, 'font%-size="(%d+)"')))
 				return image, px
 			end
-			local body = View.cardHeight(8, false)
+			-- p5 has a title and a description: one head line holding both.
+			local body = View.cardHeight(8, false, true)
 			local up, upPx = stat("p5")
 			local none, nonePx = stat("p6")
 			expect(up.p.alt).toBe("5")

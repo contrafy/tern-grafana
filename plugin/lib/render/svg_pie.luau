@@ -2,29 +2,44 @@
 -- Pie and donut SVGs as Grafana's pie chart draws them
 -- (public/app/plugins/panel/piechart/PieChart.tsx): slices clockwise from
 -- 12 o'clock in the given order, a 16 px margin, a donut ring max(r/3, 20)
--- thick, 0.005 rad padding between slices, and labels (name, value, percent
--- lines) at the middle of the ring on slices of at least 0.3 rad. Slice
--- colors are classes (palette tg-s<n> or tone classes, lib/render/svg_kit).
+-- thick, 0.005 rad padding between slices, each slice in its color's
+-- radial gradient (getGradientColorFrom at the inner radius to
+-- getGradientColorTo at the outer one, per theme: Tern's SVG has no
+-- radialGradient, so RINGS concentric bands sample it, the dark and light
+-- theme's bands each shown only in their theme, filled with the exact
+-- sampled colors), and labels (name, value, percent lines) at the middle of
+-- the ring on slices of at least 0.3 rad.
+-- The SVG is as wide as the panel gives it, the pie centered, so labels
+-- running past the pie stay visible as in Grafana (overflow: visible).
+-- A slice without a color is flat in its classes (palette tg-s<n>, exact
+-- tg-gc<n> or tone classes).
 
 local Kit = require("./svg_kit")
+local TsGradient = require("./ts_gradient")
 
 local M = {}
 
 export type Slice = {
 	value: number,
-	-- Color classes (tg-s3, or "tgp-fx tgp-error").
+	-- Color classes (tg-s3, tg-gc12 tg-hex, or "tgp-fx tgp-error").
 	class: string,
+	-- The slice's color (name or hex) for its gradient; nil draws it flat.
+	color: string?,
 	-- Label lines drawn on the slice (empty: none).
 	labels: { string },
 }
 
 export type Options = {
-	-- Square side, px.
+	-- Pie side, px.
 	size: number,
+	-- Canvas width, px (at least `size`; default `size`).
+	width: number?,
 	donut: boolean?,
 	-- Name is among the labels: Grafana sizes label text smaller then.
 	name_label: boolean?,
 }
+
+M.RINGS = 8
 
 M.MARGIN = 16
 M.PAD = 0.005
@@ -99,8 +114,10 @@ end
 -- The SVG for `slices` (non-positive values take no room, as in d3's pie).
 function M.render(slices: { Slice }, opts: Options): string
 	local size = math.max(40, opts.size)
+	local width = math.max(size, opts.width or size)
 	local l = M.layout(size, opts.donut == true)
-	local out: { string } = { Kit.open(size, size) }
+	l.cx += (width - size) / 2
+	local out: { string } = { Kit.open(width, size) }
 	local total = 0
 	local count = 0
 	for _, s in slices do
@@ -112,6 +129,17 @@ function M.render(slices: { Slice }, opts: Options): string
 	if total <= 0 then
 		Kit.noData(out, l.cx, l.cy)
 		return Kit.finish(out, "svg_pie")
+	end
+	-- Each color's gradient bands per theme.
+	local rings: { [string]: { dark: { string }, light: { string } } } = {}
+	for _, s in slices do
+		local color = s.color
+		if color and rings[color] == nil then
+			rings[color] = {
+				dark = TsGradient.pieRings(color, "dark", M.RINGS),
+				light = TsGradient.pieRings(color, "light", M.RINGS),
+			}
+		end
 	end
 	local pad = if count > 1 then M.PAD else 0
 	local fontSize = if opts.name_label
@@ -131,7 +159,24 @@ function M.render(slices: { Slice }, opts: Options): string
 		if p1 <= p0 then
 			p0, p1 = a0, a1
 		end
-		table.insert(out, fmt('<path class="%s tg-bar" d="%s"/>', s.class, arcPath(l, p0, p1)))
+		local bands = if s.color then rings[s.color :: string] else nil
+		if bands then
+			-- Outermost band first, each next one inside it, so the bands
+			-- overlap without seams.
+			for _, theme in { "dark", "light" } do
+				local fills = if theme == "dark" then bands.dark else bands.light
+				for i = M.RINGS, 1, -1 do
+					local ring: Layout =
+						{ cx = l.cx, cy = l.cy, inner = l.inner, outer = l.inner + (l.outer - l.inner) * i / M.RINGS }
+					table.insert(
+						out,
+						fmt('<path class="tg-bar tgv-%s" fill="%s" d="%s"/>', theme, fills[i], arcPath(ring, p0, p1))
+					)
+				end
+			end
+		else
+			table.insert(out, fmt('<path class="%s tg-bar" d="%s"/>', s.class, arcPath(l, p0, p1)))
+		end
 		if #s.labels > 0 and span >= M.MIN_LABEL_ANGLE then
 			local mid = (a0 + a1) / 2
 			local lx, ly = point(l, (l.outer + labelRadius) / 2, mid)

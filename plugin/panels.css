@@ -33,7 +33,7 @@
 	line-height: 1.2;
 }
 
-/* Tinted backgrounds: stat colorMode background, table color-background. */
+/* Tinted backgrounds: stat colorMode background. */
 .tgp-bg { border-radius: 4px; padding: 0 4px; }
 .tgp-stat.tgp-bg { padding: 6px 8px; }
 .tgp-bg.tgp-success { background: color-mix(in oklab, var(--ok) 22%, transparent); }
@@ -55,3 +55,512 @@
 .tgp-bgs.tgp-pending { background: var(--live); }
 .tgp-bgs.tgp-neutral,
 .tgp-bgs.tgp-muted { background: var(--l3); color: var(--t1); }
+
+/* Table cells (lib/panels/table.luau). */
+
+/* Gauge cells (BarGaugeCell): the bar needs a width in a content-sized
+   column; the value sits after it. */
+.tgp-gc { display: flex; align-items: center; gap: 8px; }
+.tgp-gc .sf-meter { flex: 1 1 auto; width: 10em; min-width: 3em; }
+.tgp-gc .sf-meter,
+.tgp-gc .sf-mt-track { height: 14px; border-radius: 3px; }
+/* The value box is at least the column's longest value wide (0.6em a character:
+   the monospace advance), and never narrower than its own text. */
+.tgp-gc-v { flex: none; text-align: right; white-space: nowrap; }
+.tgp-gw-0 { min-width: 0em; }
+.tgp-gw-1 { min-width: 0.6em; }
+.tgp-gw-2 { min-width: 1.2em; }
+.tgp-gw-3 { min-width: 1.8em; }
+.tgp-gw-4 { min-width: 2.4em; }
+.tgp-gw-5 { min-width: 3em; }
+.tgp-gw-6 { min-width: 3.6em; }
+.tgp-gw-7 { min-width: 4.2em; }
+.tgp-gw-8 { min-width: 4.8em; }
+.tgp-gw-9 { min-width: 5.4em; }
+.tgp-gw-10 { min-width: 6em; }
+.tgp-gw-11 { min-width: 6.6em; }
+.tgp-gw-12 { min-width: 7.2em; }
+.tgp-gw-13 { min-width: 7.8em; }
+.tgp-gw-14 { min-width: 8.4em; }
+.tgp-gw-15 { min-width: 9em; }
+.tgp-gw-16 { min-width: 9.6em; }
+.tgp-gw-17 { min-width: 10.2em; }
+.tgp-gw-18 { min-width: 10.8em; }
+.tgp-gw-19 { min-width: 11.4em; }
+.tgp-gw-20 { min-width: 12em; }
+.tgp-gw-21 { min-width: 12.6em; }
+.tgp-gw-22 { min-width: 13.2em; }
+.tgp-gw-23 { min-width: 13.8em; }
+.tgp-gw-24 { min-width: 14.4em; }
+
+/* Panel grids (the Zabbix problems list): tracks may shrink to their cells'
+   minimum, which is 0 for text (tg-c min-width: 0, headers clip) but, for
+   gauge cells, the padding, the bar's 3em minimum, the gap and tgp-gw-N:
+   5.5em + 0.6em a value character. */
+.tgp-table .tg-h { min-width: 0; }
+.tgp-table .tg-cols-1 { grid-template-columns: repeat(1, minmax(auto, max-content)); }
+.tgp-table .tg-cols-2 { grid-template-columns: repeat(2, minmax(auto, max-content)); }
+.tgp-table .tg-cols-3 { grid-template-columns: repeat(3, minmax(auto, max-content)); }
+.tgp-table .tg-cols-4 { grid-template-columns: repeat(4, minmax(auto, max-content)); }
+.tgp-table .tg-cols-5 { grid-template-columns: repeat(5, minmax(auto, max-content)); }
+.tgp-table .tg-cols-6 { grid-template-columns: repeat(6, minmax(auto, max-content)); }
+.tgp-table .tg-cols-7 { grid-template-columns: repeat(7, minmax(auto, max-content)); }
+.tgp-table .tg-cols-8 { grid-template-columns: repeat(8, minmax(auto, max-content)); }
+.tgp-table .tg-cols-9 { grid-template-columns: repeat(9, minmax(auto, max-content)); }
+.tgp-table .tg-cols-10 { grid-template-columns: repeat(10, minmax(auto, max-content)); }
+.tgp-table .tg-cols-11 { grid-template-columns: repeat(11, minmax(auto, max-content)); }
+.tgp-table .tg-cols-12 { grid-template-columns: repeat(12, minmax(auto, max-content)); }
+.tgp-table .tg-cols-13 { grid-template-columns: repeat(13, minmax(auto, max-content)); }
+.tgp-table .tg-cols-14 { grid-template-columns: repeat(14, minmax(auto, max-content)); }
+.tgp-table .tg-cols-15 { grid-template-columns: repeat(15, minmax(auto, max-content)); }
+.tgp-table .tg-cols-16 { grid-template-columns: repeat(16, minmax(auto, max-content)); }
+
+/* The table panel's grid (tgp-fit) as TableNG sizes it
+   (computeContentAwareColWidths): every column is as wide as its content and
+   header (max-content: an auto column's text is capped at 400px by tgp-cv,
+   custom.width and custom.minWidth are set on its cells below, a gauge cell
+   keeps the bar's minimum and its tgp-gcw value room), never squeezed into
+   the card: a table wider than the card scrolls sideways in tg-wrap. Tern's
+   grid shrinks a minmax(auto, max-content) track to 0 whatever min-width
+   its cells ask for, so the tracks are plain max-content. Without
+   fixed-width columns (tgp-grow) the columns also share the leftover width,
+   as TableNG grows its auto columns to fill the panel; a stretched
+   custom.width track would leave a gap beside its fixed cells, so tables
+   with one stay packed left. */
+.tgp-fit .tg-cols-1 { grid-template-columns: repeat(1, max-content); }
+.tgp-fit .tg-cols-2 { grid-template-columns: repeat(2, max-content); }
+.tgp-fit .tg-cols-3 { grid-template-columns: repeat(3, max-content); }
+.tgp-fit .tg-cols-4 { grid-template-columns: repeat(4, max-content); }
+.tgp-fit .tg-cols-5 { grid-template-columns: repeat(5, max-content); }
+.tgp-fit .tg-cols-6 { grid-template-columns: repeat(6, max-content); }
+.tgp-fit .tg-cols-7 { grid-template-columns: repeat(7, max-content); }
+.tgp-fit .tg-cols-8 { grid-template-columns: repeat(8, max-content); }
+.tgp-fit .tg-cols-9 { grid-template-columns: repeat(9, max-content); }
+.tgp-fit .tg-cols-10 { grid-template-columns: repeat(10, max-content); }
+.tgp-fit .tg-cols-11 { grid-template-columns: repeat(11, max-content); }
+.tgp-fit .tg-cols-12 { grid-template-columns: repeat(12, max-content); }
+.tgp-fit .tg-cols-13 { grid-template-columns: repeat(13, max-content); }
+.tgp-fit .tg-cols-14 { grid-template-columns: repeat(14, max-content); }
+.tgp-fit .tg-cols-15 { grid-template-columns: repeat(15, max-content); }
+.tgp-fit .tg-cols-16 { grid-template-columns: repeat(16, max-content); }
+.tgp-fit.tgp-grow .tg-table { justify-content: normal; }
+.tgp-fit.tgp-grow .tg-cols-1 { grid-template-columns: repeat(1, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-2 { grid-template-columns: repeat(2, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-3 { grid-template-columns: repeat(3, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-4 { grid-template-columns: repeat(4, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-5 { grid-template-columns: repeat(5, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-6 { grid-template-columns: repeat(6, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-7 { grid-template-columns: repeat(7, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-8 { grid-template-columns: repeat(8, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-9 { grid-template-columns: repeat(9, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-10 { grid-template-columns: repeat(10, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-11 { grid-template-columns: repeat(11, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-12 { grid-template-columns: repeat(12, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-13 { grid-template-columns: repeat(13, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-14 { grid-template-columns: repeat(14, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-15 { grid-template-columns: repeat(15, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-16 { grid-template-columns: repeat(16, minmax(max-content, auto)); }
+
+/* EmptyTablePlaceholder: centered under the header in text.secondary. */
+.tgp-table-empty { padding: 2em 0; text-align: center; color: var(--sf-c-muted); }
+
+/* color-background cells (and applyToRow rows): Grafana's solid color, or
+   a 120deg gradient from a darker copy of it, with contrasting text; the
+   fill covers the whole cell (tg-c padding: 2px 14px 2px 6px). */
+.tgp-cbg {
+	margin: -2px -14px -2px -6px;
+	padding: 2px 14px 2px 6px;
+	color: rgb(247, 248, 250);
+	--tgp-cbg: var(--t3);
+	background: var(--tgp-cbg);
+}
+.tgp-cbg .sf-text,
+.tgp-cbg .tgp-cmd .sf-md .md,
+.tgp-cbg .tgp-cmd .sf-md .md * { color: inherit; }
+.tgp-cbg.tgp-success { --tgp-cbg: var(--ok); }
+.tgp-cbg.tgp-error { --tgp-cbg: var(--bad); }
+.tgp-cbg.tgp-warning { --tgp-cbg: var(--warn); color: rgb(32, 34, 38); }
+.tgp-cbg.tgp-info { --tgp-cbg: var(--accent); }
+.tgp-cbg.tgp-accent,
+.tgp-cbg.tgp-pending { --tgp-cbg: var(--live); }
+.tgp-cbg.tgp-neutral,
+.tgp-cbg.tgp-muted { --tgp-cbg: var(--l3); color: var(--t1); }
+.tgp-cbg.tg-s1 { --tgp-cbg: #73bf69; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s2 { --tgp-cbg: #f2cc0c; color: rgb(32, 34, 38); }
+.tgp-cbg.tg-s3 { --tgp-cbg: #5794f2; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s4 { --tgp-cbg: #ff9830; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s5 { --tgp-cbg: #f2495c; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s6 { --tgp-cbg: #b877d9; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s7 { --tgp-cbg: #37872d; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s8 { --tgp-cbg: #e0b400; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s9 { --tgp-cbg: #1f60c4; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s10 { --tgp-cbg: #fa6400; color: rgb(247, 248, 250); }
+.tgp-cbg-grad { background: linear-gradient(120deg, color-mix(in oklab, var(--tgp-cbg) 80%, black), var(--tgp-cbg)); }
+
+/* Markdown cells wrap like Grafana's markdown-container. */
+.tgp-cmd { white-space: normal; }
+
+/* Pill cells (PillCell): tags colored by mapping, fixed color, or a string
+   hash over classicColors (namedColorsPalette.ts) with
+   getTextColorForBackground text. */
+.tgp-pills { display: inline-flex; gap: 4px; flex-wrap: nowrap; }
+.tgp-pill {
+	padding: 1px 6px;
+	border-radius: 2px;
+	font-size: 0.86em;
+	white-space: nowrap;
+}
+.tgp-pill.tgp-cbg { margin: 0; }
+.tgp-pill-0 { background: #7EB26D; color: rgb(247, 248, 250); }
+.tgp-pill-1 { background: #EAB839; color: rgb(32, 34, 38); }
+.tgp-pill-2 { background: #6ED0E0; color: rgb(32, 34, 38); }
+.tgp-pill-3 { background: #EF843C; color: rgb(247, 248, 250); }
+.tgp-pill-4 { background: #E24D42; color: rgb(247, 248, 250); }
+.tgp-pill-5 { background: #1F78C1; color: rgb(247, 248, 250); }
+.tgp-pill-6 { background: #BA43A9; color: rgb(247, 248, 250); }
+.tgp-pill-7 { background: #705DA0; color: rgb(247, 248, 250); }
+.tgp-pill-8 { background: #508642; color: rgb(247, 248, 250); }
+.tgp-pill-9 { background: #CCA300; color: rgb(247, 248, 250); }
+.tgp-pill-10 { background: #447EBC; color: rgb(247, 248, 250); }
+.tgp-pill-11 { background: #C15C17; color: rgb(247, 248, 250); }
+.tgp-pill-12 { background: #890F02; color: rgb(247, 248, 250); }
+.tgp-pill-13 { background: #0A437C; color: rgb(247, 248, 250); }
+.tgp-pill-14 { background: #6D1F62; color: rgb(247, 248, 250); }
+.tgp-pill-15 { background: #584477; color: rgb(247, 248, 250); }
+.tgp-pill-16 { background: #B7DBAB; color: rgb(32, 34, 38); }
+.tgp-pill-17 { background: #F4D598; color: rgb(32, 34, 38); }
+.tgp-pill-18 { background: #70DBED; color: rgb(32, 34, 38); }
+.tgp-pill-19 { background: #F9BA8F; color: rgb(32, 34, 38); }
+.tgp-pill-20 { background: #F29191; color: rgb(247, 248, 250); }
+.tgp-pill-21 { background: #82B5D8; color: rgb(247, 248, 250); }
+.tgp-pill-22 { background: #E5A8E2; color: rgb(32, 34, 38); }
+.tgp-pill-23 { background: #AEA2E0; color: rgb(247, 248, 250); }
+.tgp-pill-24 { background: #629E51; color: rgb(247, 248, 250); }
+.tgp-pill-25 { background: #E5AC0E; color: rgb(247, 248, 250); }
+.tgp-pill-26 { background: #64B0C8; color: rgb(247, 248, 250); }
+.tgp-pill-27 { background: #E0752D; color: rgb(247, 248, 250); }
+.tgp-pill-28 { background: #BF1B00; color: rgb(247, 248, 250); }
+.tgp-pill-29 { background: #0A50A1; color: rgb(247, 248, 250); }
+.tgp-pill-30 { background: #962D82; color: rgb(247, 248, 250); }
+.tgp-pill-31 { background: #614D93; color: rgb(247, 248, 250); }
+.tgp-pill-32 { background: #9AC48A; color: rgb(247, 248, 250); }
+.tgp-pill-33 { background: #F2C96D; color: rgb(32, 34, 38); }
+.tgp-pill-34 { background: #65C5DB; color: rgb(247, 248, 250); }
+.tgp-pill-35 { background: #F9934E; color: rgb(247, 248, 250); }
+.tgp-pill-36 { background: #EA6460; color: rgb(247, 248, 250); }
+.tgp-pill-37 { background: #5195CE; color: rgb(247, 248, 250); }
+.tgp-pill-38 { background: #D683CE; color: rgb(247, 248, 250); }
+.tgp-pill-39 { background: #806EB7; color: rgb(247, 248, 250); }
+.tgp-pill-40 { background: #3F6833; color: rgb(247, 248, 250); }
+.tgp-pill-41 { background: #967302; color: rgb(247, 248, 250); }
+.tgp-pill-42 { background: #2F575E; color: rgb(247, 248, 250); }
+.tgp-pill-43 { background: #99440A; color: rgb(247, 248, 250); }
+.tgp-pill-44 { background: #58140C; color: rgb(247, 248, 250); }
+.tgp-pill-45 { background: #052B51; color: rgb(247, 248, 250); }
+.tgp-pill-46 { background: #511749; color: rgb(247, 248, 250); }
+.tgp-pill-47 { background: #3F2B5B; color: rgb(247, 248, 250); }
+.tgp-pill-48 { background: #E0F9D7; color: rgb(32, 34, 38); }
+.tgp-pill-49 { background: #FCEACA; color: rgb(32, 34, 38); }
+.tgp-pill-50 { background: #CFFAFF; color: rgb(32, 34, 38); }
+.tgp-pill-51 { background: #F9E2D2; color: rgb(32, 34, 38); }
+.tgp-pill-52 { background: #FCE2DE; color: rgb(32, 34, 38); }
+.tgp-pill-53 { background: #BADFF4; color: rgb(32, 34, 38); }
+.tgp-pill-54 { background: #F9D9F9; color: rgb(32, 34, 38); }
+.tgp-pill-55 { background: #DEDAF7; color: rgb(32, 34, 38); }
+/* Text panel HTML (lib/panels/html.luau): links, line breaks and the inline
+   styles kept from sanitized HTML; the rest is the el tags' own look. */
+.tgx { min-width: 0; overflow-wrap: anywhere; }
+.tgx > :first-child { margin-top: 0; }
+.tgx > :last-child { margin-bottom: 0; }
+.tgx [data-href] { color: var(--sf-c-link); cursor: pointer; }
+.tgx [data-href]:hover { text-decoration: underline; }
+.tgx-br { white-space: pre; }
+.tgx-b { font-weight: 600; }
+.tgx-i { font-style: italic; }
+.tgx-u { text-decoration: underline; }
+.tgx-center { text-align: center; }
+.tgx-right { text-align: right; }
+.tgx-alt { color: var(--sf-c-muted); }
+
+/* Table cells (lib/panels/table.luau): an auto column's text is at most
+   400px (TableNG MAX_AUTO_WIDTH); custom.width fixes a column (tgp-cw-N,
+   N x 10px), custom.minWidth floors it (tgp-cmin-N). */
+.tgp-cv { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tgp-table .tg-c[class*="tgp-cw-"] .tgp-cv { max-width: 100%; }
+
+/* Data links: the cell reads as a link. */
+.tgp-dlink { color: var(--sf-c-link); cursor: pointer; }
+.tgp-dlink .sf-text { color: inherit; }
+.tgp-dlink:hover { text-decoration: underline; }
+
+/* Gradient gauge cells (BarGauge getBarGradient): runs fading from their own
+   stop class color (--tgp-from) to their child's; transparent steps fade out. */
+.tgp-gbar { flex: 1 1 auto; width: 10em; min-width: 3em; height: 14px; border-radius: 3px; overflow: hidden; display: flex; background: var(--l2); }
+.tgp-gfill { display: flex; height: 100%; }
+.tgp-gseg { flex: none; height: 100%; --tgp-from: var(--tg-c); }
+.tgp-gseg.tgp-gseg-last { flex: 1 1 auto; }
+.tgp-gseg.tg-gx,
+.tgp-gseg-to.tg-gx { --tg-c: transparent; }
+.tgp-gseg-to { height: 100%; background: linear-gradient(90deg, var(--tgp-from), var(--tg-c)); }
+
+/* Table pager (usePaginatedRows): previous, pages, next, the row range. */
+.tgp-pager { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 0; }
+.tgp-pg-b { min-width: 1.6em; padding: 0 6px; border-radius: 3px; background: var(--l1); text-align: center; cursor: pointer; }
+.tgp-pg-b.tgp-pg-on { background: var(--t1); color: var(--page); }
+.tgp-pg-b.tgp-pg-off { opacity: 0.5; cursor: default; }
+.tgp-pg-e { color: var(--t3); }
+.tgp-pg-sum { color: var(--t3); margin-left: 8px; }
+
+.tgp-w-0 { width: 0%; }
+.tgp-w-1 { width: 1%; }
+.tgp-w-2 { width: 2%; }
+.tgp-w-3 { width: 3%; }
+.tgp-w-4 { width: 4%; }
+.tgp-w-5 { width: 5%; }
+.tgp-w-6 { width: 6%; }
+.tgp-w-7 { width: 7%; }
+.tgp-w-8 { width: 8%; }
+.tgp-w-9 { width: 9%; }
+.tgp-w-10 { width: 10%; }
+.tgp-w-11 { width: 11%; }
+.tgp-w-12 { width: 12%; }
+.tgp-w-13 { width: 13%; }
+.tgp-w-14 { width: 14%; }
+.tgp-w-15 { width: 15%; }
+.tgp-w-16 { width: 16%; }
+.tgp-w-17 { width: 17%; }
+.tgp-w-18 { width: 18%; }
+.tgp-w-19 { width: 19%; }
+.tgp-w-20 { width: 20%; }
+.tgp-w-21 { width: 21%; }
+.tgp-w-22 { width: 22%; }
+.tgp-w-23 { width: 23%; }
+.tgp-w-24 { width: 24%; }
+.tgp-w-25 { width: 25%; }
+.tgp-w-26 { width: 26%; }
+.tgp-w-27 { width: 27%; }
+.tgp-w-28 { width: 28%; }
+.tgp-w-29 { width: 29%; }
+.tgp-w-30 { width: 30%; }
+.tgp-w-31 { width: 31%; }
+.tgp-w-32 { width: 32%; }
+.tgp-w-33 { width: 33%; }
+.tgp-w-34 { width: 34%; }
+.tgp-w-35 { width: 35%; }
+.tgp-w-36 { width: 36%; }
+.tgp-w-37 { width: 37%; }
+.tgp-w-38 { width: 38%; }
+.tgp-w-39 { width: 39%; }
+.tgp-w-40 { width: 40%; }
+.tgp-w-41 { width: 41%; }
+.tgp-w-42 { width: 42%; }
+.tgp-w-43 { width: 43%; }
+.tgp-w-44 { width: 44%; }
+.tgp-w-45 { width: 45%; }
+.tgp-w-46 { width: 46%; }
+.tgp-w-47 { width: 47%; }
+.tgp-w-48 { width: 48%; }
+.tgp-w-49 { width: 49%; }
+.tgp-w-50 { width: 50%; }
+.tgp-w-51 { width: 51%; }
+.tgp-w-52 { width: 52%; }
+.tgp-w-53 { width: 53%; }
+.tgp-w-54 { width: 54%; }
+.tgp-w-55 { width: 55%; }
+.tgp-w-56 { width: 56%; }
+.tgp-w-57 { width: 57%; }
+.tgp-w-58 { width: 58%; }
+.tgp-w-59 { width: 59%; }
+.tgp-w-60 { width: 60%; }
+.tgp-w-61 { width: 61%; }
+.tgp-w-62 { width: 62%; }
+.tgp-w-63 { width: 63%; }
+.tgp-w-64 { width: 64%; }
+.tgp-w-65 { width: 65%; }
+.tgp-w-66 { width: 66%; }
+.tgp-w-67 { width: 67%; }
+.tgp-w-68 { width: 68%; }
+.tgp-w-69 { width: 69%; }
+.tgp-w-70 { width: 70%; }
+.tgp-w-71 { width: 71%; }
+.tgp-w-72 { width: 72%; }
+.tgp-w-73 { width: 73%; }
+.tgp-w-74 { width: 74%; }
+.tgp-w-75 { width: 75%; }
+.tgp-w-76 { width: 76%; }
+.tgp-w-77 { width: 77%; }
+.tgp-w-78 { width: 78%; }
+.tgp-w-79 { width: 79%; }
+.tgp-w-80 { width: 80%; }
+.tgp-w-81 { width: 81%; }
+.tgp-w-82 { width: 82%; }
+.tgp-w-83 { width: 83%; }
+.tgp-w-84 { width: 84%; }
+.tgp-w-85 { width: 85%; }
+.tgp-w-86 { width: 86%; }
+.tgp-w-87 { width: 87%; }
+.tgp-w-88 { width: 88%; }
+.tgp-w-89 { width: 89%; }
+.tgp-w-90 { width: 90%; }
+.tgp-w-91 { width: 91%; }
+.tgp-w-92 { width: 92%; }
+.tgp-w-93 { width: 93%; }
+.tgp-w-94 { width: 94%; }
+.tgp-w-95 { width: 95%; }
+.tgp-w-96 { width: 96%; }
+.tgp-w-97 { width: 97%; }
+.tgp-w-98 { width: 98%; }
+.tgp-w-99 { width: 99%; }
+.tgp-w-100 { width: 100%; }
+.tg-table .tgp-cw-5 { width: 50px; min-width: 50px; max-width: 50px; }
+.tg-table .tgp-cw-6 { width: 60px; min-width: 60px; max-width: 60px; }
+.tg-table .tgp-cw-7 { width: 70px; min-width: 70px; max-width: 70px; }
+.tg-table .tgp-cw-8 { width: 80px; min-width: 80px; max-width: 80px; }
+.tg-table .tgp-cw-9 { width: 90px; min-width: 90px; max-width: 90px; }
+.tg-table .tgp-cw-10 { width: 100px; min-width: 100px; max-width: 100px; }
+.tg-table .tgp-cw-11 { width: 110px; min-width: 110px; max-width: 110px; }
+.tg-table .tgp-cw-12 { width: 120px; min-width: 120px; max-width: 120px; }
+.tg-table .tgp-cw-13 { width: 130px; min-width: 130px; max-width: 130px; }
+.tg-table .tgp-cw-14 { width: 140px; min-width: 140px; max-width: 140px; }
+.tg-table .tgp-cw-15 { width: 150px; min-width: 150px; max-width: 150px; }
+.tg-table .tgp-cw-16 { width: 160px; min-width: 160px; max-width: 160px; }
+.tg-table .tgp-cw-17 { width: 170px; min-width: 170px; max-width: 170px; }
+.tg-table .tgp-cw-18 { width: 180px; min-width: 180px; max-width: 180px; }
+.tg-table .tgp-cw-19 { width: 190px; min-width: 190px; max-width: 190px; }
+.tg-table .tgp-cw-20 { width: 200px; min-width: 200px; max-width: 200px; }
+.tg-table .tgp-cw-21 { width: 210px; min-width: 210px; max-width: 210px; }
+.tg-table .tgp-cw-22 { width: 220px; min-width: 220px; max-width: 220px; }
+.tg-table .tgp-cw-23 { width: 230px; min-width: 230px; max-width: 230px; }
+.tg-table .tgp-cw-24 { width: 240px; min-width: 240px; max-width: 240px; }
+.tg-table .tgp-cw-25 { width: 250px; min-width: 250px; max-width: 250px; }
+.tg-table .tgp-cw-26 { width: 260px; min-width: 260px; max-width: 260px; }
+.tg-table .tgp-cw-27 { width: 270px; min-width: 270px; max-width: 270px; }
+.tg-table .tgp-cw-28 { width: 280px; min-width: 280px; max-width: 280px; }
+.tg-table .tgp-cw-29 { width: 290px; min-width: 290px; max-width: 290px; }
+.tg-table .tgp-cw-30 { width: 300px; min-width: 300px; max-width: 300px; }
+.tg-table .tgp-cw-31 { width: 310px; min-width: 310px; max-width: 310px; }
+.tg-table .tgp-cw-32 { width: 320px; min-width: 320px; max-width: 320px; }
+.tg-table .tgp-cw-33 { width: 330px; min-width: 330px; max-width: 330px; }
+.tg-table .tgp-cw-34 { width: 340px; min-width: 340px; max-width: 340px; }
+.tg-table .tgp-cw-35 { width: 350px; min-width: 350px; max-width: 350px; }
+.tg-table .tgp-cw-36 { width: 360px; min-width: 360px; max-width: 360px; }
+.tg-table .tgp-cw-37 { width: 370px; min-width: 370px; max-width: 370px; }
+.tg-table .tgp-cw-38 { width: 380px; min-width: 380px; max-width: 380px; }
+.tg-table .tgp-cw-39 { width: 390px; min-width: 390px; max-width: 390px; }
+.tg-table .tgp-cw-40 { width: 400px; min-width: 400px; max-width: 400px; }
+.tg-table .tgp-cw-41 { width: 410px; min-width: 410px; max-width: 410px; }
+.tg-table .tgp-cw-42 { width: 420px; min-width: 420px; max-width: 420px; }
+.tg-table .tgp-cw-43 { width: 430px; min-width: 430px; max-width: 430px; }
+.tg-table .tgp-cw-44 { width: 440px; min-width: 440px; max-width: 440px; }
+.tg-table .tgp-cw-45 { width: 450px; min-width: 450px; max-width: 450px; }
+.tg-table .tgp-cw-46 { width: 460px; min-width: 460px; max-width: 460px; }
+.tg-table .tgp-cw-47 { width: 470px; min-width: 470px; max-width: 470px; }
+.tg-table .tgp-cw-48 { width: 480px; min-width: 480px; max-width: 480px; }
+.tg-table .tgp-cw-49 { width: 490px; min-width: 490px; max-width: 490px; }
+.tg-table .tgp-cw-50 { width: 500px; min-width: 500px; max-width: 500px; }
+.tg-table .tgp-cw-51 { width: 510px; min-width: 510px; max-width: 510px; }
+.tg-table .tgp-cw-52 { width: 520px; min-width: 520px; max-width: 520px; }
+.tg-table .tgp-cw-53 { width: 530px; min-width: 530px; max-width: 530px; }
+.tg-table .tgp-cw-54 { width: 540px; min-width: 540px; max-width: 540px; }
+.tg-table .tgp-cw-55 { width: 550px; min-width: 550px; max-width: 550px; }
+.tg-table .tgp-cw-56 { width: 560px; min-width: 560px; max-width: 560px; }
+.tg-table .tgp-cw-57 { width: 570px; min-width: 570px; max-width: 570px; }
+.tg-table .tgp-cw-58 { width: 580px; min-width: 580px; max-width: 580px; }
+.tg-table .tgp-cw-59 { width: 590px; min-width: 590px; max-width: 590px; }
+.tg-table .tgp-cw-60 { width: 600px; min-width: 600px; max-width: 600px; }
+.tg-table .tgp-cw-61 { width: 610px; min-width: 610px; max-width: 610px; }
+.tg-table .tgp-cw-62 { width: 620px; min-width: 620px; max-width: 620px; }
+.tg-table .tgp-cw-63 { width: 630px; min-width: 630px; max-width: 630px; }
+.tg-table .tgp-cw-64 { width: 640px; min-width: 640px; max-width: 640px; }
+.tg-table .tgp-cw-65 { width: 650px; min-width: 650px; max-width: 650px; }
+.tg-table .tgp-cw-66 { width: 660px; min-width: 660px; max-width: 660px; }
+.tg-table .tgp-cw-67 { width: 670px; min-width: 670px; max-width: 670px; }
+.tg-table .tgp-cw-68 { width: 680px; min-width: 680px; max-width: 680px; }
+.tg-table .tgp-cw-69 { width: 690px; min-width: 690px; max-width: 690px; }
+.tg-table .tgp-cw-70 { width: 700px; min-width: 700px; max-width: 700px; }
+.tg-table .tgp-cw-71 { width: 710px; min-width: 710px; max-width: 710px; }
+.tg-table .tgp-cw-72 { width: 720px; min-width: 720px; max-width: 720px; }
+.tg-table .tgp-cw-73 { width: 730px; min-width: 730px; max-width: 730px; }
+.tg-table .tgp-cw-74 { width: 740px; min-width: 740px; max-width: 740px; }
+.tg-table .tgp-cw-75 { width: 750px; min-width: 750px; max-width: 750px; }
+.tg-table .tgp-cw-76 { width: 760px; min-width: 760px; max-width: 760px; }
+.tg-table .tgp-cw-77 { width: 770px; min-width: 770px; max-width: 770px; }
+.tg-table .tgp-cw-78 { width: 780px; min-width: 780px; max-width: 780px; }
+.tg-table .tgp-cw-79 { width: 790px; min-width: 790px; max-width: 790px; }
+.tg-table .tgp-cw-80 { width: 800px; min-width: 800px; max-width: 800px; }
+.tg-table .tgp-cmin-5 { min-width: 50px; }
+.tg-table .tgp-cmin-6 { min-width: 60px; }
+.tg-table .tgp-cmin-7 { min-width: 70px; }
+.tg-table .tgp-cmin-8 { min-width: 80px; }
+.tg-table .tgp-cmin-9 { min-width: 90px; }
+.tg-table .tgp-cmin-10 { min-width: 100px; }
+.tg-table .tgp-cmin-11 { min-width: 110px; }
+.tg-table .tgp-cmin-12 { min-width: 120px; }
+.tg-table .tgp-cmin-13 { min-width: 130px; }
+.tg-table .tgp-cmin-14 { min-width: 140px; }
+.tg-table .tgp-cmin-15 { min-width: 150px; }
+.tg-table .tgp-cmin-16 { min-width: 160px; }
+.tg-table .tgp-cmin-17 { min-width: 170px; }
+.tg-table .tgp-cmin-18 { min-width: 180px; }
+.tg-table .tgp-cmin-19 { min-width: 190px; }
+.tg-table .tgp-cmin-20 { min-width: 200px; }
+.tg-table .tgp-cmin-21 { min-width: 210px; }
+.tg-table .tgp-cmin-22 { min-width: 220px; }
+.tg-table .tgp-cmin-23 { min-width: 230px; }
+.tg-table .tgp-cmin-24 { min-width: 240px; }
+.tg-table .tgp-cmin-25 { min-width: 250px; }
+.tg-table .tgp-cmin-26 { min-width: 260px; }
+.tg-table .tgp-cmin-27 { min-width: 270px; }
+.tg-table .tgp-cmin-28 { min-width: 280px; }
+.tg-table .tgp-cmin-29 { min-width: 290px; }
+.tg-table .tgp-cmin-30 { min-width: 300px; }
+.tg-table .tgp-cmin-31 { min-width: 310px; }
+.tg-table .tgp-cmin-32 { min-width: 320px; }
+.tg-table .tgp-cmin-33 { min-width: 330px; }
+.tg-table .tgp-cmin-34 { min-width: 340px; }
+.tg-table .tgp-cmin-35 { min-width: 350px; }
+.tg-table .tgp-cmin-36 { min-width: 360px; }
+.tg-table .tgp-cmin-37 { min-width: 370px; }
+.tg-table .tgp-cmin-38 { min-width: 380px; }
+.tg-table .tgp-cmin-39 { min-width: 390px; }
+.tg-table .tgp-cmin-40 { min-width: 400px; }
+.tg-table .tgp-cmin-41 { min-width: 410px; }
+.tg-table .tgp-cmin-42 { min-width: 420px; }
+.tg-table .tgp-cmin-43 { min-width: 430px; }
+.tg-table .tgp-cmin-44 { min-width: 440px; }
+.tg-table .tgp-cmin-45 { min-width: 450px; }
+.tg-table .tgp-cmin-46 { min-width: 460px; }
+.tg-table .tgp-cmin-47 { min-width: 470px; }
+.tg-table .tgp-cmin-48 { min-width: 480px; }
+.tg-table .tgp-cmin-49 { min-width: 490px; }
+.tg-table .tgp-cmin-50 { min-width: 500px; }
+.tg-table .tgp-cmin-51 { min-width: 510px; }
+.tg-table .tgp-cmin-52 { min-width: 520px; }
+.tg-table .tgp-cmin-53 { min-width: 530px; }
+.tg-table .tgp-cmin-54 { min-width: 540px; }
+.tg-table .tgp-cmin-55 { min-width: 550px; }
+.tg-table .tgp-cmin-56 { min-width: 560px; }
+.tg-table .tgp-cmin-57 { min-width: 570px; }
+.tg-table .tgp-cmin-58 { min-width: 580px; }
+.tg-table .tgp-cmin-59 { min-width: 590px; }
+.tg-table .tgp-cmin-60 { min-width: 600px; }
+.tg-table .tgp-cmin-61 { min-width: 610px; }
+.tg-table .tgp-cmin-62 { min-width: 620px; }
+.tg-table .tgp-cmin-63 { min-width: 630px; }
+.tg-table .tgp-cmin-64 { min-width: 640px; }
+.tg-table .tgp-cmin-65 { min-width: 650px; }
+.tg-table .tgp-cmin-66 { min-width: 660px; }
+.tg-table .tgp-cmin-67 { min-width: 670px; }
+.tg-table .tgp-cmin-68 { min-width: 680px; }
+.tg-table .tgp-cmin-69 { min-width: 690px; }
+.tg-table .tgp-cmin-70 { min-width: 700px; }
+.tg-table .tgp-cmin-71 { min-width: 710px; }
+.tg-table .tgp-cmin-72 { min-width: 720px; }
+.tg-table .tgp-cmin-73 { min-width: 730px; }
+.tg-table .tgp-cmin-74 { min-width: 740px; }
+.tg-table .tgp-cmin-75 { min-width: 750px; }
+.tg-table .tgp-cmin-76 { min-width: 760px; }
+.tg-table .tgp-cmin-77 { min-width: 770px; }
+.tg-table .tgp-cmin-78 { min-width: 780px; }
+.tg-table .tgp-cmin-79 { min-width: 790px; }
+.tg-table .tgp-cmin-80 { min-width: 800px; }

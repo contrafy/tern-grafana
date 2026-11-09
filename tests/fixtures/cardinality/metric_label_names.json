@@ -1,0 +1,22 @@
+{
+  "label_values_count_total": 11,
+  "label_names_count": 4,
+  "cardinality": [
+    {
+      "label_name": "route",
+      "label_values_count": 5
+    },
+    {
+      "label_name": "region",
+      "label_values_count": 3
+    },
+    {
+      "label_name": "status",
+      "label_values_count": 2
+    },
+    {
+      "label_name": "__name__",
+      "label_values_count": 1
+    }
+  ]
+}

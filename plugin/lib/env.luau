@@ -10,6 +10,9 @@ export type Env = {
 	-- The viewer's local UTC offset at now_ms, minutes east (DST-aware);
 	-- nil in specs that do not set it (read as UTC).
 	local_offset_min: number?,
+	-- The viewer's local UTC offset at an instant (the browser zone's DST
+	-- rules, as moment applies per value); nil reads local_offset_min.
+	local_offset_at: ((ms: number) -> number)?,
 	cols: number?,
 	rows: number?,
 	-- The block's pane id (lib/visibility.luau); nil outside a block and in

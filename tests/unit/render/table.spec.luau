@@ -4,12 +4,13 @@
 local t = require("../../lib/test")
 local Frame = require("../../../plugin/lib/frame/types")
 local Table = require("../../../plugin/lib/render/table")
+local Grid = require("../../../plugin/lib/render/grid")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local NULL = Frame.NULL
 local T = 1710000000000
 
-local function heads(columns: { { head: string, numeric: boolean? } }): { string }
+local function heads(columns: { Grid.Column }): { string }
 	local out = {}
 	for _, c in columns do
 		table.insert(out, c.head)

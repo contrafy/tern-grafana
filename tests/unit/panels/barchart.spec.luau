@@ -4,6 +4,8 @@
 -- bar chart (panel 18: TestData csv_content, stacked).
 local Barchart = require("../../../plugin/lib/panels/barchart")
 local Frame = require("../../../plugin/lib/frame/types")
+local Thresholds = require("../../../plugin/lib/units/thresholds")
+local TsGradient = require("../../../plugin/lib/render/ts_gradient")
 local S = require("./support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -75,6 +77,29 @@ describe("barchart", function()
 		expect(tall.horizontal).toBe(true)
 	end)
 
+	-- A dashboard card body is shorter than Grafana's panel (its head and
+	-- padding), and the chart is drawn at its natural height: sized to the
+	-- panel it ran past the card, hid the title and cut the x axis
+	-- (billing "Total amount by month", 24x8, a one-line legend under it).
+	it("fits the chart and its bottom legend into the card body", function()
+		local prep = Barchart.prepare(S.json(PANEL), frames(), env)
+		assert(prep, "prepared")
+		local capped = { key = "p", size = { w = 1600, h = 296 }, card_height = 248 }
+		local o, _, legend, rows = Barchart.renderOptions(S.json(PANEL), prep, env, capped)
+		expect(legend.placement).toBe("bottom")
+		expect(#rows).toBe(3)
+		-- One 16 px legend line and the 4 px gap above it.
+		expect(o.height).toBe(248 - 20)
+		expect(o.width).toBe(1600)
+		local hidden = S.json(PANEL)
+		hidden.options.legend.showLegend = false
+		expect((Barchart.renderOptions(hidden, prep, env, capped)).height).toBe(248)
+		-- Uncapped (the expanded panel): Grafana's panel size.
+		expect((Barchart.renderOptions(hidden, prep, env, { key = "p", size = { w = 1600, h = 296 } })).height).toBe(
+			296
+		)
+	end)
+
 	-- A lone series with nothing hidden uses barWidth as its group width
 	-- and fills it ("Use bar width when only one field").
 	it("widens a single series to barWidth", function()
@@ -117,6 +142,7 @@ describe("barchart", function()
 		expect(string.find(svg, ">93.4%<", 1, true) ~= nil).toBe(true)
 	end)
 
+	-- Each bar takes its threshold step's exact color.
 	it("colors bars by the colorByField values", function()
 		local panel = S.json(PANEL)
 		panel.options.colorByField = "level"
@@ -132,8 +158,8 @@ describe("barchart", function()
 		local o = Barchart.renderOptions(panel, prep, env, WIDE)
 		local classes = o.series[1].classes
 		assert(classes, "per bar classes")
-		expect(classes[1]).toBe("tgp-fx tgp-success")
-		expect(classes[2]).toBe("tgp-fx tgp-error")
+		expect(classes[1]).toBe(TsGradient.stopClass(Thresholds.color("green")))
+		expect(classes[2]).toBe(TsGradient.stopClass(Thresholds.color("red")))
 	end)
 
 	it("reports Grafana's warnings in place of the chart", function()
@@ -182,6 +208,30 @@ describe("barchart", function()
 		local node, assets = Barchart.view(panel, f, env, WIDE)
 		expect(#(assets :: any).p.bytes <= 262144).toBe(true)
 		expect(string.find(S.text(node), "more categories not shown", 1, true) ~= nil).toBe(true)
+	end)
+end)
+
+-- bars.ts xValues picks its time format from the ordinal axis increment
+-- (a category count, far below a second), so Grafana prints HH:mm:ss.SSS in
+-- the dashboard's zone, in the frame's own row order (no sort).
+describe("barchart time categories", function()
+	it("labels times as HH:mm:ss.SSS in the dashboard zone, newest row first as given", function()
+		local panel = S.json(PANEL)
+		panel.options.xField = nil
+		local day = 86400000
+		local f: { Frame.Frame } = {
+			{
+				fields = {
+					Frame.field("day", "time", { 2 * day, day }),
+					Frame.field("count", "number", { 3, 5 }),
+				},
+			},
+		}
+		local prep = Barchart.prepare(panel, f, env)
+		assert(prep, "prepared")
+		local render = Barchart.renderOptions(panel, prep, env, { key = "p", offset_min = 60 })
+		expect(render.categories).toEqual({ "01:00:00.000", "01:00:00.000" })
+		expect(render.series[1].values).toEqual({ 3, 5 })
 	end)
 end)
 

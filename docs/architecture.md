@@ -68,6 +68,8 @@ plugin/
     dashboard/             dashboard and panel blocks: model, layout from gridPos, variables, interpolation,
                            repeat, ladder, queries; state.luau is the machine, split into types, core, advance,
                            answers, keys, links, picker, png and search
+    datasources/           datasource modules (types.luau the contract, registry.luau the registry and job
+                           engine; one module per datasource plugin, incident.luau the reference)
     query/ logs/ trace/ alerts/ silences/ ops/ settings/ impact/ watches/ irm/ annotations/ investigate/
     compat/                block state machines (state.luau) with their views; compat is the dashboard
                            compatibility scan, investigate the agent handoff
@@ -221,6 +223,42 @@ For each dashboard panel `lib/dashboard/ladder.luau` decides:
    login cookie.
 
 The reason for each fallback is shown on the panel.
+
+## Datasource modules
+
+Grafana datasource plugins whose frontends do work in the browser (format variables, query a datasource proxy,
+post-process frames) get a pure port under `lib/datasources/`, one module per plugin, registered in
+`registry.luau`. The Dashboard block consults the registry before its built-in rules: a registered type is
+decided by its module alone. The contract (`types.luau`, `DsModule`; every field but `types` optional):
+
+| Field | Used for |
+| --- | --- |
+| `types` | the datasource plugin ids the module covers |
+| `blocker(target, ctx, env)` | the ladder reason for a target it cannot reproduce, nil when it can |
+| `shape(target, ctx, env)` | backend datasources: the target as the plugin's frontend hands it to `/api/ds/query` (refId, datasource, intervalMs, maxDataPoints are added by the caller) |
+| `format(values, var, list, ctx)` | the plugin's custom variable formatter (the generic shaping uses it when there is no `shape`) |
+| `postprocess(frames, targets, ctx, env)` | backend datasources: the frames of its targets, rewritten as the frontend does after the query |
+| `start(targets, ctx, env)`, `step(job, answers, env)` | frontend datasources and browser request chains: a job per datasource instance; each step gets the answers of every request the previous one asked for (by tag) and returns the job, the next requests and, at the end, the outcome |
+| `variable(query, ctx, env)` | query variables (the plugin's `metricFindQuery`): a job advanced by the same `step`, ending in options |
+
+`DsContext` carries the scope (variables and built-ins of the target group), range, interval, max points,
+`now_ms`, Grafana's datasource list, the target's instance and Grafana's major version. Requests are relative to
+the dashboard's Grafana (datasource proxy `/api/datasources/proxy/uid/<uid>`, resources, API, `/api/ds/query`)
+and go out with the user's credentials.
+
+The engine (`registry.luau`: `begin`, `answer`, `panelData`) collects a step's answers and runs the next step;
+a job that asks for nothing, repeats or misnames a tag, or takes more than `MAX_STEPS` rounds ends with an error,
+and a job's error shows on each of its targets like an `/api/ds/query` error. In the Dashboard block a panel's
+query is its `/api/ds/query` part plus its jobs (`Queries.build`); its identity includes the jobs' first
+requests. Job requests are tagged `ds/<gen>/<panel gen>/<job>/<request tag>/<panel key>` (variables:
+`dsv/<gen>/<var gen>/<request tag>/<name>`), so answers to a superseded query are dropped; the panel shows
+when every part answered, frames in target order (`Queries.combine`). An unchanged query keeps its jobs
+running across advances.
+
+Secrets: the frontend settings' datasource `url` and `jsonData` (copied into `Datasource.url` and
+`json_data`) may hold credentials (JSON API keeps API keys in `jsonData.queryParams`). They live in memory only:
+never in saved state, block args, logs, kv or compat output. Error texts lose query strings
+(`Registry.redact`, `Registry.json`).
 
 ## Links
 

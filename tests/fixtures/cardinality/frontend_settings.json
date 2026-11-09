@@ -1,0 +1,36 @@
+{
+  "defaultDatasource": "Metrics",
+  "datasources": {
+    "Cardinality": {
+      "type": "grafanacloud-cardinality-datasource",
+      "uid": "card",
+      "name": "Cardinality",
+      "url": "/api/datasources/proxy/uid/card",
+      "meta": {
+        "backend": false
+      },
+      "jsonData": {
+        "unusedMetrics": {
+          "metricsDataSourceUid": "prom",
+          "proxyType": "insights"
+        }
+      }
+    },
+    "Metrics": {
+      "type": "prometheus",
+      "uid": "prom",
+      "name": "Metrics",
+      "url": "/api/datasources/proxy/uid/prom",
+      "isDefault": true,
+      "meta": {
+        "backend": true
+      },
+      "jsonData": {
+        "prometheusType": "Mimir"
+      }
+    }
+  },
+  "buildInfo": {
+    "version": "13.3.0"
+  }
+}

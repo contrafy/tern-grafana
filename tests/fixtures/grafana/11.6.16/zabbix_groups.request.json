@@ -1,0 +1,1 @@
+{"method":"hostgroup.get","params":{"output":["name","groupid"],"sortfield":"name","with_hosts":true}}

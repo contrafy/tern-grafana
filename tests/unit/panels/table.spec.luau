@@ -1,12 +1,15 @@
 --!strict
--- The table panel (public/app/plugins/panel/table/panelcfg.cue and its cell
--- renderers): columns are the transformed frame's visible fields, cells go
--- through the display processor, cellOptions pick color-text,
--- color-background or gauge cells, sortBy orders rows, the footer reduces.
+-- The table panel (public/app/plugins/panel/table/panelcfg.cue and the
+-- grafana-ui TableNG cell renderers): columns are the transformed frame's
+-- visible fields, cells go through the display processor, cellOptions pick
+-- the cell renderer, sortBy orders rows, the footer reduces. Cell types are
+-- checked on tern-cells (TestData CSV) against Grafana 13's own render of
+-- the same panels.
 local t = require("../../lib/test")
 local S = require("./support")
 local Table = require("../../../plugin/lib/panels/table")
 local Transform = require("../../../plugin/lib/panels/transform")
+local TsGradient = require("../../../plugin/lib/render/ts_gradient")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local env = S.env
@@ -61,11 +64,12 @@ for _, version in S.VERSIONS do
 			expect(tbl.columns[1].numeric).toBe(false)
 		end)
 
-		it("renders a grid with tinted background cells", function()
+		-- color-background without a mode is Grafana's gradient fill.
+		it("renders a grid with filled background cells", function()
 			local panel = S.panel(version, 9)
 			local node = Table.view(panel, Transform.prepare(panel, S.frames(version, "prom_table"), env), env, OPTS)
 			local tinted = S.findAll(node, function(n)
-				return n.p and n.p.class == "tgp-bg tgp-error"
+				return n.p and n.p.class == "tgp-cbg tgp-error tgp-cbg-grad"
 			end)
 			expect(#tinted).toBe(1)
 			expect(S.text(tinted[1])).toBe("DOWN")
@@ -105,6 +109,8 @@ for _, version in S.VERSIONS do
 			end)
 			expect(#meters).toBe(6)
 			expect(meters[1].p.style).toBe("blocks")
+			-- LCD cells light up in their threshold band's color.
+			expect(type(meters[1].p.parts)).toBe("table")
 			panel.fieldConfig.overrides[1].properties[1].value = { type = "color-text" }
 			local text = Table.view(panel, Transform.prepare(panel, S.frames(version, "prom_table"), env), env, OPTS)
 			local up = S.find(text, function(n)
@@ -125,5 +131,325 @@ for _, version in S.VERSIONS do
 		end)
 	end)
 end
+
+local function cellsPanel(version: string, id: number): any
+	for _, p in S.decode("grafana/" .. version .. "/dashboard_tern_cells.json").dashboard.panels do
+		if p.id == id then
+			return p
+		end
+	end
+	error("no panel " .. id)
+end
+
+local function cells(version: string, id: number): (any, { any })
+	local panel = cellsPanel(version, id)
+	return panel, Transform.prepare(panel, S.frames(version, "cells_" .. id), env)
+end
+
+local function col(tbl: Table.Table, head: string): number
+	local idx = table.find(heads(tbl), head)
+	assert(idx, "no column " .. head)
+	return idx
+end
+
+-- A gradient cell's runs as "from>to@width%".
+local function runs(segments: any): { string }
+	local out: { string } = {}
+	for _, s in segments do
+		table.insert(out, string.format("%s>%s@%d", s.from, s.to, math.floor(s.width * 100 + 0.5)))
+	end
+	return out
+end
+
+local function stop(color: string): string
+	return TsGradient.stopClass(color, nil)
+end
+
+-- The gauge cells of a view (their wrappers), row by row.
+local function gaugeCells(node: any): { any }
+	return S.findAll(node, function(n)
+		return n.p and n.p.class == "tgp-gc"
+	end)
+end
+
+for _, version in S.VERSIONS do
+	describe("table cells on tern-cells, Grafana " .. version, function()
+		-- Panel 1 reproduces the battery tables of the user's dashboards:
+		-- Charge (percentunit, 0..1, gradient gauge with red/orange/green
+		-- thresholds) and Load (basic gauge) by override, Health and AC lost
+		-- color-background by mapping. Grafana draws a bar and the value
+		-- after it; Tern drew "..." because the meter had no width and the
+		-- value hid in its label.
+		it("draws gauge cells as a bar with the value after it", function()
+			local panel, frames = cells(version, 1)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			local charge = col(tbl, "Charge")
+			expect(column(tbl, "Charge")).toEqual({ "100%", "83%", "52%", "21%", "5%" })
+			local c = tbl.rows[2][charge]
+			expect(c.kind).toBe("gauge")
+			expect(c.gauge_mode).toBe("gradient")
+			expect(c.value_mode).toBe("text")
+			-- getBarGradient up to 83% of 0..1: red until halfway to the
+			-- orange step (0.15 of the bar), fading into orange by halfway to
+			-- the green step (0.5), then into green at the bar's end; offsets
+			-- are of the full bar, the runs of the filled 83%.
+			local red, orange, green = stop("red"), stop("orange"), stop("green")
+			expect(runs(c.segments)).toEqual({
+				red .. ">" .. red .. "@18",
+				red .. ">" .. orange .. "@42",
+				orange .. ">" .. green .. "@40",
+			})
+			-- 21% has not reached the orange step: plain red.
+			expect(runs(tbl.rows[4][charge].segments)).toEqual({ red .. ">" .. red .. "@100" })
+			local load = tbl.rows[1][col(tbl, "Load")]
+			expect(load.gauge_mode).toBe("basic")
+			expect(load.parts).toBeNil()
+			expect(load.tone).toBe("success")
+			local node = Table.view(panel, frames, env, OPTS)
+			local gauges = gaugeCells(node)
+			expect(#gauges).toBe(10)
+			local bar = gauges[1].c[1]
+			expect(bar.p.class).toBe("tgp-gbar")
+			expect(bar.c[1].p.class).toBe("tgp-gfill tgp-w-100")
+			local meter = gauges[2].c[1]
+			expect(meter.k).toBe("meter")
+			expect(meter.p.label).toBeNil()
+			-- valueDisplayMode text: the value in the plain text color.
+			local value = gauges[1].c[2]
+			expect(value.p.class).toBe("tgp-gc-v tgp-gw-4")
+			expect(value.c[1].p.spans[1]).toEqual({ t = "100%" })
+		end)
+
+		-- getAlignmentFactor: every value box of a gauge column is as wide as
+		-- the column's longest value ("100%", "58.0%"), and the column's
+		-- cells claim that room plus the bar's minimum, so a narrow pane
+		-- squeezes the text columns instead of cutting the value to "10".
+		it("reserves the column's longest value in gauge cells", function()
+			local panel, frames = cells(version, 1)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			expect(tbl.columns[col(tbl, "Charge")].value_width).toBe(4)
+			expect(tbl.columns[col(tbl, "Load")].value_width).toBe(5)
+			expect(tbl.columns[col(tbl, "Device")].value_width).toBeNil()
+			local node = Table.view(panel, frames, env, OPTS)
+			local load = S.findAll(node, function(n)
+				return n.p and n.p.class == "tgp-gc-v tgp-gw-5"
+			end)
+			expect(#load).toBe(5)
+			local reserved = S.findAll(node, function(n)
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "^tg%-c .*tgp%-gcw%-[45]$") ~= nil
+			end)
+			expect(#reserved).toBe(10)
+		end)
+
+		-- Panel 4 is the user's MDU table: the gauge column sits between
+		-- long text columns.
+		it("reserves the value between long text columns", function()
+			local panel, frames = cells(version, 4)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			expect(heads(tbl)).toEqual({ "device_id", "Device", "Site", "Charge", "Device 2", "AC lost" })
+			local charge = tbl.columns[col(tbl, "Charge")]
+			expect(charge.value_width).toBe(4)
+			expect(column(tbl, "Charge")).toEqual({ "100%", "83%", "52%", "21%", "5%" })
+		end)
+
+		it("fills color-background cells by mode", function()
+			local panel, frames = cells(version, 1)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			local health = tbl.rows[4][col(tbl, "Health")]
+			expect(health.text).toBe("Bad")
+			expect(health.bg_tone).toBe("error")
+			expect(health.bg_mode).toBe("gradient")
+			local ac = tbl.rows[3][col(tbl, "AC lost")]
+			expect(ac.text).toBe("LOST")
+			expect(ac.bg_mode).toBe("basic")
+			local node = Table.view(panel, frames, env, OPTS)
+			local solid = S.findAll(node, function(n)
+				return n.p and n.p.class == "tgp-cbg tgp-error"
+			end)
+			expect(#solid).toBe(2)
+		end)
+
+		-- Panel 2: gauge defaults with valueDisplayMode color, overrides for
+		-- lcd/text, hidden and a continuous-GrYlRd MTTR, no max (the range
+		-- spans every number field, so 92 groups is a sliver of 5400).
+		it("follows valueDisplayMode and the field range", function()
+			local panel, frames = cells(version, 2)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			local groups = tbl.rows[1][col(tbl, "Groups")]
+			expect(groups.value_mode).toBe("color")
+			expect(groups.tone).toBe("error")
+			expect(math.abs(groups.percent - 92 / 5400) < 1e-12).toBe(true)
+			expect(tbl.rows[1][col(tbl, "LCD")].gauge_mode).toBe("lcd")
+			local mttr = tbl.rows[1][col(tbl, "MTTR")]
+			expect(mttr.text).toBe("2 hours")
+			-- continuous-GrYlRd spans the whole bar: the runs end at the
+			-- scheme's color at the value.
+			local mttrRuns = mttr.segments :: { any }
+			expect(mttrRuns[1].from).toBe(stop(TsGradient.schemeColor("continuous-GrYlRd", 0) :: string))
+			expect(mttrRuns[#mttrRuns].to).toBe(
+				stop(TsGradient.schemeColor("continuous-GrYlRd", math.clamp(mttr.percent, 0, 1)) :: string)
+			)
+			local node = Table.view(panel, frames, env, OPTS)
+			local gauges = gaugeCells(node)
+			-- Four gauge columns, four rows; hidden draws no value.
+			expect(#gauges).toBe(16)
+			local first = gauges[1]
+			expect(first.c[2].c[1].p.spans[1]).toEqual({ t = "92", s = "error" })
+			expect(gauges[2].c[1].p.style).toBe("blocks")
+			expect(gauges[3].c[2]).toBeNil()
+			-- valueDisplayMode hidden reserves no value room.
+			expect(tbl.columns[col(tbl, "Hidden")].value_width).toBe(0)
+			expect(tbl.columns[col(tbl, "MTTR")].value_width).toBe(7)
+		end)
+
+		-- Panel 3: pill tags, markdown notes, a json-view payload, color-text
+		-- errors and Load as color-background with applyToRow.
+		it("draws pill, markdown and json-view cells", function()
+			local panel, frames = cells(version, 3)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			local tags = tbl.rows[1][col(tbl, "Tags")]
+			expect(tags.kind).toBe("pill")
+			-- getColorByStringHash over classicColors, as Grafana colored
+			-- them: prod #F29191, eu #1F78C1, web #052B51.
+			expect(tags.pills).toEqual({
+				{ text = "prod", class = "tgp-pill-20" },
+				{ text = "eu", class = "tgp-pill-5" },
+				{ text = "web", class = "tgp-pill-45" },
+			})
+			expect(tbl.rows[3][col(tbl, "Tags")].pills).toEqual({ { text = "dev", class = "tgp-pill-26" } })
+			expect(column(tbl, "Payload")).toEqual({ '{ "v": 1 }', "[ 1, 2 ]", "{}" })
+			local node = Table.view(panel, frames, env, OPTS)
+			local md = S.find(node, function(n)
+				return n.k == "md"
+			end)
+			expect(md.p.text).toBe("**hot** path")
+		end)
+
+		-- applyToRow fills every cell of the row in Load's color except
+		-- pills (Grafana's PillCell keeps its own background); color-text
+		-- keeps its own text color on it.
+		it("fills rows by an applyToRow column", function()
+			local panel, frames = cells(version, 3)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			local row = tbl.rows[2]
+			for _, head in { "Service", "Notes", "Payload", "Errors", "Usage" } do
+				expect(row[col(tbl, head)].bg_tone).toBe("error")
+				expect(row[col(tbl, head)].bg_mode).toBe("gradient")
+			end
+			expect(row[col(tbl, "Tags")].bg_tone).toBeNil()
+			expect(tbl.rows[1][col(tbl, "Service")].bg_tone).toBe("success")
+			local node = Table.view(panel, frames, env, OPTS)
+			local errors = S.find(node, function(n)
+				return n.k == "text" and n.p.spans[1].t == "91"
+			end)
+			expect(errors.p.spans[1].s).toBe("error")
+		end)
+
+		-- Panels 5 and 6: filterByValue leaves the frame its fields and no
+		-- rows. Grafana 13 keeps the header and centers its
+		-- EmptyTablePlaceholder under it, the field defaults' noValue when
+		-- set; Tern said "No data" with no header, which reads as a broken
+		-- query. Without any frame it is still PanelDataErrorView.
+		it("keeps the header over 'No rows' when a filter leaves no rows", function()
+			for id, text in { [5] = "No rows", [6] = "No label over 100" } do
+				local panel, frames = cells(version, id)
+				expect(#frames[1].fields).toBe(2)
+				local node = Table.view(panel, frames, env, OPTS)
+				local headers = S.findAll(node, function(n)
+					return n.p and (n.p.class == "tg-h" or n.p.class == "tg-h tg-num")
+				end)
+				expect(#headers).toBe(2)
+				expect(headers[1].p.text).toBe("Label")
+				local empty = S.find(node, function(n)
+					return n.p and n.p.key == "empty"
+				end)
+				expect(empty.p.text).toBe(text)
+			end
+			expect(S.text(Table.view(cellsPanel(version, 5), {}, env, OPTS))).toBe("No data")
+		end)
+	end)
+end
+
+describe("table cell options", function()
+	local function panelWith(defaults: any, overrides: any?): any
+		return {
+			type = "table",
+			fieldConfig = { defaults = { custom = defaults }, overrides = overrides or {} },
+		}
+	end
+
+	-- Cell types whose text fallback would misrepresent the cell ladder
+	-- with their name, from defaults, overrides or a legacy displayMode.
+	it("ladders the cell types it does not draw", function()
+		for _, kind in { "sparkline", "image", "data-links", "actions", "custom" } do
+			expect(Table.unsupported(panelWith({ cellOptions = { type = kind } }), env)).toBe(
+				"table cell type " .. kind .. " is not supported"
+			)
+		end
+		local override = panelWith({}, {
+			{
+				matcher = { id = "byName", options = "url" },
+				properties = { { id = "custom.displayMode", value = "image" } },
+			},
+		})
+		expect(Table.unsupported(override, env)).toBe("table cell type image is not supported")
+		for _, kind in { "auto", "color-text", "color-background", "gauge", "pill", "markdown", "json-view" } do
+			expect(Table.unsupported(panelWith({ cellOptions = { type = kind } }), env)).toBeNil()
+		end
+	end)
+
+	-- getCellOptions: a legacy displayMode wins and migrates; pill and
+	-- markdown only draw string fields.
+	it("migrates legacy display modes and falls back like getCellRenderer", function()
+		local panel, frames = cells(S.VERSIONS[#S.VERSIONS], 1)
+		panel = S.clone(panel)
+		panel.fieldConfig.defaults.custom.displayMode = "lcd-gauge"
+		local tbl = Table.build(panel, frames, env, OPTS)
+		expect(tbl.rows[1][col(tbl, "Device")].kind).toBe("gauge")
+		expect(tbl.rows[1][col(tbl, "Charge")].gauge_mode).toBe("lcd")
+		panel.fieldConfig.defaults.custom.displayMode = "color-background-solid"
+		tbl = Table.build(panel, frames, env, OPTS)
+		expect(tbl.rows[1][col(tbl, "Device")].bg_mode).toBe("basic")
+		panel.fieldConfig.defaults.custom.displayMode = nil
+		panel.fieldConfig.defaults.custom.cellOptions = { type = "pill" }
+		tbl = Table.build(panel, frames, env, OPTS)
+		expect(tbl.rows[1][col(tbl, "Device")].kind).toBe("pill")
+		expect(tbl.rows[1][col(tbl, "Remaining")].kind).toBe("auto")
+	end)
+
+	-- TableNG sizes every column to its content and scrolls a table wider
+	-- than the panel (panels.css tgp-fit: max-content tracks); the incident
+	-- list (custom.width 300 Title, 170 dates, dev dashboard tern-v08-pietable
+	-- panel 2) squeezed its auto columns to 'Resol...' and 'Criti...'
+	-- instead. Only a table without a custom.width column (panel 3) grows its
+	-- columns into the leftover width (tgp-grow): a stretched fixed track
+	-- would leave a gap beside its cells.
+	it("sizes columns to content and grows them only without a fixed width", function()
+		local panels: { [number]: any } = {}
+		for _, p in S.decode("grafana/13.3.0/dashboard_tern_v08_pietable.json").dashboard.panels do
+			panels[p.id] = p
+		end
+		local function view(id: number): any
+			local frames = Transform.prepare(panels[id], S.frames("13.3.0", "v08_pietable_" .. id), env)
+			return Table.view(panels[id], frames, env, OPTS)
+		end
+		local function wrapper(node: any): string
+			return S.find(node, function(n)
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-fit", 1, true) ~= nil
+			end).p.class
+		end
+		local function headClass(node: any, text: string): string
+			return S.find(node, function(n)
+				return n.p and n.p.text == text
+			end).p.class
+		end
+		local list = view(2)
+		expect(wrapper(list)).toBe("tgp-table tgp-fit")
+		expect(headClass(list, "Title")).toBe("tg-h tgp-cw-30")
+		expect(headClass(list, "Start date")).toBe("tg-h tgp-cw-17")
+		expect(headClass(list, "Status")).toBe("tg-h")
+		expect(wrapper(view(3))).toBe("tgp-table tgp-fit tgp-grow")
+	end)
+end)
 
 return nil

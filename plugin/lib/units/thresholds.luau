@@ -87,9 +87,12 @@ local NAMED: { [string]: Named } = {
 	text = { dark = "rgb(204, 204, 220)", light = "rgba(36, 41, 46, 1)", tone = "neutral" },
 	transparent = { dark = "rgba(0,0,0,0)", light = "rgba(255, 255, 255, 0)", tone = "muted" },
 }
+-- A dark-theme named color (upper-case) -> the same name's light-theme color.
+local LIGHT_OF: { [string]: string } = {}
 for _, hue in HUES do
 	for i, shade in SHADES do
 		NAMED[shade .. hue.name] = { dark = hue.dark[i], light = hue.light[i], tone = hue.tone }
+		LIGHT_OF[string.upper(hue.dark[i])] = hue.light[i]
 	end
 end
 
@@ -102,6 +105,13 @@ function M.color(name: string?, theme: Theme?): string
 		return if theme == "light" then named.light else named.dark
 	end
 	return name
+end
+
+-- The light-theme color of a color resolved for the dark theme: a named
+-- color's light shade (Grafana's dark-blue is #1F60C4 dark, #1250B0 light),
+-- any other color itself.
+function M.lightOf(color: string): string
+	return LIGHT_OF[string.upper(color)] or color
 end
 
 local function rgba(color: string): (number?, number, number, number)
@@ -134,6 +144,20 @@ local function rgba(color: string): (number?, number, number, number)
 		end
 	end
 	return nil, 0, 0, 0
+end
+
+-- getTextColorForAlphaBackground (grafana-ui utils/colors.ts): the text
+-- color on a background of `color`, "dark" (rgb(32, 34, 38)) or "light"
+-- (rgb(247, 248, 250)); a near-transparent one shows the theme's own text
+-- and one tinycolor cannot parse counts as black.
+function M.textOn(color: string, theme: Theme?): "dark" | "light"
+	local r, g, b, a = rgba(M.color(color, theme))
+	if r == nil then
+		return "light"
+	elseif a < 0.3 then
+		return if theme == "light" then "dark" else "light"
+	end
+	return if (r * 299 + g * 587 + b * 114) / 1000 > 180 then "dark" else "light"
 end
 
 local function toneOfRgb(color: string): Tone

@@ -1,0 +1,30 @@
+{
+  "label_values_count_total": 30,
+  "label_names_count": 6,
+  "cardinality": [
+    {
+      "label_name": "pod",
+      "label_values_count": 11
+    },
+    {
+      "label_name": "route",
+      "label_values_count": 6
+    },
+    {
+      "label_name": "__name__",
+      "label_values_count": 4
+    },
+    {
+      "label_name": "service",
+      "label_values_count": 4
+    },
+    {
+      "label_name": "region",
+      "label_values_count": 3
+    },
+    {
+      "label_name": "env",
+      "label_values_count": 2
+    }
+  ]
+}

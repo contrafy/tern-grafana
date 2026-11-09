@@ -7,6 +7,158 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-10
+
+### Added
+
+- Ad hoc filter variables: a picker to add, edit and remove filters with keys
+  and values from the datasource, applied to Prometheus and Loki queries the
+  way Grafana rewrites them, `${filter}` for datasources that read it (such as
+  the cardinality datasource), and `var-<name>` in links and saved state.
+- Panel alert state: a heart in the header of a panel linked to a Grafana
+  alert rule (firing, pending or normal), and the dashboard's annotation
+  layers (Annotations & Alerts with alert state history, and Prometheus
+  annotation queries) drawn on time series as in Grafana.
+- Table pagination with Grafana's page size, data links in table cells, and
+  columns sized by `custom.width` and `custom.minWidth`.
+- Grafana Incident panels and their labels, severities and statuses query
+  variables run natively; picked values are formatted as the server's Grafana
+  version formats them, so a dashboard that errors in Grafana errors the same
+  way in Tern.
+- The dynamic text panel (`marcusolsson-dynamictext-panel`) draws natively:
+  Handlebars templates over rows (every row, all rows, data), its built-in
+  helpers, sanitized HTML as native elements and inline styles compiled to a
+  generated stylesheet. Panels with their own JavaScript (helpers,
+  afterRender) or templates and styles loaded from URLs stay on Grafana's
+  renderer.
+- The treemap panel (`marcusolsson-treemap-panel`) draws natively with
+  d3-hierarchy's tilings, its paddings, grouping, labels and data links.
+- Datasource plugins that Grafana runs in the browser get one module contract
+  (`plugin/lib/datasources`): target blockers, shaping, post-processing,
+  multi-step request jobs, query variables and custom variable formatting.
+
+- Grafana Cloud cardinality management panels run natively: the
+  `grafanacloud-cardinality-datasource` frontend (2.6.1) is ported, with the
+  same Mimir cardinality API requests through the target Prometheus
+  datasource's proxy, the same frames (gradient gauge percentage columns),
+  metric usage with dashboard and alert rule titles, the Used column, its
+  three query variable kinds and its error texts. See docs/dashboards.md,
+  Datasource plugins.
+- JSON API panels (`marcusolsson-json-datasource`) run natively: the plugin's
+  1.3.23 frontend is ported, with the same requests through the datasource
+  proxy (urlPath, params and headers with variables and the epoch/ISO
+  macros, `jsonData.queryParams`, POST bodies), JSONPath as jsonpath-plus
+  evaluates it, the plugin's field type detection and parsing, group-by and
+  metric fields, its query variables and Grafana's error texts. JSONata
+  fields stay on the ladder. The API keys datasources keep in queryParams
+  never reach logs, saved state, compat output or error texts. See
+  docs/dashboards.md, Datasource plugins.
+- Zabbix panels (`alexanderzobnin-zabbix-datasource` 6.10.2) run natively:
+  metrics and item id targets through `/api/ds/query` with the plugin's
+  browser post-processing (Alias functions, Zabbix units, the wide merge),
+  trigger counts and problems as the plugin's Zabbix API calls, and the
+  Problems panel (`alexanderzobnin-zabbix-triggers-panel`) read-only in table
+  and list layouts. IT services, text and user macro queries, trigger counts
+  by items and direct database connections stay on the ladder. See
+  docs/dashboards.md, Datasource plugins.
+
+### Fixed
+
+- Every absolute time on a native panel (axes, legends, cursor read-outs,
+  table time cells, stat time values) is formatted in the dashboard's time
+  zone (browser, utc or an IANA zone, per value across DST); they were UTC.
+- Grid cards take exactly their panel's grid height, and every chart sizes to
+  the card body it is given, so titles stay visible and charts are no longer
+  cut at the bottom; stats center their value as Grafana's BigValue does.
+- Panel titles show "All" for a variable's custom all value; descriptions and
+  links sit in the card head as in Grafana.
+- Bar gauges, bar charts and gauges draw Grafana's exact per-row and
+  threshold colors, thick bars with large values, rounded bar ends and the
+  full threshold ring; bar chart time labels use Grafana's format.
+- Time series range their y axis over the samples in view and draw one sample
+  beyond each edge cut at the plot, like uPlot, so a query returning years of
+  history no longer flattens the line; frames are drawn in time order; axes
+  with decimals 0 label only whole ticks.
+- Dynamic text and text panels use Grafana's body and heading styles and
+  unitless line heights; positioned and stacked content no longer overlaps.
+- Pie chart slices are filled with Grafana's exact radial gradient of their
+  color in each theme: a fixed blue-gray such as Zabbix's 'Not Classified'
+  no longer turns pale green with a purple rim in Tern's light theme.
+- Table panel columns are as wide as their content and a table wider than its
+  card scrolls sideways, as in Grafana 13, instead of squeezing every auto
+  column to an ellipsis; tables without fixed-width columns spread over the
+  card's leftover width.
+- Named Grafana colors and the classic palette take Grafana's light-theme
+  shades in Tern's light theme on every native panel; exact hex colors keep
+  their value.
+- Axis tick labels pick decimals per tick like Grafana ("1 kW, 1.50 kW"), and
+  date units follow Grafana: `time:<pattern>` uses the pattern,
+  `dateTimeFromNow` shows relative time, the "no date if today" units drop
+  today's date.
+- Text panels keep inline styles Grafana's sanitizer allows (gradients,
+  colors, alignment, sizes), so styled HTML buttons draw as in Grafana.
+- Time series lines break where samples are missing, as in Grafana: the
+  panel inserts nulls where samples are further apart than `insertNulls`, or
+  than the time field's interval (the Prometheus step) when it is off, instead
+  of joining every gap with a straight line.
+- A table that a transformation such as `filterByValue` leaves with columns and
+  no rows keeps its header over Grafana 13's "No rows" (or the `noValue`
+  text) instead of "No data".
+- Treemap tiles take Grafana's saturated colors (threshold, fixed, mapping and
+  continuous scheme colors, per light and dark theme) instead of Tern's muted
+  status tones.
+- Text panels render the HTML Grafana renders instead of showing raw tags:
+  HTML mode and the HTML blocks of markdown mode (such as `<div>` wrappers)
+  draw headings, paragraphs, lists, tables, emphasis and links natively after
+  Grafana's sanitizing (disallowed tags such as `<script>` show as plain
+  text, as in Grafana), and inline `<a>`, `<b>`, `<i>`, `<code>`, `<br>` and
+  `<img>` in Markdown become Markdown. Rooted link and image paths (including
+  Markdown links like `[IRM](/a/grafana-irm-app)`) open on the dashboard's
+  Grafana; images load when Tern can fetch them, else show their alt text.
+- Every unit of Grafana's catalog formats like Grafana. Data units with a
+  starting prefix (`kbytes`..`pbytes`, `deckbytes`..`decpbytes`, `KiBs`,
+  `Mbits`, ...) scale both ways, so 0.0597 `gbytes` reads "61.1 MiB" instead
+  of "0.0597 gbytes"; energy, mass, length, pressure, radiation, hash rate,
+  currency (including suffix currencies such as `currencySEK`), throughput,
+  `hex`, `sci`, `ordinal`, `clockms`/`clocks`, `timeticks` and the `si:`,
+  `count:`, `currency:` (and `currency:financial:`) and `bool:` ids no longer
+  print the raw unit id. Time series axes in IEC units step in powers of 2,
+  as Grafana's do (0, 8, 16 ... 48 GiB).
+- Table gauge cells (`custom.cellOptions.type` `gauge`, by default or by
+  override) draw Grafana's bar gauge with the value after it instead of
+  "...": gradient and lcd bars run through the threshold colors (or the
+  continuous scheme), `valueDisplayMode` text (the default), color and
+  hidden apply. color-background cells are filled with the solid or gradient
+  color like Grafana's (`mode` basic/gradient, `applyToRow` fills the row);
+  a legacy `displayMode` wins over `cellOptions` as in Grafana. Pill,
+  markdown and json-view cells are drawn natively; data-links, actions and
+  custom cells now go to Grafana's renderer with their reason, as sparkline
+  and image cells already did. A gauge column keeps room for its longest
+  value (as Grafana's alignment factor does) and the bar's minimum, so a
+  narrow pane shrinks the bar and the text columns instead of cutting "100%"
+  to "10" over the next column; values line up down the column.
+- Stat `colorMode` `background` fills the tile with Grafana's saturated
+  gradient of the value's color and `background_solid` with the solid color,
+  with white or dark text as Grafana picks it, instead of a pale tint; fixed
+  colors (such as `blue` or `purple`) keep their Grafana color instead of
+  turning grey or beige, in the shade Grafana uses for Tern's light or dark
+  theme. `wideLayout: false` stacks name and value as in Grafana.
+- Stat values are no longer cut off at the right in narrow cards ("40239",
+  "$0"), and a long field name next to a value no longer squeezes the value
+  away.
+- Untitled panels have no "Panel N" header, and their stats show the field
+  name above the value like Grafana. Multi-value stat names wrap in full
+  instead of being truncated.
+- Short stat panels with a description (such as the 6x3 tiles of Grafana
+  Cloud's cardinality dashboards) draw their value at least a line tall
+  instead of a 5x4 px dash: the value gets the room left under the card's
+  head and chip lines, a sparkline that would leave it less than a line is
+  left out, and description and link chips keep to one line in a capped
+  card.
+- Query variables whose datasource query is an object wait for every
+  variable it references, as in Grafana; a hidden variable no longer runs
+  first with an unresolved `${label}` and leaves its repeated panels empty.
+
 ## [0.5.0] - 2026-11-09
 
 ### Added
@@ -323,7 +475,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/contrafy/tern-grafana/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/contrafy/tern-grafana/compare/v0.2.0...v0.3.0

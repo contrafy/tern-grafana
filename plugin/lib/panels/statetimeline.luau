@@ -252,7 +252,10 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		end
 	end
 	local svgH = H
-	if #legendRows > 0 then
+	if opts.card_height then
+		local drawn = { show = true, mode = "list", placement = legend.placement, calcs = {} } :: Charts.Legend
+		svgH = Charts.chartHeight(opts, H, W, legendRows, drawn)
+	elseif #legendRows > 0 then
 		svgH = math.max(60, H - 24)
 	end
 	local from, to = Charts.range(opts)

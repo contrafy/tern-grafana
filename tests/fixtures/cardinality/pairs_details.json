@@ -1,0 +1,20 @@
+{
+  "series_count_total": 40,
+  "labels": [
+    {
+      "label_name": "__name__",
+      "label_values_count": 2,
+      "series_count": 40,
+      "cardinality": [
+        {
+          "label_value": "checkout_requests_total",
+          "series_count": 28
+        },
+        {
+          "label_value": "checkout_latency_seconds_bucket",
+          "series_count": 12
+        }
+      ]
+    }
+  ]
+}

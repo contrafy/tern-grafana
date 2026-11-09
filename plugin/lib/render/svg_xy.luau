@@ -80,7 +80,7 @@ export type Options = {
 	height: number,
 	-- Time x axis (epoch ms) with Grafana's time tick labels.
 	x_time: boolean?,
-	offset_min: number?,
+	offset_min: Axis.Offset?,
 	x_unit: string?,
 	x_decimals: number?,
 	-- Hard x bounds; free ends use the data extent (uPlot's padded range

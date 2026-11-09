@@ -400,6 +400,18 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	end
 	local ySide, _, softMin, softMax, grid = Charts.yAxis(first.y.config)
 	local xSide, _, xSoftMin, xSoftMax = Charts.yAxis(first.x.config)
+	local legend = Charts.legendOptions(panel, env)
+	local legendRows: { Charts.Row } = {}
+	if legend.show then
+		for _, s in list do
+			if not Charts.hiddenFromLegend(s.y) then
+				local row = Charts.calcRow(s.y, s.class, legend.calcs, opts)
+				row.name = s.name
+				table.insert(legendRows, row)
+			end
+		end
+	end
+	H = Charts.chartHeight(opts, H, W, legendRows, legend)
 	local result = SvgXY.render({
 		width = W,
 		height = H,
@@ -426,19 +438,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	})
 	local chart, assets =
 		Charts.image(opts.key, result.svg, W, H, Charts.alt(panel, env, "XY chart"), "tern-grafana.xychart")
-	local legend = Charts.legendOptions(panel, env)
-	local legendNode: Node? = nil
-	if legend.show then
-		local rows: { Charts.Row } = {}
-		for _, s in list do
-			if not Charts.hiddenFromLegend(s.y) then
-				local row = Charts.calcRow(s.y, s.class, legend.calcs, opts)
-				row.name = s.name
-				table.insert(rows, row)
-			end
-		end
-		legendNode = Charts.calcLegend(opts.key .. ".legend", rows, legend)
-	end
+	local legendNode = if legend.show then Charts.calcLegend(opts.key .. ".legend", legendRows, legend) else nil
 	return Charts.compose(opts.key, chart, legendNode, legend.placement), assets
 end
 

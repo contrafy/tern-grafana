@@ -10,11 +10,14 @@
 -- info marker (hover title; in full in the expanded view), panel links as
 -- chips, and transparent panels without card chrome.
 
+local AlertStates = require("./alert_states")
 local Assets = require("../render/assets")
+local ClockZone = require("../panels/clock_zone")
 local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
+local Layers = require("./layers")
 local Layout = require("./layout")
 local Range = require("../time/range")
 local Registry = require("../panels/registry")
@@ -41,10 +44,16 @@ M.MIN_PANEL_WIDTH = "18ch"
 -- Bases are scaled down this much so a band's gaps fit and it only wraps on a narrow pane;
 -- flex-grow hands the slack back.
 M.BASIS_SLACK = 0.96
--- Card chrome in px: the head line with the card's top and bottom padding;
--- a panel with a description or links has a chip line under the head.
+-- Card chrome in px: the head line with the card's top and bottom padding
+-- (a card without a head, an untitled panel's, has the padding only); a
+-- panel with a description or links has a chip line under the head.
 M.CARD_CHROME_PX = 40
 M.CHIP_LINE_PX = 24
+-- A transparent panel's chrome (panels2.css tgp2-plain): 4 px padding and a
+-- 1 px border above and below; its head and chip lines are each a line
+-- with the 4 px gap under it.
+M.PLAIN_CHROME_PX = 10
+M.PLAIN_GAP_PX = 4
 
 -- A panel's Grafana height (gridPos h rows of 30 px with 8 px margins,
 -- lib/dashboard/render_png size) in Tern lines, never above it.
@@ -53,19 +62,28 @@ function M.heightLines(h: number): number
 	return math.max(4, math.floor(px / M.LINE_PX))
 end
 
--- The card body's height in px under the card's height cap (heightLines).
-function M.cardHeight(h: number, chips: boolean): number
-	return math.max(M.heightLines(h) * M.LINE_PX - M.CARD_CHROME_PX - (if chips then M.CHIP_LINE_PX else 0), 0)
+-- The card body's height in px under the card's height cap (heightLines),
+-- below the head and the chip line when the card has them.
+function M.cardHeight(h: number, chips: boolean, head: boolean, transparent: boolean?): number
+	local chrome: number
+	if transparent then
+		local line = M.LINE_PX + M.PLAIN_GAP_PX
+		chrome = M.PLAIN_CHROME_PX + (if head then line else 0) + (if chips then line else 0)
+	else
+		chrome = M.CARD_CHROME_PX - (if head then 0 else M.LINE_PX) + (if chips then M.CHIP_LINE_PX else 0)
+	end
+	return math.max(M.heightLines(h) * M.LINE_PX - chrome, 0)
 end
 
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
 	.. "o browser  y copy URL  I investigate"
 
--- The panel's title with its variables, kept in the scope memo per instance.
+-- The panel's title with its variables, kept in the scope memo per instance;
+-- "" for an untitled panel, which Grafana draws without a header.
 local function title(s: State, inst: Repeat.Instance): string
 	local t = inst.panel.title
 	if t == "" then
-		return "Panel " .. inst.panel.id
+		return ""
 	end
 	local titles = Core.memo(s).titles
 	local text = titles[inst]
@@ -92,14 +110,17 @@ local function clickable(text: string, act: string, key: string): Node
 	}
 end
 
--- The rendered native panel, memoized on its inputs.
+-- The rendered native panel, memoized on its inputs; `chips` and `head`
+-- when the card draws a chip line (metaRow) and a head line above it.
 local function nativeBody(
 	s: State,
 	inst: Repeat.Instance,
 	ps: State.PanelState,
 	env: Env,
 	assets: Assets.Assets,
-	single: boolean
+	single: boolean,
+	chips: boolean,
+	head: boolean
 ): Node
 	local data = ps.data
 	if data == nil then
@@ -111,12 +132,14 @@ local function nativeBody(
 	local cursor = if single then s.cursor else nil
 	local exemplar = if single then s.exemplar else nil
 	local labels = s.labels[inst.key]
+	local page = s.pages[inst.key]
 	-- Text panels interpolate variables into their content.
 	local signature = Core.signature(s)
 	local memo = s.memo[inst.key]
 	-- Snapped to the query interval: a refresh with the same answer is a memo hit.
 	local pr = State.drawRange(s, ps)
 	local live = if ps.live_ms then s.live_tick else nil
+	local annotations = Layers.marks(s, inst.panel.id)
 	if
 		memo
 		and memo.data == data
@@ -124,12 +147,14 @@ local function nativeBody(
 		and memo.exemplar == exemplar
 		and memo.single == single
 		and memo.labels == labels
+		and memo.page == page
 		and memo.signature == signature
 		and memo.json == inst.panel.json
 		and memo.title == title(s, inst)
 		and memo.extra_gen == ps.extra_gen
 		and memo.live == live
 		and memo.features == s.settings.features
+		and memo.annotations == annotations
 		and memo.from_ms == (if pr then pr.from_ms else nil)
 		and memo.to_ms == (if pr then pr.to_ms else nil)
 	then
@@ -143,10 +168,10 @@ local function nativeBody(
 	local scope = State.panelScope(s, inst)
 	local pw, ph = RenderPng.size(if single then 24 else inst.panel.grid.w, inst.panel.grid.h)
 	local json = inst.panel.json
-	local chips = (type(json.description) == "string" and json.description ~= "")
-		or (type(json.links) == "table" and next(json.links) ~= nil)
 	-- An expanded panel is not height-capped.
-	local cardH = if single then nil else M.cardHeight(inst.panel.grid.h, chips)
+	local cardH = if single
+		then nil
+		else M.cardHeight(inst.panel.grid.h, chips, head, inst.panel.json.transparent == true)
 	local d = s.dashboard
 	local ok, node, own = pcall(Registry.view, panelJson, data.frames, env, {
 		key = inst.key,
@@ -158,16 +183,24 @@ local function nativeBody(
 		time = if pr then { from_ms = pr.from_ms, to_ms = pr.to_ms } else nil,
 		size = { w = pw, h = ph },
 		card_height = cardH,
+		page = page,
 		extra = ps.extra,
 		timezone = if d then d.timezone else nil,
 		local_offset_min = env.local_offset_min,
+		offset_min = ClockZone.dashboardOffset(
+			if d then d.timezone else nil,
+			env.local_offset_min or 0,
+			env.local_offset_at
+		),
+		base_url = Core.browserBase(s),
 		features = s.settings.features,
+		annotations = annotations,
 		show_labels = labels,
 		-- The panel JSON before the title was replaced: the registry's
 		-- migration cache key.
 		source = json,
 		interpolate = function(text: string): string
-			return Interpolate.replace(text, scope, { format = Interpolate.text })
+			return Interpolate.replace(text, scope, { format = Interpolate.content })
 		end,
 		replace = function(text: string): string
 			return Interpolate.replace(text, scope)
@@ -187,19 +220,22 @@ local function nativeBody(
 	for i, w in data.warnings do
 		table.insert(children, muted(w, "w" .. i))
 	end
-	local body = ui.col(children, { key = "body", gap = "xs" })
+	-- dashboard.css grows it to the fixed-height card's bottom.
+	local body = ui.col(children, { key = "body", gap = "xs", role = "tern-grafana.panel-body" })
 	s.memo[inst.key] = {
 		data = data,
 		cursor = cursor,
 		exemplar = exemplar,
 		single = single,
 		labels = labels,
+		page = page,
 		signature = signature,
 		json = inst.panel.json,
 		title = title(s, inst),
 		extra_gen = ps.extra_gen,
 		live = live,
 		features = s.settings.features,
+		annotations = annotations,
 		from_ms = if pr then pr.from_ms else nil,
 		to_ms = if pr then pr.to_ms else nil,
 		node = body,
@@ -226,7 +262,8 @@ local function pngBody(s: State, inst: Repeat.Instance, ps: State.PanelState, as
 				asset = key,
 				w = if spec then spec.width else nil,
 				h = if spec then spec.height else nil,
-				alt = "Grafana render of " .. title(s, inst),
+				alt = "Grafana render of "
+					.. (if inst.panel.title ~= "" then title(s, inst) else "panel " .. inst.panel.id),
 			},
 		})
 	elseif State.pngError(s, ps) then
@@ -251,8 +288,9 @@ local MODE_BADGE: { [string]: { string } } = {
 	browser = { "browser", "neutral" },
 }
 
--- The panel description (Markdown in Grafana), interpolated; kept in the
--- scope memo per instance.
+-- The panel description (Markdown in Grafana), interpolated with the
+-- default format as VizPanel.getDescription does; kept in the scope memo
+-- per instance.
 local function description(s: State, inst: Repeat.Instance): string?
 	local raw = inst.panel.json.description
 	if type(raw) ~= "string" then
@@ -261,10 +299,7 @@ local function description(s: State, inst: Repeat.Instance): string?
 	local descriptions = Core.memo(s).descriptions
 	local cached: string | false | nil = descriptions[inst]
 	if cached == nil then
-		local text = string.match(
-			Interpolate.replace(raw, State.panelScope(s, inst), { format = Interpolate.text }),
-			"^%s*(.-)%s*$"
-		)
+		local text = string.match(Interpolate.replace(raw, State.panelScope(s, inst)), "^%s*(.-)%s*$")
 		local found: string | false = if text and text ~= "" then text else false
 		descriptions[inst] = found
 		cached = found
@@ -272,7 +307,9 @@ local function description(s: State, inst: Repeat.Instance): string?
 	return if cached then cached else nil
 end
 
--- Info marker and link chips above the body; nil when the panel has neither.
+-- Info marker and link chips; nil when the panel has neither. A grid card
+-- draws them at its head's end on one line, link titles cut short; the
+-- expanded panel wraps them in full above the body.
 local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolean): Node?
 	local chips: { Node } = {}
 	local desc = description(s, inst)
@@ -293,41 +330,84 @@ local function metaRow(s: State, inst: Repeat.Instance, env: Env, single: boolea
 				title = l.url,
 				actions = { click = "plink=" .. i .. ":" .. inst.key },
 			},
-			c = { ui.text({ ui.span(l.title, "accent") }) },
+			c = { ui.text({ ui.span(l.title, "accent") }, if single then nil else { truncate = "end" }) },
 		})
 	end
 	if #chips == 0 then
 		return nil
 	end
-	return ui.row(chips, { key = "meta", gap = "xs", wrap = true })
+	return ui.row(chips, { key = "meta", gap = "xs", wrap = single })
 end
 
-local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Assets.Assets, single: boolean): Node
+-- `id` is the card's view id in a dashboard grid (nil for the expanded
+-- panel): the head's `end` names its chip row by id.
+local function panelCard(
+	s: State,
+	inst: Repeat.Instance,
+	env: Env,
+	assets: Assets.Assets,
+	single: boolean,
+	id: string?
+): Node
 	local ps = s.panels[inst.key]
-	local head: { ui.SpanLike } = { ui.span(title(s, inst), "strong") }
+	-- Empty for an untitled panel without time info or a ladder badge: no
+	-- header line, as in Grafana.
+	local head: { ui.SpanLike } = {}
+	local function addHead(text: string, style: string)
+		table.insert(head, ui.span(if #head > 0 then "  " .. text else text, style))
+	end
+	local name = title(s, inst)
+	if name ~= "" then
+		addHead(name, "strong")
+	end
+	-- Grafana's alert state title item (VizPanelRenderer): a heart in the
+	-- state's color after the title.
+	local alert = Layers.alertState(s, inst.panel.id)
+	if alert then
+		local glyph, style = AlertStates.icon(alert)
+		if #head > 0 then
+			table.insert(head, ui.span(" "))
+		end
+		table.insert(head, ui.span(glyph, style))
+	end
+	local info = if ps and ps.time then ps.time.info else ""
+	-- Built before the body: a capped body's height counts its chip and head
+	-- lines. A capped card draws the chips at its head's end, the way
+	-- Grafana's panel header holds the info icon and links next to the title.
+	local meta = metaRow(s, inst, env, single)
+	local transparent = inst.panel.json.transparent == true
+	local metaInHead = meta ~= nil and id ~= nil and not single and not transparent
 	local body: Node
 	if ps == nil then
 		body = muted("Waiting", "wait")
 	elseif ps.decision.mode == "native" then
-		body = nativeBody(s, inst, ps, env, assets, single)
-		if ps.status == "loading" and ps.data then
-			table.insert(head, ui.span("  refreshing", "muted"))
+		body = nativeBody(
+			s,
+			inst,
+			ps,
+			env,
+			assets,
+			single,
+			meta ~= nil and not metaInHead,
+			name ~= "" or info ~= "" or metaInHead or alert ~= nil
+		)
+		-- Not on an untitled panel: a head line coming and going would shift it.
+		if ps.status == "loading" and ps.data and name ~= "" then
+			addHead("refreshing", "muted")
 		end
 	elseif ps.decision.mode == "png" then
 		body = pngBody(s, inst, ps, assets)
 	else
 		body = browserBody(inst, ps)
 	end
-	local info = if ps and ps.time then ps.time.info else ""
 	if info ~= "" then
-		table.insert(head, ui.span("  " .. info, "info"))
+		addHead(info, "info")
 	end
 	local badge = if ps then MODE_BADGE[ps.decision.mode] else nil
 	if badge then
-		table.insert(head, ui.span("  " .. badge[1], "muted"))
+		addHead(badge[1], "muted")
 	end
 	local children: { Node } = {}
-	local meta = metaRow(s, inst, env, single)
 	if meta then
 		table.insert(children, meta)
 	end
@@ -338,9 +418,11 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 	table.insert(children, body)
 	local actions = { click = "focus=" .. inst.key, dblclick = "expand=" .. inst.key }
 	local selected = s.focus == inst.key and not single
-	if inst.panel.json.transparent == true then
+	if transparent then
 		-- Grafana's transparent panels have no background or border.
-		table.insert(children, 1, ui.text(head, { key = "head", truncate = "end" }))
+		if #head > 0 then
+			table.insert(children, 1, ui.text(head, { key = "head", truncate = "end" }))
+		end
 		return {
 			k = "el",
 			p = {
@@ -352,7 +434,13 @@ local function panelCard(s: State, inst: Repeat.Instance, env: Env, assets: Asse
 			c = children,
 		}
 	end
-	return ui.card(head, children, { key = inst.key, selected = selected, actions = actions })
+	local props: { [string]: any } = {
+		key = inst.key,
+		selected = selected,
+		actions = actions,
+		["end"] = if metaInHead then (id :: string) .. ".meta" else nil,
+	}
+	return ui.card(head, children, props)
 end
 
 -- `parent` is the view id of the node this one goes in: Tern names every
@@ -369,17 +457,20 @@ local function layoutNode(
 	if n.kind == "gap" then
 		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis * M.BASIS_SLACK, grow = 0, shrink = 1 } }
 	elseif n.kind == "panel" then
-		local card = panelCard(s, byKey[n.key], env, assets, false)
+		local id = parent .. "." .. n.key
+		local card = panelCard(s, byKey[n.key], env, assets, false, id)
 		local p = card.p :: { [string]: any }
 		-- Like Grafana's narrow-screen layout, a band wraps once a panel would get
 		-- narrower than MIN_PANEL_WIDTH, and a wrapped panel takes the full width.
 		p.basis, p.grow, p.shrink = n.basis * M.BASIS_SLACK, 1, 1
-		p.min = { w = M.MIN_PANEL_WIDTH }
-		-- Every panel type is Grafana's panel height: content past it (a
+		-- Every panel type is exactly Grafana's panel height, as in its grid:
+		-- short content leaves the card's room below it, content past it (a
 		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
-		p.max = { h = string.format("%dlines", M.heightLines(n.h)) }
-		s.card_ids[n.key] = parent .. "." .. n.key
+		local lines = string.format("%dlines", M.heightLines(n.h))
+		p.min = { w = M.MIN_PANEL_WIDTH, h = lines }
+		p.max = { h = lines }
+		s.card_ids[n.key] = id
 		return card
 	end
 	local key = n.kind .. idx
@@ -543,7 +634,33 @@ local function pickerNode(s: State): Node?
 	else
 		local v = Variables.find(s.vars, p.name or "")
 		props.title = if v then (v.label or v.name) else p.name
-		if v and v.kind == "textbox" then
+		if v and v.adhoc then
+			local step = p.step or "filters"
+			if step ~= "filters" then
+				-- The filter so far: `key`, `key op`.
+				props.title = (v.label or v.name)
+					.. ": "
+					.. (p.key or "")
+					.. (if step == "value" then " " .. (p.op or "") else "")
+			end
+			props.placeholder = if step == "filters"
+				then "Filters; enter edits"
+				elseif step == "key" then "Key"
+				elseif step == "op" then "Operator"
+				elseif p.chosen then "Values; space toggles, enter applies"
+				else "Value"
+			if p.list_status then
+				props.state = p.list_status
+				props.message = p.list_error
+			end
+			if p.chosen then
+				local ids = table.create(#(p.chosen :: { string }))
+				for i, x in p.chosen :: { string } do
+					ids[i] = "v:" .. x
+				end
+				props.current = ids
+			end
+		elseif v and v.kind == "textbox" then
 			props.placeholder = "Type a value, enter to apply"
 		elseif v and v.multi then
 			props.placeholder = "Filter; space toggles, enter applies"

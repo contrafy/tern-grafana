@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"Label,Count\njob,12\ninstance,9\nmode,4","intervalMs":5000,"maxDataPoints":960}],"from":"1794254024000","to":"1794257624000"}

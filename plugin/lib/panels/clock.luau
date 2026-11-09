@@ -30,6 +30,7 @@
 
 local ClockDuration = require("./clock_duration")
 local ClockFormat = require("./clock_format")
+local Range = require("../time/range")
 local ClockZone = require("./clock_zone")
 local Env = require("../env")
 local Frame = require("../frame/types")
@@ -260,7 +261,8 @@ function M.compute(panel: any, frames: { Frame.Frame }, env: Env, opts: Common.O
 		return s
 	end
 	local now = env.now_ms
-	local localMin = opts.local_offset_min or env.local_offset_min or opts.offset_min or 0
+	local localMin = opts.local_offset_min or env.local_offset_min or 0
+	local dashMin = if opts.offset_min ~= nil then Range.offsetAt(opts.offset_min, now) else nil
 
 	local tzOption = Json.str(env, options.timezone) or ""
 	local dashTz = opts.timezone or ""
@@ -272,7 +274,7 @@ function M.compute(panel: any, frames: { Frame.Frame }, env: Env, opts: Common.O
 	if tz ~= "" then
 		tz = interpolate(tz)
 	end
-	local zone = M.zone(tz, localMin, opts.timezone, opts.offset_min)
+	local zone = M.zone(tz, localMin, opts.timezone, dashMin)
 	local offset, abbr = M.zoneAt(zone, now)
 
 	local m = mode(env, options)

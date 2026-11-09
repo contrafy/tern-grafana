@@ -163,6 +163,7 @@ function M.panels(d: Model.Dashboard, settings: Settings, env: Env): { PanelResu
 				scope = scope,
 				datasources = settings.datasources,
 				source = source,
+				grafana_major = Queries.major(settings.version),
 			}
 			local decision = Ladder.decide(p, ctx, env)
 			local blocker = if decision.mode == "native" then nil else Ladder.nativeBlocker(p, ctx, env)

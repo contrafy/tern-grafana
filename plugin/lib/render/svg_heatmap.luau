@@ -34,7 +34,7 @@ export type Options = {
 	x_max: number,
 	x_time: boolean,
 	x_unit: string?,
-	offset_min: number?,
+	offset_min: Axis.Offset?,
 	-- Bucket edges: cols[c] = {lo, hi} in x units, rows[r] = {lo, hi} in y
 	-- scale units.
 	cols: { { number } },

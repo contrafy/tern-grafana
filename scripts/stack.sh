@@ -11,6 +11,7 @@
 #   scripts/stack.sh capture [--refresh [PATTERN]]
 #                                   record new fixtures into tests/fixtures (scripts/fixtures/capture.sh);
 #                                   existing ones are only overwritten with --refresh matching PATTERN
+#   scripts/stack.sh zabbix         start the opt-in Zabbix 7.0 profile and seed it (dev/zabbix/bootstrap.sh)
 #   scripts/stack.sh token-path G   print the token file path for G (grafana12|grafana11|grafana13), never the token
 #
 # Tokens live only in .sandbox/stack/<grafana>.token (mode 0600) and are never printed. Every
@@ -38,7 +39,7 @@ log() {
 }
 
 usage() {
-	printf 'usage: %s up|down|reset|status|smoke|capture|token-path <grafana12|grafana11|grafana13>\n' "$0" >&2
+	printf 'usage: %s up|down|reset|status|smoke|capture|zabbix|token-path <grafana12|grafana11|grafana13>\n' "$0" >&2
 	exit 2
 }
 
@@ -161,6 +162,18 @@ seed() {
 		token_api "$g" POST /api/annotations \
 			"{\"dashboardUID\":\"tern-all-panels\",\"panelId\":1,\"time\":$t2,\"tags\":[\"tern-seed\",\"incident\"],\"text\":\"CPU spike on checkout\"}" >/dev/null
 	fi
+	# tern-alert-states: a dashboard-wide region (panel 0: every panel draws it) and a point on panel 3.
+	seeded=$(token_api "$g" GET '/api/annotations?dashboardUID=tern-alert-states&tags=tern-seed&limit=10' | jq 'length')
+	if [ "$seeded" = 0 ]; then
+		now=$(date +%s)
+		r0=$(((now - 30 * 60) * 1000))
+		r1=$(((now - 25 * 60) * 1000))
+		t3=$(((now - 15 * 60) * 1000))
+		token_api "$g" POST /api/annotations \
+			"{\"dashboardUID\":\"tern-alert-states\",\"panelId\":0,\"time\":$r0,\"timeEnd\":$r1,\"tags\":[\"tern-seed\",\"maintenance\"],\"text\":\"Rollout window (dashboard-wide region)\"}" >/dev/null
+		token_api "$g" POST /api/annotations \
+			"{\"dashboardUID\":\"tern-alert-states\",\"panelId\":3,\"time\":$t3,\"tags\":[\"tern-seed\",\"deploy\"],\"text\":\"kubectl rollout restart deploy/api\"}" >/dev/null
+	fi
 	token_api "$g" POST /api/user/stars/dashboard/uid/tern-all-panels >/dev/null 2>&1 || true
 	# Grafanas that store schema v2 dashboards (13+) get dev/grafana/dashboards-v2 through the
 	# dashboard API; file provisioning would hand the same files to 11 and 12.
@@ -206,7 +219,7 @@ cmd_up() {
 
 cmd_down() {
 	require_tools
-	dc down --volumes --remove-orphans
+	dc --profile zabbix down --volumes --remove-orphans
 	rm -f "$STATE"/*.token "$STATE"/*.token.tmp
 }
 
@@ -325,6 +338,11 @@ smoke) cmd_smoke ;;
 capture)
 	shift
 	exec sh "$ROOT/scripts/fixtures/capture.sh" "$@"
+	;;
+zabbix)
+	require_tools
+	dc --profile zabbix up -d zabbix-server zabbix-web zabbix-agent
+	exec sh "$ROOT/dev/zabbix/bootstrap.sh"
 	;;
 token-path)
 	[ $# -eq 2 ] || usage

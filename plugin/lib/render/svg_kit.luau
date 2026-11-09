@@ -177,44 +177,85 @@ local function exactDecimals(v: number, unit: string?): number?
 	return nil
 end
 
--- Tick labels sharing one decimals count: the fewest that print every tick
--- exactly in its unit. `perTick` (ticks a magnitude apart, log scales):
--- each tick prints with its own exact decimals instead.
+-- uPlot's tick increment as Grafana reads it (grafana-data utils/numbers.ts
+-- guessDecimals(roundDecimals(incr, 6))): the fraction digits of the
+-- increment rounded to 6 places.
+local function incrDecimals(incr: number): number
+	if incr % 1 == 0 then
+		return 0
+	end
+	local n = incr * 1e6 * (1 + 2 ^ -52)
+	local r = math.floor(math.abs(n) + 0.5) / 1e6
+	local s = string.gsub(string.format("%.6f", r), "0+$", "")
+	local dot = string.find(s, ".", 1, true)
+	return if dot then #s - dot else 0
+end
+
+-- JavaScript's +text for a formatted number: decimal (optionally with an
+-- exponent) or 0x hex; nil where JavaScript reads NaN ("1 hour", "01m:02s").
+local function jsNumber(text: string): number?
+	if string.match(text, "^0[xX]%x+$") then
+		return tonumber(text)
+	end
+	local mantissa = string.match(text, "^[%+%-]?([%d%.]+)$") or string.match(text, "^[%+%-]?([%d%.]+)[eE][%+%-]?%d+$")
+	if mantissa == nil or not string.find(mantissa, "%d") or select(2, string.gsub(mantissa, "%.", "")) > 1 then
+		return nil
+	end
+	return tonumber(text)
+end
+
+-- getDisplayProcessor's adjacentDecimals applies to plain numeric units
+-- only: not date, currency, boolean or locale ones.
+local function trimsDecimals(unit: string?): boolean
+	if unit == nil then
+		return true
+	end
+	return unit ~= "locale"
+		and string.sub(unit, 1, 8) ~= "currency"
+		and string.sub(unit, 1, 4) ~= "bool"
+		and string.sub(unit, 1, 8) ~= "dateTime"
+		and string.sub(unit, 1, 5) ~= "time:"
+end
+
+-- Axis tick labels as Grafana's UPlotAxisBuilder values() and the field
+-- display processor print them: a panel's decimals win; otherwise a
+-- fractional increment's decimals format every tick and trailing zeros are
+-- dropped (0.25 step: "0.5", 0.2 percentunit step: "20%"), and a whole
+-- increment leaves each tick its own automatic decimals ("1 kW", "1.50 kW";
+-- "512 MiB", "1 GiB", "1.50 GiB"). `perTick` (ticks a magnitude apart, log
+-- scales): each tick prints with its own exact decimals instead. Decimals 0
+-- on a linear axis label only the whole ticks (UPlotAxisBuilder's integer
+-- filter); the others get "" and keep their grid line.
 function M.tickLabels(ticks: { number }, unit: string?, decimals: number?, perTick: boolean?): { string }
-	local function render(d: number?): { string }
-		local out: { string } = table.create(#ticks)
+	local out: { string } = table.create(#ticks)
+	if decimals ~= nil then
+		local whole = decimals == 0 and not perTick
 		for i, v in ticks do
-			out[i] = Format.text(v, unit, d)
+			out[i] = if whole and math.abs(v - math.round(v)) > 1e-9 * math.max(1, math.abs(v))
+				then ""
+				else Format.text(v, unit, decimals)
 		end
 		return out
 	end
-	if decimals ~= nil then
-		return render(decimals)
-	end
 	if perTick then
-		local out: { string } = table.create(#ticks)
 		for i, v in ticks do
 			out[i] = Format.text(v, unit, exactDecimals(v, unit))
 		end
 		return out
 	end
-	local common = 0
-	for _, v in ticks do
-		local d = exactDecimals(v, unit)
-		if d == nil then
-			-- Not a short decimal in this unit (1500 B = 1.46484375 KiB):
-			-- Grafana's automatic three significant digits.
-			return render(nil)
+	local adjacent = if #ticks >= 2 then incrDecimals(ticks[2] - ticks[1]) else 0
+	if adjacent == 0 or not trimsDecimals(unit) then
+		for i, v in ticks do
+			out[i] = Format.text(v, unit)
 		end
-		common = math.max(common, d)
+		return out
 	end
-	local labels = render(common)
-	for i = 2, #labels do
-		if labels[i] == labels[i - 1] then
-			return render(nil)
-		end
+	for i, v in ticks do
+		local f = Format.format(v, unit, adjacent)
+		local n = jsNumber(f.text)
+		out[i] = f.prefix .. (if n then Format.jsString(n) else f.text) .. f.suffix
 	end
-	return labels
+	return out
 end
 
 -- A horizontal value axis: spacing from the widest label plus a gap,

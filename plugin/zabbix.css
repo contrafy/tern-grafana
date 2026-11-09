@@ -1,0 +1,44 @@
+/* Zabbix Problems panel (lib/panels/zabbix_problems.luau). Colors come from
+   the tg-gc<n> color classes (--tg-c), nearest to the panel's own colors. */
+
+/* Severity cells are filled with the severity color, white text
+   (_react-table.scss .severity-cell). */
+.tgz-p .tgz-sev {
+	margin: -2px -14px -2px -6px;
+	padding: 2px 14px 2px 6px;
+	background: var(--tg-c);
+	color: rgb(255, 255, 255);
+	font-weight: 500;
+}
+.tgz-p .tgz-sev .sf-text { color: inherit; }
+
+/* Tag badges colored by tag name (EventTag.tsx, .zbx-tag). */
+/* Inline badges in a non-atomic container: the cell's ellipsis replaces the
+   badges that do not fit and keeps the first ones, as in Grafana's cell. */
+.tgz-tags { display: inline; white-space: nowrap; }
+.tgz-p .tgz-tag {
+	display: inline-block;
+	margin-right: 4px;
+	padding: 1px 6px;
+	border-radius: 2px;
+	background: var(--tg-c);
+	color: rgb(255, 255, 255);
+	font-size: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.tgz-p .tgz-status { font-weight: 500; }
+
+/* List layout (AlertCard.tsx). */
+.tgz-list { display: flex; flex-direction: column; }
+.tgz-card {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	padding: 4px 0;
+	border-bottom: 1px solid var(--l2);
+}
+.tgz-bar { width: 4px; align-self: stretch; background: var(--tg-c); border-radius: 2px; }
+.tgz-card-body { flex: 1; min-width: 0; }
+.tgz-card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }

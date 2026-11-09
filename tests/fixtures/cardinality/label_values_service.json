@@ -1,0 +1,28 @@
+{
+  "series_count_total": 88,
+  "labels": [
+    {
+      "label_name": "service",
+      "label_values_count": 4,
+      "series_count": 70,
+      "cardinality": [
+        {
+          "label_value": "checkout",
+          "series_count": 40
+        },
+        {
+          "label_value": "cart",
+          "series_count": 18
+        },
+        {
+          "label_value": "billing",
+          "series_count": 8
+        },
+        {
+          "label_value": "search",
+          "series_count": 4
+        }
+      ]
+    }
+  ]
+}

@@ -25,7 +25,7 @@ export type Options = {
 	calcs: { Calc }?,
 	-- Cursor time; replaces the calcs with the value at the cursor.
 	cursor: number?,
-	offset_min: number?,
+	offset_min: Range.Offset?,
 	key: string?,
 }
 
@@ -94,6 +94,41 @@ end
 
 function M.swatch(class: string): Node
 	return { k = "el", p = { tag = "span", class = "tg-swatch " .. class } }
+end
+
+-- Tern's px for rowsNode, measured in a dashboard card, so a chart can
+-- leave its legend room: list entries (swatch, name, values) wrap across
+-- `width` onto 16 px lines 10 px apart; a table is a 22 px header and 21
+-- px rows.
+M.LINE_PX = 16
+M.LINE_GAP_PX = 10
+M.ENTRY_GAP_PX = 12
+M.SWATCH_PX = 14
+M.CHAR_PX = 8
+M.TABLE_HEAD_PX = 22
+M.TABLE_ROW_PX = 21
+
+function M.height(rows: { Row }, mode: Mode, width: number): number
+	if #rows == 0 then
+		return 0
+	elseif mode == "table" then
+		return M.TABLE_HEAD_PX + #rows * M.TABLE_ROW_PX
+	end
+	local lines, x = 1, 0
+	for _, r in rows do
+		local chars = utf8.len(r.name) or #r.name
+		for _, v in r.values do
+			chars += 1 + (utf8.len(v) or #v)
+		end
+		local w = M.SWATCH_PX + chars * M.CHAR_PX
+		if x > 0 and x + M.ENTRY_GAP_PX + w > width then
+			lines += 1
+			x = w
+		else
+			x += (if x > 0 then M.ENTRY_GAP_PX else 0) + w
+		end
+	end
+	return lines * M.LINE_PX + (lines - 1) * M.LINE_GAP_PX
 end
 
 -- VizLegend rows under `key`: a wrapping list (name, then the values in

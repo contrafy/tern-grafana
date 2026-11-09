@@ -16,6 +16,8 @@ local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgXY = require("../render/svg_xy")
 local Tbl = require("../tbl")
+local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -25,13 +27,33 @@ type Node = ui.Node
 
 local M = {}
 
--- The panel's design size in px: its gridPos size, else the view's.
+-- The panel's design size in px: its gridPos width and, in a height-capped
+-- dashboard card, the card body's height (opts.card_height, the room
+-- Grafana's viz gets below its header and padding), else its gridPos
+-- height; else the view's.
 function M.size(opts: Common.Options, w: number, h: number): (number, number)
 	local s = opts.size
 	if s then
-		return s.w, s.h
+		return s.w, opts.card_height or s.h
 	end
 	return opts.width or w, opts.height or h
+end
+
+-- The gap between a chart and the legend under it (compose's col gap xs).
+M.LEGEND_GAP_PX = 4
+-- VizLayout's maxHeight of a bottom legend: past it Grafana scrolls the
+-- legend, so the chart never gets less than the rest.
+M.LEGEND_MAX = 0.35
+
+-- The chart's height in a height-capped card (opts.card_height) with
+-- `rows` in its legend across `w` px: a bottom legend's height comes off
+-- the viz (VizLayout); `h` itself otherwise.
+function M.chartHeight(opts: Common.Options, h: number, w: number, rows: { Row }, legend: Legend): number
+	if opts.card_height == nil or #rows == 0 or not legend.show or legend.placement ~= "bottom" then
+		return h
+	end
+	local px = Legend.height(rows, legend.mode, w) + M.LEGEND_GAP_PX
+	return math.max(math.floor(h - math.min(px, h * M.LEGEND_MAX)), 1)
 end
 
 -- The panel's query range (after its time overrides), if known.
@@ -53,6 +75,33 @@ function M.displayClass(d: FieldConfig.Display): string
 	return d.class or M.toneClass(d.tone)
 end
 
+-- A display processor's color (FieldConfig.Display or Scale).
+export type ColorOf = { class: string?, color: string, tone: Thresholds.Tone, percent: number }
+
+-- The class of the exact color Grafana paints a value in: its palette
+-- class, a fixed color as a literal in both themes, a continuous scheme's
+-- interpolated color, else the resolved color (thresholds, mappings).
+function M.valueClass(item: Item, d: ColorOf, opts: Common.Options): string
+	if d.class then
+		return d.class :: string
+	end
+	local cfg = item.config
+	local mode = cfg.color_mode
+	local fixed = cfg.fixed_color
+	if (mode == "fixed" or mode == "shades") and fixed and d.color == Thresholds.color(fixed, opts.theme) then
+		return TsGradient.fixedClass(fixed, opts.theme)
+	elseif string.sub(mode, 1, 11) == "continuous-" and d.color == "" then
+		local c = TsGradient.schemeColor(mode, d.percent, opts.theme)
+		if c then
+			return TsGradient.stopClass(c, opts.theme)
+		end
+	end
+	if d.color ~= "" then
+		return TsGradient.stopClass(d.color, opts.theme)
+	end
+	return M.toneClass(d.tone)
+end
+
 -- Classes for a whole series (getFieldSeriesColor). Palette modes take the
 -- k-th palette color: Grafana re-indexes the plotted fields
 -- (setClassicPaletteIdxs), skipping x and hidden fields.
@@ -61,8 +110,7 @@ function M.seriesClass(item: Item, k: number, opts: Common.Options): string
 	if mode == "palette-classic" or mode == "palette-classic-by-name" then
 		return FieldConfig.paletteClass(k)
 	end
-	local c = FieldConfig.seriesColor(item, { theme = opts.theme })
-	return c.class or M.toneClass(c.tone)
+	return M.valueClass(item, FieldConfig.seriesColor(item, { theme = opts.theme }), opts)
 end
 
 -- Whether Grafana colors each value of the field on its own (by-value
@@ -80,6 +128,9 @@ export type Legend = {
 	placement: "bottom" | "right",
 	calcs: { string },
 }
+
+-- A plain list legend under the chart (geomap, node graph).
+M.LIST_LEGEND = table.freeze({ show = true, mode = "list" :: "list", placement = "bottom" :: "bottom", calcs = {} })
 
 function M.legendOptions(panel: any, env: Env): Legend
 	local raw = Json.tbl(env, Json.path(env, panel, "options", "legend"))

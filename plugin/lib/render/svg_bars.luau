@@ -7,8 +7,13 @@
 --   width of its group;
 -- - stacking normal (positives up, negatives down) or percent (each
 --   category's values over the sum of their magnitudes, axis 0..100%);
+-- - the value axis over uPlot's range of the bars' ends, padded 10% with a
+--   soft 0 (prepConfig), unless min/max are set;
+-- - the value end of each bar rounded by bar_radius (the topmost series
+--   when stacked);
 -- - value labels at each bar's end, one font size for all (the largest
---   that fits every label: 65% of a bar's width or thickness, 8..30 px);
+--   that fits every label: 65% of a bar's thickness and the room between
+--   the bars' ends and the plot's edge, 8..30 px);
 --   `auto` drops labels that would overlap one already drawn, `never` none;
 -- - category labels rotated by `label_rotation` degrees, cut to `label_max`
 --   characters, thinned so they do not overlap (label_spacing px apart;
@@ -46,6 +51,10 @@ export type Options = {
 	-- 0..1 bar fill; the outline (line_width px) is drawn at full color.
 	fill_opacity: number?,
 	line_width: number?,
+	-- options.barRadius: the value end's corner radius as a fraction of
+	-- the bar's thickness (uPlot bars clamp it to half the shorter side);
+	-- stacked bars round only the topmost series.
+	bar_radius: number?,
 	show_value: ("auto" | "always" | "never")?,
 	-- Fixed value label size (options.text.valueSize), px.
 	value_size: number?,
@@ -153,6 +162,24 @@ function M.render(opts: Options): Result
 	if stacking == "percent" then
 		hardMin = if lo < 0 then -1 else 0
 		hardMax = 1
+	elseif #bars > 0 then
+		-- uPlot rangeNum over the bars' value ends, padded 10%, with
+		-- prepConfig's soft 0 (mode 1) unless min/max are set.
+		local dMin, dMax = math.huge, -math.huge
+		for _, b in bars do
+			local v = if stacking == "none" then b.raw elseif b.raw < 0 then b.lo else b.hi
+			dMin, dMax = math.min(dMin, v), math.max(dMax, v)
+		end
+		local a, z = Kit.padRange(dMin, dMax)
+		if hardMin == nil then
+			hardMin = if dMin >= 0 then 0 else a
+		end
+		if hardMax == nil then
+			hardMax = if dMax <= 0 then 0 else z
+		end
+		if hardMin == 0 and hardMax == 0 then
+			hardMax = 100
+		end
 	end
 
 	local out: { string } = { Kit.open(W, H) }
@@ -247,19 +274,81 @@ function M.render(opts: Options): Result
 		return g0 + (si - 1) * (w + gap), w
 	end
 
+	-- A bar from `base` to `tip` along the value axis, `a0`..`a0 + w` across
+	-- it, its tip corners rounded by `r` px.
+	local function barPath(base: number, tip: number, a0: number, w: number, r: number): string
+		local len = math.abs(tip - base)
+		r = math.min(r, w / 2, len)
+		local dir = if tip >= base then 1 else -1
+		if horizontal then
+			if r < 0.5 then
+				return fmt("M%.1f %.1fh%.1fv%.1fh%.1fZ", math.min(base, tip), a0, len, w, -len)
+			end
+			local sweep = if dir > 0 then 1 else 0
+			return fmt(
+				"M%.1f %.1fH%.1fA%.1f %.1f 0 0 %d %.1f %.1fV%.1fA%.1f %.1f 0 0 %d %.1f %.1fH%.1fZ",
+				base,
+				a0,
+				tip - dir * r,
+				r,
+				r,
+				sweep,
+				tip,
+				a0 + r,
+				a0 + w - r,
+				r,
+				r,
+				sweep,
+				tip - dir * r,
+				a0 + w,
+				base
+			)
+		end
+		if r < 0.5 then
+			return fmt("M%.1f %.1fh%.1fv%.1fh%.1fZ", a0, math.min(base, tip), w, len, -w)
+		end
+		local sweep = if dir < 0 then 1 else 0
+		return fmt(
+			"M%.1f %.1fV%.1fA%.1f %.1f 0 0 %d %.1f %.1fH%.1fA%.1f %.1f 0 0 %d %.1f %.1fV%.1fZ",
+			a0,
+			base,
+			tip - dir * r,
+			r,
+			r,
+			sweep,
+			a0 + r,
+			tip,
+			a0 + w - r,
+			r,
+			r,
+			sweep,
+			a0 + w,
+			tip - dir * r,
+			base
+		)
+	end
+	local radius = if stacking == "percent" then 0 else math.max(opts.bar_radius or 0, 0)
 	local byClass: { [string]: { string } } = {}
 	local classOrder: { string } = {}
 	local thickness = math.huge
+	-- The room past the bars' tips to the plot's edge (bars.ts hSpace and
+	-- vSpace): auto-sized value labels must fit in it.
+	local room = math.huge
 	for _, b in bars do
 		local a0, w = across(b.cat, b.series)
 		thickness = math.min(thickness, w)
-		local p0, p1 = valPx(b.lo), valPx(b.hi)
-		local d: string
-		if horizontal then
-			d = fmt("M%.1f %.1fh%.1fv%.1fh%.1fZ", math.min(p0, p1), a0, math.abs(p1 - p0), w, -math.abs(p1 - p0))
-		else
-			d = fmt("M%.1f %.1fh%.1fv%.1fh%.1fZ", a0, math.min(p0, p1), w, math.abs(p1 - p0), -w)
+		local neg = b.raw < 0
+		local base, tip = valPx(if neg then b.hi else b.lo), valPx(if neg then b.lo else b.hi)
+		-- Percent stacks fill the axis: their labels sit on the bars.
+		if stacking ~= "percent" then
+			if horizontal then
+				room = math.min(room, if neg then tip - left else right - tip)
+			else
+				room = math.min(room, if neg then bottom - tip else tip - top)
+			end
 		end
+		local r = if stacking == "none" or b.series == nseries then radius * w else 0
+		local d = barPath(base, tip, a0, w, r)
 		local list = byClass[b.class]
 		if list == nil then
 			list = {}
@@ -309,13 +398,18 @@ function M.render(opts: Options): Result
 			texts[i] = format(b.series, v)
 		end
 		if size == nil then
+			-- calculateFontSize over the bar's thickness and the room past
+			-- the tips, less the label offset.
 			local fit = M.MAX_FONT
+			local offset = if horizontal
+				then math.min(10, math.floor(0.15 * thickness + 0.5))
+				else math.min(5, math.floor(0.1 * thickness + 0.5))
 			for _, t in texts do
 				local w14 = Kit.textWidth(t, 14) + 2
 				if horizontal then
-					fit = math.min(fit, thickness * FONT_RATIO)
+					fit = math.min(fit, thickness * FONT_RATIO, (room - offset) / w14 * 14)
 				else
-					fit = math.min(fit, thickness * FONT_RATIO / w14 * 14)
+					fit = math.min(fit, thickness * FONT_RATIO / w14 * 14, room - offset)
 				end
 			end
 			size = math.floor(fit + 0.5)
@@ -370,7 +464,7 @@ function M.render(opts: Options): Result
 	-- Axis labels.
 	if showAxis then
 		for i, v in scale.ticks do
-			if v >= vmin and v <= vmax then
+			if v >= vmin and v <= vmax and tickLabels[i] ~= "" then
 				local p = valPx(v)
 				if horizontal then
 					table.insert(out, Kit.text(p, H - 6, tickLabels[i]))

@@ -3,6 +3,7 @@
 -- round tick values on y, and time labels whose detail matches the zoom.
 local t = require("../../lib/test")
 local Axis = require("../../../plugin/lib/render/axis")
+local ClockZone = require("../../../plugin/lib/panels/clock_zone")
 local Range = require("../../../plugin/lib/time/range")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -75,6 +76,22 @@ describe("Axis.niceScale", function()
 	end)
 end)
 
+-- Grafana's time series axes step IEC units in powers of 2 (TimeSeries/
+-- utils.ts IEC_UNITS, BIN_INCRS), so a GiB axis lands on 8 GiB, not 10 GiB.
+describe("Axis.rangeScale with IEC units", function()
+	it("steps in powers of 2 of the unit itself", function()
+		expect(Axis.rangeScale(0, 48.4, 200, "gbytes").ticks).toEqual({ 0, 8, 16, 24, 32, 40, 48 })
+		expect(Axis.rangeScale(0, 48.4, 200, "decgbytes").ticks).toEqual({ 0, 10, 20, 30, 40 })
+		expect(Axis.rangeScale(0, 5e9, 300, "bytes").step).toBe(2 ^ 29)
+	end)
+
+	-- The smallest increment is 1 in the unit, so a sub-GiB gbytes range only
+	-- has its 0 tick.
+	it("never steps below 1 unit", function()
+		expect(Axis.rangeScale(0, 0.07, 200, "gbytes").ticks).toEqual({ 0 })
+	end)
+end)
+
 describe("Axis.timeFormat (UPlotAxisBuilder formatTime)", function()
 	it("picks the format from the increment and the visible range", function()
 		expect(Axis.timeFormat(500, MINUTE)).toBe("HH:mm:ss.SSS")
@@ -114,6 +131,20 @@ describe("Axis.timeTicks", function()
 		expect(r.incr).toBe(DAY)
 		expect(r.labels[1]).toBe("03/15 00:00")
 		expect(r.labels[2]).toBe("03/16 00:00")
+	end)
+
+	-- uPlot formats and steps ticks in the dashboard zone per value: across
+	-- US DST start (2024-03-10) day ticks stay on local midnight.
+	it("keeps day ticks on local midnight across a DST change", function()
+		local ny = ClockZone.dashboardOffset("America/New_York", 0)
+		local from = at("2024-03-08T05:00:00Z")
+		local r = Axis.timeTicks(from, from + 7 * DAY - HOUR, 900, ny)
+		expect(r.incr).toBe(DAY)
+		expect(r.labels[1]).toBe("03/08 00:00")
+		expect(r.labels[3]).toBe("03/10 00:00")
+		expect(r.labels[4]).toBe("03/11 00:00")
+		expect(r.labels[#r.labels]).toBe("03/14 00:00")
+		expect(r.ticks[4] - r.ticks[3]).toBe(DAY - HOUR)
 	end)
 
 	it("labels a 90 d range with MM/DD", function()

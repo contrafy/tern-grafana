@@ -1,0 +1,65 @@
+{
+ "meta": { "slug": "incident-insights" },
+ "dashboard": {
+  "uid": "incident-insights",
+  "title": "Incident Insights",
+  "schemaVersion": 41,
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+   "list": [
+    {
+     "name": "DS_INCIDENT",
+     "type": "datasource",
+     "query": "grafana-incident-datasource",
+     "current": { "text": "Incident", "value": "inc" },
+     "hide": 2
+    },
+    {
+     "name": "labels",
+     "type": "query",
+     "datasource": { "type": "grafana-incident-datasource", "uid": "${DS_INCIDENT}" },
+     "query": { "queryType": "labels", "refId": "IncidentVariableQueryEditor-VariableQuery" },
+     "definition": "",
+     "multi": true,
+     "includeAll": true,
+     "allValue": "$__all",
+     "current": { "text": ["All"], "value": ["$__all"] },
+     "refresh": 1,
+     "regex": "",
+     "sort": 0
+    },
+    {
+     "name": "severity",
+     "type": "query",
+     "datasource": { "type": "grafana-incident-datasource", "uid": "${DS_INCIDENT}" },
+     "query": { "queryType": "severities", "refId": "IncidentVariableQueryEditor-VariableQuery" },
+     "definition": "",
+     "multi": true,
+     "includeAll": true,
+     "allValue": "$__all",
+     "current": { "text": ["All"], "value": ["$__all"] },
+     "refresh": 1,
+     "regex": "",
+     "sort": 0
+    }
+   ]
+  },
+  "panels": [
+   {
+    "id": 29,
+    "type": "table",
+    "title": "Incidents",
+    "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+    "datasource": { "type": "grafana-incident-datasource", "uid": "${DS_INCIDENT}" },
+    "targets": [
+     {
+      "refId": "A",
+      "datasource": { "type": "grafana-incident-datasource", "uid": "${DS_INCIDENT}" },
+      "queryType": "incidents",
+      "queryString": "or($labels) or($severity) or(status:active status:resolved)"
+     }
+    ]
+   }
+  ]
+ }
+}

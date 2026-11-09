@@ -1,0 +1,4152 @@
+{
+ "docs": {
+  "weather": "{\"coord\":{\"lon\":-96.8,\"lat\":32.78},\"weather\":[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"base\":\"stations\",\"main\":{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},\"visibility\":10000,\"wind\":{\"speed\":9.22,\"deg\":180,\"gust\":14.97},\"clouds\":{\"all\":20},\"dt\":1762700000,\"sys\":{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},\"timezone\":-21600,\"id\":4684888,\"name\":\"Dallas\",\"cod\":200}",
+  "store": "{\"store\":{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}}",
+  "rows": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+  "keys": "{\"b\":1,\"2\":2,\"a\":3,\"1\":4,\"length\":5,\"a.b\":6,\"x\":{\"y~z\":7,\"*\":8,\"@string()\":9}}",
+  "nested": "[[1,2],[3,[4,5]],[]]",
+  "text": "\"héllo\""
+ },
+ "cases": [
+  {
+   "doc": "weather",
+   "path": "$",
+   "values": "[{\"coord\":{\"lon\":-96.8,\"lat\":32.78},\"weather\":[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"base\":\"stations\",\"main\":{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},\"visibility\":10000,\"wind\":{\"speed\":9.22,\"deg\":180,\"gust\":14.97},\"clouds\":{\"all\":20},\"dt\":1762700000,\"sys\":{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},\"timezone\":-21600,\"id\":4684888,\"name\":\"Dallas\",\"cod\":200}]",
+   "name": "$"
+  },
+  {
+   "doc": "weather",
+   "path": "$.main.temp",
+   "values": "[88.3]",
+   "name": "temp"
+  },
+  {
+   "doc": "weather",
+   "path": "main.temp",
+   "values": "[88.3]",
+   "name": "temp"
+  },
+  {
+   "doc": "weather",
+   "path": "$.main",
+   "values": "[{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995}]",
+   "name": "main"
+  },
+  {
+   "doc": "weather",
+   "path": "$.*",
+   "values": "[{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"stations\",{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},10000,{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},1762700000,{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},-21600,4684888,\"Dallas\",200]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$..*",
+   "values": "[{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"stations\",{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},10000,{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},1762700000,{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},-21600,4684888,\"Dallas\",200,-96.8,32.78,{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},800,\"Clear\",\"clear sky\",\"01d\",88.3,90.2,85.2,90.7,1014,41,1014,995,9.22,180,14.97,20,2,2000000,\"US\",1762692000,1762730000]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$..",
+   "values": "[{\"coord\":{\"lon\":-96.8,\"lat\":32.78},\"weather\":[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"base\":\"stations\",\"main\":{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},\"visibility\":10000,\"wind\":{\"speed\":9.22,\"deg\":180,\"gust\":14.97},\"clouds\":{\"all\":20},\"dt\":1762700000,\"sys\":{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},\"timezone\":-21600,\"id\":4684888,\"name\":\"Dallas\",\"cod\":200},{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000}]",
+   "name": ".."
+  },
+  {
+   "doc": "weather",
+   "path": "$..temp",
+   "values": "[88.3]",
+   "name": "temp"
+  },
+  {
+   "doc": "weather",
+   "path": "$.weather[0].main",
+   "values": "[\"Clear\"]",
+   "name": "main"
+  },
+  {
+   "doc": "weather",
+   "path": "$.weather[*].main",
+   "values": "[\"Clear\"]",
+   "name": "main"
+  },
+  {
+   "doc": "weather",
+   "path": "$.weather.length",
+   "values": "[1]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$.name.length",
+   "values": "[6]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$.name[0]",
+   "values": "[\"D\"]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$['main']['temp']",
+   "values": "[88.3]",
+   "name": "temp"
+  },
+  {
+   "doc": "weather",
+   "path": "$[\"main\"].temp",
+   "values": "[88.3]",
+   "name": "temp"
+  },
+  {
+   "doc": "weather",
+   "path": "$['main','wind']",
+   "values": "[]",
+   "name": "main','wind"
+  },
+  {
+   "doc": "weather",
+   "path": "$.main[temp,humidity]",
+   "values": "[88.3,41]",
+   "name": "temp,humidity"
+  },
+  {
+   "doc": "weather",
+   "path": "$.coord.*",
+   "values": "[-96.8,32.78]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$..lat",
+   "values": "[32.78]",
+   "name": "lat"
+  },
+  {
+   "doc": "weather",
+   "path": "$.sys.country",
+   "values": "[\"US\"]",
+   "name": "country"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[-1]",
+   "values": "[]",
+   "name": "-1"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[-1:]",
+   "values": "[]",
+   "name": "-1:"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[:2]",
+   "values": "[]",
+   "name": ":2"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[0:0]",
+   "values": "[]",
+   "name": "0:0"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[::2]",
+   "values": "[]",
+   "name": "::2"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "weather",
+   "path": "$..book[?(@.price<10)]",
+   "values": "[]",
+   "name": "?(@.price<10)"
+  },
+  {
+   "doc": "weather",
+   "path": "$..book[(@.length-1)]",
+   "values": "[]",
+   "name": "(@.length-1)"
+  },
+  {
+   "doc": "weather",
+   "path": "$.missing[?(@.a)]",
+   "values": "[]",
+   "name": "?(@.a)"
+  },
+  {
+   "doc": "weather",
+   "path": "$..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "weather",
+   "path": "$..book[0,1].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "weather",
+   "path": "$..book[0][title,author]",
+   "values": "[]",
+   "name": "title,author"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.*~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[0].^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "weather",
+   "path": "$..price^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[*].author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "weather",
+   "path": "$..author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[?(@.isbn)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[1:3:0]",
+   "values": "[]",
+   "name": "1:3:0"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[-2:]",
+   "values": "[]",
+   "name": "-2:"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[:-1]",
+   "values": "[]",
+   "name": ":-1"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..*@string()",
+   "values": "[\"stations\",\"Dallas\",\"Clear\",\"clear sky\",\"01d\",\"US\"]",
+   "name": "@string()"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[*]^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book^^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[*].price@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..[0]",
+   "values": "[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[0]~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*]",
+   "values": "[{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"stations\",{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},10000,{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},1762700000,{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},-21600,4684888,\"Dallas\",200]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*].name",
+   "values": "[]",
+   "name": "name"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*].t",
+   "values": "[]",
+   "name": "t"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*].v",
+   "values": "[]",
+   "name": "v"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*].ok",
+   "values": "[]",
+   "name": "ok"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*].tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0].tags[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$..tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "weather",
+   "path": "$[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "weather",
+   "path": "$.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$.2",
+   "values": "[]",
+   "name": "2"
+  },
+  {
+   "doc": "weather",
+   "path": "$['1']",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "weather",
+   "path": "$.*",
+   "values": "[{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"stations\",{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},10000,{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},1762700000,{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},-21600,4684888,\"Dallas\",200]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$..*",
+   "values": "[{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"stations\",{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},10000,{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},1762700000,{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},-21600,4684888,\"Dallas\",200,-96.8,32.78,{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},800,\"Clear\",\"clear sky\",\"01d\",88.3,90.2,85.2,90.7,1014,41,1014,995,9.22,180,14.97,20,2,2000000,\"US\",1762692000,1762730000]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$.a.b",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "weather",
+   "path": "$['a.b']",
+   "values": "[]",
+   "name": "a.b"
+  },
+  {
+   "doc": "weather",
+   "path": "$.x[\"y~z\"]",
+   "values": "[]",
+   "name": "y~z"
+  },
+  {
+   "doc": "weather",
+   "path": "$.x['*']",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$.x.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$.`length",
+   "values": "[]",
+   "name": "`length"
+  },
+  {
+   "doc": "weather",
+   "path": "$.x.@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "weather",
+   "path": "$.x['@string()']",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "weather",
+   "path": "$[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$[1][1][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$..[1]",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "weather",
+   "path": "$.*.*",
+   "values": "[-96.8,32.78,{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},88.3,90.2,85.2,90.7,1014,41,1014,995,9.22,180,14.97,20,2,2000000,\"US\",1762692000,1762730000]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$[*][*]",
+   "values": "[-96.8,32.78,{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},88.3,90.2,85.2,90.7,1014,41,1014,995,9.22,180,14.97,20,2,2000000,\"US\",1762692000,1762730000]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$..[*]",
+   "values": "[{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"stations\",{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},10000,{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},1762700000,{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},-21600,4684888,\"Dallas\",200,-96.8,32.78,{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},800,\"Clear\",\"clear sky\",\"01d\",88.3,90.2,85.2,90.7,1014,41,1014,995,9.22,180,14.97,20,2,2000000,\"US\",1762692000,1762730000]",
+   "name": "*"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0,2]",
+   "values": "[]",
+   "name": "0,2"
+  },
+  {
+   "doc": "weather",
+   "path": "$[-1:][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0].length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0][1]",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0][5]",
+   "values": "[]",
+   "name": "5"
+  },
+  {
+   "doc": "weather",
+   "path": "$.foo",
+   "values": "[]",
+   "name": "foo"
+  },
+  {
+   "doc": "weather",
+   "path": "length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$.~",
+   "values": "[null,\"coord\",\"weather\",0,\"main\",\"wind\",\"clouds\",\"sys\"]",
+   "name": "~"
+  },
+  {
+   "doc": "weather",
+   "path": "@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@scalar()",
+   "values": "[]",
+   "name": "@scalar()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@object()",
+   "values": "[{\"coord\":{\"lon\":-96.8,\"lat\":32.78},\"weather\":[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"base\":\"stations\",\"main\":{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},\"visibility\":10000,\"wind\":{\"speed\":9.22,\"deg\":180,\"gust\":14.97},\"clouds\":{\"all\":20},\"dt\":1762700000,\"sys\":{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},\"timezone\":-21600,\"id\":4684888,\"name\":\"Dallas\",\"cod\":200},{\"lon\":-96.8,\"lat\":32.78},[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},{\"speed\":9.22,\"deg\":180,\"gust\":14.97},{\"all\":20},{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000}]",
+   "name": "@object()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@array()",
+   "values": "[[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}]]",
+   "name": "@array()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@null()",
+   "values": "[]",
+   "name": "@null()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@integer()",
+   "values": "[]",
+   "name": "@integer()"
+  },
+  {
+   "doc": "weather",
+   "path": "$..@boolean()",
+   "values": "[]",
+   "name": "@boolean()"
+  },
+  {
+   "doc": "weather",
+   "path": "$['a']['b']",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "weather",
+   "path": "$.a[b]",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "weather",
+   "path": "$[?(@)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@)"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[?(@.price > 10)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store['book'][0]['title']",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[0][\"title\"]",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "weather",
+   "path": "$..book[*][category,price]",
+   "values": "[]",
+   "name": "category,price"
+  },
+  {
+   "doc": "weather",
+   "path": "$.weather[0][main,description]",
+   "values": "[\"Clear\",\"clear sky\"]",
+   "name": "main,description"
+  },
+  {
+   "doc": "weather",
+   "path": "$.main.temp.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "weather",
+   "path": "$.",
+   "values": "[{\"coord\":{\"lon\":-96.8,\"lat\":32.78},\"weather\":[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}],\"base\":\"stations\",\"main\":{\"temp\":88.3,\"feels_like\":90.2,\"temp_min\":85.2,\"temp_max\":90.7,\"pressure\":1014,\"humidity\":41,\"sea_level\":1014,\"grnd_level\":995},\"visibility\":10000,\"wind\":{\"speed\":9.22,\"deg\":180,\"gust\":14.97},\"clouds\":{\"all\":20},\"dt\":1762700000,\"sys\":{\"type\":2,\"id\":2000000,\"country\":\"US\",\"sunrise\":1762692000,\"sunset\":1762730000},\"timezone\":-21600,\"id\":4684888,\"name\":\"Dallas\",\"cod\":200}]",
+   "name": "$"
+  },
+  {
+   "doc": "weather",
+   "path": "$..temp..x",
+   "values": "[]",
+   "name": "x"
+  },
+  {
+   "doc": "weather",
+   "path": "$.*[0]",
+   "values": "[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"},\"s\",\"D\"]",
+   "name": "0"
+  },
+  {
+   "doc": "weather",
+   "path": "$.store.book[0:2].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "weather",
+   "path": "$.*[0:1]",
+   "values": "[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\",\"icon\":\"01d\"}]",
+   "name": "0:1"
+  },
+  {
+   "doc": "weather",
+   "path": "$..book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "weather",
+   "path": "$.sys[country]",
+   "values": "[\"US\"]",
+   "name": "country"
+  },
+  {
+   "doc": "weather",
+   "path": "$[2:1]",
+   "values": "[]",
+   "name": "2:1"
+  },
+  {
+   "doc": "weather",
+   "path": "$[:]",
+   "values": "[]",
+   "name": ":"
+  },
+  {
+   "doc": "weather",
+   "path": "$[::]",
+   "values": "[]",
+   "name": "::"
+  },
+  {
+   "doc": "store",
+   "path": "$",
+   "values": "[{\"store\":{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}}]",
+   "name": "$"
+  },
+  {
+   "doc": "store",
+   "path": "$.main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "store",
+   "path": "main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "store",
+   "path": "$.main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "store",
+   "path": "$.*",
+   "values": "[{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$..*",
+   "values": "[{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}},[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"color\":\"red\",\"price\":19.95},{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99},\"reference\",\"Nigel Rees\",\"Sayings of the Century\",8.95,\"fiction\",\"Evelyn Waugh\",\"Sword of Honour\",12.99,\"fiction\",\"Herman Melville\",\"Moby Dick\",\"0-553-21311-3\",8.99,\"fiction\",\"J. R. R. Tolkien\",\"The Lord of the Rings\",\"0-395-19395-8\",22.99,\"red\",19.95]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$..",
+   "values": "[{\"store\":{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}},{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}},[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99},{\"color\":\"red\",\"price\":19.95}]",
+   "name": ".."
+  },
+  {
+   "doc": "store",
+   "path": "$..temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "store",
+   "path": "$.weather[0].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "store",
+   "path": "$.weather[*].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "store",
+   "path": "$.weather.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$.name.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$.name[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$['main']['temp']",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "store",
+   "path": "$[\"main\"].temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "store",
+   "path": "$['main','wind']",
+   "values": "[]",
+   "name": "main','wind"
+  },
+  {
+   "doc": "store",
+   "path": "$.main[temp,humidity]",
+   "values": "[]",
+   "name": "temp,humidity"
+  },
+  {
+   "doc": "store",
+   "path": "$.coord.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$..lat",
+   "values": "[]",
+   "name": "lat"
+  },
+  {
+   "doc": "store",
+   "path": "$.sys.country",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[-1]",
+   "values": "[]",
+   "name": "-1"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[-1:]",
+   "values": "[{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]",
+   "name": "-1:"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[:2]",
+   "values": "[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99}]",
+   "name": ":2"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[0:0]",
+   "values": "[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]",
+   "name": "0:0"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[::2]",
+   "values": "[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99}]",
+   "name": "::2"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[1:]",
+   "values": "[{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]",
+   "name": "1:"
+  },
+  {
+   "doc": "store",
+   "path": "$..book[?(@.price<10)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@.price<10)"
+  },
+  {
+   "doc": "store",
+   "path": "$..book[(@.length-1)]",
+   "error": "Eval [(expr)] prevented in JSONPath expression.",
+   "name": "(@.length-1)"
+  },
+  {
+   "doc": "store",
+   "path": "$.missing[?(@.a)]",
+   "values": "[]",
+   "name": "?(@.a)"
+  },
+  {
+   "doc": "store",
+   "path": "$..price",
+   "values": "[8.95,12.99,8.99,22.99,19.95]",
+   "name": "price"
+  },
+  {
+   "doc": "store",
+   "path": "$..book[0,1].title",
+   "values": "[\"Sayings of the Century\",\"Sword of Honour\"]",
+   "name": "title"
+  },
+  {
+   "doc": "store",
+   "path": "$..book[0][title,author]",
+   "values": "[\"Sayings of the Century\",\"Nigel Rees\"]",
+   "name": "title,author"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.*~",
+   "values": "[\"book\",\"bicycle\"]",
+   "name": "~"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[0].^",
+   "values": "[[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]]",
+   "name": "^"
+  },
+  {
+   "doc": "store",
+   "path": "$..price^",
+   "values": "[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99},{\"color\":\"red\",\"price\":19.95}]",
+   "name": "^"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[*].author",
+   "values": "[\"Nigel Rees\",\"Evelyn Waugh\",\"Herman Melville\",\"J. R. R. Tolkien\"]",
+   "name": "author"
+  },
+  {
+   "doc": "store",
+   "path": "$.store..price",
+   "values": "[8.95,12.99,8.99,22.99,19.95]",
+   "name": "price"
+  },
+  {
+   "doc": "store",
+   "path": "$..author",
+   "values": "[\"Nigel Rees\",\"Evelyn Waugh\",\"Herman Melville\",\"J. R. R. Tolkien\"]",
+   "name": "author"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[?(@.isbn)].title",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "title"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[1:3:0]",
+   "values": "[{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99}]",
+   "name": "1:3:0"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[-2:]",
+   "values": "[{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]",
+   "name": "-2:"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[:-1]",
+   "values": "[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99}]",
+   "name": ":-1"
+  },
+  {
+   "doc": "store",
+   "path": "$..@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "store",
+   "path": "$..*@string()",
+   "values": "[\"reference\",\"Nigel Rees\",\"Sayings of the Century\",\"fiction\",\"Evelyn Waugh\",\"Sword of Honour\",\"fiction\",\"Herman Melville\",\"Moby Dick\",\"0-553-21311-3\",\"fiction\",\"J. R. R. Tolkien\",\"The Lord of the Rings\",\"0-395-19395-8\",\"red\"]",
+   "name": "@string()"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[*]^",
+   "values": "[[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]]",
+   "name": "^"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book^^",
+   "values": "[{\"store\":{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}}]",
+   "name": "^"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book.length",
+   "values": "[4]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[*].price@number()",
+   "values": "[8.95,12.99,8.99,22.99]",
+   "name": "@number()"
+  },
+  {
+   "doc": "store",
+   "path": "$..[0]",
+   "values": "[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95}]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[0]~",
+   "values": "[\"0\"]",
+   "name": "~"
+  },
+  {
+   "doc": "store",
+   "path": "$[*]",
+   "values": "[{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$[*].name",
+   "values": "[]",
+   "name": "name"
+  },
+  {
+   "doc": "store",
+   "path": "$[*].t",
+   "values": "[]",
+   "name": "t"
+  },
+  {
+   "doc": "store",
+   "path": "$[*].v",
+   "values": "[]",
+   "name": "v"
+  },
+  {
+   "doc": "store",
+   "path": "$[*].ok",
+   "values": "[]",
+   "name": "ok"
+  },
+  {
+   "doc": "store",
+   "path": "$[*].tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "store",
+   "path": "$[0].tags[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$..tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "store",
+   "path": "$[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "store",
+   "path": "$.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$.2",
+   "values": "[]",
+   "name": "2"
+  },
+  {
+   "doc": "store",
+   "path": "$['1']",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "store",
+   "path": "$.*",
+   "values": "[{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$..*",
+   "values": "[{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}},[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"color\":\"red\",\"price\":19.95},{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99},\"reference\",\"Nigel Rees\",\"Sayings of the Century\",8.95,\"fiction\",\"Evelyn Waugh\",\"Sword of Honour\",12.99,\"fiction\",\"Herman Melville\",\"Moby Dick\",\"0-553-21311-3\",8.99,\"fiction\",\"J. R. R. Tolkien\",\"The Lord of the Rings\",\"0-395-19395-8\",22.99,\"red\",19.95]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$.a.b",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "store",
+   "path": "$['a.b']",
+   "values": "[]",
+   "name": "a.b"
+  },
+  {
+   "doc": "store",
+   "path": "$.x[\"y~z\"]",
+   "values": "[]",
+   "name": "y~z"
+  },
+  {
+   "doc": "store",
+   "path": "$.x['*']",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$.x.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$.`length",
+   "values": "[]",
+   "name": "`length"
+  },
+  {
+   "doc": "store",
+   "path": "$.x.@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "store",
+   "path": "$.x['@string()']",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "store",
+   "path": "$[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$[1][1][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$..[1]",
+   "values": "[{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99}]",
+   "name": "1"
+  },
+  {
+   "doc": "store",
+   "path": "$.*.*",
+   "values": "[[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"color\":\"red\",\"price\":19.95}]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$[*][*]",
+   "values": "[[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"color\":\"red\",\"price\":19.95}]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$..[*]",
+   "values": "[{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}},[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"color\":\"red\",\"price\":19.95},{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99},\"reference\",\"Nigel Rees\",\"Sayings of the Century\",8.95,\"fiction\",\"Evelyn Waugh\",\"Sword of Honour\",12.99,\"fiction\",\"Herman Melville\",\"Moby Dick\",\"0-553-21311-3\",8.99,\"fiction\",\"J. R. R. Tolkien\",\"The Lord of the Rings\",\"0-395-19395-8\",22.99,\"red\",19.95]",
+   "name": "*"
+  },
+  {
+   "doc": "store",
+   "path": "$[0,2]",
+   "values": "[]",
+   "name": "0,2"
+  },
+  {
+   "doc": "store",
+   "path": "$[-1:][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "store",
+   "path": "$[0].length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$[0][1]",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "store",
+   "path": "$[0][5]",
+   "values": "[]",
+   "name": "5"
+  },
+  {
+   "doc": "store",
+   "path": "$.foo",
+   "values": "[]",
+   "name": "foo"
+  },
+  {
+   "doc": "store",
+   "path": "length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$.~",
+   "values": "[null,\"store\",\"book\",0,1,2,3,\"bicycle\"]",
+   "name": "~"
+  },
+  {
+   "doc": "store",
+   "path": "@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "store",
+   "path": "$..@scalar()",
+   "values": "[]",
+   "name": "@scalar()"
+  },
+  {
+   "doc": "store",
+   "path": "$..@object()",
+   "values": "[{\"store\":{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}},{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}},[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99},{\"color\":\"red\",\"price\":19.95}]",
+   "name": "@object()"
+  },
+  {
+   "doc": "store",
+   "path": "$..@array()",
+   "values": "[[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}]]",
+   "name": "@array()"
+  },
+  {
+   "doc": "store",
+   "path": "$..@null()",
+   "values": "[]",
+   "name": "@null()"
+  },
+  {
+   "doc": "store",
+   "path": "$..@integer()",
+   "values": "[]",
+   "name": "@integer()"
+  },
+  {
+   "doc": "store",
+   "path": "$..@boolean()",
+   "values": "[]",
+   "name": "@boolean()"
+  },
+  {
+   "doc": "store",
+   "path": "$['a']['b']",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "store",
+   "path": "$.a[b]",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "store",
+   "path": "$[?(@)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@)"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[?(@.price > 10)].title",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "title"
+  },
+  {
+   "doc": "store",
+   "path": "$.store['book'][0]['title']",
+   "values": "[\"Sayings of the Century\"]",
+   "name": "title"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[0][\"title\"]",
+   "values": "[\"Sayings of the Century\"]",
+   "name": "title"
+  },
+  {
+   "doc": "store",
+   "path": "$..book[*][category,price]",
+   "values": "[\"reference\",8.95,\"fiction\",12.99,\"fiction\",8.99,\"fiction\",22.99]",
+   "name": "category,price"
+  },
+  {
+   "doc": "store",
+   "path": "$.weather[0][main,description]",
+   "values": "[]",
+   "name": "main,description"
+  },
+  {
+   "doc": "store",
+   "path": "$.main.temp.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "store",
+   "path": "$.",
+   "values": "[{\"store\":{\"book\":[{\"category\":\"reference\",\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\",\"price\":8.95},{\"category\":\"fiction\",\"author\":\"Evelyn Waugh\",\"title\":\"Sword of Honour\",\"price\":12.99},{\"category\":\"fiction\",\"author\":\"Herman Melville\",\"title\":\"Moby Dick\",\"isbn\":\"0-553-21311-3\",\"price\":8.99},{\"category\":\"fiction\",\"author\":\"J. R. R. Tolkien\",\"title\":\"The Lord of the Rings\",\"isbn\":\"0-395-19395-8\",\"price\":22.99}],\"bicycle\":{\"color\":\"red\",\"price\":19.95}}}]",
+   "name": "$"
+  },
+  {
+   "doc": "store",
+   "path": "$..temp..x",
+   "values": "[]",
+   "name": "x"
+  },
+  {
+   "doc": "store",
+   "path": "$.*[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "store",
+   "path": "$.store.book[0:2].title",
+   "values": "[\"Sayings of the Century\",\"Sword of Honour\"]",
+   "name": "title"
+  },
+  {
+   "doc": "store",
+   "path": "$.*[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "store",
+   "path": "$..book.length",
+   "values": "[4]",
+   "name": "length"
+  },
+  {
+   "doc": "store",
+   "path": "$.sys[country]",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "store",
+   "path": "$[2:1]",
+   "values": "[]",
+   "name": "2:1"
+  },
+  {
+   "doc": "store",
+   "path": "$[:]",
+   "values": "[]",
+   "name": ":"
+  },
+  {
+   "doc": "store",
+   "path": "$[::]",
+   "values": "[]",
+   "name": "::"
+  },
+  {
+   "doc": "rows",
+   "path": "$",
+   "values": "[[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]]",
+   "name": "$"
+  },
+  {
+   "doc": "rows",
+   "path": "$.main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "rows",
+   "path": "main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "rows",
+   "path": "$.main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "rows",
+   "path": "$.*",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$..*",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}},\"a\",1,\"2024-01-01\",true,[\"x\",\"y\"],\"x\",\"y\",\"b\",null,\"2024-01-02T10:00:00Z\",false,[],\"c\",2.5,null,null,{}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$..",
+   "values": "[[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}],{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},[\"x\",\"y\"],{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},null,[],{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}},null,null,{}]",
+   "name": ".."
+  },
+  {
+   "doc": "rows",
+   "path": "$..temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "rows",
+   "path": "$.weather[0].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "rows",
+   "path": "$.weather[*].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "rows",
+   "path": "$.weather.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$.name.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$.name[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$['main']['temp']",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "rows",
+   "path": "$[\"main\"].temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "rows",
+   "path": "$['main','wind']",
+   "values": "[]",
+   "name": "main','wind"
+  },
+  {
+   "doc": "rows",
+   "path": "$.main[temp,humidity]",
+   "values": "[]",
+   "name": "temp,humidity"
+  },
+  {
+   "doc": "rows",
+   "path": "$.coord.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$..lat",
+   "values": "[]",
+   "name": "lat"
+  },
+  {
+   "doc": "rows",
+   "path": "$.sys.country",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[-1]",
+   "values": "[]",
+   "name": "-1"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[-1:]",
+   "values": "[]",
+   "name": "-1:"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[:2]",
+   "values": "[]",
+   "name": ":2"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[0:0]",
+   "values": "[]",
+   "name": "0:0"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[::2]",
+   "values": "[]",
+   "name": "::2"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "rows",
+   "path": "$..book[?(@.price<10)]",
+   "values": "[]",
+   "name": "?(@.price<10)"
+  },
+  {
+   "doc": "rows",
+   "path": "$..book[(@.length-1)]",
+   "values": "[]",
+   "name": "(@.length-1)"
+  },
+  {
+   "doc": "rows",
+   "path": "$.missing[?(@.a)]",
+   "values": "[]",
+   "name": "?(@.a)"
+  },
+  {
+   "doc": "rows",
+   "path": "$..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "rows",
+   "path": "$..book[0,1].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "rows",
+   "path": "$..book[0][title,author]",
+   "values": "[]",
+   "name": "title,author"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.*~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[0].^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "rows",
+   "path": "$..price^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[*].author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "rows",
+   "path": "$..author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[?(@.isbn)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[1:3:0]",
+   "values": "[]",
+   "name": "1:3:0"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[-2:]",
+   "values": "[]",
+   "name": "-2:"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[:-1]",
+   "values": "[]",
+   "name": ":-1"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..*@string()",
+   "values": "[\"a\",\"2024-01-01\",\"x\",\"y\",\"b\",\"2024-01-02T10:00:00Z\",\"c\"]",
+   "name": "@string()"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[*]^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book^^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[*].price@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..[0]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},\"x\"]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[0]~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*].name",
+   "values": "[\"a\",\"b\",\"c\"]",
+   "name": "name"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*].t",
+   "values": "[\"2024-01-01\",\"2024-01-02T10:00:00Z\",null]",
+   "name": "t"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*].v",
+   "values": "[1,null,2.5]",
+   "name": "v"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*].ok",
+   "values": "[true,false,null]",
+   "name": "ok"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*].tags",
+   "values": "[[\"x\",\"y\"],[],{}]",
+   "name": "tags"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0].tags[*]",
+   "values": "[\"x\",\"y\"]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$..tags",
+   "values": "[[\"x\",\"y\"],[],{}]",
+   "name": "tags"
+  },
+  {
+   "doc": "rows",
+   "path": "$[1:]",
+   "values": "[{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "1:"
+  },
+  {
+   "doc": "rows",
+   "path": "$.length",
+   "values": "[3]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$.2",
+   "values": "[{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "2"
+  },
+  {
+   "doc": "rows",
+   "path": "$['1']",
+   "values": "[{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]}]",
+   "name": "1"
+  },
+  {
+   "doc": "rows",
+   "path": "$.*",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$..*",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}},\"a\",1,\"2024-01-01\",true,[\"x\",\"y\"],\"x\",\"y\",\"b\",null,\"2024-01-02T10:00:00Z\",false,[],\"c\",2.5,null,null,{}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$.a.b",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "rows",
+   "path": "$['a.b']",
+   "values": "[]",
+   "name": "a.b"
+  },
+  {
+   "doc": "rows",
+   "path": "$.x[\"y~z\"]",
+   "values": "[]",
+   "name": "y~z"
+  },
+  {
+   "doc": "rows",
+   "path": "$.x['*']",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$.x.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$.`length",
+   "values": "[3]",
+   "name": "`length"
+  },
+  {
+   "doc": "rows",
+   "path": "$.x.@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "rows",
+   "path": "$.x['@string()']",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "rows",
+   "path": "$[0]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]}]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$[1][1][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$..[1]",
+   "values": "[{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},\"y\"]",
+   "name": "1"
+  },
+  {
+   "doc": "rows",
+   "path": "$.*.*",
+   "values": "[\"a\",1,\"2024-01-01\",true,[\"x\",\"y\"],\"b\",null,\"2024-01-02T10:00:00Z\",false,[],\"c\",2.5,null,null,{}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$[*][*]",
+   "values": "[\"a\",1,\"2024-01-01\",true,[\"x\",\"y\"],\"b\",null,\"2024-01-02T10:00:00Z\",false,[],\"c\",2.5,null,null,{}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$..[*]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}},\"a\",1,\"2024-01-01\",true,[\"x\",\"y\"],\"x\",\"y\",\"b\",null,\"2024-01-02T10:00:00Z\",false,[],\"c\",2.5,null,null,{}]",
+   "name": "*"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0,2]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "0,2"
+  },
+  {
+   "doc": "rows",
+   "path": "$[-1:][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0:1]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]}]",
+   "name": "0:1"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0].length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0][1]",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0][5]",
+   "values": "[]",
+   "name": "5"
+  },
+  {
+   "doc": "rows",
+   "path": "$.foo",
+   "values": "[]",
+   "name": "foo"
+  },
+  {
+   "doc": "rows",
+   "path": "length",
+   "values": "[3]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$[0]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]}]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$.~",
+   "values": "[null,0,\"tags\",1,\"v\",\"tags\",2,\"t\",\"ok\",\"tags\"]",
+   "name": "~"
+  },
+  {
+   "doc": "rows",
+   "path": "@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@scalar()",
+   "values": "[null,null,null]",
+   "name": "@scalar()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@object()",
+   "values": "[[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}],{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},[\"x\",\"y\"],{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},[],{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}},{}]",
+   "name": "@object()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@array()",
+   "values": "[[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}],[\"x\",\"y\"],[]]",
+   "name": "@array()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@null()",
+   "values": "[null,null,null]",
+   "name": "@null()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@integer()",
+   "values": "[]",
+   "name": "@integer()"
+  },
+  {
+   "doc": "rows",
+   "path": "$..@boolean()",
+   "values": "[]",
+   "name": "@boolean()"
+  },
+  {
+   "doc": "rows",
+   "path": "$['a']['b']",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "rows",
+   "path": "$.a[b]",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "rows",
+   "path": "$[?(@)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@)"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[?(@.price > 10)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store['book'][0]['title']",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[0][\"title\"]",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "rows",
+   "path": "$..book[*][category,price]",
+   "values": "[]",
+   "name": "category,price"
+  },
+  {
+   "doc": "rows",
+   "path": "$.weather[0][main,description]",
+   "values": "[]",
+   "name": "main,description"
+  },
+  {
+   "doc": "rows",
+   "path": "$.main.temp.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "rows",
+   "path": "$.",
+   "values": "[[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]]",
+   "name": "$"
+  },
+  {
+   "doc": "rows",
+   "path": "$..temp..x",
+   "values": "[]",
+   "name": "x"
+  },
+  {
+   "doc": "rows",
+   "path": "$.*[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "rows",
+   "path": "$.store.book[0:2].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "rows",
+   "path": "$.*[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "rows",
+   "path": "$..book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "rows",
+   "path": "$.sys[country]",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "rows",
+   "path": "$[2:1]",
+   "values": "[]",
+   "name": "2:1"
+  },
+  {
+   "doc": "rows",
+   "path": "$[:]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": ":"
+  },
+  {
+   "doc": "rows",
+   "path": "$[::]",
+   "values": "[{\"name\":\"a\",\"v\":1,\"t\":\"2024-01-01\",\"ok\":true,\"tags\":[\"x\",\"y\"]},{\"name\":\"b\",\"v\":null,\"t\":\"2024-01-02T10:00:00Z\",\"ok\":false,\"tags\":[]},{\"name\":\"c\",\"v\":2.5,\"t\":null,\"ok\":null,\"tags\":{}}]",
+   "name": "::"
+  },
+  {
+   "doc": "keys",
+   "path": "$",
+   "values": "[{\"1\":4,\"2\":2,\"b\":1,\"a\":3,\"length\":5,\"a.b\":6,\"x\":{\"y~z\":7,\"*\":8,\"@string()\":9}}]",
+   "name": "$"
+  },
+  {
+   "doc": "keys",
+   "path": "$.main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "keys",
+   "path": "main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "keys",
+   "path": "$.main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "keys",
+   "path": "$.*",
+   "values": "[4,2,1,3,5,6,{\"y~z\":7,\"*\":8,\"@string()\":9}]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$..*",
+   "values": "[4,2,1,3,5,6,{\"y~z\":7,\"*\":8,\"@string()\":9},7,8,9]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$..",
+   "values": "[{\"1\":4,\"2\":2,\"b\":1,\"a\":3,\"length\":5,\"a.b\":6,\"x\":{\"y~z\":7,\"*\":8,\"@string()\":9}},{\"y~z\":7,\"*\":8,\"@string()\":9}]",
+   "name": ".."
+  },
+  {
+   "doc": "keys",
+   "path": "$..temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "keys",
+   "path": "$.weather[0].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "keys",
+   "path": "$.weather[*].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "keys",
+   "path": "$.weather.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$.name.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$.name[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$['main']['temp']",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "keys",
+   "path": "$[\"main\"].temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "keys",
+   "path": "$['main','wind']",
+   "values": "[]",
+   "name": "main','wind"
+  },
+  {
+   "doc": "keys",
+   "path": "$.main[temp,humidity]",
+   "values": "[]",
+   "name": "temp,humidity"
+  },
+  {
+   "doc": "keys",
+   "path": "$.coord.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$..lat",
+   "values": "[]",
+   "name": "lat"
+  },
+  {
+   "doc": "keys",
+   "path": "$.sys.country",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[-1]",
+   "values": "[]",
+   "name": "-1"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[-1:]",
+   "values": "[]",
+   "name": "-1:"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[:2]",
+   "values": "[]",
+   "name": ":2"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[0:0]",
+   "values": "[]",
+   "name": "0:0"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[::2]",
+   "values": "[]",
+   "name": "::2"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "keys",
+   "path": "$..book[?(@.price<10)]",
+   "values": "[]",
+   "name": "?(@.price<10)"
+  },
+  {
+   "doc": "keys",
+   "path": "$..book[(@.length-1)]",
+   "values": "[]",
+   "name": "(@.length-1)"
+  },
+  {
+   "doc": "keys",
+   "path": "$.missing[?(@.a)]",
+   "values": "[]",
+   "name": "?(@.a)"
+  },
+  {
+   "doc": "keys",
+   "path": "$..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "keys",
+   "path": "$..book[0,1].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "keys",
+   "path": "$..book[0][title,author]",
+   "values": "[]",
+   "name": "title,author"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.*~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[0].^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "keys",
+   "path": "$..price^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[*].author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "keys",
+   "path": "$..author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[?(@.isbn)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[1:3:0]",
+   "values": "[]",
+   "name": "1:3:0"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[-2:]",
+   "values": "[]",
+   "name": "-2:"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[:-1]",
+   "values": "[]",
+   "name": ":-1"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..*@string()",
+   "values": "[9]",
+   "name": "@string()"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[*]^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book^^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[*].price@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[0]~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*]",
+   "values": "[4,2,1,3,5,6,{\"y~z\":7,\"*\":8,\"@string()\":9}]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*].name",
+   "values": "[]",
+   "name": "name"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*].t",
+   "values": "[]",
+   "name": "t"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*].v",
+   "values": "[]",
+   "name": "v"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*].ok",
+   "values": "[]",
+   "name": "ok"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*].tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0].tags[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$..tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "keys",
+   "path": "$[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "keys",
+   "path": "$.length",
+   "values": "[5]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$.2",
+   "values": "[2]",
+   "name": "2"
+  },
+  {
+   "doc": "keys",
+   "path": "$['1']",
+   "values": "[4]",
+   "name": "1"
+  },
+  {
+   "doc": "keys",
+   "path": "$.*",
+   "values": "[4,2,1,3,5,6,{\"y~z\":7,\"*\":8,\"@string()\":9}]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$..*",
+   "values": "[4,2,1,3,5,6,{\"y~z\":7,\"*\":8,\"@string()\":9},7,8,9]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$.a.b",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "keys",
+   "path": "$['a.b']",
+   "values": "[6]",
+   "name": "a.b"
+  },
+  {
+   "doc": "keys",
+   "path": "$.x[\"y~z\"]",
+   "values": "[7]",
+   "name": "y~z"
+  },
+  {
+   "doc": "keys",
+   "path": "$.x['*']",
+   "values": "[8]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$.x.*",
+   "values": "[8]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$.`length",
+   "values": "[5]",
+   "name": "`length"
+  },
+  {
+   "doc": "keys",
+   "path": "$.x.@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "keys",
+   "path": "$.x['@string()']",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "keys",
+   "path": "$[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$[1][1][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$..[1]",
+   "values": "[4]",
+   "name": "1"
+  },
+  {
+   "doc": "keys",
+   "path": "$.*.*",
+   "values": "[8]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$[*][*]",
+   "values": "[8]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$..[*]",
+   "values": "[4,2,1,3,5,6,{\"y~z\":7,\"*\":8,\"@string()\":9},7,8,9]",
+   "name": "*"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0,2]",
+   "values": "[2]",
+   "name": "0,2"
+  },
+  {
+   "doc": "keys",
+   "path": "$[-1:][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0].length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0][1]",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0][5]",
+   "values": "[]",
+   "name": "5"
+  },
+  {
+   "doc": "keys",
+   "path": "$.foo",
+   "values": "[]",
+   "name": "foo"
+  },
+  {
+   "doc": "keys",
+   "path": "length",
+   "values": "[5]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$.~",
+   "values": "[null,\"x\"]",
+   "name": "~"
+  },
+  {
+   "doc": "keys",
+   "path": "@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@scalar()",
+   "values": "[]",
+   "name": "@scalar()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@object()",
+   "values": "[{\"1\":4,\"2\":2,\"b\":1,\"a\":3,\"length\":5,\"a.b\":6,\"x\":{\"y~z\":7,\"*\":8,\"@string()\":9}},{\"y~z\":7,\"*\":8,\"@string()\":9}]",
+   "name": "@object()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@array()",
+   "values": "[]",
+   "name": "@array()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@null()",
+   "values": "[]",
+   "name": "@null()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@integer()",
+   "values": "[]",
+   "name": "@integer()"
+  },
+  {
+   "doc": "keys",
+   "path": "$..@boolean()",
+   "values": "[]",
+   "name": "@boolean()"
+  },
+  {
+   "doc": "keys",
+   "path": "$['a']['b']",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "keys",
+   "path": "$.a[b]",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "keys",
+   "path": "$[?(@)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@)"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[?(@.price > 10)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store['book'][0]['title']",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[0][\"title\"]",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "keys",
+   "path": "$..book[*][category,price]",
+   "values": "[]",
+   "name": "category,price"
+  },
+  {
+   "doc": "keys",
+   "path": "$.weather[0][main,description]",
+   "values": "[]",
+   "name": "main,description"
+  },
+  {
+   "doc": "keys",
+   "path": "$.main.temp.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "keys",
+   "path": "$.",
+   "values": "[{\"1\":4,\"2\":2,\"b\":1,\"a\":3,\"length\":5,\"a.b\":6,\"x\":{\"y~z\":7,\"*\":8,\"@string()\":9}}]",
+   "name": "$"
+  },
+  {
+   "doc": "keys",
+   "path": "$..temp..x",
+   "values": "[]",
+   "name": "x"
+  },
+  {
+   "doc": "keys",
+   "path": "$.*[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "keys",
+   "path": "$.store.book[0:2].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "keys",
+   "path": "$.*[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "keys",
+   "path": "$..book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "keys",
+   "path": "$.sys[country]",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "keys",
+   "path": "$[2:1]",
+   "values": "[]",
+   "name": "2:1"
+  },
+  {
+   "doc": "keys",
+   "path": "$[:]",
+   "values": "[]",
+   "name": ":"
+  },
+  {
+   "doc": "keys",
+   "path": "$[::]",
+   "values": "[]",
+   "name": "::"
+  },
+  {
+   "doc": "nested",
+   "path": "$",
+   "values": "[[[1,2],[3,[4,5]],[]]]",
+   "name": "$"
+  },
+  {
+   "doc": "nested",
+   "path": "$.main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "nested",
+   "path": "main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "nested",
+   "path": "$.main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "nested",
+   "path": "$.*",
+   "values": "[[1,2],[3,[4,5]],[]]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$..*",
+   "values": "[[1,2],[3,[4,5]],[],1,2,3,[4,5],4,5]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$..",
+   "values": "[[[1,2],[3,[4,5]],[]],[1,2],[3,[4,5]],[4,5],[]]",
+   "name": ".."
+  },
+  {
+   "doc": "nested",
+   "path": "$..temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "nested",
+   "path": "$.weather[0].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "nested",
+   "path": "$.weather[*].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "nested",
+   "path": "$.weather.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$.name.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$.name[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$['main']['temp']",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "nested",
+   "path": "$[\"main\"].temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "nested",
+   "path": "$['main','wind']",
+   "values": "[]",
+   "name": "main','wind"
+  },
+  {
+   "doc": "nested",
+   "path": "$.main[temp,humidity]",
+   "values": "[]",
+   "name": "temp,humidity"
+  },
+  {
+   "doc": "nested",
+   "path": "$.coord.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$..lat",
+   "values": "[]",
+   "name": "lat"
+  },
+  {
+   "doc": "nested",
+   "path": "$.sys.country",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[-1]",
+   "values": "[]",
+   "name": "-1"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[-1:]",
+   "values": "[]",
+   "name": "-1:"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[:2]",
+   "values": "[]",
+   "name": ":2"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[0:0]",
+   "values": "[]",
+   "name": "0:0"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[::2]",
+   "values": "[]",
+   "name": "::2"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "nested",
+   "path": "$..book[?(@.price<10)]",
+   "values": "[]",
+   "name": "?(@.price<10)"
+  },
+  {
+   "doc": "nested",
+   "path": "$..book[(@.length-1)]",
+   "values": "[]",
+   "name": "(@.length-1)"
+  },
+  {
+   "doc": "nested",
+   "path": "$.missing[?(@.a)]",
+   "values": "[]",
+   "name": "?(@.a)"
+  },
+  {
+   "doc": "nested",
+   "path": "$..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "nested",
+   "path": "$..book[0,1].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "nested",
+   "path": "$..book[0][title,author]",
+   "values": "[]",
+   "name": "title,author"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.*~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[0].^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "nested",
+   "path": "$..price^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[*].author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "nested",
+   "path": "$..author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[?(@.isbn)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[1:3:0]",
+   "values": "[]",
+   "name": "1:3:0"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[-2:]",
+   "values": "[]",
+   "name": "-2:"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[:-1]",
+   "values": "[]",
+   "name": ":-1"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..*@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[*]^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book^^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[*].price@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..[0]",
+   "values": "[[1,2],1,3,4]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[0]~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*]",
+   "values": "[[1,2],[3,[4,5]],[]]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*].name",
+   "values": "[]",
+   "name": "name"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*].t",
+   "values": "[]",
+   "name": "t"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*].v",
+   "values": "[]",
+   "name": "v"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*].ok",
+   "values": "[]",
+   "name": "ok"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*].tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0].tags[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$..tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "nested",
+   "path": "$[1:]",
+   "values": "[[3,[4,5]],[]]",
+   "name": "1:"
+  },
+  {
+   "doc": "nested",
+   "path": "$.length",
+   "values": "[3]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$.2",
+   "values": "[[]]",
+   "name": "2"
+  },
+  {
+   "doc": "nested",
+   "path": "$['1']",
+   "values": "[[3,[4,5]]]",
+   "name": "1"
+  },
+  {
+   "doc": "nested",
+   "path": "$.*",
+   "values": "[[1,2],[3,[4,5]],[]]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$..*",
+   "values": "[[1,2],[3,[4,5]],[],1,2,3,[4,5],4,5]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$.a.b",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "nested",
+   "path": "$['a.b']",
+   "values": "[]",
+   "name": "a.b"
+  },
+  {
+   "doc": "nested",
+   "path": "$.x[\"y~z\"]",
+   "values": "[]",
+   "name": "y~z"
+  },
+  {
+   "doc": "nested",
+   "path": "$.x['*']",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$.x.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$.`length",
+   "values": "[3]",
+   "name": "`length"
+  },
+  {
+   "doc": "nested",
+   "path": "$.x.@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "nested",
+   "path": "$.x['@string()']",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "nested",
+   "path": "$[0]",
+   "values": "[[1,2]]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$[1][1][0]",
+   "values": "[4]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$..[1]",
+   "values": "[[3,[4,5]],2,[4,5],5]",
+   "name": "1"
+  },
+  {
+   "doc": "nested",
+   "path": "$.*.*",
+   "values": "[1,2,3,[4,5]]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$[*][*]",
+   "values": "[1,2,3,[4,5]]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$..[*]",
+   "values": "[[1,2],[3,[4,5]],[],1,2,3,[4,5],4,5]",
+   "name": "*"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0,2]",
+   "values": "[[1,2],[]]",
+   "name": "0,2"
+  },
+  {
+   "doc": "nested",
+   "path": "$[-1:][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0:1]",
+   "values": "[[1,2]]",
+   "name": "0:1"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0].length",
+   "values": "[2]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0][1]",
+   "values": "[2]",
+   "name": "1"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0][5]",
+   "values": "[]",
+   "name": "5"
+  },
+  {
+   "doc": "nested",
+   "path": "$.foo",
+   "values": "[]",
+   "name": "foo"
+  },
+  {
+   "doc": "nested",
+   "path": "length",
+   "values": "[3]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$[0]",
+   "values": "[[1,2]]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$.~",
+   "values": "[null,0,1,1,2]",
+   "name": "~"
+  },
+  {
+   "doc": "nested",
+   "path": "@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@scalar()",
+   "values": "[]",
+   "name": "@scalar()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@object()",
+   "values": "[[[1,2],[3,[4,5]],[]],[1,2],[3,[4,5]],[4,5],[]]",
+   "name": "@object()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@array()",
+   "values": "[[[1,2],[3,[4,5]],[]],[1,2],[3,[4,5]],[4,5],[]]",
+   "name": "@array()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@null()",
+   "values": "[]",
+   "name": "@null()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@integer()",
+   "values": "[]",
+   "name": "@integer()"
+  },
+  {
+   "doc": "nested",
+   "path": "$..@boolean()",
+   "values": "[]",
+   "name": "@boolean()"
+  },
+  {
+   "doc": "nested",
+   "path": "$['a']['b']",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "nested",
+   "path": "$.a[b]",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "nested",
+   "path": "$[?(@)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@)"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[?(@.price > 10)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store['book'][0]['title']",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[0][\"title\"]",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "nested",
+   "path": "$..book[*][category,price]",
+   "values": "[]",
+   "name": "category,price"
+  },
+  {
+   "doc": "nested",
+   "path": "$.weather[0][main,description]",
+   "values": "[]",
+   "name": "main,description"
+  },
+  {
+   "doc": "nested",
+   "path": "$.main.temp.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "nested",
+   "path": "$.",
+   "values": "[[[1,2],[3,[4,5]],[]]]",
+   "name": "$"
+  },
+  {
+   "doc": "nested",
+   "path": "$..temp..x",
+   "values": "[]",
+   "name": "x"
+  },
+  {
+   "doc": "nested",
+   "path": "$.*[0]",
+   "values": "[1,3]",
+   "name": "0"
+  },
+  {
+   "doc": "nested",
+   "path": "$.store.book[0:2].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "nested",
+   "path": "$.*[0:1]",
+   "values": "[1,3]",
+   "name": "0:1"
+  },
+  {
+   "doc": "nested",
+   "path": "$..book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "nested",
+   "path": "$.sys[country]",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "nested",
+   "path": "$[2:1]",
+   "values": "[]",
+   "name": "2:1"
+  },
+  {
+   "doc": "nested",
+   "path": "$[:]",
+   "values": "[[1,2],[3,[4,5]],[]]",
+   "name": ":"
+  },
+  {
+   "doc": "nested",
+   "path": "$[::]",
+   "values": "[[1,2],[3,[4,5]],[]]",
+   "name": "::"
+  },
+  {
+   "doc": "text",
+   "path": "$",
+   "values": "[\"héllo\"]",
+   "name": "$"
+  },
+  {
+   "doc": "text",
+   "path": "$.main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "text",
+   "path": "main.temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "text",
+   "path": "$.main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "text",
+   "path": "$.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$..*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$..",
+   "values": "[\"héllo\"]",
+   "name": ".."
+  },
+  {
+   "doc": "text",
+   "path": "$..temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "text",
+   "path": "$.weather[0].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "text",
+   "path": "$.weather[*].main",
+   "values": "[]",
+   "name": "main"
+  },
+  {
+   "doc": "text",
+   "path": "$.weather.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$.name.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$.name[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$['main']['temp']",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "text",
+   "path": "$[\"main\"].temp",
+   "values": "[]",
+   "name": "temp"
+  },
+  {
+   "doc": "text",
+   "path": "$['main','wind']",
+   "values": "[]",
+   "name": "main','wind"
+  },
+  {
+   "doc": "text",
+   "path": "$.main[temp,humidity]",
+   "values": "[]",
+   "name": "temp,humidity"
+  },
+  {
+   "doc": "text",
+   "path": "$.coord.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$..lat",
+   "values": "[]",
+   "name": "lat"
+  },
+  {
+   "doc": "text",
+   "path": "$.sys.country",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[-1]",
+   "values": "[]",
+   "name": "-1"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[-1:]",
+   "values": "[]",
+   "name": "-1:"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[:2]",
+   "values": "[]",
+   "name": ":2"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[0:0]",
+   "values": "[]",
+   "name": "0:0"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[::2]",
+   "values": "[]",
+   "name": "::2"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "text",
+   "path": "$..book[?(@.price<10)]",
+   "values": "[]",
+   "name": "?(@.price<10)"
+  },
+  {
+   "doc": "text",
+   "path": "$..book[(@.length-1)]",
+   "values": "[]",
+   "name": "(@.length-1)"
+  },
+  {
+   "doc": "text",
+   "path": "$.missing[?(@.a)]",
+   "values": "[]",
+   "name": "?(@.a)"
+  },
+  {
+   "doc": "text",
+   "path": "$..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "text",
+   "path": "$..book[0,1].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "text",
+   "path": "$..book[0][title,author]",
+   "values": "[]",
+   "name": "title,author"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.*~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[0].^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "text",
+   "path": "$..price^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[*].author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "text",
+   "path": "$.store..price",
+   "values": "[]",
+   "name": "price"
+  },
+  {
+   "doc": "text",
+   "path": "$..author",
+   "values": "[]",
+   "name": "author"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[?(@.isbn)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[1:3:0]",
+   "values": "[]",
+   "name": "1:3:0"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[-2:]",
+   "values": "[]",
+   "name": "-2:"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[:-1]",
+   "values": "[]",
+   "name": ":-1"
+  },
+  {
+   "doc": "text",
+   "path": "$..@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "text",
+   "path": "$..*@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[*]^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book^^",
+   "values": "[]",
+   "name": "^"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[*].price@number()",
+   "values": "[]",
+   "name": "@number()"
+  },
+  {
+   "doc": "text",
+   "path": "$..[0]",
+   "values": "[\"h\"]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[0]~",
+   "values": "[]",
+   "name": "~"
+  },
+  {
+   "doc": "text",
+   "path": "$[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$[*].name",
+   "values": "[]",
+   "name": "name"
+  },
+  {
+   "doc": "text",
+   "path": "$[*].t",
+   "values": "[]",
+   "name": "t"
+  },
+  {
+   "doc": "text",
+   "path": "$[*].v",
+   "values": "[]",
+   "name": "v"
+  },
+  {
+   "doc": "text",
+   "path": "$[*].ok",
+   "values": "[]",
+   "name": "ok"
+  },
+  {
+   "doc": "text",
+   "path": "$[*].tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "text",
+   "path": "$[0].tags[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$..tags",
+   "values": "[]",
+   "name": "tags"
+  },
+  {
+   "doc": "text",
+   "path": "$[1:]",
+   "values": "[]",
+   "name": "1:"
+  },
+  {
+   "doc": "text",
+   "path": "$.length",
+   "values": "[5]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$.2",
+   "values": "[\"l\"]",
+   "name": "2"
+  },
+  {
+   "doc": "text",
+   "path": "$['1']",
+   "values": "[\"é\"]",
+   "name": "1"
+  },
+  {
+   "doc": "text",
+   "path": "$.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$..*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$.a.b",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "text",
+   "path": "$['a.b']",
+   "values": "[]",
+   "name": "a.b"
+  },
+  {
+   "doc": "text",
+   "path": "$.x[\"y~z\"]",
+   "values": "[]",
+   "name": "y~z"
+  },
+  {
+   "doc": "text",
+   "path": "$.x['*']",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$.x.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$.`length",
+   "values": "[5]",
+   "name": "`length"
+  },
+  {
+   "doc": "text",
+   "path": "$.x.@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "text",
+   "path": "$.x['@string()']",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "text",
+   "path": "$[0]",
+   "values": "[\"h\"]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$[1][1][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$..[1]",
+   "values": "[\"é\"]",
+   "name": "1"
+  },
+  {
+   "doc": "text",
+   "path": "$.*.*",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$[*][*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$..[*]",
+   "values": "[]",
+   "name": "*"
+  },
+  {
+   "doc": "text",
+   "path": "$[0,2]",
+   "values": "[\"h\",\"l\"]",
+   "name": "0,2"
+  },
+  {
+   "doc": "text",
+   "path": "$[-1:][0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "text",
+   "path": "$[0].length",
+   "values": "[1]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$[0][1]",
+   "values": "[]",
+   "name": "1"
+  },
+  {
+   "doc": "text",
+   "path": "$[0][5]",
+   "values": "[]",
+   "name": "5"
+  },
+  {
+   "doc": "text",
+   "path": "$.foo",
+   "values": "[]",
+   "name": "foo"
+  },
+  {
+   "doc": "text",
+   "path": "length",
+   "values": "[5]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$[0]",
+   "values": "[\"h\"]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$.~",
+   "values": "[null]",
+   "name": "~"
+  },
+  {
+   "doc": "text",
+   "path": "@string()",
+   "values": "[]",
+   "name": "@string()"
+  },
+  {
+   "doc": "text",
+   "path": "$..@scalar()",
+   "values": "[\"héllo\"]",
+   "name": "@scalar()"
+  },
+  {
+   "doc": "text",
+   "path": "$..@object()",
+   "values": "[]",
+   "name": "@object()"
+  },
+  {
+   "doc": "text",
+   "path": "$..@array()",
+   "values": "[]",
+   "name": "@array()"
+  },
+  {
+   "doc": "text",
+   "path": "$..@null()",
+   "values": "[]",
+   "name": "@null()"
+  },
+  {
+   "doc": "text",
+   "path": "$..@integer()",
+   "values": "[]",
+   "name": "@integer()"
+  },
+  {
+   "doc": "text",
+   "path": "$..@boolean()",
+   "values": "[]",
+   "name": "@boolean()"
+  },
+  {
+   "doc": "text",
+   "path": "$['a']['b']",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "text",
+   "path": "$.a[b]",
+   "values": "[]",
+   "name": "b"
+  },
+  {
+   "doc": "text",
+   "path": "$[?(@)]",
+   "error": "Eval [?(expr)] prevented in JSONPath expression.",
+   "name": "?(@)"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[?(@.price > 10)].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "text",
+   "path": "$.store['book'][0]['title']",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[0][\"title\"]",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "text",
+   "path": "$..book[*][category,price]",
+   "values": "[]",
+   "name": "category,price"
+  },
+  {
+   "doc": "text",
+   "path": "$.weather[0][main,description]",
+   "values": "[]",
+   "name": "main,description"
+  },
+  {
+   "doc": "text",
+   "path": "$.main.temp.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "",
+   "values": "[]",
+   "name": ""
+  },
+  {
+   "doc": "text",
+   "path": "$.",
+   "values": "[\"héllo\"]",
+   "name": "$"
+  },
+  {
+   "doc": "text",
+   "path": "$..temp..x",
+   "values": "[]",
+   "name": "x"
+  },
+  {
+   "doc": "text",
+   "path": "$.*[0]",
+   "values": "[]",
+   "name": "0"
+  },
+  {
+   "doc": "text",
+   "path": "$.store.book[0:2].title",
+   "values": "[]",
+   "name": "title"
+  },
+  {
+   "doc": "text",
+   "path": "$.*[0:1]",
+   "values": "[]",
+   "name": "0:1"
+  },
+  {
+   "doc": "text",
+   "path": "$..book.length",
+   "values": "[]",
+   "name": "length"
+  },
+  {
+   "doc": "text",
+   "path": "$.sys[country]",
+   "values": "[]",
+   "name": "country"
+  },
+  {
+   "doc": "text",
+   "path": "$[2:1]",
+   "values": "[]",
+   "name": "2:1"
+  },
+  {
+   "doc": "text",
+   "path": "$[:]",
+   "values": "[]",
+   "name": ":"
+  },
+  {
+   "doc": "text",
+   "path": "$[::]",
+   "values": "[]",
+   "name": "::"
+  }
+ ]
+}

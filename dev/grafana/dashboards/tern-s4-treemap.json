@@ -1,0 +1,223 @@
+{
+  "uid": "tern-s4-treemap",
+  "title": "Tern S4 Treemap",
+  "description": "marcusolsson-treemap-panel 2.1.1 on TestData and Prometheus; panel 1 mirrors the cardinality details treemap.",
+  "tags": [
+    "tern",
+    "s4"
+  ],
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus 3",
+          "value": "prom3"
+        },
+        "hide": 0,
+        "refresh": 1,
+        "options": [],
+        "regex": ""
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "marcusolsson-treemap-panel",
+      "title": "Label cardinality (squarify, percentage thresholds, links)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 10
+      },
+      "options": {
+        "tiling": "treemapSquarify"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "links": [
+            {
+              "title": "Scope to ${__data.fields[0]}",
+              "url": "d/tern-s4-treemap/?${datasource:queryparam}&var-filter=${__data.fields[0]}"
+            }
+          ],
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "label,count\njob,5120\ninstance,4800\n__name__,3100\nle,2900\nquantile,1250\ncode,800\nmethod,420\nhandler,390\n"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "marcusolsson-treemap-panel",
+      "title": "Series per metric (Prometheus instant table)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 10
+      },
+      "options": {
+        "tiling": "treemapSquarify",
+        "labelFields": []
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "refId": "A",
+          "expr": "topk(20, count by (__name__) ({__name__=~\"prometheus_.+\"}))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "__auto"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "series"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "marcusolsson-treemap-panel",
+      "title": "Grouped by job (binary tiling, palette)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 10
+      },
+      "options": {
+        "tiling": "treemapBinary",
+        "groupByField": "job",
+        "textField": "metric",
+        "sizeField": "count"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "job,metric,count\nprometheus,prometheus_http_requests_total,320\nprometheus,prometheus_tsdb_head_series,12\nprometheus,prometheus_engine_query_duration_seconds,48\nnode,node_cpu_seconds_total,160\nnode,node_network_receive_bytes_total,90\nnode,node_filesystem_avail_bytes,40\ntempo,tempo_request_duration_seconds_bucket,210\n"
+        }
+      ]
+    }
+  ]
+}

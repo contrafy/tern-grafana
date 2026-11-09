@@ -474,6 +474,30 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	for k, c in h.counts do
 		classes[k] = if c.item then Charts.seriesClass(c.item :: Item, k, opts) else FieldConfig.paletteClass(k)
 	end
+	local legend = Charts.legendOptions(panel, env)
+	local rows: { Charts.Row } = {}
+	if legend.show then
+		for k, c in h.counts do
+			local item = c.item
+			if item and Charts.hiddenFromLegend(item) then
+				continue
+			end
+			if item and not h.ordinal then
+				local row = Charts.calcRow(item :: Item, classes[k], legend.calcs, opts)
+				row.name = c.name
+				table.insert(rows, row)
+			else
+				local values: { string } = {}
+				local results = Reduce.calcs(c.values, legend.calcs, "number")
+				for i, calc in legend.calcs do
+					local v = results[calc]
+					values[i] = if type(v) == "number" then tostring(v) else "-"
+				end
+				table.insert(rows, { class = classes[k], name = c.name, values = values })
+			end
+		end
+	end
+	H = Charts.chartHeight(opts, H, W, rows, legend)
 	local svg: string
 	if h.ordinal then
 		local cats: { string } = table.create(#h.x_max)
@@ -556,31 +580,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	end
 	local chart, assets =
 		Charts.image(opts.key, svg, W, H, Charts.alt(panel, env, "Histogram"), "tern-grafana.histogram")
-	local legend = Charts.legendOptions(panel, env)
-	local legendNode: Node? = nil
-	if legend.show then
-		local rows: { Charts.Row } = {}
-		for k, c in h.counts do
-			local item = c.item
-			if item and Charts.hiddenFromLegend(item) then
-				continue
-			end
-			if item and not h.ordinal then
-				local row = Charts.calcRow(item :: Item, classes[k], legend.calcs, opts)
-				row.name = c.name
-				table.insert(rows, row)
-			else
-				local values: { string } = {}
-				local results = Reduce.calcs(c.values, legend.calcs, "number")
-				for i, calc in legend.calcs do
-					local v = results[calc]
-					values[i] = if type(v) == "number" then tostring(v) else "-"
-				end
-				table.insert(rows, { class = classes[k], name = c.name, values = values })
-			end
-		end
-		legendNode = Charts.calcLegend(opts.key .. ".legend", rows, legend)
-	end
+	local legendNode = if legend.show then Charts.calcLegend(opts.key .. ".legend", rows, legend) else nil
 	return Charts.compose(opts.key, chart, legendNode, legend.placement), assets
 end
 

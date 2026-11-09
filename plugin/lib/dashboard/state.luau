@@ -28,7 +28,8 @@
 -- The machine is split by concern: types.luau (state shape), core.luau
 -- (tags, routes, scopes, instance index), png.luau (render cache),
 -- advance.luau (queries and refresh), answers.luau (loading and answers),
--- links.luau, picker.luau and keys.luau. This module keeps init, update,
+-- layers.luau (annotation layers and alert states), links.luau, picker.luau
+-- and keys.luau. This module keeps init, update,
 -- title and save, and re-exports what the view and specs read.
 
 local Advance = require("./advance")
@@ -39,6 +40,7 @@ local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Keys = require("./keys")
 local Links = require("./links")
+local Layers = require("./layers")
 local Model = require("./model")
 local Picker = require("./picker")
 local Png = require("./png")
@@ -233,6 +235,13 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		Links.openPanelInBrowser(s, value, effects)
 	elseif act == "plink" then
 		Links.openPanelLink(s, value, env, effects)
+	elseif act == "dlink" then
+		Links.openDataLink(value, effects)
+	elseif act == "tpage" then
+		local page, key = string.match(value, "^(%d+):(.+)$")
+		if page and key and Core.find(s, key) then
+			s.pages[key] = tonumber(page) :: number
+		end
 	elseif act == "dashboard" then
 		local url = Links.grafanaUrl(s, env)
 		if url then
@@ -295,8 +304,16 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		Answers.onQuery(s, key, msg.response, env)
 	elseif kind == "x" then
 		return Answers.onExtra(s, parts, msg.response, env)
+	elseif kind == "ds" then
+		return Answers.onJob(s, parts, msg.response, env, effects)
+	elseif kind == "dsv" then
+		return Answers.onVariableJob(s, parts, msg.response, env, effects)
 	elseif kind == "png" then
 		return Answers.onPng(s, msg.tag, msg.response, env, effects)
+	elseif kind == "adhoc" then
+		return Picker.onList(s, parts, msg.response, env)
+	elseif kind == "layer" then
+		return Layers.answer(s, parts, msg.response, env)
 	else
 		return false
 	end

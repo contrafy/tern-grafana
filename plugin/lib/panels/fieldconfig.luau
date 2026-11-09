@@ -269,6 +269,7 @@ local function dsTouches(ds: Frame.FieldConfig): boolean
 		or ds.thresholds ~= nil
 		or ds.mappings ~= nil
 		or ds.color ~= nil
+		or ds.noValue ~= nil
 end
 
 local function resolveAll(
@@ -318,6 +319,9 @@ local function resolveAll(
 				end
 				if ds.color ~= nil then
 					applyProperty(env, cfg, "color", ds.color)
+				end
+				if ds.noValue ~= nil then
+					cfg.no_value = ds.noValue
 				end
 			end
 			for _, o in overrides do

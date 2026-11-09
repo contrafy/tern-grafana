@@ -5,10 +5,12 @@
 -- Tern's native `chart` spark.
 
 local Assets = require("../render/assets")
+local DsTypes = require("../datasources/types")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local Json = require("./json")
 local Lttb = require("../time/lttb")
+local Range = require("../time/range")
 local Thresholds = require("../units/thresholds")
 local TransportTypes = require("../transport/types")
 local ui = require("../ui")
@@ -27,8 +29,8 @@ export type Options = {
 	height: number?,
 	from_ms: number?,
 	to_ms: number?,
-	-- Minutes east of UTC for times.
-	offset_min: number?,
+	-- The dashboard timezone for times (Range.offsetAt per value).
+	offset_min: Range.Offset?,
 	-- Dashboard variable interpolation for text content and titles.
 	interpolate: ((string) -> string)?,
 	-- Dashboard variable interpolation in Grafana's default format (glob), as
@@ -40,12 +42,17 @@ export type Options = {
 	-- selected one's index into the chart's drawn exemplars.
 	exemplars: { any }?,
 	exemplar: number?,
+	-- Time series: the dashboard annotations shown on this panel
+	-- (lib/dashboard/layers.luau marks, lib/render/svg_annotations Mark).
+	annotations: { any }?,
 	-- Panel size in px from its gridPos (lib/dashboard/render_png size).
 	size: { w: number, h: number }?,
 	-- The panel card body's height in px under the card's height cap
 	-- (lib/dashboard/view cardHeight), often less than size.h; nil when the
 	-- card is not capped (an expanded panel).
 	card_height: number?,
+	-- Table: the page the user flipped to (1-based; nil is the first).
+	page: number?,
 	-- The panel's query range after its own time overrides (timeFrom,
 	-- timeShift); from_ms/to_ms carry the same range.
 	time: { from_ms: number, to_ms: number }?,
@@ -62,6 +69,9 @@ export type Options = {
 	-- Grafana's frontend feature toggles (/api/frontend/settings
 	-- featureToggles), e.g. newGauge.
 	features: { [string]: boolean }?,
+	-- The Grafana's browser URL without a trailing slash: text panel links
+	-- and images with rooted paths resolve against it.
+	base_url: string?,
 }
 
 -- Context for a module's non-datasource requests.
@@ -69,16 +79,7 @@ export type RequestContext = {
 	time: { from_ms: number, to_ms: number },
 	dashboard_uid: string?,
 	-- The Grafana's data sources (frontend settings); nil until they are known.
-	datasources: {
-		{
-			uid: string,
-			type: string,
-			name: string,
-			is_default: boolean,
-			manage_alerts: boolean?,
-			backend: boolean?,
-		}
-	}?,
+	datasources: { DsTypes.Datasource }?,
 }
 
 -- dashboards, alerts and annotations go to the dashboard's Grafana (Grafana's

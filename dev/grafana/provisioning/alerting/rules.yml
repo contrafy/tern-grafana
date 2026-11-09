@@ -112,6 +112,8 @@ groups:
           team: platform
         annotations:
           summary: TernGrafanaPending
+          __dashboardUid__: tern-alert-states
+          __panelId__: "2"
       - uid: tern-g-normal
         title: TernGrafanaNormal
         condition: C
@@ -145,3 +147,5 @@ groups:
           team: platform
         annotations:
           summary: TernGrafanaNormal
+          __dashboardUid__: tern-alert-states
+          __panelId__: "1"

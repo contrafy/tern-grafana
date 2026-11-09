@@ -1,0 +1,1 @@
+{"method":"problem.get","params":{"output":"extend","selectAcknowledges":"extend","selectSuppressionData":"extend","selectTags":"extend","source":"0","object":"0","sortfield":["eventid"],"sortorder":"DESC","evaltype":"0","groupids":["22","4"],"severities":[4],"limit":1001}}

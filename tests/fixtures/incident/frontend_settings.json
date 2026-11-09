@@ -1,0 +1,25 @@
+{
+ "defaultDatasource": "Metrics",
+ "datasources": {
+  "Metrics": {
+   "type": "prometheus",
+   "uid": "prom",
+   "name": "Metrics",
+   "isDefault": true,
+   "url": "/api/datasources/proxy/uid/prom",
+   "meta": { "id": "prometheus", "backend": true },
+   "jsonData": { "httpMethod": "POST" }
+  },
+  "Incident": {
+   "type": "grafana-incident-datasource",
+   "uid": "inc",
+   "name": "Incident",
+   "isDefault": false,
+   "url": "/api/datasources/proxy/uid/inc",
+   "meta": { "id": "grafana-incident-datasource", "backend": true },
+   "jsonData": { "backendUrl": "https://incident.example.invalid" }
+  }
+ },
+ "rendererAvailable": false,
+ "buildInfo": { "version": "13.3.0", "edition": "Open Source" }
+}

@@ -43,9 +43,6 @@ local REASONS: { [string]: string } = {
 	row = "a row is a layout element, not a panel",
 }
 
--- Table cell types whose text fallback would misrepresent the data.
-local UNSUPPORTED_CELLS: { [string]: boolean } = { sparkline = true, image = true }
-
 -- Without an env (no JSON null sentinel known) JSON nulls only read as empty.
 local NO_ENV: Env = {
 	now_ms = 0,
@@ -57,25 +54,6 @@ local NO_ENV: Env = {
 	end,
 	null = newproxy(false),
 }
-
-local function cellTypes(panel: any, env: Env): { string }
-	local out: { string } = {}
-	local t = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "custom", "cellOptions", "type"))
-	if t then
-		table.insert(out, t)
-	end
-	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
-		for _, p in Json.list(env, Json.path(env, o, "properties")) do
-			if Json.str(env, Json.path(env, p, "id")) == "custom.cellOptions" then
-				local pt = Json.str(env, Json.path(env, p, "value", "type"))
-				if pt then
-					table.insert(out, pt)
-				end
-			end
-		end
-	end
-	return out
-end
 
 -- Built-in modules ------------------------------------------------------------
 
@@ -161,19 +139,14 @@ local BARGAUGE: PanelModule = {
 	types = { "bargauge" },
 	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return gauge().barView(panel, frames, env, opts), nil
+		return gauge().barView(panel, frames, env, opts)
 	end,
 }
 
 local TABLE: PanelModule = {
 	types = { "table" },
 	supports = supportsWith(function(panel: any, env: Env): string?
-		for _, t in cellTypes(panel, env) do
-			if UNSUPPORTED_CELLS[t] then
-				return string.format("table cell type %s is not supported", t)
-			end
-		end
-		return nil
+		return tablePanel().unsupported(panel, env)
 	end),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
 		-- TablePanel: no frames is PanelDataErrorView.
@@ -342,6 +315,24 @@ local LAZY: { { types: { string }, load: () -> any } } = {
 		types = { "canvas" },
 		load = function(): any
 			return require("./canvas")
+		end,
+	},
+	{
+		types = { "marcusolsson-treemap-panel" },
+		load = function(): any
+			return require("./treemap")
+		end,
+	},
+	{
+		types = { "marcusolsson-dynamictext-panel" },
+		load = function(): any
+			return require("./dynamictext")
+		end,
+	},
+	{
+		types = { "alexanderzobnin-zabbix-triggers-panel" },
+		load = function(): any
+			return require("./zabbix_problems")
 		end,
 	},
 }

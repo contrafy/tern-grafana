@@ -65,6 +65,8 @@ export type Dashboard = {
 	week_start: string?,
 	templating: { any },
 	links: { any },
+	-- annotations.list as written (lib/dashboard/annotations reads it).
+	annotations: { any },
 	sections: { Section },
 }
 
@@ -198,6 +200,7 @@ function M.parse(doc: any, env: Env): (Dashboard?, string?)
 	end
 	local refresh = Env.value(env, d.refresh)
 	local templating = Env.value(env, d.templating)
+	local annotations = Env.value(env, d.annotations)
 	return {
 		uid = uid,
 		title = str(env, d.title) or uid,
@@ -210,6 +213,7 @@ function M.parse(doc: any, env: Env): (Dashboard?, string?)
 		timezone = str(env, d.timezone) or "",
 		week_start = str(env, d.weekStart),
 		templating = if type(templating) == "table" then list(env, templating.list) else {},
+		annotations = if type(annotations) == "table" then list(env, annotations.list) else {},
 		links = list(env, d.links),
 		sections = sections(env, list(env, d.panels)),
 	},

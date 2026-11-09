@@ -1,0 +1,186 @@
+{
+  "cod": "200",
+  "cnt": 12,
+  "list": [
+    {
+      "dt": 1762689600,
+      "dt_iso": "2025-11-09T12:00:00Z",
+      "dt_txt": "2025-11-09 12:00:00",
+      "city": "Dallas",
+      "main": {
+        "temp": 71.2,
+        "humidity": 40
+      },
+      "weather": [
+        {
+          "main": "Clear"
+        }
+      ]
+    },
+    {
+      "dt": 1762689600,
+      "dt_iso": "2025-11-09T12:00:00Z",
+      "dt_txt": "2025-11-09 12:00:00",
+      "city": "Chicago",
+      "main": {
+        "temp": 44.6,
+        "humidity": 40
+      },
+      "weather": [
+        {
+          "main": "Clouds"
+        }
+      ]
+    },
+    {
+      "dt": 1762689600,
+      "dt_iso": "2025-11-09T12:00:00Z",
+      "dt_txt": "2025-11-09 12:00:00",
+      "city": "Seattle",
+      "main": {
+        "temp": 48.2,
+        "humidity": 40
+      },
+      "weather": [
+        {
+          "main": "Rain"
+        }
+      ]
+    },
+    {
+      "dt": 1762700400,
+      "dt_iso": "2025-11-09T15:00:00Z",
+      "dt_txt": "2025-11-09 15:00:00",
+      "city": "Dallas",
+      "main": {
+        "temp": 78.4,
+        "humidity": 45
+      },
+      "weather": [
+        {
+          "main": "Clear"
+        }
+      ]
+    },
+    {
+      "dt": 1762700400,
+      "dt_iso": "2025-11-09T15:00:00Z",
+      "dt_txt": "2025-11-09 15:00:00",
+      "city": "Chicago",
+      "main": {
+        "temp": 49.1,
+        "humidity": 45
+      },
+      "weather": [
+        {
+          "main": "Rain"
+        }
+      ]
+    },
+    {
+      "dt": 1762700400,
+      "dt_iso": "2025-11-09T15:00:00Z",
+      "dt_txt": "2025-11-09 15:00:00",
+      "city": "Seattle",
+      "main": {
+        "temp": 50.7,
+        "humidity": 45
+      },
+      "weather": [
+        {
+          "main": "Rain"
+        }
+      ]
+    },
+    {
+      "dt": 1762711200,
+      "dt_iso": "2025-11-09T18:00:00Z",
+      "dt_txt": "2025-11-09 18:00:00",
+      "city": "Dallas",
+      "main": {
+        "temp": 84.9,
+        "humidity": 50
+      },
+      "weather": [
+        {
+          "main": "Clouds"
+        }
+      ]
+    },
+    {
+      "dt": 1762711200,
+      "dt_iso": "2025-11-09T18:00:00Z",
+      "dt_txt": "2025-11-09 18:00:00",
+      "city": "Chicago",
+      "main": {
+        "temp": 51.3,
+        "humidity": 50
+      },
+      "weather": [
+        {
+          "main": "Rain"
+        }
+      ]
+    },
+    {
+      "dt": 1762711200,
+      "dt_iso": "2025-11-09T18:00:00Z",
+      "dt_txt": "2025-11-09 18:00:00",
+      "city": "Seattle",
+      "main": {
+        "temp": 52.4,
+        "humidity": 50
+      },
+      "weather": [
+        {
+          "main": "Clouds"
+        }
+      ]
+    },
+    {
+      "dt": 1762722000,
+      "dt_iso": "2025-11-09T21:00:00Z",
+      "dt_txt": "2025-11-09 21:00:00",
+      "city": "Dallas",
+      "main": {
+        "temp": 80.1,
+        "humidity": 55
+      },
+      "weather": [
+        {
+          "main": "Clear"
+        }
+      ]
+    },
+    {
+      "dt": 1762722000,
+      "dt_iso": "2025-11-09T21:00:00Z",
+      "dt_txt": "2025-11-09 21:00:00",
+      "city": "Chicago",
+      "main": {
+        "temp": 47.8,
+        "humidity": 55
+      },
+      "weather": [
+        {
+          "main": "Clouds"
+        }
+      ]
+    },
+    {
+      "dt": 1762722000,
+      "dt_iso": "2025-11-09T21:00:00Z",
+      "dt_txt": "2025-11-09 21:00:00",
+      "city": "Seattle",
+      "main": {
+        "temp": 49.9,
+        "humidity": 55
+      },
+      "weather": [
+        {
+          "main": "Rain"
+        }
+      ]
+    }
+  ]
+}

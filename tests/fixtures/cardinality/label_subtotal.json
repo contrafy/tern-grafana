@@ -1,0 +1,11 @@
+{
+  "series_count_total": 88,
+  "labels": [
+    {
+      "label_name": "service",
+      "label_values_count": 4,
+      "series_count": 70,
+      "cardinality": []
+    }
+  ]
+}

@@ -9,17 +9,18 @@
 -- - "v1" (packages/grafana-ui/src/components/Gauge/Gauge.tsx, the flot
 --   gauge): a 270 degree arc whose width is min(size / 5.5, 40), with the
 --   threshold markers as an outer ring a fifth of that wide.
--- Every color is a class (panels2.css): `tgg-s-<tone>` strokes,
--- `tgg-f-<tone>` fills, so a theme switch recolors without a new blob.
--- Grafana's conic color gradient becomes the threshold bands the gradient
--- passes through, each in its step's tone.
+-- Every color is a class: an exact color class (lib/render/ts_gradient
+-- tg-gc<n>, or a tone pair "tgp-fx tgp-<tone>") drawn with the shape role
+-- tg-line (strokes) or tg-bar (fills), so a theme switch recolors without
+-- a new blob. Grafana's conic color gradient becomes the threshold bands
+-- the gradient passes through, each in its step's color.
 
 local M = {}
 
 export type Style = "v1" | "gauge" | "circle"
 
--- A run of the scale (0..1 fractions of min..max) in one tone.
-export type Band = { from: number, to: number, tone: string }
+-- A run of the scale (0..1 fractions of min..max) in one color class.
+export type Band = { from: number, to: number, class: string }
 
 export type Label = { at: number, text: string }
 
@@ -38,10 +39,10 @@ export type Spec = {
 	-- the value.
 	fill_from: number,
 	fill_to: number,
-	-- Tones along the scale the filled run is painted in.
+	-- Colors along the scale the filled run is painted in.
 	bands: { Band },
-	-- Tone of each segment by its start fraction (segmented bars).
-	segment_tone: ((at: number) -> string)?,
+	-- Color class of each segment by its start fraction (segmented bars).
+	segment_class: ((at: number) -> string)?,
 	-- The outer threshold ring (showThresholdMarkers).
 	ring: { Band }?,
 	labels: { Label }?,
@@ -50,14 +51,14 @@ export type Spec = {
 	prefix: string?,
 	text: string?,
 	suffix: string?,
-	-- Value text tone (v1 colors the value; v2 uses the text color).
-	text_tone: string?,
+	-- Value text color class (v1 colors the value; v2 uses the text color).
+	text_class: string?,
 	name: string?,
 	value_size: number?,
 	name_size: number?,
 	-- Sparkline values scaled to 0..1 (nil entries are gaps).
 	spark: { number? }?,
-	spark_tone: string?,
+	spark_class: string?,
 }
 
 -- RadialGauge constants.
@@ -232,7 +233,7 @@ function M.fillRuns(bands: { Band }, from: number, to: number): { Band }
 	for _, b in bands do
 		local a, z = math.max(b.from, from), math.min(b.to, to)
 		if z > a then
-			table.insert(out, { from = a, to = z, tone = b.tone })
+			table.insert(out, { from = a, to = z, class = b.class })
 		end
 	end
 	return out
@@ -306,7 +307,7 @@ function M.render(s: Spec): (string, number, number)
 			else { { from, sweep } }
 		for _, piece in pieces do
 			push(
-				'<path class="%s" fill="none" stroke-width="%s" stroke-linecap="%s" d="%s"/>',
+				'<path class="%s tg-line" fill="none" stroke-width="%s" stroke-linecap="%s" d="%s"/>',
 				class,
 				fmt(width),
 				linecap,
@@ -324,9 +325,9 @@ function M.render(s: Spec): (string, number, number)
 		for i = 0, n - 1 do
 			local at = i / n
 			local filled = at >= from and at < to
-			local tone = if filled and s.segment_tone then s.segment_tone(at) else nil
+			local class = if filled and s.segment_class then s.segment_class(at) else nil
 			arc(
-				if filled then "tgg-s-" .. (tone or "neutral") else "tgg-track",
+				if filled then class or "tgp-fx tgp-neutral" else "tgg-track",
 				d.start + step * i + 0.01,
 				step - between,
 				d.radius,
@@ -340,19 +341,12 @@ function M.render(s: Spec): (string, number, number)
 		for i, r in runs do
 			-- Rounded caps only on the ends of the whole bar.
 			local linecap = if s.rounded and (i == 1 or i == #runs) and #runs == 1 then "round" else "butt"
-			arc("tgg-s-" .. r.tone, d.start + r.from * d.range, (r.to - r.from) * d.range, d.radius, d.bar, linecap)
+			arc(r.class, d.start + r.from * d.range, (r.to - r.from) * d.range, d.radius, d.bar, linecap)
 		end
 	end
 	if s.ring then
 		for _, b in s.ring do
-			arc(
-				"tgg-s-" .. b.tone,
-				d.start + b.from * d.range,
-				(b.to - b.from) * d.range,
-				d.ring_radius,
-				d.ring_width,
-				"butt"
-			)
+			arc(b.class, d.start + b.from * d.range, (b.to - b.from) * d.range, d.ring_radius, d.ring_width, "butt")
 		end
 	end
 	if s.endpoint and segments <= 1 and to > from then
@@ -414,7 +408,7 @@ function M.render(s: Spec): (string, number, number)
 		-- drops <tspan>, so each part is its own <text>, laid out with the
 		-- 0.6 em glyph estimate.
 		local unit = math.max(vSize * 0.7, 6)
-		local tone = if s.text_tone then "tgg-f-" .. s.text_tone else "tgg-text"
+		local tone = if s.text_class then s.text_class .. " tg-bar" else "tgg-text"
 		type Part = { text: string, size: number }
 		local parts: { Part } = {}
 		if s.prefix and s.prefix ~= "" then
@@ -477,18 +471,18 @@ function M.render(s: Spec): (string, number, number)
 			end
 		end
 		if first and last and #line > 1 then
-			local tone = s.spark_tone or "info"
+			local class = s.spark_class or "tgp-fx tgp-info"
 			local path = table.concat(line)
 			push(
-				'<path class="tgg-f-%s" fill-opacity="0.2" d="%sL%s %sL%s %sZ"/>',
-				tone,
+				'<path class="%s tg-area" fill-opacity="0.2" d="%sL%s %sL%s %sZ"/>',
+				class,
 				path,
 				fmt(last),
 				fmt(top + h),
 				fmt(first),
 				fmt(top + h)
 			)
-			push('<path class="tgg-s-%s" fill="none" stroke-width="1" d="%s"/>', tone, path)
+			push('<path class="%s tg-line" fill="none" stroke-width="1" d="%s"/>', class, path)
 		end
 	end
 	-- Tight viewBox (2 px margin) inside the design box: text and

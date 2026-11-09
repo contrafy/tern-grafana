@@ -80,7 +80,11 @@ for _, version in S.VERSIONS do
 					error("panel " .. id .. ": " .. S.text(failed))
 				end
 				local kind = S.panel(version, id).type
-				local svg = kind == "timeseries" or kind == "gauge" or kind == "heatmap" or kind == "state-timeline"
+				local svg = kind == "timeseries"
+					or kind == "gauge"
+					or kind == "bargauge"
+					or kind == "heatmap"
+					or kind == "state-timeline"
 				expect(assets[key] ~= nil or next(assets) ~= nil).toBe(svg)
 			end
 		end)
@@ -92,10 +96,8 @@ for _, version in S.VERSIONS do
 				local node = Registry.view(S.panel(version, id), {}, env, { key = "k" })
 				expect(S.text(node)).toBe("No data")
 			end
-			local bar = S.find((Registry.view(S.panel(version, 8), {}, env, { key = "k" })), function(n)
-				return n.k == "meter"
-			end)
-			expect(bar.p.label[1].t).toBe("No data")
+			local _, barAssets = Registry.view(S.panel(version, 8), {}, env, { key = "k" })
+			expect(string.find((barAssets :: any).k.bytes, ">No data</text>", 1, true) ~= nil).toBe(true)
 			local panel = S.clone(S.panel(version, 9))
 			panel.fieldConfig.defaults.noValue = "nothing here"
 			expect(S.text((Registry.view(panel, {}, env, { key = "k" })))).toBe("nothing here")

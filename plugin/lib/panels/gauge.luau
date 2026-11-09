@@ -12,23 +12,24 @@
 -- min..max, put threshold markers in an outer ring and threshold labels at
 -- min, each step and max (getFormattedThresholds).
 --
--- Bar gauge: Tern `meter` nodes. Each value becomes one meter whose fill is
--- the value's percent of the field range in its threshold tone:
--- displayMode basic and gradient fill in the value's tone (a gradient ends
--- in that color); lcd is Tern's block grid with each threshold band's
--- cells in the band's tone; valueMode color|text|hidden and namePlacement
--- hidden decide the label and title. Tern meters take only two threshold
--- levels, so tones are explicit. `meters` also describes gauges as rings
--- (ring marks at the steps), for read-outs that want numbers.
+-- Bar gauge: one SVG (lib/render/svg_bargauge) of every value's bar in
+-- the panel's size: displayMode basic|gradient|lcd, orientation (auto:
+-- vertical when wider than tall), valueMode color|text|hidden, textMode,
+-- namePlacement, showUnfilled, text sizes and the manual sizing limits.
+-- Every color is the exact color Grafana paints (Charts.valueClass): a
+-- fixed color per row, each threshold step's own color.
 
 local Assets = require("../render/assets")
+local Charts = require("./charts")
 local Common = require("./common")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
 local Json = require("./json")
+local SvgBarGauge = require("../render/svg_bargauge")
 local SvgGauge = require("../render/svg_gauge")
 local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 local Values = require("./values")
 local ui = require("../ui")
 
@@ -36,21 +37,7 @@ type Env = Env.Env
 type Frame = Frame.Frame
 type Node = ui.Node
 
-export type Mark = { at: number, tone: string, title: string }
 export type Part = { value: number, token: string }
-
-export type Meter = {
-	title: string?,
-	label: string?,
-	value: number,
-	tone: string,
-	marks: { Mark }?,
-	parts: { Part }?,
-	-- Formatted threshold step values (gauge showThresholdLabels).
-	threshold_labels: { string }?,
-	-- The label's color: the value's tone, or none (bar gauge valueMode text).
-	label_tone: string?,
-}
 
 local M = {}
 
@@ -87,7 +74,8 @@ local clamp01 = SvgGauge.clamp01
 
 -- LCD cells from 0 up to `fill`, each run in its threshold band's tone; the
 -- run holding the value takes the value's own tone, so a value sitting
--- exactly on a step reads in that step's color as in Grafana.
+-- exactly on a step reads in that step's color as in Grafana (table gauge
+-- cells).
 local function bandParts(item: FieldConfig.Item, fill: number, valueTone: Thresholds.Tone): { Part }
 	local parts: { Part } = {}
 	local name = Thresholds.active(nil, item.config.thresholds).name
@@ -116,103 +104,174 @@ local function bandParts(item: FieldConfig.Item, fill: number, valueTone: Thresh
 	return parts
 end
 
-function M.meters(panel: any, frames: { Frame }, env: Env, opts: Common.Options, bar: boolean): { Meter }
+M.bandParts = bandParts
+
+-- Bar gauge ---------------------------------------------------------------------
+
+-- getBarGradient for thresholds: the first step's color, then each step the
+-- value reaches blending in halfway from the previous step; the last color
+-- reached ends the bar. Stops are fractions of the full bar length.
+local function thresholdGradient(item: FieldConfig.Item, numeric: number, fill: number, opts: Common.Options)
+	local th = item.config.thresholds
+	local lo, hi = item.range_min or 0, item.range_max or 100
+	local stops: { SvgBarGauge.Stop } = {}
+	local last = 0
+	local lastClass = ""
+	for i, s in th.steps do
+		local class = TsGradient.stopClass(Thresholds.color(s.color, opts.theme), opts.theme)
+		if i == 1 then
+			table.insert(stops, { at = 0, class = class })
+		else
+			local value = if type(s.value) == "number" then s.value else -math.huge
+			local pos = if th.mode == "percentage" then value / 100 else math.min((value - lo) / (hi - lo), 1)
+			local thresholdValue = if th.mode == "percentage" then lo + (hi - lo) * pos else value
+			if numeric < thresholdValue then
+				break
+			end
+			table.insert(stops, { at = pos - (pos - last) / 2, class = lastClass })
+			last = pos
+		end
+		lastClass = class
+	end
+	table.insert(stops, { at = fill, class = lastClass })
+	return stops
+end
+
+-- getBarGradient for continuous schemes: the scheme's colors spread evenly
+-- over the full bar length.
+local function schemeGradient(mode: string, opts: Common.Options): { SvgBarGauge.Stop }?
+	local stops: { SvgBarGauge.Stop } = {}
+	for i = 0, 8 do
+		local c = TsGradient.schemeColor(mode, i / 8, opts.theme)
+		if c == nil then
+			return nil
+		end
+		table.insert(stops, { at = i / 8, class = TsGradient.stopClass(c, opts.theme) })
+	end
+	return stops
+end
+
+-- BarGaugePanel getOrientation.
+local function vertical(orientation: string, w: number, h: number): boolean
+	if orientation == "auto" then
+		return w > h
+	end
+	return orientation == "vertical"
+end
+
+-- panelcfg.cue defaults; calcBarSize applies the panel's limits only with
+-- manual sizing.
+local DEFAULT_MIN_VIZ_WIDTH = 8
+local DEFAULT_MIN_VIZ_HEIGHT = 16
+local DEFAULT_MAX_VIZ_HEIGHT = 300
+
+M.BAR_SIZE = { w = 480, h = 240 }
+
+-- The bars and the renderer options for a panel `w` x `h` px.
+function M.barSpecs(
+	panel: any,
+	frames: { Frame },
+	env: Env,
+	opts: Common.Options,
+	w: number,
+	h: number
+): ({ SvgBarGauge.Bar }, SvgBarGauge.Options)
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "thresholds" })
 	local values = Values.values(panel, items, env, { theme = opts.theme, offset_min = opts.offset_min })
-	local options = Json.obj(env, Json.path(env, panel, "options"))
-	local displayMode = Json.str(env, options.displayMode) or "gradient"
-	local valueMode = Json.str(env, options.valueMode) or "color"
-	local namePlacement = Json.str(env, options.namePlacement) or "auto"
-	local showMarkers = Json.bool(env, options.showThresholdMarkers) ~= false
-	local showLabels = Json.bool(env, options.showThresholdLabels) == true
-	local out: { Meter } = {}
+	local o = Json.obj(env, Json.path(env, panel, "options"))
+	local mode = Json.str(env, o.displayMode) or "gradient"
+	if mode ~= "basic" and mode ~= "lcd" then
+		mode = "gradient"
+	end
+	local textMode = Json.str(env, o.textMode) or "auto"
+	local isVertical = vertical(Json.str(env, o.orientation) or "auto", w, h)
+	local manual = Json.str(env, o.sizing) == "manual"
+	local valueMode = Json.str(env, o.valueMode) or "color"
+	if textMode == "name" or textMode == "none" then
+		valueMode = "hidden"
+	end
+	local text = Json.obj(env, o.text)
+	-- shouldShowName: auto names one bar only when the defaults set a
+	-- display name.
+	local showName = if textMode == "auto"
+		then #values ~= 1 or (Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "displayName")) or "") ~= ""
+		else textMode == "name" or textMode == "value_and_name"
+	local bars: { SvgBarGauge.Bar } = {}
 	for _, v in values do
 		local d = v.display
-		local fill = clamp01(d.percent)
-		local meter: Meter = {
-			-- The no-values placeholder has no display title (BarGauge shows none).
-			title = if (bar and namePlacement == "hidden") or v.placeholder then nil else v.title,
-			label = FieldConfig.joined(d),
-			value = fill,
-			tone = d.tone,
-			label_tone = if bar and valueMode == "text" then nil else d.tone,
-		}
-		if bar and valueMode == "hidden" then
-			meter.label = nil
-		end
 		local item = v.item
-		if item and item.config.color_mode == "thresholds" then
-			if bar and displayMode == "lcd" then
-				meter.parts = bandParts(item, fill, d.tone)
-			elseif not bar and showMarkers then
-				local marks: { Mark } = {}
-				for _, e in steps(item) do
-					table.insert(marks, {
-						at = e.at,
-						tone = Thresholds.tone(e.name) :: string,
-						title = FieldConfig.joined(FieldConfig.display(item, e.value, { theme = opts.theme })),
-					})
+		local fill = d.percent
+		local bar: SvgBarGauge.Bar = {
+			-- The no-values placeholder has no display title.
+			title = if showName and not v.placeholder then v.title else nil,
+			prefix = d.prefix,
+			text = d.text,
+			suffix = d.suffix,
+			fill = fill,
+			class = if item then Charts.valueClass(item, d, opts) else Charts.toneClass(d.tone),
+		}
+		if item then
+			local it = item :: FieldConfig.Item
+			local cfgMode = it.config.color_mode
+			if mode == "gradient" then
+				if cfgMode == "thresholds" then
+					bar.gradient = thresholdGradient(it, d.numeric or -math.huge, clamp01(fill), opts)
+				elseif string.sub(cfgMode, 1, 11) == "continuous-" then
+					bar.gradient = schemeGradient(cfgMode, opts)
 				end
-				meter.marks = marks
-			end
-			if not bar and showLabels then
-				local labels: { string } = {}
-				for _, s in item.config.thresholds.steps do
-					if type(s.value) == "number" then
-						table.insert(
-							labels,
-							FieldConfig.joined(FieldConfig.display(item, s.value, { theme = opts.theme }))
-						)
-					end
+			elseif mode == "lcd" then
+				local lo, hi = it.range_min or 0, it.range_max or 100
+				bar.cell_class = function(at: number): string
+					return Charts.valueClass(
+						it,
+						FieldConfig.display(it, lo + at * (hi - lo), { theme = opts.theme }),
+						opts
+					)
 				end
-				meter.threshold_labels = labels
 			end
 		end
-		table.insert(out, meter)
+		table.insert(bars, bar)
 	end
-	return out
+	return bars,
+		{
+			width = w,
+			height = h,
+			vertical = isVertical,
+			mode = mode :: SvgBarGauge.Mode,
+			value_mode = valueMode,
+			show_unfilled = Json.bool(env, o.showUnfilled) ~= false,
+			name_placement = Json.str(env, o.namePlacement) or "auto",
+			title_size = Json.num(env, text.titleSize),
+			value_size = Json.num(env, text.valueSize),
+			min_viz_width = if manual and isVertical
+				then Json.num(env, o.minVizWidth) or DEFAULT_MIN_VIZ_WIDTH
+				else DEFAULT_MIN_VIZ_WIDTH,
+			min_viz_height = if manual and not isVertical
+				then Json.num(env, o.minVizHeight) or DEFAULT_MIN_VIZ_HEIGHT
+				else DEFAULT_MIN_VIZ_HEIGHT,
+			max_viz_height = if manual and not isVertical
+				then Json.num(env, o.maxVizHeight) or DEFAULT_MAX_VIZ_HEIGHT
+				else DEFAULT_MAX_VIZ_HEIGHT,
+		}
 end
 
-local function meterNode(m: Meter, key: string, style: string, size: string): Node
-	local p: { [string]: any } = { key = "m", style = style, size = size, value = m.value, grow = 1 }
-	if m.label then
-		local token = Common.token((m.label_tone or "neutral") :: any)
-		p.label = { ui.span(m.label :: string, if token ~= "" then "strong " .. token else "strong") }
-	end
-	if m.parts then
-		p.parts = m.parts
-	else
-		-- `neutral` would yield to the accent default; Grafana's fallback is gray.
-		p.tone = if m.tone == "neutral" then "muted" else m.tone
-	end
-	if m.marks then
-		p.marks = m.marks
-	end
-	local children: { Node } = {}
-	if m.title then
-		table.insert(children, ui.text({ ui.span(m.title :: string, "muted") }, { key = "t", truncate = "end" }))
-	end
-	table.insert(children, { k = "meter", p = p })
-	if m.threshold_labels and #(m.threshold_labels :: { string }) > 0 then
-		table.insert(children, ui.muted(table.concat(m.threshold_labels :: { string }, " · "), { key = "th" }))
-	end
-	return { k = "col", p = { key = key, gap = "xs", grow = 1 }, c = children }
+-- The viz height Grafana gives a gauge: the card body in a height-capped
+-- card (opts.card_height), else the panel less its header row.
+local function vizHeight(opts: Common.Options, size: { w: number, h: number }, least: number): number
+	return math.max(opts.card_height or (size.h - M.HEADER_PX), least)
 end
 
-function M.barView(panel: any, frames: { Frame }, env: Env, opts: Common.Options): Node
-	local meters = M.meters(panel, frames, env, opts, true)
-	local nodes: { Node } = table.create(#meters)
-	local displayMode = Json.str(env, Json.path(env, panel, "options", "displayMode")) or "gradient"
-	local style = if displayMode == "lcd" then "blocks" else "bar"
-	for i, m in meters do
-		nodes[i] = meterNode(m, "g" .. i, style, "md")
+function M.barView(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
+	local size = opts.size or M.BAR_SIZE
+	local w = math.max(size.w, 60)
+	local h = vizHeight(opts, size, 40)
+	local bars, o = M.barSpecs(panel, frames, env, opts, w, h)
+	local svg, iw, ih = SvgBarGauge.render(bars, o)
+	local alt: { string } = {}
+	for _, b in bars do
+		table.insert(alt, (if b.title then b.title .. ": " else "") .. b.prefix .. b.text .. b.suffix)
 	end
-	local orientation = Json.str(env, Json.path(env, panel, "options", "orientation")) or "auto"
-	if orientation ~= "vertical" then
-		-- Horizontal bar gauges stack their bars (Grafana's default reading).
-		return ui.col(nodes, { key = opts.key, gap = "sm", role = "tern-grafana.bargauge" })
-	end
-	return ui.row(nodes, { key = opts.key, gap = "md", wrap = true, role = "tern-grafana.bargauge" })
+	return Charts.image(opts.key, svg, iw, ih, table.concat(alt, ", "), "tern-grafana.bargauge")
 end
 
 -- Radial gauge ----------------------------------------------------------------
@@ -312,9 +371,9 @@ local function scaleOf(item: FieldConfig.Item, look: Look): (number, number)
 end
 
 -- The threshold bands over the scale (getFormattedThresholds): the edges
--- are min, every step strictly inside, max; each band takes the step active
--- in it, later steps winning ties.
-function M.bands(item: FieldConfig.Item, lo: number, hi: number): { SvgGauge.Band }
+-- are min, every step strictly inside, max; each band takes the color of
+-- the step active in it, later steps winning ties.
+function M.bands(item: FieldConfig.Item, lo: number, hi: number, theme: Thresholds.Theme?): { SvgGauge.Band }
 	local th = item.config.thresholds
 	local pct = th.mode == "percentage"
 	local edges: { number } = { 0 }
@@ -333,12 +392,12 @@ function M.bands(item: FieldConfig.Item, lo: number, hi: number): { SvgGauge.Ban
 		local a, b = edges[i], edges[i + 1]
 		if b > a then
 			local mid = lo + (a + b) / 2 * (hi - lo)
-			local tone = Thresholds.active(mid, th, lo, hi).tone
+			local class = TsGradient.stopClass(Thresholds.active(mid, th, lo, hi, theme).color, theme)
 			local prev = out[#out]
-			if prev and prev.tone == tone then
+			if prev and prev.class == class then
 				prev.to = b
 			else
-				table.insert(out, { from = a, to = b, tone = tone })
+				table.insert(out, { from = a, to = b, class = class })
 			end
 		end
 	end
@@ -437,6 +496,7 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			valueAt = frac(numeric, lo, hi)
 		end
 		local from, to = 0, valueAt
+		local valueClass = Charts.valueClass(item, d, opts)
 		if look.neutral then
 			local n = frac(math.clamp(look.neutral :: number, math.min(lo, hi), math.max(lo, hi)), lo, hi)
 			from, to = math.min(n, valueAt), math.max(n, valueAt)
@@ -453,10 +513,10 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			fill_from = from,
 			fill_to = to,
 			bands = if look.gradient and thresholdsMode
-				then M.bands(item, lo, hi)
-				else { { from = 0, to = 1, tone = d.tone } },
+				then M.bands(item, lo, hi, opts.theme)
+				else { { from = 0, to = 1, class = valueClass } },
 			endpoint = look.endpoint,
-			text_tone = if v2 then nil else d.tone,
+			text_class = if v2 then nil else valueClass,
 			value_size = look.value_size,
 			name_size = look.name_size,
 		}
@@ -465,16 +525,20 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			-- processor; the no-values placeholder has none, so Grafana's
 			-- fallback gray.
 			local placeholder = v.placeholder == true
-			spec.segment_tone = function(at: number): string
+			spec.segment_class = function(at: number): string
 				if placeholder then
-					return "neutral"
+					return Charts.toneClass("neutral")
 				end
-				return FieldConfig.display(item, lo + at * (hi - lo), { theme = opts.theme }).tone
+				return Charts.valueClass(
+					item,
+					FieldConfig.display(item, lo + at * (hi - lo), { theme = opts.theme }),
+					opts
+				)
 			end
 		end
 		local ringOn = look.markers and thresholdsMode and (not v2 or lo ~= hi)
 		if ringOn then
-			spec.ring = M.bands(item, lo, hi)
+			spec.ring = M.bands(item, lo, hi, opts.theme)
 		end
 		if look.labels and thresholdsMode then
 			local labels: { SvgGauge.Label } = {}
@@ -497,7 +561,7 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		end
 		if look.sparkline and v.spark then
 			spec.spark = sparkOf(v.spark)
-			spec.spark_tone = d.tone
+			spec.spark_class = valueClass
 		end
 		table.insert(out, spec)
 	end
@@ -512,7 +576,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	end
 	local size = opts.size or M.DEFAULT_SIZE
 	local w = math.max(size.w, 60)
-	local h = math.max(size.h - M.HEADER_PX, 60)
+	local h = vizHeight(opts, size, 60)
 	local cols, rows = M.grid(#specs, w, h)
 	local cw = math.floor((w - M.SPACING * (cols - 1)) / cols)
 	local ch = math.floor((h - M.SPACING * (rows - 1)) / rows)

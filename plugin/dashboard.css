@@ -40,6 +40,45 @@
 	min-width: 0;
 }
 
+/* Grafana's panel header keeps the title to one line, cut short: a wrapped
+   head would push a height-capped card's body out of the card. */
+[data-role="tern-grafana.dashboard"] .sf-card .sf-head {
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* A transparent panel (panels2.css tgp2-plain) is a flex column under a
+   height cap: its head line keeps its height when the body is too tall,
+   so the body is cut at the bottom instead of the title squashed. */
+[data-role="tern-grafana.dashboard"] .tgp2-plain > .sf-text,
+[data-role="tern-grafana.dashboard"] .tgp2-plain > .sf-row {
+	flex-shrink: 0;
+}
+
+/* BigValue lays its values out over the panel's whole content box
+   (VizRepeater): in the fixed-height card the native body grows to the
+   card's bottom (other panels keep their content at its top), a stat and
+   its tile grid grow with it, the grid's rows share that height
+   (panels2.css tgp-stat-grid) and each tile centers its value. */
+[data-role="tern-grafana.dashboard"] .sf-card {
+	display: flex;
+	flex-direction: column;
+}
+
+[data-role="tern-grafana.dashboard"] .sf-card > .sf-card-body {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+}
+
+[data-role="tern-grafana.panel-body"],
+[data-role="tern-grafana.panel-body"] > [data-role="tern-grafana.stat"],
+[data-role="tern-grafana.stat"] > .tgp-stat-grid {
+	flex-grow: 1;
+}
+
 [data-role="tern-grafana.dashboard"] .sf-card .sf-image {
 	max-width: 100%;
 }

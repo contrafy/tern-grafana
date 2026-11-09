@@ -38,6 +38,8 @@ export type Context = {
 	source: ((panel_id: number) -> Model.Panel?)?,
 	-- Queries.resolve answers for this scope (Queries.Resolved).
 	resolved: Queries.Resolved?,
+	-- Grafana's major version (datasource modules' rules may depend on it).
+	grafana_major: number?,
 }
 
 -- Chained `-- Dashboard --` queries followed at most this deep.
@@ -45,7 +47,7 @@ local MAX_CHAIN = 8
 
 -- Why the data of a panel cannot be produced natively; nil when it can.
 local function queryBlocker(panel: Model.Panel, ctx: Context, env: Env, depth: number): string?
-	local _, err = Queries.resolveIn(ctx.resolved, panel.json, ctx.scope, ctx.datasources, env)
+	local _, err = Queries.resolveIn(ctx.resolved, panel.json, ctx.scope, ctx.datasources, env, ctx.grafana_major)
 	if err then
 		return err
 	end

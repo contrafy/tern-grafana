@@ -68,11 +68,12 @@ function M.geometry(layout: Layout, k: number): Geometry
 	}
 end
 
--- Layout.xOfTime clamped to the plot.
+-- Layout.xOfTime, not clamped: a sample beyond the time range lands off
+-- the plot, so the segment into the plot keeps its slope (the renderer
+-- clips the series to the plot, as uPlot clips its canvas).
 function M.x(g: Geometry, t: number): number
 	local f = if g.span > 0 then (t - g.t_from) / g.span else 0.5
-	local x = g.left + f * g.width
-	return if x < g.left then g.left elseif x > g.right then g.right else x
+	return g.left + f * g.width
 end
 
 -- Layout.yOfValue on the geometry's scale, clamped to the plot.
@@ -208,13 +209,165 @@ local function newBuf(): Buf
 	return { parts = {}, n = 0, x = 0, y = 0, legacy = 0 }
 end
 
+-- The part of a run (pixel points, x ascending) between x = lo and x = hi:
+-- the points inside plus where the drawn edge crosses each bound (the
+-- line's height there, or the value a step holds). Empty when nothing of
+-- the run is inside. Tern's SVG sanitizer drops clipPath and mask, so
+-- samples beyond the time range are cut here instead.
+local function clipRun(p: { number }, interp: Interpolation, lo: number, hi: number): { number }
+	local n = #p // 2
+	if n == 0 or (p[1] >= lo and p[2 * n - 1] <= hi) then
+		return p
+	elseif p[2 * n - 1] < lo or p[1] > hi then
+		return {}
+	end
+	local a = 1
+	while p[2 * a - 1] < lo do
+		a += 1
+	end
+	local z = n
+	while p[2 * z - 1] > hi do
+		z -= 1
+	end
+	local out: { number } = table.create(2 * (z - a + 3))
+	local function cross(i: number, x: number)
+		local x0, y0, x1, y1 = p[2 * i - 1], p[2 * i], p[2 * i + 1], p[2 * i + 2]
+		local y: number
+		if interp == "stepAfter" then
+			y = y0
+		elseif interp == "stepBefore" then
+			y = y1
+		else
+			y = if x1 == x0 then y1 else y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+		end
+		table.insert(out, x)
+		table.insert(out, y)
+	end
+	if a > 1 then
+		cross(a - 1, lo)
+	end
+	for i = a, z do
+		table.insert(out, p[2 * i - 1])
+		table.insert(out, p[2 * i])
+	end
+	if z < n then
+		cross(z, hi)
+	end
+	return out
+end
+
+-- One cubic (x0, y0, c1x, c1y, c2x, c2y, x1, y1) cut at x: its part right
+-- of x (`right`) or left of it. The control points run left to right, so
+-- x(t) rises and bisection finds t.
+local function splitCubic(c: { number }, x: number, right: boolean): { number }
+	local function at(a: number, b: number, d: number, e: number, t: number): number
+		local u = 1 - t
+		return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * d + t * t * t * e
+	end
+	local t0, t1 = 0, 1
+	for _ = 1, 40 do
+		local t = (t0 + t1) / 2
+		if at(c[1], c[3], c[5], c[7], t) < x then
+			t0 = t
+		else
+			t1 = t
+		end
+	end
+	local t = (t0 + t1) / 2
+	local function lerp(a: number, b: number): number
+		return a + (b - a) * t
+	end
+	local x01, y01 = lerp(c[1], c[3]), lerp(c[2], c[4])
+	local x12, y12 = lerp(c[3], c[5]), lerp(c[4], c[6])
+	local x23, y23 = lerp(c[5], c[7]), lerp(c[6], c[8])
+	local x012, y012 = lerp(x01, x12), lerp(y01, y12)
+	local x123, y123 = lerp(x12, x23), lerp(y12, y23)
+	local y = lerp(y012, y123)
+	if right then
+		return { x, y, x123, y123, x23, y23, c[7], c[8] }
+	end
+	return { c[1], c[2], x01, y01, x012, y012, x, y }
+end
+
+-- A smoothed run as its start point and six numbers per cubic (controls
+-- and end), cut to lo..hi when given: empty when nothing is inside.
+local function smoothSegs(p: { number }, lo: number?, hi: number?): { number }
+	local n = #p // 2
+	local m = tangents(p)
+	local clip = lo ~= nil and hi ~= nil and (p[1] < lo or p[2 * n - 1] > hi)
+	local out: { number } = if clip then {} else { p[1], p[2] }
+	for i = 1, n - 1 do
+		local x0, y0, x1, y1 = p[2 * i - 1], p[2 * i], p[2 * i + 1], p[2 * i + 2]
+		local h = (x1 - x0) / 3
+		local c = { x0, y0, x0 + h, y0 + h * m[i], x1 - h, y1 - h * m[i + 1], x1, y1 }
+		if clip then
+			local a, z = lo :: number, hi :: number
+			if x1 <= a or x0 >= z then
+				continue
+			end
+			if x0 < a then
+				c = splitCubic(c, a, true)
+			end
+			if c[7] > z then
+				c = splitCubic(c, z, false)
+			end
+			if #out == 0 then
+				out[1], out[2] = c[1], c[2]
+			end
+		end
+		table.move(c, 3, 8, #out + 1, out)
+	end
+	return out
+end
+
+-- smoothSegs of a run, cut to the plot's width with the samples' heights
+-- clamped to the plot (no cut without `g`).
+local function smoothCut(p: { number }, g: Geometry?): { number }
+	local s = smoothSegs(p, if g then g.left else nil, if g then g.right else nil)
+	if g and #s >= 8 then
+		s[2] = math.clamp(s[2], g.top, g.bottom)
+		for o = 8, #s, 6 do
+			s[o] = math.clamp(s[o], g.top, g.bottom)
+		end
+	end
+	return s
+end
+
 -- One edge through pixel points `p` (x1, y1, x2, y2, ...) in order: a new
 -- subpath at its first point (`join` false) or a line to it from the
 -- current point; then straight, stepped (stepAfter holds a value until the
--- next sample, stepBefore takes the next value at once) or smoothed.
-local function edge(b: Buf, p: { number }, interp: Interpolation, join: boolean)
+-- next sample, stepBefore takes the next value at once) or smoothed. With
+-- `g` (x ascending) only the part within the plot's width is drawn and the
+-- samples' heights are clamped to the plot after that cut (so a sample
+-- beyond the range, placed at its own height, sets the slope into the
+-- plot). Returns whether anything was drawn.
+-- `pre` gives the smoothed edge's cubics (smoothSegs layout) ready to draw.
+local function edge(
+	b: Buf,
+	p: { number },
+	interp: Interpolation,
+	join: boolean,
+	g: Geometry?,
+	pre: { number }?
+): boolean
+	local segs: { number }? = pre
+	if segs == nil and interp == "smooth" and #p > 4 then
+		segs = smoothCut(p, g)
+		if #(segs :: { number }) < 8 then
+			return false
+		end
+	elseif segs == nil and g then
+		p = clipRun(p, interp, g.left, g.right)
+		if #p == 0 then
+			return false
+		end
+		for i = 2, #p, 2 do
+			p[i] = math.clamp(p[i], g.top, g.bottom)
+		end
+	end
 	local parts, k = b.parts, b.n
-	local X, Y = tenths(p[1]), tenths(p[2])
+	local sx, sy = if segs then segs[1] else p[1], if segs then segs[2] else p[2]
+	local X, Y = tenths(sx), tenths(sy)
 	local L = legacy(X) + legacy(Y)
 	parts[k + 1] = if join then "L" else "M"
 	parts[k + 2] = num(X)
@@ -222,7 +375,30 @@ local function edge(b: Buf, p: { number }, interp: Interpolation, join: boolean)
 	k += 3
 	L += 2
 	local n = #p // 2
-	if n > 1 then
+	if segs then
+		for i = 1, (#segs - 2) // 6 do
+			local o = 6 * i - 3
+			local ax, ay = tenths(segs[o]), tenths(segs[o + 1])
+			local bx, by = tenths(segs[o + 2]), tenths(segs[o + 3])
+			local x, y = tenths(segs[o + 4]), tenths(segs[o + 5])
+			local ox, oy = X, Y
+			if i % ANCHOR == 0 then
+				parts[k + 1] = "C"
+				ox, oy = 0, 0
+			else
+				parts[k + 1] = "c"
+			end
+			parts[k + 2] = num(ax - ox)
+			parts[k + 3] = sep(ay - oy)
+			parts[k + 4] = sep(bx - ox)
+			parts[k + 5] = sep(by - oy)
+			parts[k + 6] = sep(x - ox)
+			parts[k + 7] = sep(y - oy)
+			k += 7
+			L += 6 + legacy(ax) + legacy(ay) + legacy(bx) + legacy(by) + legacy(x) + legacy(y)
+			X, Y = x, y
+		end
+	elseif n > 1 then
 		if interp == "stepAfter" or interp == "stepBefore" then
 			-- Walking right to left swaps which end of a step comes first.
 			local after = (interp == "stepAfter") == (p[3] >= p[1])
@@ -246,31 +422,6 @@ local function edge(b: Buf, p: { number }, interp: Interpolation, join: boolean)
 				end
 				k += 4
 				L += 2 + legacy(x) + legacy(y)
-				X, Y = x, y
-			end
-		elseif interp == "smooth" and n > 2 then
-			local m = tangents(p)
-			for i = 1, n - 1 do
-				local x0, y0, x1, y1 = p[2 * i - 1], p[2 * i], p[2 * i + 1], p[2 * i + 2]
-				local h = (x1 - x0) / 3
-				local ax, ay = tenths(x0 + h), tenths(y0 + h * m[i])
-				local bx, by = tenths(x1 - h), tenths(y1 - h * m[i + 1])
-				local x, y = tenths(x1), tenths(y1)
-				local ox, oy = X, Y
-				if i % ANCHOR == 0 then
-					parts[k + 1] = "C"
-					ox, oy = 0, 0
-				else
-					parts[k + 1] = "c"
-				end
-				parts[k + 2] = num(ax - ox)
-				parts[k + 3] = sep(ay - oy)
-				parts[k + 4] = sep(bx - ox)
-				parts[k + 5] = sep(by - oy)
-				parts[k + 6] = sep(x - ox)
-				parts[k + 7] = sep(y - oy)
-				k += 7
-				L += 6 + legacy(ax) + legacy(ay) + legacy(bx) + legacy(by) + legacy(x) + legacy(y)
 				X, Y = x, y
 			end
 		else
@@ -303,17 +454,45 @@ local function edge(b: Buf, p: { number }, interp: Interpolation, join: boolean)
 	end
 	b.n, b.x, b.y = k, X, Y
 	b.legacy += L
+	return true
 end
 
 local function finish(b: Buf): (string, number)
 	return table.concat(b.parts, "", 1, b.n), b.legacy
 end
 
--- The line through each run of present samples. A lone sample becomes a
--- zero-length segment, which a round cap still draws as a dot.
+-- Whether a present sample lies outside the geometry's time range (the
+-- renderer keeps one beyond each end, Data.window).
+local function beyond(g: Geometry, times: { number }, values: { any }): boolean
+	local t1 = g.t_from + g.span
+	for i, t in times do
+		if (t < g.t_from or t > t1) and present(values[i]) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Layout.yOfValue on the geometry's scale, not clamped (for samples cut by
+-- edge, which clamps after the cut).
+local function yRaw(g: Geometry, v: number): number
+	local f: number?
+	if g.linear then
+		f = if g.y_max <= g.y_min then 0.5 else (v - g.y_min) / g.y_span
+	else
+		f = Axis.position(g.axis, v)
+	end
+	return g.bottom - (f or 0) * g.height
+end
+
+-- The line through each run of present samples, cut to the plot's width.
+-- A lone sample becomes a zero-length segment, which a round cap still
+-- draws as a dot.
 function M.line(g: Geometry, times: { number }, values: { any }, interp: Interpolation): (string, number)
 	local b = newBuf()
-	if interp ~= "linear" then
+	local cut = beyond(g, times, values)
+	if interp ~= "linear" or cut then
+		local yOf: (Geometry, number) -> number = if cut then yRaw else M.y
 		local run: { number } = {}
 		local c = 0
 		local count = #times
@@ -321,12 +500,11 @@ function M.line(g: Geometry, times: { number }, values: { any }, interp: Interpo
 			local v = if i <= count then values[i] else nil
 			if i <= count and present(v) then
 				run[c + 1] = M.x(g, times[i])
-				run[c + 2] = M.y(g, v)
+				run[c + 2] = yOf(g, v)
 				c += 2
 			elseif c > 0 then
 				-- `run` is reused for the next run once edge has read it.
-				edge(b, run, interp, false)
-				if c == 2 then
+				if edge(b, run, interp, false, g) and c == 2 then
 					b.n += 1
 					b.parts[b.n] = "h0"
 					b.legacy += 2
@@ -339,19 +517,14 @@ function M.line(g: Geometry, times: { number }, values: { any }, interp: Interpo
 	end
 	-- Linear: straight from the samples, no point arrays.
 	local parts, k, L = b.parts, 0, 0
-	local left, right, top, bottom = g.left, g.right, g.top, g.bottom
+	local top, bottom = g.top, g.bottom
 	local t0, span, width, height = g.t_from, g.span, g.width, g.height
 	local linear, y0, ySpan, flat = g.linear, g.y_min, g.y_span, g.y_max <= g.y_min
 	local inRun, X, Y = 0, 0, 0
 	for i, t in times do
 		local v = values[i]
 		if type(v) == "number" and v == v and v ~= HUGE and v ~= -HUGE then
-			local x = left + (if span > 0 then (t - t0) / span else 0.5) * width
-			if x < left then
-				x = left
-			elseif x > right then
-				x = right
-			end
+			local x = g.left + (if span > 0 then (t - t0) / span else 0.5) * width
 			local f: number?
 			if linear then
 				f = if flat then 0.5 else (v - y0) / ySpan
@@ -419,8 +592,9 @@ function M.line(g: Geometry, times: { number }, values: { any }, interp: Interpo
 	return table.concat(parts, "", 1, k), L
 end
 
--- Dots (zero-length round-capped segments) at the samples; `lone` keeps
--- only samples with no present neighbor (uPlot's points filter for gaps).
+-- Dots (zero-length round-capped segments) at the samples on the plot;
+-- `lone` keeps only samples with no present neighbor (uPlot's points
+-- filter for gaps).
 function M.dots(g: Geometry, times: { number }, values: { any }, lone: boolean): (string, number)
 	local parts, k, L = {}, 0, 0
 	local X, Y = 0, 0
@@ -434,7 +608,11 @@ function M.dots(g: Geometry, times: { number }, values: { any }, lone: boolean):
 		if lone and ((i > 1 and present(values[i - 1])) or (i < n and present(values[i + 1]))) then
 			continue
 		end
-		local x, y = tenths(M.x(g, times[i])), tenths(M.y(g, v))
+		local px = M.x(g, times[i])
+		if px < g.left - 0.05 or px > g.right + 0.05 then
+			continue
+		end
+		local x, y = tenths(px), tenths(M.y(g, v))
 		if count % ANCHOR == 0 then
 			parts[k + 1] = "M"
 			parts[k + 2] = num(x)
@@ -453,9 +631,27 @@ function M.dots(g: Geometry, times: { number }, values: { any }, lone: boolean):
 	return table.concat(parts, "", 1, k), L
 end
 
+-- The reverse of smoothSegs data: the same curves walked from the end.
+local function reverseSegs(s: { number }): { number }
+	local k = (#s - 2) // 6
+	local out: { number } = table.create(#s)
+	out[1], out[2] = s[#s - 1], s[#s]
+	for j = k, 1, -1 do
+		local o = 6 * j - 3
+		local px, py = s[o - 2], s[o - 1]
+		table.insert(out, s[o + 2])
+		table.insert(out, s[o + 3])
+		table.insert(out, s[o])
+		table.insert(out, s[o + 1])
+		table.insert(out, px)
+		table.insert(out, py)
+	end
+	return out
+end
+
 -- Closed areas between each run of present values and its base: the
 -- stacked bottoms, the values of the fillBelowTo series (`below`, by
--- time), or the axis baseline.
+-- time), or the axis baseline; cut to the plot's width.
 function M.area(
 	g: Geometry,
 	times: { number },
@@ -467,6 +663,8 @@ function M.area(
 ): (string, number)
 	local b = newBuf()
 	local n = #times
+	local cut = beyond(g, times, tops)
+	local yOf: (Geometry, number) -> number = if cut then yRaw else M.y
 	local runStart: number? = nil
 	for i = 1, n + 1 do
 		local v = if i <= n and present(tops[i]) then tops[i] else nil
@@ -477,26 +675,54 @@ function M.area(
 			runStart = i
 		elseif v == nil and runStart ~= nil then
 			local s, e = runStart, i - 1
+			runStart = nil
 			local top: { number } = table.create(2 * (e - s + 1))
 			local c = 0
 			for j = s, e do
 				top[c + 1] = M.x(g, times[j])
-				top[c + 2] = M.y(g, tops[j] :: number)
+				top[c + 2] = yOf(g, tops[j] :: number)
 				c += 2
 			end
-			edge(b, top, interp, false)
+			if not edge(b, top, interp, false, if cut then g else nil) then
+				continue
+			end
 			if bottoms or below then
-				local bot: { number } = table.create(2 * (e - s + 1))
-				c = 0
-				for j = e, s, -1 do
-					bot[c + 1] = M.x(g, times[j])
-					bot[c + 2] = M.y(g, if bottoms then bottoms[j] else (below :: { [number]: number })[times[j]])
-					c += 2
+				local function lower(j: number): number
+					return if bottoms then bottoms[j] else (below :: { [number]: number })[times[j]]
 				end
-				edge(b, bot, interp, true)
+				if cut then
+					local asc: { number } = table.create(2 * (e - s + 1))
+					c = 0
+					for j = s, e do
+						asc[c + 1] = M.x(g, times[j])
+						asc[c + 2] = yRaw(g, lower(j))
+						c += 2
+					end
+					if interp == "smooth" and e - s >= 2 then
+						edge(b, {}, interp, true, nil, reverseSegs(smoothCut(asc, g)))
+					else
+						local p = clipRun(asc, interp, g.left, g.right)
+						local rev: { number } = table.create(#p)
+						for k = #p - 1, 1, -2 do
+							table.insert(rev, p[k])
+							table.insert(rev, math.clamp(p[k + 1], g.top, g.bottom))
+						end
+						edge(b, rev, interp, true)
+					end
+				else
+					local bot: { number } = table.create(2 * (e - s + 1))
+					c = 0
+					for j = e, s, -1 do
+						bot[c + 1] = M.x(g, times[j])
+						bot[c + 2] = M.y(g, lower(j))
+						c += 2
+					end
+					edge(b, bot, interp, true)
+				end
 			else
 				local yb = tenths(M.y(g, base))
-				local xe, xs = tenths(M.x(g, times[e])), tenths(M.x(g, times[s]))
+				local xe = tenths(math.min(M.x(g, times[e]), g.right))
+				local xs = tenths(math.max(M.x(g, times[s]), g.left))
 				local parts, k = b.parts, b.n
 				parts[k + 1] = "L"
 				parts[k + 2] = num(xe)
@@ -510,7 +736,6 @@ function M.area(
 			b.n += 1
 			b.parts[b.n] = "Z"
 			b.legacy += 1
-			runStart = nil
 		end
 	end
 	return finish(b)

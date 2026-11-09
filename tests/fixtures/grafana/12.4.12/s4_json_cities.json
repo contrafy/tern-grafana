@@ -1,0 +1,16 @@
+{
+  "cities": [
+    {
+      "name": "Dallas",
+      "id": "dallas"
+    },
+    {
+      "name": "Chicago",
+      "id": "chicago"
+    },
+    {
+      "name": "Seattle",
+      "id": "seattle"
+    }
+  ]
+}

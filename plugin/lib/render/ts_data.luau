@@ -194,6 +194,62 @@ function M.transformed(list: { Series.Series }, styles: { SeriesStyle }, tFrom: 
 	return out
 end
 
+-- uPlot closestIdx: the index (1-based) of the time nearest `t` in the
+-- ascending `times`, the earlier one on a tie.
+local function closestIdx(t: number, times: { number }): number
+	local lo, hi = 1, #times
+	while hi - lo > 1 do
+		local mid = (lo + hi) // 2
+		if times[mid] < t then
+			lo = mid
+		else
+			hi = mid
+		end
+	end
+	return if t - times[lo] <= times[hi] - t then lo else hi
+end
+
+-- The samples in view, as uPlot's setScales finds them (i0..i1: the
+-- samples nearest the range's ends, moved inside it unless that leaves at
+-- most two), and the series as drawn: getOuterIdxs adds the nearest
+-- present sample beyond each end, so a line enters the plot at its slope
+-- and the plot clips it. Returns the series (itself when nothing is cut)
+-- and the times of its first and last sample in view; nil bounds for an
+-- empty series. Times must ascend; other series are kept whole.
+function M.window(s: Series.Series, tFrom: number, tTo: number): (Series.Series, number?, number?)
+	local times = s.times
+	local n = #times
+	if n == 0 then
+		return s, nil, nil
+	elseif not ascending(times) then
+		return s, tFrom, tTo
+	end
+	local i0, i1 = closestIdx(tFrom, times), closestIdx(tTo, times)
+	if i1 - i0 > 1 then
+		if times[i0] < tFrom then
+			i0 += 1
+		end
+		if times[i1] > tTo then
+			i1 -= 1
+		end
+	end
+	local values = s.values
+	local o0, o1 = math.max(i0 - 1, 1), math.min(i1 + 1, n)
+	while o0 > 1 and finite(values[o0]) == nil do
+		o0 -= 1
+	end
+	while o1 < n and finite(values[o1]) == nil do
+		o1 += 1
+	end
+	if o0 == 1 and o1 == n then
+		return s, times[i0], times[i1]
+	end
+	local copy = Tbl.copy(s)
+	copy.times = table.move(times, o0, o1, 1, table.create(o1 - o0 + 1))
+	copy.values = table.move(values, o0, o1, 1, table.create(o1 - o0 + 1))
+	return copy, times[i0], times[i1]
+end
+
 export type StackGroup = { mode: Series.StackMode, neg: boolean, members: { number } }
 
 -- getStackingGroups: one group per direction (a series with a negative
@@ -266,6 +322,100 @@ local function spanned(times: { number }, values: { any }, span: boolean | numbe
 		end
 	end
 	return t2, v2
+end
+
+-- A series over more threshold steps than this (range edges included)
+-- gets one null per gap and none at the edges instead, which draws the
+-- same.
+M.INSERT_MAX = 100000
+
+-- applyNullInsertThreshold (grafana-data nullInsertThreshold.ts, run by
+-- the time series panel's prepareGraphableFields): where the time column
+-- (ascending ms) jumps by more than `threshold`, a null at every threshold
+-- step from the earlier sample, so the line breaks; likewise from
+-- `pseudo_min` up to the first sample and from the last up to `pseudo_max`
+-- (the panel's range). Returns the inputs themselves when nothing is
+-- inserted.
+function M.insertNulls(
+	times: { number },
+	columns: { { any } },
+	threshold: number,
+	pseudoMin: number?,
+	pseudoMax: number?
+): ({ number }, { { any } })
+	local n = #times
+	if n == 0 or not (threshold > 0) then
+		return times, columns
+	end
+	local first, last = times[1], times[n]
+	local needs = (pseudoMin ~= nil and pseudoMin < first - threshold)
+		or (pseudoMax ~= nil and pseudoMax > last + threshold)
+	if not needs then
+		for i = 2, n do
+			if times[i] - times[i - 1] > threshold then
+				needs = true
+				break
+			end
+		end
+	end
+	if not needs then
+		return times, columns
+	end
+	local lo = if pseudoMin then math.min(pseudoMin, first) else first
+	local hi = if pseudoMax then math.max(pseudoMax, last) else last
+	local thorough = (hi - lo) / threshold <= M.INSERT_MAX
+	local out: { number } = {}
+	local k = 0
+	if thorough and pseudoMin ~= nil and pseudoMin < first then
+		local slot = first - math.ceil((first - pseudoMin) / threshold) * threshold
+		while slot < first do
+			k += 1
+			out[k] = slot
+			slot += threshold
+		end
+	end
+	k += 1
+	out[k] = first
+	local prev = first
+	for i = 2, n do
+		local cur = times[i]
+		while cur - prev > threshold do
+			k += 1
+			out[k] = prev + threshold
+			prev += threshold
+			if not thorough then
+				break
+			end
+		end
+		k += 1
+		out[k] = cur
+		prev = cur
+	end
+	if thorough and pseudoMax ~= nil and pseudoMax > prev then
+		while prev + threshold < pseudoMax do
+			k += 1
+			out[k] = prev + threshold
+			prev += threshold
+		end
+	end
+	if k == n then
+		return times, columns
+	end
+	local filled: { { any } } = table.create(#columns)
+	for c, col in columns do
+		local values: { any } = table.create(k)
+		local j = 1
+		for i = 1, k do
+			if times[j] == out[i] then
+				values[i] = col[j]
+				j += 1
+			else
+				values[i] = NULL
+			end
+		end
+		filled[c] = values
+	end
+	return out, filled
 end
 
 function M.downsample(
@@ -345,8 +495,9 @@ function M.downsample(
 end
 
 -- Bars over more distinct times than the plot has slots: each series' samples
--- are grouped into equal time buckets (the bucket's largest value, at the
--- bucket's center), so every stacked series lands in the same slots.
+-- in the time range are grouped into equal time buckets (the bucket's largest
+-- value, at the bucket's center), so every stacked series lands in the same
+-- slots.
 function M.bucketBars(list: { Series.Series }, tFrom: number, tTo: number, slots: number): { Series.Series }
 	local distinct: { [number]: boolean } = {}
 	local n = 0
@@ -367,8 +518,8 @@ function M.bucketBars(list: { Series.Series }, tFrom: number, tTo: number, slots
 		local best: { [number]: number } = {}
 		for j, t in s.times do
 			local v = finite(s.values[j])
-			if v then
-				local b = math.clamp(math.floor((t - tFrom) / width), 0, slots - 1)
+			if v and t >= tFrom and t <= tTo then
+				local b = math.min(math.floor((t - tFrom) / width), slots - 1)
 				if best[b] == nil or v > best[b] then
 					best[b] = v
 				end

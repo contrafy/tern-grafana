@@ -221,12 +221,53 @@ function M.linearRange(lo: number?, hi: number?, r: LinearRange): (number, numbe
 	return a, b
 end
 
--- uPlot axis splits on a fixed range: the smallest nice increment (1, 2,
--- 2.5, 5 x 10^n) whose ticks are at least the y spacing apart, at its
--- multiples inside min..max.
-function M.rangeScale(min: number, max: number, plotPx: number): Scale
+-- IEC units of the time series panel (public/app/core/components/
+-- TimeSeries/utils.ts IEC_UNITS): their axes step in powers of 2.
+local IEC_UNITS: { [string]: boolean } = {
+	bytes = true,
+	bits = true,
+	kbytes = true,
+	mbytes = true,
+	gbytes = true,
+	tbytes = true,
+	pbytes = true,
+	binBps = true,
+	binbps = true,
+	KiBs = true,
+	Kibits = true,
+	MiBs = true,
+	Mibits = true,
+	GiBs = true,
+	Gibits = true,
+	TiBs = true,
+	Tibits = true,
+	PiBs = true,
+	Pibits = true,
+}
+
+-- BIN_INCRS (2^0..2^52, in the unit itself) as uPlot's findIncr walks
+-- them: the smallest whose ticks are at least `space` px apart.
+local function binaryStep(span: number, plotPx: number, space: number): number
+	for i = 0, 52 do
+		local incr = 2 ^ i
+		if incr * plotPx / span >= space then
+			return incr
+		end
+	end
+	return 2 ^ 52
+end
+
+-- uPlot axis splits on a fixed range: the smallest increment whose ticks
+-- are at least the y spacing apart, at its multiples inside min..max.
+-- Increments are nice (1, 2, 2.5, 5 x 10^n), or powers of 2 for IEC units,
+-- so a GiB axis reads 0, 8, 16 GiB and a tiny one only 0.
+function M.rangeScale(min: number, max: number, plotPx: number, unit: string?): Scale
 	local space = if plotPx <= 150 then M.Y_SPACE_SMALL else M.Y_SPACE
-	local step = M.niceStep(max - min, plotPx / space)
+	local step = if unit
+			and IEC_UNITS[unit]
+			and max > min
+		then binaryStep(max - min, plotPx, space)
+		else M.niceStep(max - min, plotPx / space)
 	local ticks: { number } = {}
 	for i = math.ceil(min / step - 1e-9), math.floor(max / step + 1e-9) do
 		table.insert(ticks, clean(i * step))
@@ -485,7 +526,7 @@ function M.timeFormat(incr: number, range: number): string
 end
 
 -- `ms` in one of the FORMATS, in a fixed offset (minutes east of UTC).
-function M.formatTime(ms: number, format: string, offsetMin: number?): string
+function M.formatTime(ms: number, format: string, offsetMin: Range.Offset?): string
 	local s = Range.formatMs(ms, offsetMin) -- "YYYY-MM-DD HH:MM:SS"
 	local Y, Mo, D = string.sub(s, 1, 4), string.sub(s, 6, 7), string.sub(s, 9, 10)
 	local hm = string.sub(s, 12, 16)
@@ -507,21 +548,27 @@ end
 
 export type TimeTicks = { incr: number, format: string, ticks: { number }, labels: { string } }
 
-local function civil(ms: number, offsetMin: number): (number, number)
-	local s = Range.formatMs(ms, offsetMin)
+export type Offset = Range.Offset
+
+local function civil(ms: number, offset: Offset): (number, number)
+	local s = Range.formatMs(ms, offset)
 	return tonumber(string.sub(s, 1, 4)) :: number, tonumber(string.sub(s, 6, 7)) :: number
 end
 
-local function monthStart(y: number, m: number, offsetMin: number): number
-	local ms = Range.parse(string.format("%04d-%02d-01", y, m), false, { now_ms = 0, offset_min = offsetMin })
-	return ms :: number
+-- Local midnight of the month's first day, at the zone's offset on that day.
+local function monthStart(y: number, m: number, offset: Offset): number
+	local function at(min: number): number
+		return Range.parse(string.format("%04d-%02d-01", y, m), false, { now_ms = 0, offset_min = min }) :: number
+	end
+	local guess = at(Range.offsetAt(offset, 0))
+	return at(Range.offsetAt(offset, guess))
 end
 
-local function calendarTicks(from: number, to: number, months: number, offsetMin: number): { number }
+local function calendarTicks(from: number, to: number, months: number, offset: Offset): { number }
 	local ticks: { number } = {}
-	local y, m = civil(from, offsetMin)
+	local y, m = civil(from, offset)
 	while true do
-		local t = monthStart(y, m, offsetMin)
+		local t = monthStart(y, m, offset)
 		if t > to then
 			break
 		end
@@ -537,8 +584,8 @@ local function calendarTicks(from: number, to: number, months: number, offsetMin
 end
 
 -- Ticks for from..to on an axis `plotPx` wide.
-function M.timeTicks(from: number, to: number, plotPx: number, offsetMin: number?): TimeTicks
-	local off = offsetMin or 0
+function M.timeTicks(from: number, to: number, plotPx: number, offsetMin: Offset?): TimeTicks
+	local off: Offset = offsetMin or 0
 	local range = math.max(to - from, 1)
 	-- calculateSpace: the width of a label formatted for the densest
 	-- increment the minimum spacing allows.
@@ -559,10 +606,14 @@ function M.timeTicks(from: number, to: number, plotPx: number, offsetMin: number
 		ticks = calendarTicks(from, to, math.floor(incr / (30 * DAY) + 0.5), off)
 	else
 		ticks = {}
-		local shift = off * MINUTE
-		local t = math.ceil((from + shift) / incr) * incr - shift
+		local base = Range.offsetAt(off, from) * MINUTE
+		local t = math.ceil((from + base) / incr) * incr - base
 		while t <= to do
-			table.insert(ticks, t)
+			-- Steps over an hour stay on the wall clock across a DST change.
+			local tick = if incr > HOUR then t + base - Range.offsetAt(off, t) * MINUTE else t
+			if tick >= from and tick <= to then
+				table.insert(ticks, tick)
+			end
 			t += incr
 		end
 	end

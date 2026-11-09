@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-11-08T06:00:00.000000000Z",
+  "unused": {
+    "queue_depth": {
+      "Count": 12
+    },
+    "worker_up": {
+      "Count": 6
+    }
+  }
+}

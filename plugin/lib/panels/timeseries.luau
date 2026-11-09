@@ -9,8 +9,10 @@
 --   axis, as Grafana's buildScaleKey groups them (a per-series unit
 --   override draws a second axis on the right); custom.axisCenteredZero,
 --   custom.axisGridShow;
--- - custom.drawStyle line|bars|points, fillOpacity, spanNulls (true
---   connects; false or a gap threshold keeps gaps), stacking.mode
+-- - custom.drawStyle line|bars|points, fillOpacity, insertNulls (a gap
+--   longer than it, else than the time field's interval, gets nulls: the
+--   line breaks), spanNulls (true connects; false or a gap threshold keeps
+--   gaps), stacking.mode
 --   none|normal|percent and stacking.group per series (stacks per scale),
 --   custom.transform negative-Y|constant, thresholdsStyle.mode (off, line,
 --   dashed, area, line+area, dashed+area; "series" colors by value, drawn
@@ -22,14 +24,18 @@
 --   color at the series' `seriesBy` value, thresholds in its step's tone
 --   (getFieldSeriesColor); gradientMode hue and scheme paint line and fill
 --   through a gradient (lib/render/ts_gradient);
--- - options.legend: showLegend, displayMode list|table|hidden, calcs (any
---   lib/panels/reduce reducer, formatted with the series' own config);
+-- - options.legend: showLegend, displayMode list|table|hidden, placement
+--   bottom|right, calcs (any lib/panels/reduce reducer, formatted with the
+--   series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
---   read out under the legend.
+--   read out under the legend;
+-- - dashboard annotations (opts.annotations) as dashed lines, regions and
+--   markers, styled by the panel's options.annotations.
 
 local Assets = require("../render/assets")
 local Axis = require("../render/axis")
 local ChartView = require("../render/chart_view")
+local Charts = require("./charts")
 local Common = require("./common")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
@@ -37,7 +43,10 @@ local Frame = require("../frame/types")
 local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
+local SvgAnnotations = require("../render/svg_annotations")
 local SvgTimeseries = require("../render/svg_timeseries")
+local Tbl = require("../tbl")
+local TsData = require("../render/ts_data")
 local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
@@ -160,9 +169,11 @@ function M.renderOptions(panel: any, env: Env, opts: Common.Options): SvgTimeser
 	local style: SvgTimeseries.ThresholdStyle? = THRESHOLD_STYLES[thresholdMode]
 	local thresholdStyle: SvgTimeseries.ThresholdStyle = style or "off"
 	local fill = Json.num(env, custom.fillOpacity)
+	-- Grafana's panel width and, in a height-capped card, the card body.
+	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
 	return {
-		width = opts.width or M.WIDTH,
-		height = opts.height or M.HEIGHT,
+		width = W,
+		height = H,
 		unit = cfg.unit,
 		decimals = cfg.decimals,
 		min = cfg.min,
@@ -274,7 +285,7 @@ end
 local function seriesClass(item: FieldConfig.Item, color: FieldConfig.Scale, opts: Common.Options): string
 	local mode = item.config.color_mode
 	if mode == "fixed" or mode == "shades" then
-		return TsGradient.stopClass(item.config.fixed_color or "", opts.theme)
+		return TsGradient.fixedClass(item.config.fixed_color or "", opts.theme)
 	elseif string.sub(mode, 1, 11) == "continuous-" then
 		local c = TsGradient.schemeColor(mode, color.percent, opts.theme)
 		if c then
@@ -354,6 +365,72 @@ local function fillBelowIndex(name: string, visible: { FieldConfig.Item }): numb
 	return nil
 end
 
+-- applyNullInsertThreshold's threshold for one frame: each field's
+-- custom.insertNulls (ms; 0, false or absent fall back), else the time
+-- field's interval (the datasource's step). Grafana inserts only when every
+-- field agrees (an override on some fields of a frame inserts nothing) and
+-- the threshold is positive. `true`, which the editor never writes, falls
+-- back to the interval too.
+local function nullThreshold(fields: { FieldConfig.Item }, interval: number?, env: Env): number?
+	local threshold: number? = nil
+	for _, item in fields do
+		local own = Json.num(env, item.config.custom.insertNulls)
+		local t = if own and own ~= 0 and own == own then own else interval
+		if t == nil then
+			continue
+		elseif threshold ~= nil and threshold ~= t then
+			return nil
+		end
+		threshold = t
+	end
+	return if threshold and threshold > 0 then threshold else nil
+end
+
+-- Inserted nulls by time column: a cursor move redraws with the same
+-- frames, and the render memo compares value columns by identity.
+type Nulled = {
+	threshold: number,
+	from: number?,
+	to: number?,
+	columns: { { any } },
+	times: { number },
+	filled: { { any } },
+}
+local nulled: { [{ number }]: Nulled } = setmetatable({} :: any, { __mode = "k" })
+
+local function insertNulls(frame: Frame, threshold: number, from: number?, to: number?)
+	local fields = frame.fields
+	local times = fields[1].values :: { number }
+	local columns: { { any } } = table.create(#fields - 1)
+	for i = 2, #fields do
+		columns[i - 1] = fields[i].values
+	end
+	local hit = nulled[times]
+	local fresh = hit ~= nil and hit.threshold == threshold and hit.from == from and hit.to == to
+	if hit and fresh then
+		for i, c in columns do
+			if hit.columns[i] ~= c then
+				fresh = false
+				break
+			end
+		end
+	end
+	if hit == nil or not fresh then
+		local t, filled = TsData.insertNulls(times, columns, threshold, from, to)
+		hit = { threshold = threshold, from = from, to = to, columns = columns, times = t, filled = filled }
+		nulled[times] = hit
+	end
+	local h = hit :: Nulled
+	if h.times == times then
+		return
+	end
+	for i, f in fields do
+		local copy = Tbl.copy(f)
+		copy.values = if i == 1 then h.times else h.filled[i - 1]
+		fields[i] = copy
+	end
+end
+
 -- The last renders by panel key. A cursor move in an expanded panel redraws
 -- the same chart with only the overlay changed; SvgTimeseries.render is a
 -- pure function of (frames, options), so equal arguments reuse its result.
@@ -403,12 +480,28 @@ local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.O
 end
 
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
+	-- preparePlotFrame joins on time, which sorts a frame whose times run
+	-- backwards (a newest-first table from Grafana Incident).
+	local sorted: { Frame } = table.create(#frames)
+	for i, f in frames do
+		sorted[i] = Charts.sortByTime(f)
+	end
+	frames = sorted
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "palette-classic" })
 	local render = M.renderOptions(panel, env, opts)
 	-- Frames with their time field and the visible number fields, baked.
 	local baked: { Frame } = {}
 	local visible: { FieldConfig.Item } = {}
 	local byFrame: { [Frame]: Frame } = {}
+	local frameItems: { [Frame]: { FieldConfig.Item } } = {}
+	for _, item in items do
+		local list = frameItems[item.frame]
+		if list == nil then
+			list = {}
+			frameItems[item.frame] = list
+		end
+		table.insert(list :: { FieldConfig.Item }, item)
+	end
 	for _, item in items do
 		local tf = Frame.timeField(item.frame)
 		if tf == nil or item.field.type ~= "number" or FieldConfig.hidden(item) then
@@ -422,6 +515,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		end
 		table.insert((out :: Frame).fields, FieldConfig.bake(item))
 		table.insert(visible, item)
+	end
+	for src, out in byFrame do
+		local tf = out.fields[1]
+		local threshold = nullThreshold(frameItems[src], if tf.config then tf.config.interval else nil, env)
+		if threshold then
+			insertNulls(out, threshold, opts.from_ms, opts.to_ms)
+		end
 	end
 	if #visible == 0 then
 		-- TimeSeriesPanel without graphable fields: PanelDataErrorView.
@@ -444,6 +544,9 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if opts.exemplars and #opts.exemplars > 0 then
 		render.exemplars = opts.exemplars
 	end
+	if opts.annotations and #opts.annotations > 0 then
+		render.annotations = SvgAnnotations.layer(opts.annotations, Json.path(env, panel, "options", "annotations"))
+	end
 	local palette = M.paletteIndexes(frames)
 	local styles: { SvgTimeseries.SeriesStyle } = table.create(#visible)
 	for i, item in visible do
@@ -463,6 +566,21 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		styles[i] = st
 	end
 	render.series = styles
+	-- In a height-capped card the chart leaves a bottom legend room; calc
+	-- values are estimated at 7 characters.
+	local legendLook = Charts.legendOptions(panel, env)
+	if opts.card_height and legendLook.show then
+		local guess = table.create(#legendLook.calcs, "0000.00")
+		local rows: { Legend.Row } = {}
+		for _, item in visible do
+			if not Charts.hiddenFromLegend(item) then
+				table.insert(rows, { class = "", name = item.name, values = guess })
+			end
+		end
+		local rh, rw = render.height, render.width
+		assert(rh and rw, "timeseries: render size unset")
+		render.height = Charts.chartHeight(opts, rh, rw, rows, legendLook)
+	end
 	local result = renderMemo(opts.key, baked, render)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
@@ -484,6 +602,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		return chart, assets
 	end
 	local legend = legendView(opts.key .. ".legend", drawn, legendCalcs(panel, env), mode, result.dropped, opts, env)
+	if legendLook.placement == "right" then
+		-- VizLayout: the legend beside the plot, from its top.
+		return { k = "row", p = { key = opts.key .. ".panel", gap = "sm", align = "start" }, c = { chart, legend } },
+			assets
+	end
 	return { k = "col", p = { key = opts.key .. ".panel", gap = "xs" }, c = { chart, legend } }, assets
 end
 

@@ -60,6 +60,8 @@ local function scopedValue(vals: Values, i: number): Interpolate.Var
 		multi = vals.var.multi,
 		include_all = vals.var.include_all,
 		single = true,
+		name = vals.var.name,
+		query = vals.var.query_model,
 	}
 end
 

@@ -3,6 +3,8 @@
 -- date math (Howard Hinnant's days_from_civil / civil_from_days) and the
 -- moment-timezone subset the panel needs (see clock.luau's header).
 
+local Range = require("../time/range")
+
 local M = {}
 
 M.SECOND = 1000
@@ -349,6 +351,25 @@ function M.zone(tz: string, localMin: number, dashTz: string?, dashMin: number?)
 	-- moment-timezone has no such zone: the moment stays in local time, its
 	-- abbreviation is empty and zoneFormat "name" falls back to the string.
 	return { name = tz, std = localMin, abbr = "", approx = true }
+end
+
+-- The display offset of a dashboard timezone (Grafana's getTimeZone): ""
+-- and "browser" are the viewer's zone (per instant when `localAt` is
+-- given), "utc" UTC, an IANA name its rules per instant (moment-timezone),
+-- anything unknown the viewer's zone.
+function M.dashboardOffset(tz: string?, localMin: number, localAt: ((ms: number) -> number)?): Range.Offset
+	if tz == nil or tz == "" or tz == "browser" then
+		return localAt or localMin
+	end
+	local zone = M.zone(tz, localMin)
+	if zone.approx then
+		return localAt or localMin
+	elseif zone.rule == nil then
+		return zone.std
+	end
+	return function(ms: number): number
+		return (M.zoneAt(zone, ms))
+	end
 end
 
 M.daysFromCivil = daysFromCivil
