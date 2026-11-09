@@ -458,14 +458,14 @@ describe("fieldconfig byValue matcher (fieldValueMatcher.ts)", function()
 		end
 		expect(table.concat(texts, " ")).toContain("60%")
 		expect((string.find(table.concat(texts, " "), "3%", 1, true))).toBeNil()
-		local meters = Gauge.meters(panel, frames, env, { key = "g" }, false)
+		local specs = Gauge.specs(panel, frames, env, { key = "g" })
 		local labels: { string } = {}
-		for _, m in meters do
-			table.insert(labels, m.label or "")
+		for _, g in specs do
+			table.insert(labels, (g.text or "") .. (g.suffix or ""))
 		end
 		expect(table.concat(labels, " ")).toContain("60%")
-		local bars = Gauge.meters(panel, frames, env, { key = "b" }, true)
-		expect(#bars).toBe(#meters)
+		local bars = Gauge.barSpecs(panel, frames, env, { key = "b" }, 400, 200)
+		expect(#bars).toBe(#specs)
 		local tbl = Table.build(panel, frames, env, { key = "t" })
 		local units: { [string]: string? } = {}
 		for _, c in tbl.columns do

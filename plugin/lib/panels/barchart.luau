@@ -14,8 +14,9 @@
 --   xTickLabelMaxLength (auto when rotated: half the height over the
 --   rotation), xTickLabelSpacing;
 -- - colors: palette-classic per series (re-indexed over the bars), fixed
---   as tones, by-value modes (thresholds, continuous) per bar, and
+--   colors exactly, by-value modes (thresholds, continuous) per bar, and
 --   colorByField: each bar in the color field's color for its row;
+-- - barRadius rounds the bars' value ends;
 -- - fieldConfig unit, decimals, min, max, mappings (value labels),
 --   custom.fillOpacity, lineWidth, thresholdsStyle, axisPlacement hidden,
 --   axisGridShow; legend with calcs.
@@ -194,13 +195,15 @@ function M.renderOptions(panel: any, prep: Prepared, env: Env, opts: Common.Opti
 				local v = colorItem.field.values[r]
 				classes[r] = if Frame.isNull(v)
 					then nil
-					else Charts.displayClass(FieldConfig.display(colorItem, v, display))
+					else Charts.valueClass(colorItem, FieldConfig.display(colorItem, v, display), opts)
 			end
 			s.classes = classes
 		elseif Charts.byValue(item) then
 			local classes: { string? } = table.create(#item.field.values)
 			for r, v in item.field.values do
-				classes[r] = if Frame.finite(v) then Charts.displayClass(FieldConfig.display(item, v, display)) else nil
+				classes[r] = if Frame.finite(v)
+					then Charts.valueClass(item, FieldConfig.display(item, v, display), opts)
+					else nil
 			end
 			s.classes = classes
 		end
@@ -236,6 +239,7 @@ function M.renderOptions(panel: any, prep: Prepared, env: Env, opts: Common.Opti
 		bar_width = barWidth,
 		fill_opacity = (fill or 80) / 100,
 		line_width = lineWidth or 1,
+		bar_radius = if stacking == "percent" then 0 else Json.num(env, options.barRadius) or 0,
 		show_value = if showValue == "always" or showValue == "never" then showValue else "auto",
 		value_size = textSize,
 		format = format,

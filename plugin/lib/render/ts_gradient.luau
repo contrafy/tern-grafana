@@ -408,6 +408,32 @@ function M.hue(color: string, theme: Theme?): { string }
 	return { classOfRgb(top), classOfRgb(bottom) }
 end
 
+-- PieChart's radial slice gradient (getGradientColorFrom at the inner
+-- radius to getGradientColorTo at the outer one) in `theme`, sampled as the
+-- stop classes of `n` concentric rings (Tern's SVG drops radialGradient);
+-- kept exact in both themes.
+function M.pieRings(color: string, theme: Theme?, n: number): { string }
+	local c = parse(Thresholds.color(color, theme)) or { 128, 128, 128 }
+	local k = if theme == "light" then -0.7 else 1
+	local from = spin(lighten(c, -20 * k), 4)
+	local to = spin(lighten(c, -10 * k), -4)
+	local out: { string } = table.create(n)
+	for i = 1, n do
+		local t = (i - 0.5) / n
+		local mix: Rgb = {}
+		for j = 1, 3 do
+			mix[j] = from[j] + (to[j] - from[j]) * t
+		end
+		out[i] = classOfRgb(mix) .. " tg-hex"
+	end
+	return out
+end
+
+-- The color name of palette class tg-s<k> (getClassicPalette).
+function M.paletteColor(k: number): string
+	return CLASSIC[(k - 1) % #M.PALETTE_HEX + 1]
+end
+
 -- The colors a by-value scheme runs through, or nil when the mode has none
 -- (fixed, shades and palettes other than the classic one).
 local function schemeColors(mode: string): { string }?

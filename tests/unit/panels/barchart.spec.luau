@@ -4,6 +4,8 @@
 -- bar chart (panel 18: TestData csv_content, stacked).
 local Barchart = require("../../../plugin/lib/panels/barchart")
 local Frame = require("../../../plugin/lib/frame/types")
+local Thresholds = require("../../../plugin/lib/units/thresholds")
+local TsGradient = require("../../../plugin/lib/render/ts_gradient")
 local S = require("./support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -117,6 +119,7 @@ describe("barchart", function()
 		expect(string.find(svg, ">93.4%<", 1, true) ~= nil).toBe(true)
 	end)
 
+	-- Each bar takes its threshold step's exact color.
 	it("colors bars by the colorByField values", function()
 		local panel = S.json(PANEL)
 		panel.options.colorByField = "level"
@@ -132,8 +135,8 @@ describe("barchart", function()
 		local o = Barchart.renderOptions(panel, prep, env, WIDE)
 		local classes = o.series[1].classes
 		assert(classes, "per bar classes")
-		expect(classes[1]).toBe("tgp-fx tgp-success")
-		expect(classes[2]).toBe("tgp-fx tgp-error")
+		expect(classes[1]).toBe(TsGradient.stopClass(Thresholds.color("green")))
+		expect(classes[2]).toBe(TsGradient.stopClass(Thresholds.color("red")))
 	end)
 
 	it("reports Grafana's warnings in place of the chart", function()

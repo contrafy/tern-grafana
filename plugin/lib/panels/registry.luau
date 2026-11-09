@@ -139,7 +139,7 @@ local BARGAUGE: PanelModule = {
 	types = { "bargauge" },
 	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return gauge().barView(panel, frames, env, opts), nil
+		return gauge().barView(panel, frames, env, opts)
 	end,
 }
 

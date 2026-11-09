@@ -43,8 +43,6 @@ local Json = require("./json")
 local Url = require("../url")
 local Layout = require("./treemap_layout")
 local SvgTreemap = require("../render/svg_treemap")
-local Thresholds = require("../units/thresholds")
-local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -580,29 +578,6 @@ local function fits(label: string, w: number, h: number): boolean
 	return sansEm(label) * SvgTreemap.FONT + M.LABEL_MARGIN_X < w and M.LABEL_MARGIN_Y < h
 end
 
--- The class of the color Grafana fills a leaf with: a fixed color keeps a
--- literal hex in both themes, a continuous scheme interpolates its colors.
-local function leafClass(item: FieldConfig.Item, d: FieldConfig.Display, opts: Common.Options): string
-	if d.class then
-		return d.class
-	end
-	local cfg = item.config
-	local mode = cfg.color_mode
-	local fixed = cfg.fixed_color
-	if (mode == "fixed" or mode == "shades") and fixed and d.color == Thresholds.color(fixed, opts.theme) then
-		return TsGradient.fixedClass(fixed, opts.theme)
-	elseif string.sub(mode, 1, 11) == "continuous-" and d.color == "" then
-		local c = TsGradient.schemeColor(mode, d.percent, opts.theme)
-		if c then
-			return TsGradient.stopClass(c, opts.theme)
-		end
-	end
-	if d.color ~= "" then
-		return TsGradient.stopClass(d.color, opts.theme)
-	end
-	return Charts.toneClass(d.tone)
-end
-
 -- The drawn tiles and the leaves' hits for a W x H content box.
 function M.tiles(
 	panel: any,
@@ -644,7 +619,7 @@ function M.tiles(
 			y0 = t.y0,
 			x1 = t.x1,
 			y1 = t.y1,
-			class = leafClass(v.color, color, opts),
+			class = Charts.valueClass(v.color, color, opts),
 			label = label,
 		})
 		if w <= 0 or h <= 0 then

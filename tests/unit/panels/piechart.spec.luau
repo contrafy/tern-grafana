@@ -72,9 +72,9 @@ describe("piechart", function()
 	it("draws a donut with percent labels and a value/percent legend table", function()
 		local node, assets = Piechart.view(S.json(PANEL), frames(), env, { key = "p", size = { w = 480, h = 300 } })
 		local svg = (assets :: any).p.bytes
-		expect(count(svg, "tg-bar")).toBe(4)
+		expect(count(svg, "tg-bar")).toBe(4 * 2 * 8) -- 8 gradient bands per theme per slice
 		-- A donut slice closes along its inner arc: two arcs per slice.
-		expect(count(svg, "A")).toBe(8)
+		expect(count(svg, "A")).toBe(8 * 2 * 8)
 		expect(string.find(svg, ">56%<", 1, true) ~= nil).toBe(true)
 		expect(string.find(svg, ">8%<", 1, true) ~= nil).toBe(true)
 		expect(#svg <= 262144).toBe(true)
@@ -117,7 +117,7 @@ describe("piechart", function()
 		panel.fieldConfig.overrides = S.json([[ [{"matcher": {"id": "byName", "options": "requests"},
 			"properties": [{"id": "custom.hideFrom", "value": {"legend": true, "viz": false, "tooltip": false}}]}] ]])
 		local node, assets = Piechart.view(panel, frames(), env, { key = "p" })
-		expect(count((assets :: any).p.bytes, "tg-bar")).toBe(1)
+		expect(count((assets :: any).p.bytes, "tg-bar")).toBe(2 * 8)
 		local legend = S.find(node, function(n)
 			return n.p and n.p.role == "tern-grafana.legend"
 		end)
