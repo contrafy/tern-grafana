@@ -107,9 +107,14 @@ Attribution is unchanged: actions are still sent with, and recorded under, the s
 ## Testing
 
 Specs (`tests/unit/irm/`) run against responses captured read-only from a Grafana Cloud stack with IRM 0.128.0 and
-scrubbed by `scripts/fixtures/scrub_irm.py`: names, emails, ids, titles, messages, label names and values, slugs and
-URLs become consistent pseudonyms (the same original maps to the same replacement in every file), phone numbers and
-chat identities are dropped, lists are trimmed. The raw captures stay in the gitignored `.sandbox/user/irm-raw/`.
+scrubbed by `scripts/fixtures/scrub_irm.py`: names, emails, titles, messages, label names and values, slugs and URLs
+(with any ids in them) become consistent pseudonyms (the same original maps to the same replacement in every file);
+numeric ids and object numbers (alert group numbers, incident, org, stack, role and Grafana user ids) and metric values
+are renumbered from 1001 in the order of the originals, so order and cross-references survive; phone numbers and chat
+identities are dropped; lists are trimmed. The script then scans its output against the raw capture and fails if any
+raw string (3+ characters) or number (100+) survived outside the allow list: enum-like fields, server error wording,
+the org's status names, timestamps, counts and the public plugin id. The raw captures stay in the gitignored
+`.sandbox/user/irm-raw/`.
 Write answers (`tests/fixtures/irm/docs/`) are the Incident API reference's examples with `error` emptied (the
 reference's example text is an error message; success is an empty `error`). Rerun the scrub after a new capture:
 
@@ -117,3 +122,12 @@ reference's example text is an error message; success is an empty `error`). Reru
 python3 scripts/fixtures/scrub_irm.py   # reads .sandbox/user/irm-raw, writes tests/fixtures/irm/<irm version>
 make fixtures test
 ```
+
+For screenshots without a real IRM stack, `scripts/fake-irm/server.py` serves these fixtures as a Grafana with IRM
+([dev-stack.md](dev-stack.md#commands)):
+
+| Alert groups | Schedules |
+| --- | --- |
+| ![On-call alert groups](screenshots/irm-oncall.png) | ![Schedules with you marked](screenshots/irm-schedules.png) |
+
+![Open incidents](screenshots/irm-incidents.png)

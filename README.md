@@ -179,6 +179,15 @@ Only `y` or **Confirm** sends it. The status line shows `IRM: 2 alert groups,
 the block marks you in each schedule and the status line says
 `IRM: you are on call until 22:00`.
 
+| Alert groups | Schedules (`tab`) |
+| --- | --- |
+| ![On-call alert groups, firing and acknowledged](docs/screenshots/irm-oncall.png) | ![Schedules with who is on call now and next, you marked](docs/screenshots/irm-schedules.png) |
+
+![Open incidents with severity, status and age](docs/screenshots/irm-incidents.png)
+
+The screenshots come from a local fake IRM serving scrubbed captures
+(`scripts/fake-irm/server.py`), so names and titles are placeholders.
+
 Details: [Grafana IRM](docs/irm.md).
 
 ## Logs
@@ -425,7 +434,7 @@ accepts the token.
 3. **Add service account token**, then copy it (it starts with `glsa_` and is
    shown only once) and paste it into Connect Grafana.
 
-The same steps work on a self-hosted Grafana 11 or 12.
+The same steps work on a self-hosted Grafana 11, 12 or 13.
 
 The config lives in `~/.config/tern-grafana/config.json`
 (`$XDG_CONFIG_HOME/tern-grafana/config.json` when set). The Settings block
@@ -450,7 +459,7 @@ problem reported with its JSON path ([configuration](docs/configuration.md),
 
 ![Settings block testing endpoints](docs/screenshots/settings-tests.png)
 
-Tested with Tern 0.7.0 on macOS; Tern on Linux and remote hosts is not
+Tested with Tern 0.9.13 on macOS; Tern on Linux and remote hosts is not
 verified yet (see [Features](#features)).
 
 To remove: `tern plugin remove tern-grafana`.
@@ -482,11 +491,11 @@ the URLs you configure. See [SECURITY.md](SECURITY.md).
 
 | Backend | Versions |
 | --- | --- |
-| Grafana | 11, 12 |
+| Grafana | 11, 12, 13 |
 | Prometheus | 2.53 LTS, 3.x |
 | Alertmanager | 0.27+ |
 | Loki | 3.x |
-| Tempo | 2.x |
+| Tempo | 2.x, 3.x |
 
 Thanos, Mimir, Cortex and VictoriaMetrics work through the same Prometheus
 HTTP API (`path_prefix` for Mimir, tenant headers such as `X-Scope-OrgID`).
@@ -563,7 +572,7 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | Alertmanager | - | - | done | done | - | - | - | done |
 | Grafana-managed alerting | - | - | done | done | - | - | - | - |
 | Loki (direct or via Grafana) | - | done | - | - | - | done | - | done |
-| Tempo (direct or via Grafana) | - | planned | - | - | - | - | done | - |
+| Tempo (direct or via Grafana) | - | done | - | - | - | - | done | - |
 
 `-`: not applicable. Prometheus-compatible servers (Thanos, Mimir, Cortex,
 VictoriaMetrics) follow the Prometheus direct row. Lenses: `promtool` and
@@ -574,7 +583,7 @@ VictoriaMetrics) follow the Prometheus direct row. Lenses: `promtool` and
 ```sh
 make bootstrap          # pinned luau, luau-lsp, StyLua, selene into .tools/
 make check              # format check, lint, typecheck, unit tests
-make stack-up           # Grafana 11 and 12, Prometheus 2.53 and 3, Alertmanager, Loki, Tempo in Docker
+make stack-up           # Grafana 11, 12 and 13, Prometheus 2.53 and 3, Alertmanager, Loki, Tempo in Docker
 make fixtures-capture   # record test fixtures from the running stack
 scripts/dev-tern.sh     # a sandboxed Tern under /tmp, never your own config
 tern plugin link .      # load the checkout in place; reloads on save
