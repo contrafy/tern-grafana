@@ -68,6 +68,15 @@ describe("hash", function()
 		expect(Json.hash(FILE) == Json.hash(FILE .. " ")).toBe(false)
 		expect(Json.hash('{"a":1}') == Json.hash('{"a":2}')).toBe(false)
 	end)
+
+	-- A write in flight compares against the hash taken at load; the format
+	-- (FNV-1a 32 bit hex, a dash, the byte length) never changes.
+	it("keeps its exact output", function()
+		expect(Json.hash("")).toBe("811c9dc5-0")
+		expect(Json.hash("a")).toBe("e40c292c-1")
+		expect(Json.hash('{"a":1}\n')).toBe("e526c981-8")
+		expect(Json.hash(string.rep("x\0\255", 100))).toBe("ddf523b1-300")
+	end)
 end)
 
 return nil

@@ -5,6 +5,8 @@
 -- (feature sections, anything unknown) go through the runtime's own JSON
 -- encoder, which keeps empty arrays as `[]`, and are only re-indented.
 
+local Hash = require("../hash")
+
 local M = {}
 
 M.INDENT = "  "
@@ -266,13 +268,7 @@ end
 -- FNV-1a (32 bit) of the bytes plus the length: identifies the file text the
 -- block loaded, so a write can refuse when the file changed underneath.
 function M.hash(text: string): string
-	local h = 2166136261
-	for i = 1, #text do
-		h = bit32.bxor(h, string.byte(text, i))
-		-- h * 16777619 mod 2^32 without losing bits in a double.
-		h = (bit32.lshift(h, 24) + h * 403) % 4294967296
-	end
-	return string.format("%08x-%d", h, #text)
+	return Hash.fnv1a32hex(text) .. "-" .. #text
 end
 
 return M

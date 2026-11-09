@@ -17,6 +17,7 @@ local Model = require("./model")
 local Probe = require("./probe")
 local Response = require("../source/response")
 local Route = require("../config/route")
+local Str = require("../str")
 local Tbl = require("../tbl")
 local TransportTypes = require("../transport/types")
 
@@ -97,10 +98,6 @@ local INTERNAL = { "usage", "ml%-metrics", "alert%-state%-history", "insights" }
 -- Cloud uid suffix for the stack's own datasource of each kind.
 local CLOUD_SUFFIX: { [string]: string } = { prometheus = "prom", loki = "logs", tempo = "traces" }
 
-local function trim(s: string): string
-	return string.match(s, "^%s*(.-)%s*$") :: string
-end
-
 -- Helpers ------------------------------------------------------------------------------
 
 function M.validEnvName(name: string): boolean
@@ -111,7 +108,7 @@ end
 -- when missing, query, fragment and trailing slashes are dropped, and a
 -- Grafana Cloud URL (*.grafana.net) loses any page path copied with it.
 function M.normalizeUrl(text: string): (string?, string?)
-	local t = trim(text)
+	local t = Str.trim(text)
 	if t == "" then
 		return nil, "enter the Grafana URL, e.g. https://you.grafana.net"
 	end
@@ -347,7 +344,7 @@ end
 function M.setField(prev: Conn, id: string, text: string): (Conn, string?)
 	local c = Tbl.copy(prev)
 	if id == "url" then
-		local t = trim(text)
+		local t = Str.trim(text)
 		if t == c.url then
 			return prev, nil
 		end
@@ -369,7 +366,7 @@ function M.setField(prev: Conn, id: string, text: string): (Conn, string?)
 		c.token = t
 		untested(c)
 	elseif id == "context" then
-		c.context = trim(text)
+		c.context = Str.trim(text)
 		c.context_auto = c.context == ""
 		if c.context_auto then
 			local url = M.normalizeUrl(c.url)
@@ -380,7 +377,7 @@ function M.setField(prev: Conn, id: string, text: string): (Conn, string?)
 			untested(c)
 		end
 	elseif id == "env_name" then
-		local t = trim(text)
+		local t = Str.trim(text)
 		if t ~= "" and not M.validEnvName(t) then
 			return prev, "an environment variable name is letters, digits and '_', not starting with a digit"
 		end

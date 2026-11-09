@@ -276,7 +276,7 @@ end
 
 local function formPage(s: State): { Node }
 	local form = s.form :: Model.Form
-	local fields = Model.fields(form, s.raw)
+	local fields = State.formFields(s)
 	local byField, rest = Model.assign(fields, s.form_problems)
 	local selected = fields[s.form_sel]
 	local out: { Node } = {
@@ -402,7 +402,7 @@ end
 
 local function connectPage(s: State): { Node }
 	local c = s.connect :: Connect.Conn
-	local fields = Connect.fields(c)
+	local fields = State.connectFields(s)
 	local selected = fields[s.form_sel]
 	local out: { Node } = {
 		ui.text({ ui.span(State.connectTitle(c), "strong") }, { key = "ft" }),

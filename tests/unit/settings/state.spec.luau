@@ -408,12 +408,15 @@ describe("connection test", function()
 		local first, second
 		s, first = press(s, "t")
 		s, second = press(s, "t")
-		local stale = update(s, {
+		local stale, effects, changed = State.update(s, {
 			kind = "http_done",
 			tag = first[1].tag,
 			response = ok("prometheus/3.15.0/buildinfo.json"),
-		})
+		}, ENV)
 		expect(stale).toBe(s)
+		-- Nothing changed: the runner skips render and save.
+		expect(#effects).toBe(0)
+		expect(changed).toBe(false)
 		expect(second[1].tag == first[1].tag).toBe(false)
 	end)
 
