@@ -32,7 +32,7 @@ local Common = require("./common")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
-local Grid = require("../render/grid")
+local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgTimeseries = require("../render/svg_timeseries")
@@ -130,10 +130,6 @@ local THRESHOLD_STYLES: { [string]: SvgTimeseries.ThresholdStyle } = {
 
 type Drawn = { item: FieldConfig.Item, class: string }
 
-local function swatch(class: string): Node
-	return { k = "el", p = { tag = "span", class = "tg-swatch " .. class } }
-end
-
 local function legendView(
 	key: string,
 	drawn: { Drawn },
@@ -143,7 +139,8 @@ local function legendView(
 	opts: Common.Options,
 	env: Env
 ): Node
-	local rows: { { class: string, name: string, values: { string } } } = {}
+	local rows: { Legend.Row } = {}
+	local disp = { theme = opts.theme, offset_min = opts.offset_min }
 	for _, d in drawn do
 		local item = d.item
 		if Json.bool(env, Json.path(env, item.config.custom.hideFrom, "legend")) == true then
@@ -153,49 +150,19 @@ local function legendView(
 		local values: { string } = {}
 		for k, c in calcs do
 			local v = results[c]
-			values[k] = if v == nil
-				then "-"
-				else FieldConfig.joined(
-					FieldConfig.display(item, v, { theme = opts.theme, offset_min = opts.offset_min })
-				)
+			values[k] = if v == nil then "-" else FieldConfig.joined(FieldConfig.display(item, v, disp))
 		end
 		table.insert(rows, { class = d.class, name = item.name, values = values })
 	end
 	local children: { Node } = {}
 	if mode == "table" then
-		local columns: { Grid.Column } = { { head = "Name" } }
-		for _, c in calcs do
-			table.insert(columns, { head = Reduce.name(c), numeric = true })
+		local heads: { string } = table.create(#calcs)
+		for i, c in calcs do
+			heads[i] = Reduce.name(c)
 		end
-		local gridRows: { Grid.Row } = table.create(#rows)
-		for i, r in rows do
-			local cells: { Node } = {
-				{ k = "row", p = { gap = "xs", align = "center" }, c = { swatch(r.class), Grid.text(r.name) } },
-			}
-			for _, v in r.values do
-				table.insert(cells, Grid.text(v))
-			end
-			gridRows[i] = { key = "s" .. i, cells = cells }
-		end
-		table.insert(children, Grid.grid(key .. ".t", columns, gridRows, "tern-grafana.legend"))
+		table.insert(children, Legend.rowsNode(key .. ".t", rows, heads, "table"))
 	else
-		local entries: { Node } = table.create(#rows)
-		for i, r in rows do
-			local spans: { ui.SpanLike } = { r.name }
-			if #r.values > 0 then
-				table.insert(spans, ui.span(" " .. table.concat(r.values, " "), "strong"))
-			end
-			entries[i] = {
-				k = "row",
-				p = { key = "s" .. i, gap = "xs", align = "center" },
-				c = { swatch(r.class), ui.text(spans) },
-			}
-		end
-		table.insert(children, {
-			k = "row",
-			p = { key = key .. ".l", gap = "md", wrap = true, role = "tern-grafana.legend" },
-			c = entries,
-		})
+		table.insert(children, Legend.rowsNode(key .. ".l", rows, {}, "list"))
 	end
 	if dropped > 0 then
 		table.insert(
@@ -369,6 +336,54 @@ local function fillBelowIndex(name: string, visible: { FieldConfig.Item }): numb
 	return nil
 end
 
+-- The last renders by panel key. A cursor move in an expanded panel redraws
+-- the same chart with only the overlay changed; SvgTimeseries.render is a
+-- pure function of (frames, options), so equal arguments reuse its result.
+-- Value columns compare by identity (frames are never mutated), everything
+-- else structurally. A handful of keys: one expanded panel is the case.
+type RenderMemo = { baked: { Frame }, render: SvgTimeseries.Options, result: SvgTimeseries.Result }
+
+local renders: { [string]: RenderMemo } = {}
+local renderCount = 0
+local RENDER_MEMO_MAX = 4
+local BY_IDENTITY: { [any]: boolean } = { values = true, exemplars = true }
+
+local function same(a: any, b: any, key: any): boolean
+	if a == b then
+		return true
+	elseif type(a) ~= "table" or type(b) ~= "table" or BY_IDENTITY[key] then
+		return false
+	end
+	for k, v in a do
+		if not same(v, b[k], k) then
+			return false
+		end
+	end
+	for k in b do
+		if a[k] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.Options): SvgTimeseries.Result
+	local hit = renders[key]
+	if hit and same(hit.render, render, nil) and same(hit.baked, baked, nil) then
+		return hit.result
+	end
+	local result = SvgTimeseries.render(baked, render)
+	if hit == nil then
+		if renderCount >= RENDER_MEMO_MAX then
+			table.clear(renders)
+			renderCount = 0
+		end
+		renderCount += 1
+	end
+	renders[key] = { baked = baked, render = render, result = result }
+	return result
+end
+
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "palette-classic" })
 	local render = M.renderOptions(panel, env, opts)
@@ -430,7 +445,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		styles[i] = st
 	end
 	render.series = styles
-	local result = SvgTimeseries.render(baked, render)
+	local result = renderMemo(opts.key, baked, render)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
 		drawn[i] = { item = visible[i], class = s.class }

@@ -115,37 +115,20 @@ function M.levelFromKey(key: string | number): Level
 	return "unknown"
 end
 
-local function isWordByte(b: number?): boolean
-	return b ~= nil and ((b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 95)
-end
-
--- getLogLevel: the level word that appears first in the line.
+-- getLogLevel: the level word that appears first in the line. A key only
+-- counts between non-word bytes, so the first match is the first whole word
+-- of the line that is a key: one scan over the words.
 function M.level(line: string): Level
 	if line == "" then
 		return "unknown"
 	end
-	local lower = string.lower(line)
-	local best: Level = "unknown"
-	local bestAt: number? = nil
-	for _, kv in KEYS do
-		local key = kv[1]
-		local init = 1
-		while true do
-			local a, b = string.find(lower, key, init, true)
-			if a == nil or b == nil then
-				break
-			end
-			if not isWordByte(string.byte(lower, a - 1)) and not isWordByte(string.byte(lower, b + 1)) then
-				if bestAt == nil or a < bestAt then
-					best = kv[2] :: Level
-					bestAt = a
-				end
-				break
-			end
-			init = a + 1
+	for word in string.gmatch(string.lower(line), "[0-9a-z_]+") do
+		local level = BY_KEY[word]
+		if level then
+			return level :: Level
 		end
 	end
-	return best
+	return "unknown"
 end
 
 local ISO_DATE = (

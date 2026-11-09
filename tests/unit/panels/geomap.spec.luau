@@ -34,8 +34,15 @@ for _, version in S.VERSIONS do
 				key = "gm",
 				size = { w = 1000, h = 460 },
 			})
-			local svg = (assets :: any).gm.bytes
-			expect(#svg <= 262144).toBe(true)
+			-- Markers painted alike share a <g> carrying their paint: read each
+			-- one with its group's attributes.
+			local ungroup = function(paint: string, body: string): string
+				return (string.gsub(body, "/>", function()
+					return " " .. paint .. "/>"
+				end))
+			end
+			local svg = string.gsub((assets :: any).gm.bytes, "<g ([^>]*)>(.-)</g>", ungroup :: any)
+			expect(#(assets :: any).gm.bytes <= 262144).toBe(true)
 			expect(string.find(svg, 'class="tgm-land"', 1, true) ~= nil).toBe(true)
 			expect(string.find(svg, 'r="20.0" fill="#F2495C" fill-opacity="0.60"', 1, true) ~= nil).toBe(true)
 			expect(string.find(svg, 'r="4.0" fill="#73BF69"', 1, true) ~= nil).toBe(true)

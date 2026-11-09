@@ -78,39 +78,30 @@ function M.name(id: string): string
 	return id
 end
 
-local function isNull(v: any): boolean
-	return v == nil or v == Frame.NULL
-end
+local NULL = Frame.NULL
 
-local function isNaN(v: any): boolean
-	return type(v) == "number" and v ~= v
-end
+local isNull = Frame.isNull
 
--- doStandardCalcs.
+-- doStandardCalcs. Accumulates in locals and builds the result in one
+-- constructor (no rehashing); NaN is skipped where Grafana skips it.
 local function standard(values: { any }, numeric: boolean, ignoreNulls: boolean, nullAsZero: boolean): Calcs
-	local c: Calcs = {
-		sum = 0,
-		count = 0,
-		nonNullCount = 0,
-		allIsNull = true,
-		allIsZero = true,
-		delta = 0,
-		diffperc = 0,
-	}
+	local sum, count, nonNullCount, delta = 0, 0, 0, 0
+	local allIsNull, allIsZero = true, true
 	local max, min, logmin, step = -math.huge, math.huge, math.huge, math.huge
 	local previousDeltaUp = true
+	local first: any, last: any = nil, nil
 	local lastNotNull: any = nil
 	local firstNotNull: any = nil
 	local n = #values
 	for i = 1, n do
 		local v = values[i]
-		if isNull(v) then
+		if v == NULL then
 			v = nil
 		end
 		if i == 1 then
-			c.first = v
+			first = v
 		end
-		c.last = v
+		last = v
 		if v == nil then
 			if ignoreNulls then
 				continue
@@ -119,16 +110,16 @@ local function standard(values: { any }, numeric: boolean, ignoreNulls: boolean,
 				v = 0
 			end
 		end
-		c.count += 1
-		if v ~= nil and not isNaN(v) then
+		count += 1
+		if v ~= nil and v == v then
 			local isFirst = firstNotNull == nil
 			if isFirst then
 				firstNotNull = v
 			end
 			if numeric and type(v) == "number" then
-				c.sum += v
-				c.allIsNull = false
-				c.nonNullCount += 1
+				sum += v
+				allIsNull = false
+				nonNullCount += 1
 				if not isFirst and type(lastNotNull) == "number" then
 					local d = v - lastNotNull
 					if step > d then
@@ -139,7 +130,7 @@ local function standard(values: { any }, numeric: boolean, ignoreNulls: boolean,
 						previousDeltaUp = false
 					else
 						if previousDeltaUp then
-							c.delta += d
+							delta += d
 						end
 						previousDeltaUp = true
 					end
@@ -155,35 +146,62 @@ local function standard(values: { any }, numeric: boolean, ignoreNulls: boolean,
 				end
 			end
 			if v ~= 0 then
-				c.allIsZero = false
+				allIsZero = false
 			end
 			lastNotNull = v
 		end
 	end
-	c.firstNotNull = firstNotNull
-	c.lastNotNull = lastNotNull
-	c.max = if max == -math.huge and c.nonNullCount == 0 then nil else max
-	c.min = if min == math.huge and c.nonNullCount == 0 then nil else min
-	c.logmin = if logmin == math.huge then nil else logmin
-	c.step = if step == math.huge then nil else step
-	if c.nonNullCount > 0 then
-		c.mean = c.sum / c.nonNullCount
-	end
-	if c.allIsNull then
-		c.allIsZero = false
-	end
-	if c.max ~= nil and c.min ~= nil then
-		c.range = c.max - c.min
-	end
+	local cmax: number? = if max == -math.huge and nonNullCount == 0 then nil else max
+	local cmin: number? = if min == math.huge and nonNullCount == 0 then nil else min
+	local diff: number?, diffperc = nil, 0
 	if type(firstNotNull) == "number" and type(lastNotNull) == "number" then
-		c.diff = lastNotNull - firstNotNull
-		c.diffperc = c.diff / firstNotNull * 100
+		diff = lastNotNull - firstNotNull
+		diffperc = (diff :: number) / firstNotNull * 100
 	end
-	c.countAll = n
-	if not numeric then
-		c.sum = nil
+	return {
+		sum = if numeric then sum else nil,
+		count = count,
+		nonNullCount = nonNullCount,
+		allIsNull = allIsNull,
+		allIsZero = allIsZero and not allIsNull,
+		delta = delta,
+		diffperc = diffperc,
+		first = first,
+		last = last,
+		firstNotNull = firstNotNull,
+		lastNotNull = lastNotNull,
+		max = cmax,
+		min = cmin,
+		logmin = if logmin == math.huge then nil else logmin,
+		step = if step == math.huge then nil else step,
+		mean = if nonNullCount > 0 then sum / nonNullCount else nil,
+		range = if cmax ~= nil and cmin ~= nil then cmax - cmin else nil,
+		diff = diff,
+		countAll = n,
+	}
+end
+
+-- Min and max of a number field as standard() reads them in "connected"
+-- mode (NaN and nulls skipped, +-Inf kept), without the other calcs.
+function M.minMax(values: { any }): (number?, number?)
+	local lo, hi = math.huge, -math.huge
+	local any = false
+	for i = 1, #values do
+		local v = values[i]
+		if type(v) == "number" and v == v then
+			any = true
+			if v > hi then
+				hi = v
+			end
+			if v < lo then
+				lo = v
+			end
+		end
 	end
-	return c
+	if not any then
+		return nil, nil
+	end
+	return lo, hi
 end
 
 local function numbersOf(values: { any }, ignoreNulls: boolean, nullAsZero: boolean): { number }
@@ -321,9 +339,45 @@ function M.calcs(values: { any }, ids: { string }, fieldType: string?, nullMode:
 	return c
 end
 
--- One reducer's value.
+-- One reducer's value. The reducers panels pick most (last, first and their
+-- not-null forms, countAll) and the non-standard ones skip doStandardCalcs.
 function M.reduce(values: { any }, id: string, fieldType: string?, nullMode: NullMode?): any
-	return M.calcs(values, { id }, fieldType, nullMode)[id]
+	local mode = nullMode or "connected"
+	local ignoreNulls = mode == "connected"
+	local nullAsZero = mode == "null as zero"
+	local n = #values
+	if id == "lastNotNull" or id == "firstNotNull" then
+		local from, to, by = 1, n, 1
+		if id == "lastNotNull" then
+			from, to, by = n, 1, -1
+		end
+		for i = from, to, by do
+			local v = values[i]
+			if v == nil or v == NULL then
+				if ignoreNulls or not nullAsZero then
+					continue
+				end
+				return 0
+			end
+			if v == v then
+				return v
+			end
+		end
+		return nil
+	elseif id == "last" then
+		local v = values[n]
+		return if v == NULL then nil else v
+	elseif id == "first" then
+		local v = if n > 0 then values[1] else nil
+		return if v == NULL then nil else v
+	elseif id == "countAll" then
+		return n
+	end
+	local numeric = fieldType == nil or fieldType == "number" or fieldType == "time"
+	if EXTRA[id] or percentileOf(id) then
+		return extra(id, values, numeric, ignoreNulls, nullAsZero)
+	end
+	return standard(values, numeric, ignoreNulls, nullAsZero)[id]
 end
 
 return M

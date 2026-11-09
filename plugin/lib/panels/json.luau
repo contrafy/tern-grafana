@@ -52,6 +52,12 @@ function M.num(_env: Env, v: any): number?
 	return nil
 end
 
+-- A number value only (NaN reads as absent, strings do not count): fields
+-- that are numbers in every saved document.
+function M.number(v: any): number?
+	return if type(v) == "number" and v == v then v else nil
+end
+
 function M.bool(_env: Env, v: any): boolean?
 	return if type(v) == "boolean" then v else nil
 end
@@ -59,12 +65,14 @@ end
 -- t[k1][k2]... with absent links reading as nil.
 function M.path(env: Env, v: any, ...: string): any
 	local cur = v
-	for _, k in { ... } do
+	-- select() over the varargs: no key table per call (this runs for most
+	-- reads of panel JSON).
+	for i = 1, select("#", ...) do
 		local t = M.tbl(env, cur)
 		if t == nil then
 			return nil
 		end
-		cur = t[k]
+		cur = t[(select(i, ...))]
 	end
 	return if cur == env.null then nil else cur
 end

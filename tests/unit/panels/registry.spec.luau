@@ -149,4 +149,28 @@ describe("registry unsupported reasons", function()
 	end)
 end)
 
+describe("registry module loading", function()
+	-- Panel modules load on first use, so the registry lists their types
+	-- itself; a type it lists differently would never reach its module.
+	it("lists each lazily loaded module under the types the module declares", function()
+		for _, entry in Registry.LAZY do
+			expect(entry.load().types).toEqual(entry.types)
+		end
+	end)
+
+	-- Dashboards render a fresh copy of the panel JSON on every redraw; the
+	-- migration of a legacy panel is keyed by the JSON it was copied from,
+	-- and a copy whose title changed (a variable in it) migrates again.
+	it("migrates a legacy panel once per source and again when its title changes", function()
+		local source = { type = "singlestat", title = "Up" }
+		local a = Registry.effective(table.clone(source), nil, source)
+		local b = Registry.effective(table.clone(source), nil, source)
+		expect(a ~= nil and a == b).toBe(true)
+		local renamed = table.clone(source)
+		renamed.title = "Down"
+		local c = Registry.effective(renamed, nil, source) :: any
+		expect(c.title).toBe("Down")
+	end)
+end)
+
 return nil

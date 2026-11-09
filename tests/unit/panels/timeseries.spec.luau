@@ -136,6 +136,24 @@ for _, version in S.VERSIONS do
 			expect(string.find(legend, "Value", 1, true) ~= nil).toBe(true)
 		end)
 
+		-- An expanded panel redraws on every cursor key: the chart under the
+		-- cursor is the same render, while new data or options draw anew.
+		it("draws the chart once across cursor moves and again for new data", function()
+			local frames = S.refFrames(version, "prom_range", "A")
+			local times = frames[1].fields[1].values
+			local panel = S.panel(version, 2)
+			local _, first = Timeseries.view(panel, frames, env, { key = "memo", cursor = times[2] })
+			local _, moved = Timeseries.view(panel, frames, env, { key = "memo", cursor = times[3] })
+			expect(rawequal(first.memo.bytes, moved.memo.bytes)).toBe(true)
+			local changed = S.clone(frames)
+			local values = changed[1].fields[2].values
+			values[#values] = 1000
+			local _, fresh = Timeseries.view(panel, changed, env, { key = "memo", cursor = times[3] })
+			expect(fresh.memo.bytes ~= first.memo.bytes).toBe(true)
+			local _, wider = Timeseries.view(panel, frames, env, { key = "memo", cursor = times[3], width = 500 })
+			expect(wider.memo.bytes ~= first.memo.bytes).toBe(true)
+		end)
+
 		it("hides the legend when showLegend is false", function()
 			local panel = S.clone(S.panel(version, 2))
 			panel.options.legend.showLegend = false

@@ -168,6 +168,12 @@ local function toneOfRgb(color: string): Tone
 	return "accent"
 end
 
+-- Tones of non-palette colours by colour text: dashboards repeat a handful of
+-- colours across every cell and threshold, and parsing them is the cost.
+local toneCache: { [string]: Tone } = {}
+local toneCacheSize = 0
+local TONE_CACHE_MAX = 512
+
 function M.tone(name: string?): Tone
 	if name == nil or name == "" then
 		return "neutral"
@@ -176,7 +182,18 @@ function M.tone(name: string?): Tone
 	if named then
 		return named.tone
 	end
-	return toneOfRgb(name)
+	local hit: Tone? = toneCache[name]
+	if hit then
+		return hit
+	end
+	local tone: Tone = toneOfRgb(name)
+	if toneCacheSize >= TONE_CACHE_MAX then
+		table.clear(toneCache)
+		toneCacheSize = 0
+	end
+	toneCache[name] = tone
+	toneCacheSize += 1
+	return tone
 end
 
 -- The value's position in min..max (Grafana's percent, 0..1 inside the range).

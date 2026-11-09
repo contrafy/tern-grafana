@@ -114,11 +114,19 @@ local function frameMeta(env: Env, raw: any): Frame.FrameMeta?
 end
 
 local function column(env: Env, raw: any, length: number): { any }
-	local out: { any } = table.create(length)
+	local NULL = Frame.NULL
 	local src = object(env, raw)
+	if src == nil then
+		return table.create(length, NULL)
+	end
+	local out: { any } = table.create(length)
+	local null = env.null
 	for i = 1, length do
-		local v = if src then src[i] else nil
-		out[i] = if Env.isNull(env, v) then Frame.NULL else v
+		local v = src[i]
+		if v == nil or v == null then
+			v = NULL
+		end
+		out[i] = v
 	end
 	return out
 end
