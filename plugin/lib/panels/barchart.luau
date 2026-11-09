@@ -116,25 +116,17 @@ function M.prepare(panel: any, frames: { Frame }, env: Env): (Prepared?, string?
 	return { x = x :: Item, series = series, color = color, total = total, items = items }, nil
 end
 
--- Category labels: strings as they are, times in Grafana's auto format for
--- their spacing, anything else through the field's display processor.
+-- Category labels: strings as they are, times as bars.ts xValues prints
+-- them (xTimeAuto), anything else through the field's display processor.
+-- xValues picks its format from the axis increment, which on the ordinal
+-- x scale counts categories, not ms: below 1000 for any chart drawn here,
+-- so Grafana prints every time as HH:mm:ss.SSS, in the dashboard's zone.
 local function categories(x: Item, opts: Common.Options): { string }
 	local values = x.field.values
 	local out: { string } = table.create(#values)
 	if x.field.type == "time" and not (x.config.unit and string.sub(x.config.unit :: string, 1, 5) == "time:") then
-		local step, lo, hi = math.huge, math.huge, -math.huge
 		for i, t in values do
-			if type(t) == "number" then
-				lo, hi = math.min(lo, t), math.max(hi, t)
-				local prev = values[i - 1]
-				if type(prev) == "number" and t ~= prev then
-					step = math.min(step, math.abs(t - prev))
-				end
-			end
-		end
-		local format = Axis.timeFormat(if step == math.huge then 1000 else step, math.max(hi - lo, 1))
-		for i, t in values do
-			out[i] = if type(t) == "number" then Axis.formatTime(t, format, opts.offset_min) else ""
+			out[i] = if type(t) == "number" then Axis.formatTime(t, Axis.FORMATS.millisecond, opts.offset_min) else ""
 		end
 		return out
 	end
@@ -150,10 +142,35 @@ local function categories(x: Item, opts: Common.Options): { string }
 	return out
 end
 
--- The renderer options a panel maps to (exposed for specs).
-function M.renderOptions(panel: any, prep: Prepared, env: Env, opts: Common.Options): (SvgBars.Options, { string })
+-- VizLegend rows: every bar series not hidden from the legend, in its
+-- series color, with the legend's calcs.
+local function legendRows(prep: Prepared, legend: Charts.Legend, opts: Common.Options): { Charts.Row }
+	local rows: { Charts.Row } = {}
+	if not legend.show then
+		return rows
+	end
+	for k, item in prep.series do
+		if not Charts.hiddenFromLegend(item) then
+			table.insert(rows, Charts.calcRow(item, Charts.seriesClass(item, k, opts), legend.calcs, opts))
+		end
+	end
+	return rows
+end
+
+-- The renderer options a panel maps to (exposed for specs), its notes and
+-- its legend with that legend's rows. In a height-capped card the chart
+-- gets the card body less a bottom legend.
+function M.renderOptions(
+	panel: any,
+	prep: Prepared,
+	env: Env,
+	opts: Common.Options
+): (SvgBars.Options, { string }, Charts.Legend, { Charts.Row })
 	local options = Json.obj(env, Json.path(env, panel, "options"))
+	local legend = Charts.legendOptions(panel, env)
+	local rows = legendRows(prep, legend, opts)
 	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
+	H = Charts.chartHeight(opts, H, W, rows, legend)
 	local orientation = Json.str(env, options.orientation) or "auto"
 	local horizontal = if orientation == "auto" then W < H else orientation == "horizontal"
 	local stacking = Json.str(env, options.stacking) or "none"
@@ -255,7 +272,9 @@ function M.renderOptions(panel: any, prep: Prepared, env: Env, opts: Common.Opti
 		value_axis = Json.str(env, custom.axisPlacement) ~= "hidden",
 		grid = Json.bool(env, custom.axisGridShow) ~= false,
 	},
-		notes
+		notes,
+		legend,
+		rows
 end
 
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets?)
@@ -267,7 +286,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		return Common.noData(panel, env, opts.key), {}
 	end
 	local p = prep :: Prepared
-	local render, notes = M.renderOptions(panel, p, env, opts)
+	local render, notes, legend, rows = M.renderOptions(panel, p, env, opts)
 	local result = SvgBars.render(render)
 	if result.dropped > 0 then
 		table.insert(notes, string.format("%d more categories not shown (chart size limit)", result.dropped))
@@ -280,17 +299,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		Charts.alt(panel, env, "Bar chart"),
 		"tern-grafana.barchart"
 	)
-	local legend = Charts.legendOptions(panel, env)
-	local legendNode: Node? = nil
-	if legend.show then
-		local rows: { Charts.Row } = {}
-		for k, item in p.series do
-			if not Charts.hiddenFromLegend(item) then
-				table.insert(rows, Charts.calcRow(item, render.series[k].class, legend.calcs, opts))
-			end
-		end
-		legendNode = Charts.calcLegend(opts.key .. ".legend", rows, legend)
-	end
+	local legendNode = if legend.show then Charts.calcLegend(opts.key .. ".legend", rows, legend) else nil
 	return Charts.compose(opts.key, chart, legendNode, legend.placement, notes), assets
 end
 

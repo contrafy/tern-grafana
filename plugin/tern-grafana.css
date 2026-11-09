@@ -330,6 +330,11 @@
 :where(:root:not([data-theme='dark'])) .tg-s9 { stop-color: #1250b0; color: #1250b0; stroke: #1250b0; fill: #1250b0; --tg-c: #1250b0; }
 :where(:root:not([data-theme='dark'])) .tg-s10 { stop-color: #e55400; color: #e55400; stroke: #e55400; fill: #e55400; --tg-c: #e55400; }
 
+/* Grafana's default annotation color (lib/render/svg_annotations.luau),
+   the built-in "Annotations & Alerts" layer's iconColor; before the shape
+   roles so they still win. */
+.tg-anno { stroke: #00d3ff; fill: #00d3ff; }
+
 /* Shape roles: after the palette and tones so they win the cascade. */
 .tg-line,
 .tg-dots,

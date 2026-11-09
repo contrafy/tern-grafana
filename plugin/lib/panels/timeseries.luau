@@ -24,10 +24,13 @@
 --   color at the series' `seriesBy` value, thresholds in its step's tone
 --   (getFieldSeriesColor); gradientMode hue and scheme paint line and fill
 --   through a gradient (lib/render/ts_gradient);
--- - options.legend: showLegend, displayMode list|table|hidden, calcs (any
---   lib/panels/reduce reducer, formatted with the series' own config);
+-- - options.legend: showLegend, displayMode list|table|hidden, placement
+--   bottom|right, calcs (any lib/panels/reduce reducer, formatted with the
+--   series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
---   read out under the legend.
+--   read out under the legend;
+-- - dashboard annotations (opts.annotations) as dashed lines, regions and
+--   markers, styled by the panel's options.annotations.
 
 local Assets = require("../render/assets")
 local Axis = require("../render/axis")
@@ -40,6 +43,7 @@ local Frame = require("../frame/types")
 local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
+local SvgAnnotations = require("../render/svg_annotations")
 local SvgTimeseries = require("../render/svg_timeseries")
 local Tbl = require("../tbl")
 local TsData = require("../render/ts_data")
@@ -165,9 +169,11 @@ function M.renderOptions(panel: any, env: Env, opts: Common.Options): SvgTimeser
 	local style: SvgTimeseries.ThresholdStyle? = THRESHOLD_STYLES[thresholdMode]
 	local thresholdStyle: SvgTimeseries.ThresholdStyle = style or "off"
 	local fill = Json.num(env, custom.fillOpacity)
+	-- Grafana's panel width and, in a height-capped card, the card body.
+	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
 	return {
-		width = opts.width or M.WIDTH,
-		height = opts.height or M.HEIGHT,
+		width = W,
+		height = H,
 		unit = cfg.unit,
 		decimals = cfg.decimals,
 		min = cfg.min,
@@ -538,6 +544,9 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if opts.exemplars and #opts.exemplars > 0 then
 		render.exemplars = opts.exemplars
 	end
+	if opts.annotations and #opts.annotations > 0 then
+		render.annotations = SvgAnnotations.layer(opts.annotations, Json.path(env, panel, "options", "annotations"))
+	end
 	local palette = M.paletteIndexes(frames)
 	local styles: { SvgTimeseries.SeriesStyle } = table.create(#visible)
 	for i, item in visible do
@@ -557,6 +566,21 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		styles[i] = st
 	end
 	render.series = styles
+	-- In a height-capped card the chart leaves a bottom legend room; calc
+	-- values are estimated at 7 characters.
+	local legendLook = Charts.legendOptions(panel, env)
+	if opts.card_height and legendLook.show then
+		local guess = table.create(#legendLook.calcs, "0000.00")
+		local rows: { Legend.Row } = {}
+		for _, item in visible do
+			if not Charts.hiddenFromLegend(item) then
+				table.insert(rows, { class = "", name = item.name, values = guess })
+			end
+		end
+		local rh, rw = render.height, render.width
+		assert(rh and rw, "timeseries: render size unset")
+		render.height = Charts.chartHeight(opts, rh, rw, rows, legendLook)
+	end
 	local result = renderMemo(opts.key, baked, render)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
@@ -578,6 +602,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		return chart, assets
 	end
 	local legend = legendView(opts.key .. ".legend", drawn, legendCalcs(panel, env), mode, result.dropped, opts, env)
+	if legendLook.placement == "right" then
+		-- VizLayout: the legend beside the plot, from its top.
+		return { k = "row", p = { key = opts.key .. ".panel", gap = "sm", align = "start" }, c = { chart, legend } },
+			assets
+	end
 	return { k = "col", p = { key = opts.key .. ".panel", gap = "xs" }, c = { chart, legend } }, assets
 end
 

@@ -41,4 +41,12 @@ describe("Kit.tickLabels", function()
 	end)
 end)
 
+-- UPlotAxisBuilder: decimals 0 on a linear axis labels only whole ticks
+-- (Grafana shows 0, 1, 2, 3 where rounding would print 0, 1, 1, 2, 2, 3).
+describe("Kit.tickLabels decimals 0", function()
+	it("leaves fractional ticks unlabeled", function()
+		expect(Kit.tickLabels({ 0, 0.5, 1, 1.5, 2 }, nil, 0)).toEqual({ "0", "", "1", "", "2" })
+	end)
+end)
+
 return nil

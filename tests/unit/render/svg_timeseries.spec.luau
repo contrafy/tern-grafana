@@ -1154,4 +1154,57 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		expect(tag(render({ five }, { series = { { draw = "bars" } } }).svg, "tg-bar")).toBeNil()
 	end)
 end)
+-- Recorded on dashboard tern-v08-tsbar (Grafana 13.3.0): SQL rows long
+-- before the range and a monthly series whose first month precedes it.
+describe("svg_timeseries.render samples beyond the range", function()
+	local Fixtures = require("../../lib/fixtures")
+	local Grafana = require("../../../plugin/lib/frame/grafana")
+	local Support = require("../../lib/support")
+	local json = require("../../lib/json")
+
+	local function load(n: number): ({ Frame.Frame }, number, number)
+		local base = "grafana/13.3.0/ds_query_v08_tsbar_" .. n
+		local env = Support.env()
+		local req = json.decode(Fixtures.read(base .. ".request.json"))
+		local out: { Frame.Frame } = {}
+		for _, r in Grafana.parseResults(json.decode(Fixtures.read(base .. ".json")), env) do
+			assert(r.ok, "fixture query failed")
+			for _, f in r.frames do
+				table.insert(out, f)
+			end
+		end
+		return out, tonumber(req.from) :: number, tonumber(req.to) :: number
+	end
+
+	it("ranges y over the samples in view, as uPlot does", function()
+		local frames, from, to = load(1)
+		local r = Svg.render(frames, { from_ms = from, to_ms = to, width = 1000, height = 400 })
+		-- Grafana: 3.259 .. 3.271; the value 5 of rows years before stays out.
+		expect(r.layout.y_min).toBe(3.259)
+		expect(r.layout.y_max).toBe(3.271)
+	end)
+
+	it("enters the plot at the step a sample before the range holds", function()
+		local frames, from, to = load(3)
+		local style: Svg.SeriesStyle = { interpolation = "stepBefore", unit = "s" }
+		local opts: Svg.Options = {
+			from_ms = from,
+			to_ms = to,
+			width = 1000,
+			height = 400,
+			series = { style },
+		}
+		local r = Svg.render(frames, opts)
+		local left = r.layout.plot_left
+		local line = string.match(r.svg, 'class="tg%-s1 tg%-line"[^>]-d="([^"]+)"') :: string
+		local x, y = string.match(line, "^M([%d%.]+) ([%d%.]+)")
+		-- The line starts at the plot's left edge at the September value
+		-- (stepBefore takes the next sample's value), not at August's.
+		expect(tonumber(x)).toBe(math.floor(left * 10 + 0.5) / 10)
+		local g = r.layout
+		local want = g.plot_bottom - (60120 - g.y_min) / (g.y_max - g.y_min) * (g.plot_bottom - g.plot_top)
+		expect(math.abs((tonumber(y) :: number) - want) < 0.1).toBe(true)
+	end)
+end)
+
 return nil

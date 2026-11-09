@@ -464,7 +464,7 @@ function M.render(opts: Options): Result
 	-- Axis labels.
 	if showAxis then
 		for i, v in scale.ticks do
-			if v >= vmin and v <= vmax then
+			if v >= vmin and v <= vmax and tickLabels[i] ~= "" then
 				local p = valPx(v)
 				if horizontal then
 					table.insert(out, Kit.text(p, H - 6, tickLabels[i]))

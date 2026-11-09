@@ -194,6 +194,62 @@ function M.transformed(list: { Series.Series }, styles: { SeriesStyle }, tFrom: 
 	return out
 end
 
+-- uPlot closestIdx: the index (1-based) of the time nearest `t` in the
+-- ascending `times`, the earlier one on a tie.
+local function closestIdx(t: number, times: { number }): number
+	local lo, hi = 1, #times
+	while hi - lo > 1 do
+		local mid = (lo + hi) // 2
+		if times[mid] < t then
+			lo = mid
+		else
+			hi = mid
+		end
+	end
+	return if t - times[lo] <= times[hi] - t then lo else hi
+end
+
+-- The samples in view, as uPlot's setScales finds them (i0..i1: the
+-- samples nearest the range's ends, moved inside it unless that leaves at
+-- most two), and the series as drawn: getOuterIdxs adds the nearest
+-- present sample beyond each end, so a line enters the plot at its slope
+-- and the plot clips it. Returns the series (itself when nothing is cut)
+-- and the times of its first and last sample in view; nil bounds for an
+-- empty series. Times must ascend; other series are kept whole.
+function M.window(s: Series.Series, tFrom: number, tTo: number): (Series.Series, number?, number?)
+	local times = s.times
+	local n = #times
+	if n == 0 then
+		return s, nil, nil
+	elseif not ascending(times) then
+		return s, tFrom, tTo
+	end
+	local i0, i1 = closestIdx(tFrom, times), closestIdx(tTo, times)
+	if i1 - i0 > 1 then
+		if times[i0] < tFrom then
+			i0 += 1
+		end
+		if times[i1] > tTo then
+			i1 -= 1
+		end
+	end
+	local values = s.values
+	local o0, o1 = math.max(i0 - 1, 1), math.min(i1 + 1, n)
+	while o0 > 1 and finite(values[o0]) == nil do
+		o0 -= 1
+	end
+	while o1 < n and finite(values[o1]) == nil do
+		o1 += 1
+	end
+	if o0 == 1 and o1 == n then
+		return s, times[i0], times[i1]
+	end
+	local copy = Tbl.copy(s)
+	copy.times = table.move(times, o0, o1, 1, table.create(o1 - o0 + 1))
+	copy.values = table.move(values, o0, o1, 1, table.create(o1 - o0 + 1))
+	return copy, times[i0], times[i1]
+end
+
 export type StackGroup = { mode: Series.StackMode, neg: boolean, members: { number } }
 
 -- getStackingGroups: one group per direction (a series with a negative
@@ -439,8 +495,9 @@ function M.downsample(
 end
 
 -- Bars over more distinct times than the plot has slots: each series' samples
--- are grouped into equal time buckets (the bucket's largest value, at the
--- bucket's center), so every stacked series lands in the same slots.
+-- in the time range are grouped into equal time buckets (the bucket's largest
+-- value, at the bucket's center), so every stacked series lands in the same
+-- slots.
 function M.bucketBars(list: { Series.Series }, tFrom: number, tTo: number, slots: number): { Series.Series }
 	local distinct: { [number]: boolean } = {}
 	local n = 0
@@ -461,8 +518,8 @@ function M.bucketBars(list: { Series.Series }, tFrom: number, tTo: number, slots
 		local best: { [number]: number } = {}
 		for j, t in s.times do
 			local v = finite(s.values[j])
-			if v then
-				local b = math.clamp(math.floor((t - tFrom) / width), 0, slots - 1)
+			if v and t >= tFrom and t <= tTo then
+				local b = math.min(math.floor((t - tFrom) / width), slots - 1)
 				if best[b] == nil or v > best[b] then
 					best[b] = v
 				end

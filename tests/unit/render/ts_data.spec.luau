@@ -59,4 +59,33 @@ describe("insertNulls", function()
 	end)
 end)
 
+-- uPlot ranges y over the samples in view and draws one sample beyond each
+-- end, so rows far before the range neither flatten the axis nor pin the
+-- line to the plot's edge.
+describe("window", function()
+	local function series(times: { number }, values: { any }): any
+		return { name = "s", labels = {}, times = times, values = values }
+	end
+
+	it("keeps the samples in view plus the nearest present one beyond each end", function()
+		local s = series({ 10, 20, 100, 110, 120, 200, 300 }, { 5, 5, 3, 3.2, 3, 7, 9 })
+		local cut, t0, t1 = TsData.window(s, 90, 150)
+		expect(cut.times).toEqual({ 20, 100, 110, 120, 200 })
+		expect({ t0, t1 }).toEqual({ 100, 120 })
+	end)
+
+	it("skips nulls to the nearest present sample beyond the range", function()
+		local s = series({ 10, 20, 100, 110, 120 }, { 5, N, 3, 3.2, 3 })
+		local cut = TsData.window(s, 90, 150)
+		expect(cut.times).toEqual({ 10, 20, 100, 110, 120 })
+	end)
+
+	it("returns the series itself when every sample is drawn", function()
+		local s = series({ 100, 110, 120 }, { 1, 2, 3 })
+		local cut, t0, t1 = TsData.window(s, 90, 150)
+		expect(cut == s).toBe(true)
+		expect({ t0, t1 }).toEqual({ 100, 120 })
+	end)
+end)
+
 return nil

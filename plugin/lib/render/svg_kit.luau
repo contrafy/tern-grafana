@@ -223,12 +223,17 @@ end
 -- dropped (0.25 step: "0.5", 0.2 percentunit step: "20%"), and a whole
 -- increment leaves each tick its own automatic decimals ("1 kW", "1.50 kW";
 -- "512 MiB", "1 GiB", "1.50 GiB"). `perTick` (ticks a magnitude apart, log
--- scales): each tick prints with its own exact decimals instead.
+-- scales): each tick prints with its own exact decimals instead. Decimals 0
+-- on a linear axis label only the whole ticks (UPlotAxisBuilder's integer
+-- filter); the others get "" and keep their grid line.
 function M.tickLabels(ticks: { number }, unit: string?, decimals: number?, perTick: boolean?): { string }
 	local out: { string } = table.create(#ticks)
 	if decimals ~= nil then
+		local whole = decimals == 0 and not perTick
 		for i, v in ticks do
-			out[i] = Format.text(v, unit, decimals)
+			out[i] = if whole and math.abs(v - math.round(v)) > 1e-9 * math.max(1, math.abs(v))
+				then ""
+				else Format.text(v, unit, decimals)
 		end
 		return out
 	end
