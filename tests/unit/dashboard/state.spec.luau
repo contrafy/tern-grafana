@@ -452,6 +452,44 @@ for _, version in S.VERSIONS do
 			local view = View.view(h.s, h.env) :: any
 			expect(view.layer).toBeNil()
 		end)
+
+		-- Repeat copies of a deselected value hold frames and drawn nodes:
+		-- they go, and the titles drawn before follow the new selection.
+		it("drops the panels of deselected repeat values and retitles the rest", function()
+			-- Card titles (card heads) of the grid.
+			local function heads(node: any, out: { string }?): { string }
+				local acc = out or {}
+				if type(node) == "table" then
+					if node.k == "card" then
+						local spans = node.p.head
+						table.insert(acc, if type(spans) == "table" and spans[1] then spans[1].t else "")
+					end
+					for _, c in node.c or {} do
+						heads(c, acc)
+					end
+				end
+				return acc
+			end
+			local h = start(version, VARS)
+			expect(h.s.panels["p3.1"] ~= nil).toBe(true)
+			local options = h.s.vars[2].options
+			local before = heads((View.view(h.s, h.env) :: any).main)
+			expect(table.find(before, "up for " .. options[1].text) ~= nil).toBe(true)
+			State.update(h.s, { kind = "event", ev = { ev = "action", act = "var", value = "job" } }, h.env)
+			State.update(h.s, { kind = "event", ev = { ev = "select", item = options[2].value } }, h.env)
+			press(h, version, key("enter"))
+			expect(h.s.vars[2].values).toEqual({ options[2].value })
+			for k in h.s.panels do
+				expect(Repeat.find(h.s.sections, (string.gsub(k, "^=", ""))) ~= nil).toBe(true)
+			end
+			for k in h.s.memo do
+				expect(Repeat.find(h.s.sections, k) ~= nil).toBe(true)
+			end
+			expect(h.s.panels["p3.1"]).toBeNil()
+			local after = heads((View.view(h.s, h.env) :: any).main)
+			expect(table.find(after, "up for " .. options[2].text) ~= nil).toBe(true)
+			expect(table.find(after, "up for " .. options[1].text)).toBeNil()
+		end)
 	end)
 
 	describe("panel block on Grafana " .. version, function()
@@ -522,6 +560,16 @@ for _, version in S.VERSIONS do
 					end
 				end
 				expect(failed).toBe(1)
+				-- The next refresh forgets the failure and renders it again.
+				local _, again = State.key(h.s, char("r"), h.env)
+				expect((next(h.s.png_errors))).toBeNil()
+				local renders = 0
+				for _, e in again do
+					if e.kind == "http" and string.match(e.tag, "^png/") then
+						renders += 1
+					end
+				end
+				expect(renders).toBe(1)
 			end)
 
 			it("caches the render and draws it as an image asset", function()
@@ -707,6 +755,25 @@ describe("dashboard refreshes and blobs", function()
 		end
 		expect(queries > 0).toBe(true)
 		expect(period).toBe(h.s.refresh_ms)
+	end)
+
+	-- The runner skips render and save on `changed == false` (lib/effect.luau).
+	it("reports no change for dropped answers and ticks that change nothing", function()
+		local h = start("12.4.12", PANELS)
+		local hidden = true
+		h.env.pane = 7
+		h.env.kv_get = function(k: string): any
+			return if k == Visibility.KEY then Visibility.record({ 5, 7 }, if hidden then { 5 } else { 5, 7 }) else nil
+		end
+		local tick: any = { kind = "tick", tag = "refresh/" .. h.s.gen .. "/" .. h.s.timer_gen }
+		expect(select(3, State.update(h.s, tick, h.env))).toBe(false)
+		local stale: any = { kind = "http_done", tag = "q/" .. h.s.gen .. "/0/p2", response = S.response(RANGE) }
+		expect(select(3, State.update(h.s, stale, h.env))).toBe(false)
+		local old: any = { kind = "http_done", tag = "dash/" .. (h.s.gen - 1), response = S.response(RANGE) }
+		expect(select(3, State.update(h.s, old, h.env))).toBe(false)
+		expect(select(3, State.update(h.s, { kind = "tick", tag = "nothing/1" }, h.env))).toBe(false)
+		hidden = false
+		expect(select(3, State.update(h.s, tick, h.env))).toBe(true)
 	end)
 
 	it("refreshes only the expanded panel, and the others once they are shown again", function()

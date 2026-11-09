@@ -5,6 +5,8 @@
 -- what to show, never how to authenticate.
 
 local Range = require("../time/range")
+local Tbl = require("../tbl")
+local Url = require("../url")
 
 local M = {}
 
@@ -213,13 +215,7 @@ local function fail(code: ErrorCode, message: string): (nil, LinkError)
 end
 
 -- RFC 3986 unreserved characters stay; everything else is %XX.
-function M.percentEncode(s: string): string
-	return (
-		string.gsub(s, "[^%w%-%._~]", function(c: string): string
-			return string.format("%%%02X", string.byte(c))
-		end)
-	)
-end
+M.percentEncode = Url.percentEncode
 
 -- Decodes %XX; `plus` also turns `+` into a space (form encoding, as used
 -- by query strings). Returns nil on a malformed escape.
@@ -339,15 +335,6 @@ function M.decode(url: string): (Link?, LinkError?)
 	return M.validate(link)
 end
 
-local function sortedKeys<T>(t: { [string]: T }): { string }
-	local keys = {}
-	for k in t do
-		table.insert(keys, k)
-	end
-	table.sort(keys)
-	return keys
-end
-
 -- Canonical form: parameters sorted by name, variables after them, values
 -- percent-encoded. Raises on an invalid link (a caller bug).
 function M.encode(link: Link): string
@@ -355,13 +342,18 @@ function M.encode(link: Link): string
 	if not ok then
 		error("scheme.encode: " .. (err :: LinkError).message, 2)
 	end
+	return M.encodeValid(link)
+end
+
+-- encode for a link M.validate accepted (it is not checked again).
+function M.encodeValid(link: Link): string
 	local parts = {}
-	for _, name in sortedKeys(link.params) do
-		table.insert(parts, M.percentEncode(name) .. "=" .. M.percentEncode(link.params[name]))
+	for _, name in Tbl.sortedKeys(link.params) do
+		table.insert(parts, Url.percentEncode(name) .. "=" .. Url.percentEncode(link.params[name]))
 	end
-	for _, name in sortedKeys(link.vars) do
+	for _, name in Tbl.sortedKeys(link.vars) do
 		for _, v in link.vars[name] do
-			table.insert(parts, "var-" .. M.percentEncode(name) .. "=" .. M.percentEncode(v))
+			table.insert(parts, "var-" .. Url.percentEncode(name) .. "=" .. Url.percentEncode(v))
 		end
 	end
 	local out = M.SCHEME .. "://" .. link.action

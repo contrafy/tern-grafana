@@ -6,8 +6,9 @@
 -- value. Range ends are passed as written ("now-1h"), so Grafana resolves
 -- them the same way it resolves the dashboard.
 
-local Scheme = require("../links/scheme")
+local Tbl = require("../tbl")
 local TransportTypes = require("../transport/types")
+local Url = require("../url")
 
 type Request = TransportTypes.Request
 
@@ -54,15 +55,6 @@ function M.tz(timezone: string): string?
 	return timezone
 end
 
-local function sortedNames(t: { [string]: any }): { string }
-	local names = {}
-	for k in t do
-		table.insert(names, k)
-	end
-	table.sort(names)
-	return names
-end
-
 local function int(n: number): string
 	return string.format("%d", math.floor(n))
 end
@@ -85,7 +77,7 @@ local function pairsFor(spec: Spec, render: boolean): { { string } }
 	if spec.theme then
 		table.insert(out, { "theme", spec.theme })
 	end
-	for _, name in sortedNames(spec.vars) do
+	for _, name in Tbl.sortedKeys(spec.vars) do
 		for _, v in spec.vars[name] do
 			table.insert(out, { "var-" .. name, v })
 		end
@@ -94,7 +86,7 @@ local function pairsFor(spec: Spec, render: boolean): { { string } }
 end
 
 local function path(prefix: string, spec: Spec): string
-	return prefix .. Scheme.percentEncode(spec.uid) .. "/" .. Scheme.percentEncode(spec.slug)
+	return prefix .. Url.percentEncode(spec.uid) .. "/" .. Url.percentEncode(spec.slug)
 end
 
 -- The render API request (PNG body).
@@ -106,7 +98,7 @@ end
 function M.soloUrl(base: string, spec: Spec): string
 	local parts: { string } = {}
 	for _, p in pairsFor(spec, false) do
-		table.insert(parts, Scheme.percentEncode(p[1]) .. "=" .. Scheme.percentEncode(p[2]))
+		table.insert(parts, Url.percentEncode(p[1]) .. "=" .. Url.percentEncode(p[2]))
 	end
 	return base .. path("/d-solo/", spec) .. "?" .. table.concat(parts, "&")
 end
