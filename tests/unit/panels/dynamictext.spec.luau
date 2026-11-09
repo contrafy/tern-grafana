@@ -152,8 +152,9 @@ describe("inline styles", function()
 		local css = HtmlStyle.stylesheet()
 		for prop, value in string.gmatch(css, "[{;]([%a%-]+):([^;}]*)") do
 			if string.sub(prop, 1, 2) ~= "--" then
-				expect({ prop, known[prop] == true }).toEqual({ prop, true })
-				expect({ prop, string.find(value, "fit-content", 1, true) ~= nil }).toEqual({ prop, false })
+				expect({ prop = prop, known = known[prop] == true }).toEqual({ prop = prop, known = true })
+				local fit = string.find(value :: string, "fit-content", 1, true) ~= nil
+				expect({ prop = prop, fit = fit }).toEqual({ prop = prop, fit = false })
 			end
 		end
 		expect(string.find(css, "font-size:%a") ~= nil).toBe(false)
