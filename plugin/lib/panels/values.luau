@@ -17,6 +17,7 @@ local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
 local Json = require("./json")
+local Range = require("../time/range")
 local Reduce = require("./reduce")
 
 type Env = Env.Env
@@ -46,7 +47,7 @@ export type Options = {
 	-- Compute sparklines (stat graphMode area).
 	sparkline: boolean?,
 	theme: any?,
-	offset_min: number?,
+	offset_min: Range.Offset?,
 }
 
 local M = {}

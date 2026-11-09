@@ -5,6 +5,7 @@
 -- dateTimeFromNow is moment's fromNow. Expected strings come from moment
 -- 2.30 on the same instants.
 local t = require("../../lib/test")
+local ClockZone = require("../../../plugin/lib/panels/clock_zone")
 local FieldConfig = require("../../../plugin/lib/panels/fieldconfig")
 local Frame = require("../../../plugin/lib/frame/types")
 local S = require("./support")
@@ -36,6 +37,26 @@ describe("fielddisplay date units", function()
 		expect(text("dateTimeAsIso", NOW, { offset_min = 120 })).toBe("2024-03-15 15:45:30")
 		expect(text("dateTimeAsUS", NOW)).toBe("03/15/2024 1:45:30 pm")
 		expect(text("dateTimeAsLocal", NOW)).toBe("03/15/2024, 01:45:30 PM")
+	end)
+
+	-- Grafana formats each value in the dashboard zone at that value's time.
+	it("formats each value at its own offset in an IANA dashboard zone", function()
+		local ny = ClockZone.dashboardOffset("America/New_York", 0)
+		expect(text("dateTimeAsIso", NOW, { offset_min = ny })).toBe("2024-03-15 09:45:30")
+		expect(text("dateTimeAsIso", NOW - 14 * DAY, { offset_min = ny })).toBe("2024-03-01 08:45:30")
+		expect(text("dateTimeAsIso", NOW, { offset_min = ClockZone.dashboardOffset("utc", 120) })).toBe(
+			"2024-03-15 13:45:30"
+		)
+		expect(text("dateTimeAsIso", NOW, { offset_min = ClockZone.dashboardOffset("browser", 120) })).toBe(
+			"2024-03-15 15:45:30"
+		)
+		-- The browser zone follows the viewer's own DST rules per value.
+		local viewer = function(ms: number): number
+			return if ms < NOW - 7 * DAY then 60 else 120
+		end
+		expect(text("dateTimeAsIso", NOW - 14 * DAY, { offset_min = ClockZone.dashboardOffset("", 120, viewer) })).toBe(
+			"2024-03-01 14:45:30"
+		)
 	end)
 
 	-- Only a value on the viewer's current day loses its date.

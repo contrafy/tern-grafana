@@ -25,7 +25,7 @@ export type Options = {
 	calcs: { Calc }?,
 	-- Cursor time; replaces the calcs with the value at the cursor.
 	cursor: number?,
-	offset_min: number?,
+	offset_min: Range.Offset?,
 	key: string?,
 }
 

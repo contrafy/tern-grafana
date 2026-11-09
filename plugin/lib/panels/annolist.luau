@@ -19,12 +19,12 @@
 -- offered (the panel view holds no state).
 
 local Assets = require("../render/assets")
-local Clock = require("./clock")
 local Common = require("./common")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local Json = require("./json")
 local Range = require("../time/range")
+local ClockZone = require("./clock_zone")
 local Response = require("../source/response")
 local Scheme = require("../links/scheme")
 local Text = require("./text")
@@ -236,14 +236,13 @@ end
 
 -- The dashboard timezone's offset at `ms` (dashboard.formatDate).
 local function offsetAt(opts: Common.Options, env: Env, ms: number): number
-	local localMin = opts.local_offset_min or env.local_offset_min or opts.offset_min or 0
-	local tz = opts.timezone or ""
-	if tz == "browser" then
-		tz = ""
-	end
-	local zone = Clock.zone(tz, localMin, opts.timezone, opts.offset_min)
-	local offset = Clock.zoneAt(zone, ms)
-	return offset
+	local offset = opts.offset_min
+		or ClockZone.dashboardOffset(
+			opts.timezone,
+			opts.local_offset_min or env.local_offset_min or 0,
+			env.local_offset_at
+		)
+	return Range.offsetAt(offset, ms)
 end
 
 -- Tag colors ------------------------------------------------------------------------------

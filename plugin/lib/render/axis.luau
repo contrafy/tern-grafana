@@ -526,7 +526,7 @@ function M.timeFormat(incr: number, range: number): string
 end
 
 -- `ms` in one of the FORMATS, in a fixed offset (minutes east of UTC).
-function M.formatTime(ms: number, format: string, offsetMin: number?): string
+function M.formatTime(ms: number, format: string, offsetMin: Range.Offset?): string
 	local s = Range.formatMs(ms, offsetMin) -- "YYYY-MM-DD HH:MM:SS"
 	local Y, Mo, D = string.sub(s, 1, 4), string.sub(s, 6, 7), string.sub(s, 9, 10)
 	local hm = string.sub(s, 12, 16)
@@ -548,21 +548,27 @@ end
 
 export type TimeTicks = { incr: number, format: string, ticks: { number }, labels: { string } }
 
-local function civil(ms: number, offsetMin: number): (number, number)
-	local s = Range.formatMs(ms, offsetMin)
+export type Offset = Range.Offset
+
+local function civil(ms: number, offset: Offset): (number, number)
+	local s = Range.formatMs(ms, offset)
 	return tonumber(string.sub(s, 1, 4)) :: number, tonumber(string.sub(s, 6, 7)) :: number
 end
 
-local function monthStart(y: number, m: number, offsetMin: number): number
-	local ms = Range.parse(string.format("%04d-%02d-01", y, m), false, { now_ms = 0, offset_min = offsetMin })
-	return ms :: number
+-- Local midnight of the month's first day, at the zone's offset on that day.
+local function monthStart(y: number, m: number, offset: Offset): number
+	local function at(min: number): number
+		return Range.parse(string.format("%04d-%02d-01", y, m), false, { now_ms = 0, offset_min = min }) :: number
+	end
+	local guess = at(Range.offsetAt(offset, 0))
+	return at(Range.offsetAt(offset, guess))
 end
 
-local function calendarTicks(from: number, to: number, months: number, offsetMin: number): { number }
+local function calendarTicks(from: number, to: number, months: number, offset: Offset): { number }
 	local ticks: { number } = {}
-	local y, m = civil(from, offsetMin)
+	local y, m = civil(from, offset)
 	while true do
-		local t = monthStart(y, m, offsetMin)
+		local t = monthStart(y, m, offset)
 		if t > to then
 			break
 		end
@@ -578,8 +584,8 @@ local function calendarTicks(from: number, to: number, months: number, offsetMin
 end
 
 -- Ticks for from..to on an axis `plotPx` wide.
-function M.timeTicks(from: number, to: number, plotPx: number, offsetMin: number?): TimeTicks
-	local off = offsetMin or 0
+function M.timeTicks(from: number, to: number, plotPx: number, offsetMin: Offset?): TimeTicks
+	local off: Offset = offsetMin or 0
 	local range = math.max(to - from, 1)
 	-- calculateSpace: the width of a label formatted for the densest
 	-- increment the minimum spacing allows.
@@ -600,10 +606,14 @@ function M.timeTicks(from: number, to: number, plotPx: number, offsetMin: number
 		ticks = calendarTicks(from, to, math.floor(incr / (30 * DAY) + 0.5), off)
 	else
 		ticks = {}
-		local shift = off * MINUTE
-		local t = math.ceil((from + shift) / incr) * incr - shift
+		local base = Range.offsetAt(off, from) * MINUTE
+		local t = math.ceil((from + base) / incr) * incr - base
 		while t <= to do
-			table.insert(ticks, t)
+			-- Steps over an hour stay on the wall clock across a DST change.
+			local tick = if incr > HOUR then t + base - Range.offsetAt(off, t) * MINUTE else t
+			if tick >= from and tick <= to then
+				table.insert(ticks, tick)
+			end
 			t += incr
 		end
 	end

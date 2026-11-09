@@ -69,7 +69,7 @@ export type Display = {
 
 -- `now_ms` is the clock dateTimeFromNow and the NoDateIfToday units read;
 -- without it they show the full date.
-export type Options = { theme: Thresholds.Theme?, offset_min: number?, now_ms: number? }
+export type Options = { theme: Thresholds.Theme?, offset_min: Range.Offset?, now_ms: number? }
 
 export type Defaults = { color_mode: string? }
 
@@ -207,7 +207,8 @@ M.fromNow = fromNow
 -- current day), moment's fromNow, or the system format with milliseconds
 -- for a time field spanning under a minute.
 local function formatDate(ms: number, unit: string, o: Options, showMs: boolean): string
-	local offset = o.offset_min or 0
+	local zone: Range.Offset = o.offset_min or 0
+	local offset = Range.offsetAt(zone, ms)
 	local now = o.now_ms
 	local pattern: string
 	if string.sub(unit, 1, 5) == "time:" then
@@ -218,7 +219,8 @@ local function formatDate(ms: number, unit: string, o: Options, showMs: boolean)
 		pattern = ISO .. ".SSS"
 	else
 		local p = DATE_UNITS[unit]
-		local sameDay = now ~= nil and Range.formatMs(ms, offset):sub(1, 10) == Range.formatMs(now, offset):sub(1, 10)
+		local sameDay = now ~= nil
+			and Range.formatMs(ms, zone):sub(1, 10) == Range.formatMs(now :: number, zone):sub(1, 10)
 		pattern = if p[2] and sameDay then p[2] else p[1]
 	end
 	return ClockFormat.format(pattern, ms, offset, "")

@@ -27,7 +27,21 @@ export type Options = {
 
 export type Range = { from_ms: number, to_ms: number }
 
+-- A display timezone: a fixed offset in minutes east of UTC, or the offset of
+-- a zone with DST rules at a given instant (Grafana formats each value in the
+-- dashboard's zone at that value's time).
+export type Offset = number | (ms: number) -> number
+
 local M = {}
+
+function M.offsetAt(offset: Offset?, ms: number): number
+	if offset == nil then
+		return 0
+	elseif type(offset) == "number" then
+		return offset
+	end
+	return offset(ms)
+end
 
 local SECOND = 1000
 local MINUTE = 60 * SECOND
@@ -311,8 +325,8 @@ function M.resolve(from: string, to: string, opts: Options): (Range?, string?)
 	return { from_ms = fromMs, to_ms = toMs }, nil
 end
 
-function M.formatMs(ms: number, offset_min: number?): string
-	local local_ms = math.floor(ms) + (offset_min or 0) * MINUTE
+function M.formatMs(ms: number, offset_min: Offset?): string
+	local local_ms = math.floor(ms) + M.offsetAt(offset_min, ms) * MINUTE
 	local days = local_ms // DAY
 	local rem = local_ms - days * DAY
 	local y, m, d = civilFromDays(days)

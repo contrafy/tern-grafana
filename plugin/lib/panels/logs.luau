@@ -284,7 +284,7 @@ local LEVEL_TAGS: { [Level]: string } = {
 	unknown = "",
 }
 
-local function formatTime(ms: number, offsetMin: number?): string
+local function formatTime(ms: number, offsetMin: Range.Offset?): string
 	local whole = math.floor(ms)
 	return Range.formatMs(whole, offsetMin) .. string.format(".%03d", whole % 1000)
 end

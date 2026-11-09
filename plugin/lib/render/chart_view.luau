@@ -69,7 +69,7 @@ function M.exemplarView(
 	layout: Layout.Layout,
 	e: FrameProm.Exemplar,
 	key: string,
-	offset_min: number?,
+	offset_min: Range.Offset?,
 	traceLabel: string?
 ): Node
 	local spans: { ui.SpanLike } = {

@@ -62,7 +62,7 @@ export type Options = {
 	align_value: ("left" | "center" | "right")?,
 	fill_opacity: number?,
 	line_width: number?,
-	offset_min: number?,
+	offset_min: Axis.Offset?,
 	-- Lane label axis hidden (axisPlacement hidden).
 	hide_y: boolean?,
 	-- Time axis hidden.
