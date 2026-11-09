@@ -115,6 +115,49 @@ describe("inline styles", function()
 		expect(r.dropped).toEqual({ "transform", "color" })
 		expect(string.find(r.class, "dt-d-flex", 1, true) ~= nil).toBe(true)
 	end)
+	it("draws values Tern's parser rejects as their nearest accepted value", function()
+		expect(#HtmlStyle.compile("width:fit-content; font-size:large").dropped).toBe(0)
+		expect(HtmlStyle.compile("width:fit-content").class).toBe(HtmlStyle.compile("width:max-content").class)
+		expect(HtmlStyle.compile("font-size:large").class).toBe(HtmlStyle.compile("font-size:18px").class)
+		expect(HtmlStyle.compile("width:large").dropped).toEqual({ "width" })
+	end)
+	it("names properties Tern cannot style as not drawn", function()
+		local r = HtmlStyle.compile("text-indent:2em; word-spacing:4px; table-layout:fixed")
+		expect(r.dropped).toEqual({ "text-indent", "word-spacing", "table-layout" })
+	end)
+	it("only declares properties and values Tern 0.9.13's stylesheet parser accepts", function()
+		-- Each loads without a parse error in Tern 0.9.13; a rejected
+		-- declaration does nothing, so its class would silently not draw.
+		local known: { [string]: boolean } = {}
+		for _, p in
+			string.split(
+				"align-content align-items align-self background background-color background-image border-bottom "
+					.. "border-bottom-color border-bottom-left-radius border-bottom-right-radius border-bottom-style "
+					.. "border-bottom-width border-collapse border-left-color border-left-style border-left-width "
+					.. "border-right-color border-right-style border-right-width border-top-color "
+					.. "border-top-left-radius border-top-right-radius border-top-style border-top-width bottom "
+					.. "box-shadow box-sizing color column-gap cursor display flex-basis flex-direction flex-grow "
+					.. "flex-shrink flex-wrap font-family font-size font-style font-weight height justify-content "
+					.. "justify-items justify-self left letter-spacing line-height list-style-type margin-bottom "
+					.. "margin-left margin-right margin-top max-height max-width min-height min-width object-fit "
+					.. "opacity order overflow-wrap overflow-x overflow-y padding padding-bottom padding-left "
+					.. "padding-right padding-top position right row-gap text-align text-decoration "
+					.. "text-decoration-line text-overflow text-transform top vertical-align visibility white-space "
+					.. "width word-break z-index",
+				" "
+			)
+		do
+			known[p] = true
+		end
+		local css = HtmlStyle.stylesheet()
+		for prop, value in string.gmatch(css, "[{;]([%a%-]+):([^;}]*)") do
+			if string.sub(prop, 1, 2) ~= "--" then
+				expect({ prop, known[prop] == true }).toEqual({ prop, true })
+				expect({ prop, string.find(value, "fit-content", 1, true) ~= nil }).toEqual({ prop, false })
+			end
+		end
+		expect(string.find(css, "font-size:%a") ~= nil).toBe(false)
+	end)
 	it("keeps the stylesheet under 150 KB", function()
 		expect(#HtmlStyle.stylesheet() < 150 * 1024).toBe(true)
 	end)

@@ -315,9 +315,11 @@ Tern draws `grafana-clock-panel` itself, following the plugin's 2.1.8 behavior, 
   to 0.01 below 10000, layout, flex, alignment, text, border, radius, overflow, z-index, opacity, the first
   box-shadow and linear-gradient with up to 3 stops (stop positions ignored, angle rounded to 5 degrees). Font
   weights round to 50, font families to sans-serif (Inter), serif or monospace; `position: fixed` draws as
-  absolute. An element holds up to 10 lengths and 4 colors. What is not drawn (transforms, filters, `var()`,
-  `calc()`, background images) is listed under the panel. data: images (SVG, PNG, JPEG, GIF, WebP up to 256 KiB)
-  are drawn as images.
+  absolute; `fit-content` draws as `max-content` and font-size keywords (`small`, `x-large`, `smaller`, ...) as
+  their browser-default px or em ratio, since Tern's stylesheet parser rejects those values. An element holds up
+  to 10 lengths and 4 colors. What is not drawn (transforms, filters, `var()`, `calc()`, background images, and
+  `text-indent`, `word-spacing` and `table-layout`, which Tern cannot style) is listed under the panel. data:
+  images (SVG, PNG, JPEG, GIF, WebP up to 256 KiB) are drawn as images.
 - **Panel `styles`.** Plain declarations style the panel; CSS with selectors is skipped and named under the panel
   (its selectors target Grafana's DOM).
 - **Not native.** `helpers` or `afterRender` JavaScript ("the panel runs its own JavaScript (...)"),

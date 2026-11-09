@@ -58,9 +58,7 @@ local LENGTH: { [string]: string } = {
 	["column-gap"] = "cg",
 	["font-size"] = "fs",
 	["letter-spacing"] = "ls",
-	["word-spacing"] = "wsp",
 	["line-height"] = "lh",
-	["text-indent"] = "ti",
 	["border-top-width"] = "btw",
 	["border-right-width"] = "brw",
 	["border-bottom-width"] = "bbw",
@@ -104,19 +102,26 @@ local LENGTH_KEYWORDS: { [string]: { string } } = {
 		"z-index",
 	},
 	none = { "max-width", "max-height" },
-	normal = { "line-height", "letter-spacing", "word-spacing", "row-gap", "column-gap" },
-	["fit-content"] = { "width", "height", "min-width", "min-height", "max-width", "max-height", "flex-basis" },
+	normal = { "line-height", "letter-spacing", "row-gap", "column-gap" },
 	["max-content"] = { "width", "height", "min-width", "min-height", "max-width", "max-height", "flex-basis" },
 	["min-content"] = { "width", "height", "min-width", "min-height", "max-width", "max-height", "flex-basis" },
-	["xx-small"] = { "font-size" },
-	["x-small"] = { "font-size" },
-	small = { "font-size" },
-	medium = { "font-size" },
-	large = { "font-size" },
-	["x-large"] = { "font-size" },
-	["xx-large"] = { "font-size" },
-	smaller = { "font-size" },
-	larger = { "font-size" },
+}
+
+-- Values Tern's stylesheet parser rejects, drawn as the nearest value it
+-- takes: fit-content as max-content (the same unless the content overflows
+-- the container), absolute font-size keywords as the browser's default px
+-- and the relative ones as their em ratio.
+local LENGTH_ALIASES: { [string]: string } = {
+	["fit-content"] = "max-content",
+	["xx-small"] = "9px",
+	["x-small"] = "10px",
+	small = "13px",
+	medium = "16px",
+	large = "18px",
+	["x-large"] = "24px",
+	["xx-large"] = "32px",
+	smaller = "0.83em",
+	larger = "1.2em",
 }
 
 local function words(s: string): { string }
@@ -175,7 +180,6 @@ local KEYWORDS: { [string]: { code: string, values: { string } } } = {
 	["border-left-style"] = { code = "bls", values = BORDER_STYLE },
 	["list-style-type"] = { code = "lst", values = words("none disc circle square decimal") },
 	["border-collapse"] = { code = "bcl", values = words("collapse separate") },
-	["table-layout"] = { code = "tl", values = words("auto fixed") },
 	["background-color"] = { code = "bgk", values = words("transparent") },
 	["box-shadow"] = { code = "shk", values = words("none") },
 	["background-image"] = { code = "bgi", values = words("none") },
@@ -864,7 +868,13 @@ local function declare(st: State, prop: string, value: string): boolean
 		set(st, prop, { "dt-pos-absolute" })
 		return true
 	elseif LENGTH[prop] then
-		return length(st, prop, value)
+		local alias = LENGTH_ALIASES[value]
+		if alias == "max-content" and not table.find(LENGTH_KEYWORDS["max-content"], prop) then
+			return false
+		elseif alias and alias ~= "max-content" and prop ~= "font-size" then
+			return false
+		end
+		return length(st, prop, alias or value)
 	elseif KEYWORDS[prop] and not COLOR[prop] and not SHORTHAND_KEYWORD[prop] then
 		return keyword(st, prop, value)
 	elseif COLOR[prop] then
