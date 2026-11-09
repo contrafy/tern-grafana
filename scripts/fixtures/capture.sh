@@ -516,15 +516,43 @@ capture_sql() {
 		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
 }
 
+# capture_cells: fixtures for dashboard tern-cells (table cell types over TestData CSV), each panel's
+# /api/ds/query as the frontend builds it (scripts/fixtures/panel_query.jq).
+capture_cells() {
+	dash=$ROOT/dev/grafana/dashboards/tern-cells.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_cells_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_stat_fidelity: fixtures for dashboard tern-stat-fidelity (stat colors, untitled and
+# multi-value stats, narrow values), each panel's /api/ds/query as the frontend builds it.
+capture_stat_fidelity() {
+	dash=$ROOT/dev/grafana/dashboards/tern-stat-fidelity.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_stat_fidelity_$pid" POST /api/ds/query "$body"
+	done
+}
+
 capture_grafana "$G12" "$TOK12"
 capture_all_panels
 capture_sql
+capture_cells
+capture_stat_fidelity
 capture_grafana "$G11" "$TOK11"
 capture_all_panels
 capture_sql
+capture_cells
+capture_stat_fidelity
 capture_grafana "$G13" "$TOK13"
 capture_all_panels
 capture_sql
+capture_cells
+capture_stat_fidelity
 
 # ---------------------------------------------------------------------------------------------
 # Alertmanager (+ amtool from the same image)

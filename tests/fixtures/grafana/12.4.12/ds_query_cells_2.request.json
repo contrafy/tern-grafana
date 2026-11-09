@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"Integration,Groups,LCD,Hidden,MTTR\nGrafana Alerting,92,92,92,5400\nWebhook,55,55,55,1200\nEmail,31,31,31,300\nSlack,8,8,8,60","intervalMs":2000,"maxDataPoints":1920}],"from":"1794250381000","to":"1794253981000"}
