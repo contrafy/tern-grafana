@@ -7,7 +7,13 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-09
+
 ### Added
+
+- Time series `custom.gradientMode` `hue` and `scheme` are drawn natively
+  again, as Grafana's gradient fills (hue shift, threshold steps as hard
+  edges, continuous schemes); 0.4.0 sent these panels to Grafana's renderer.
 
 - Grafana 13 is supported and verified: the dev stack runs Grafana 13.3 next to
   11.6 and 12.4, with recorded fixtures every per-version spec reads.
@@ -19,11 +25,34 @@ versions may break).
   blob-cache issue draft are re-measured on 0.9.13, which trims its image
   cache to 1 GiB at daemon start but still never while running.
 
+### Changed
+
+- Performance round, with no change to config, saved state or behavior.
+  Measured with the new benchmark harness (`make bench`, docs/benchmarks.md)
+  against 0.4.0, CPU times without JSON decoding:
+  - time series SVGs are 35-40% smaller (relative path data), so the image
+    cache grows that much slower; a 60-panel dashboard refreshes about 60%
+    faster and Tern All Panels about 30% faster;
+  - a Query block refresh over 7 days is about 34% faster;
+  - a Loki tail poll of 5000 lines takes about 2 ms instead of 14 ms (new
+    lines are merged, unchanged rows reused);
+  - the compatibility scan is linear in the number of dashboards;
+  - blocks and lenses load their code on first open, and updates that change
+    nothing skip the repaint and save;
+  - settings edits update in place (key handling about 10-100x faster).
+- Cleanup: shared helpers replace about 25 duplicated groups, the dashboard
+  state machine and the large render and panel modules are split, and the
+  architecture doc's module map is rewritten.
+
 ### Fixed
 
 - Gauges on Grafana 13 draw as its radial gauge (shape, segments, sparkline,
   effects): 13 dropped the `newGauge` toggle and always draws the new gauge,
   so the plugin no longer falls back to the old gauge there.
+- A fixed-color (for example purple) or continuous-scheme time series and its
+  legend swatch are drawn in Grafana's color instead of a theme tone.
+- The IRM test fixtures no longer carry raw alert-group numbers and alert
+  values from the capture; the scrub renumbers ids and fails on any raw value.
 
 ## [0.4.0] - 2026-10-20
 
@@ -294,7 +323,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/contrafy/tern-grafana/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/contrafy/tern-grafana/compare/v0.1.1...v0.2.0
