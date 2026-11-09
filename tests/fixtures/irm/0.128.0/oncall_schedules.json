@@ -7,10 +7,12 @@
  "previous": null,
  "results": [
   {
-   "id": "S000000000006",
+   "id": "S000000000004",
    "name": "name 1",
    "on_call_now": [],
    "shifts": [
+    "O000000000005",
+    "O000000000006",
     "O000000000007",
     "O000000000008",
     "O000000000009",
@@ -50,34 +52,43 @@
     "O000000000043",
     "O000000000044",
     "O000000000045",
-    "O000000000046",
-    "O000000000047",
-    "O000000000048"
+    "O000000000046"
    ],
    "team_id": null,
    "time_zone": "time_zone 1",
    "type": "web"
   },
   {
-   "id": "S000000000049",
+   "id": "S000000000047",
    "name": "name 2",
    "on_call_now": [
+    "U000000000048",
+    "U000000000049",
     "U000000000050",
     "U000000000051",
-    "U000000000052",
-    "U000000000053",
-    "U000000000054"
+    "U000000000052"
    ],
+   "shifts": [
+    "O000000000053"
+   ],
+   "team_id": null,
+   "time_zone": "time_zone 1",
+   "type": "web"
+  },
+  {
+   "id": "S000000000054",
+   "name": "name 3",
+   "on_call_now": [],
    "shifts": [
     "O000000000055"
    ],
    "team_id": null,
-   "time_zone": "time_zone 1",
+   "time_zone": "time_zone 2",
    "type": "web"
   },
   {
    "id": "S000000000056",
-   "name": "name 3",
+   "name": "name 4",
    "on_call_now": [],
    "shifts": [
     "O000000000057"
@@ -88,23 +99,12 @@
   },
   {
    "id": "S000000000058",
-   "name": "name 4",
-   "on_call_now": [],
-   "shifts": [
-    "O000000000059"
-   ],
-   "team_id": null,
-   "time_zone": "time_zone 2",
-   "type": "web"
-  },
-  {
-   "id": "S000000000060",
    "name": "name 5",
    "on_call_now": [
-    "U000000000061"
+    "U000000000059"
    ],
    "shifts": [
-    "O000000000062"
+    "O000000000060"
    ],
    "team_id": null,
    "time_zone": "time_zone 2",
