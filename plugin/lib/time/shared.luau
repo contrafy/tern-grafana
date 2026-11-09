@@ -167,4 +167,29 @@ function M.join(
 	return nil, nil, M.share(mine, range, cursor, env)
 end
 
+-- share, appending the kv write (if any) to `effects`.
+function M.shareInto(effects: { any }, mine: Sync, range: Range, cursor: number?, env: Env)
+	local e = M.share(mine, range, cursor, env)
+	if e then
+		table.insert(effects, e)
+	end
+end
+
+-- toggle then, when sync turned on, join with `range` and `cursor` (this
+-- block's current ones), appending the poll timer and any kv write to
+-- `effects`. Returns the range and cursor to adopt (nil when sync turned off,
+-- or nothing to adopt).
+function M.toggleInto(effects: { any }, mine: Sync, range: Range, cursor: number?, env: Env): (Range?, number?)
+	local t = M.toggle(mine)
+	if t == nil then
+		return nil, nil
+	end
+	table.insert(effects, t)
+	local r, c, e = M.join(mine, range, cursor, env)
+	if e then
+		table.insert(effects, e)
+	end
+	return r, c
+end
+
 return M

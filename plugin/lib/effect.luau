@@ -48,7 +48,12 @@ export type View = Node | Regions
 
 export type Machine<S> = {
 	init: (args: { string }, saved: any, env: Env.Env) -> (S, { Effect }),
-	update: (state: S, msg: Msg, env: Env.Env) -> (S, { Effect }),
+	-- The optional third result `changed`: `false` promises that nothing
+	-- `view` or `save` reads changed (a stale-generation answer, a hidden-tab
+	-- re-arm tick, a poll that adopted or added nothing), so the runner may
+	-- skip render and save; effects are still executed. `nil` or `true` mean
+	-- the state may have changed. Return `false` only for provable no-ops.
+	update: (state: S, msg: Msg, env: Env.Env) -> (S, { Effect }, boolean?),
 	view: (state: S, env: Env.Env) -> (View, Assets.Assets?),
 	title: ((state: S) -> string?)?,
 	-- JSON values only, never secrets (saved state lands in Tern's state file).

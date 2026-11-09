@@ -185,4 +185,16 @@ describe("default precedence", function()
 	end)
 end)
 
+describe("Route.contextNames", function()
+	-- Pickers and error messages list contexts in this order.
+	it("lists every context name sorted", function()
+		expect(Route.contextNames({ contexts = { prod = {}, lab = {}, Edge = {} } } :: any)).toEqual({
+			"Edge",
+			"lab",
+			"prod",
+		})
+		expect(Route.contextNames({ contexts = {} } :: any)).toEqual({})
+	end)
+end)
+
 return nil

@@ -415,14 +415,23 @@ function M.zoom(r: Range, factor: number): Range
 	}
 end
 
-function M.zoomOut(r: Range): Range
-	return M.zoom(r, 2)
-end
-
 -- direction -1 moves back in time, +1 forward, by half the span.
 function M.shift(r: Range, direction: number): Range
 	local half = (r.to_ms - r.from_ms) / 2 * (if direction < 0 then -1 else 1)
 	return { from_ms = math.floor(r.from_ms + half), to_ms = math.floor(r.to_ms + half) }
+end
+
+-- A coarse age: "42s", "5m", "3h", "2d" (whole units, rounded down, never negative).
+function M.age(ms: number): string
+	local sec = math.max(0, math.floor(ms / 1000))
+	if sec < 60 then
+		return sec .. "s"
+	elseif sec < 3600 then
+		return (sec // 60) .. "m"
+	elseif sec < 86400 then
+		return (sec // 3600) .. "h"
+	end
+	return (sec // 86400) .. "d"
 end
 
 return M
