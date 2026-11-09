@@ -10,8 +10,8 @@ local ConfigHost = require("./config_host")
 local EnvHost = require("./env_host")
 local Evaluate = require("./lib/watches/evaluate")
 local Poll = require("./lib/watches/poll")
+local Poller = require("./poller_host")
 local Settings = require("./lib/watches/settings")
-local TransportHost = require("./transport_host")
 local Validate = require("./lib/config/validate")
 
 type State = Evaluate.State
@@ -23,30 +23,13 @@ M.FIRST_DELAY_MS = 3000
 -- A cycle whose answers never all arrived is abandoned after this long.
 M.STUCK_MS = 2 * 60 * 1000
 
-local started = false
-local cycle = 0
-local inflightSince: number? = nil
+local P: Poller.Poller
 local states: { [string]: State }? = nil
 local warnedFor: any = nil
 
-local function warn(what: string, err: any)
-	pcall(tern.log.warn, "tern-grafana watches " .. what .. " failed", tostring(err))
-end
-
-local schedule: (ms: number) -> ()
-
-local function write(value: any)
-	local ok, err = pcall(function()
-		tern.kv.set(Poll.KEY, value)
-	end)
-	if not ok then
-		warn("kv.set", err)
-	end
-end
-
 local function run()
-	if inflightSince and tern.now() - (inflightSince :: number) < M.STUCK_MS then
-		schedule(Poll.MIN_DELAY_MS * 5)
+	if Poller.busy(P, M.STUCK_MS) then
+		Poller.schedule(P, Poll.MIN_DELAY_MS * 5)
 		return
 	end
 	pcall(ConfigHost.load)
@@ -60,18 +43,14 @@ local function run()
 		end
 	end
 	if states == nil then
-		local okPrev, prev = pcall(tern.kv.get, Poll.KEY)
-		states = Poll.restore(if okPrev then prev else nil, watches, env.now_ms)
+		states = Poll.restore(Poller.read(P), watches, env.now_ms)
 	end
 	local current = states :: { [string]: State }
 	if #watches == 0 then
-		local okGet, existing = pcall(tern.kv.get, Poll.KEY)
-		if okGet and existing ~= nil then
-			write(nil)
-		end
+		Poller.clear(P)
 		table.clear(current)
-		inflightSince = nil
-		schedule(Poll.IDLE_MS)
+		P.inflightSince = nil
+		Poller.schedule(P, Poll.IDLE_MS)
 		return
 	end
 	-- Forget watches that were removed from the config.
@@ -87,38 +66,36 @@ local function run()
 
 	local due = Poll.due(watches, current, env.now_ms)
 	if #due == 0 then
-		schedule(Poll.nextDelay(watches, current, env.now_ms))
+		Poller.schedule(P, Poll.nextDelay(watches, current, env.now_ms))
 		return
 	end
-	cycle += 1
-	local mine = cycle
-	inflightSince = tern.now()
+	local mine = Poller.begin(P)
 	local pending = #due
 	local function finish()
-		if mine ~= cycle or pending > 0 then
+		if mine ~= P.cycle or pending > 0 then
 			return
 		end
-		inflightSince = nil
+		P.inflightSince = nil
 		local now = EnvHost.nowMs()
 		local okPayload, payload = pcall(Poll.payload, watches, current, config, now)
 		if okPayload then
-			write(payload)
+			Poller.write(P, payload)
 		else
-			warn("summary", payload)
+			Poller.warn(P, "summary", payload)
 		end
-		schedule(Poll.nextDelay(watches, current, now))
+		Poller.schedule(P, Poll.nextDelay(watches, current, now))
 	end
 	for _, w in due do
 		local job = Poll.job(config :: any, w, env.now_ms)
 		local function settle(response: any)
-			if mine ~= cycle then
+			if mine ~= P.cycle then
 				return
 			end
 			local ok, state = pcall(Poll.finish, EnvHost.make(nil), current[w.name], job, response, env.now_ms)
 			if ok then
 				current[w.name] = state
 			else
-				warn("evaluate " .. w.name, state)
+				Poller.warn(P, "evaluate " .. w.name, state)
 			end
 			pending -= 1
 			finish()
@@ -126,49 +103,20 @@ local function run()
 		if job.request == nil then
 			local prev = current[w.name]
 			if prev == nil or prev.error ~= "config" then
-				warn("route " .. w.name, job.error)
+				Poller.warn(P, "route " .. w.name, job.error)
 			end
 			settle(nil)
 		else
-			local okExec, err = pcall(function()
-				TransportHost.execute(job.route :: any, job.request :: any, settle)
-			end)
-			if not okExec then
-				settle({
-					status = 0,
-					headers = {},
-					body = "",
-					timed_out = false,
-					failure = { kind = "network", message = tostring(err) },
-				})
-			end
+			Poller.execute(job.route, job.request, settle)
 		end
 	end
 end
 
-function schedule(ms: number)
-	local ok, err = pcall(tern.timer, ms, function()
-		local okRun, runErr = pcall(function()
-			run()
-		end)
-		if not okRun then
-			inflightSince = nil
-			warn("cycle", runErr)
-			schedule(Poll.IDLE_MS)
-		end
-	end)
-	if not ok then
-		warn("timer", err)
-	end
-end
+P = Poller.new("tern-grafana watches", Poll.KEY, Poll.IDLE_MS, run)
 
 -- Starts the poll loop once per host VM.
 function M.start()
-	if started then
-		return
-	end
-	started = true
-	schedule(M.FIRST_DELAY_MS)
+	Poller.start(P, M.FIRST_DELAY_MS)
 end
 
 return M

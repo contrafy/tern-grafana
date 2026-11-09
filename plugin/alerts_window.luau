@@ -6,9 +6,8 @@
 -- command, which is also what clicking the segment runs. Status segments
 -- only show while the user's status bar is on. Tern keeps one status
 -- formatter per plugin, so this one also shows the watches segment
--- (watches_window) and the IRM segment (lib/irm/segment.luau, from the kv
--- summary irm_poll_host writes); the signature covers all of them, so any
--- change refreshes.
+-- (watches_window) and the IRM segment (irm_poll_host's kv summary); the
+-- signature covers all of them, so any change refreshes.
 --
 -- The segment stack loads in timer callbacks right after the window entry,
 -- one group per tick, never with the entry (50 ms load budget) nor in the
@@ -64,6 +63,10 @@ local GROUPS: { () -> () } = {
 	end,
 }
 
+-- Formatter reuses segments of the same os.time() second.
+local cached: { any }? = nil
+local cachedAt: number? = nil
+
 local function current(t: any, s: Stack): { any }?
 	local seconds = os.time()
 	local now = seconds * 1000
@@ -72,7 +75,8 @@ local function current(t: any, s: Stack): { any }?
 	local okIrm, irmRaw = pcall(t.kv.get, s.IrmSummary.KEY)
 	local irm = if okIrm then s.IrmSegment.segments(irmRaw, now, localOffsetMin(seconds)) else nil
 	local watches = WatchesWindow.segments(t)
-	return s.WatchSegment.append(s.WatchSegment.append(alerts, watches), irm)
+	cached, cachedAt = s.WatchSegment.append(s.WatchSegment.append(alerts, watches), irm), seconds
+	return cached
 end
 
 function M.register(t: any)
@@ -90,6 +94,9 @@ function M.register(t: any)
 		local s = stack
 		if s == nil then
 			return nil
+		end
+		if cachedAt == os.time() then
+			return cached
 		end
 		return current(t, s)
 	end)
@@ -125,6 +132,7 @@ function M.register(t: any)
 			end)
 			pcall(announce, s, cx)
 		end
+		pcall(WatchesWindow.check, t, cx)
 		t.timer(M.CHECK_MS, check)
 	end
 

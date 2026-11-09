@@ -8,6 +8,8 @@
 -- child's stdin. Explanations name sources, programs, items and exit codes,
 -- never a secret or a command's output.
 
+local Str = require("../str")
+
 local M = {}
 
 export type Platform = "macos" | "linux"
@@ -204,15 +206,6 @@ local function keychainName(os: string?): string
 	return if os == "linux" then "the Secret Service keyring" else "the macOS keychain"
 end
 
--- First line only, without a "runtime error: " prefix: a host error may carry
--- a Lua stack traceback.
-function M.firstLine(text: string?): string
-	local line = string.match(text or "", "^%s*([^\r\n]*)") or ""
-	line = string.gsub(line, "^runtime error: ", "")
-	line = string.gsub(line, "%s+$", "")
-	return if line == "" then "unknown error" else line
-end
-
 local function keychainOf(detail: Detail): string
 	return keychainName(detail.os)
 end
@@ -283,7 +276,7 @@ function M.explain(kind: Kind, detail: Detail): Explained
 		}
 	elseif kind == "cmd_start" then
 		return {
-			message = string.format("%s `%s` could not be started: %s", field, program, M.firstLine(detail.error)),
+			message = string.format("%s `%s` could not be started: %s", field, program, Str.firstLine(detail.error)),
 			hint = "check the program path in " .. field,
 		}
 	elseif kind == "cmd_failed" then
@@ -307,7 +300,7 @@ function M.explain(kind: Kind, detail: Detail): Explained
 				"%s %s could not be read: %s",
 				field,
 				detail.path or "?",
-				M.firstLine(detail.error)
+				Str.firstLine(detail.error)
 			),
 			hint = "check that the file exists and is readable by you (chmod 600)",
 		}

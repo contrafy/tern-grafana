@@ -2,9 +2,9 @@
 -- Deploy annotations (G1) and the impact watch trigger (G2): the
 -- `command_started` / `command_finished` hooks and the approve block
 -- (`tern-grafana.annotate`). Decisions live in lib/annotations (trigger,
--- approval, state); this file pairs the hook events, gathers the facts only
--- the host can (login user, git short SHA of the cwd), keeps pending drafts
--- in memory for the approve block, and posts for contexts approved "always".
+-- approval, state, session: pending drafts, toasts, audit lines); this file
+-- pairs the hook events, gathers the facts only the host can (login user, git
+-- short SHA of the cwd), and posts for contexts approved "always".
 --
 -- Pending drafts never leave host memory (no kv, no block args): the approve
 -- link carries only a nonce, so a restarted Tern shows the request as gone
@@ -22,6 +22,7 @@ local Pairing = require("./lib/annotations/pairing")
 local Render = require("./lib/annotations/render")
 local Route = require("./lib/config/route")
 local Scheme = require("./lib/links/scheme")
+local Session = require("./lib/annotations/session")
 local State = require("./lib/annotations/state")
 local TransportHost = require("./transport_host")
 local Trigger = require("./lib/annotations/trigger")
@@ -30,20 +31,16 @@ type Draft = Api.Draft
 
 local M = {}
 
-M.PENDING_TTL_MS = 60 * 60 * 1000
-M.MAX_PENDING = 16
 M.GIT_TIMEOUT_MS = 2000
 
 local tracker = Pairing.new()
-local pending: { [string]: { draft: Draft, created_ms: number } } = {}
--- Problems already toasted this session (one toast per cause).
-local told: { [string]: boolean } = {}
+local session = Session.new()
 local registered = false
 -- The config whose section problems were last logged.
 local warnedFor: any = nil
 
-local function info(what: string, line: string)
-	pcall(tern.log.info, "tern-grafana " .. what, line)
+local function audit(line: string)
+	pcall(tern.log.info, "tern-grafana annotate", line)
 end
 
 local function warn(what: string, err: any)
@@ -68,45 +65,6 @@ local function open(cx: EffectCx, target: string)
 	if not ok then
 		warn("open", err)
 	end
-end
-
-local function prune(now: number)
-	local oldestId: string? = nil
-	local oldest = math.huge
-	local n = 0
-	for id, p in pending do
-		if now - p.created_ms > M.PENDING_TTL_MS then
-			pending[id] = nil
-		else
-			n += 1
-			if p.created_ms < oldest then
-				oldestId, oldest = id, p.created_ms
-			end
-		end
-	end
-	if n >= M.MAX_PENDING and oldestId then
-		pending[oldestId :: string] = nil
-	end
-end
-
-local function store(draft: Draft): string
-	local now = EnvHost.nowMs()
-	prune(now)
-	local id: string
-	repeat
-		id = string.format("%x%06x", math.floor(now), math.random(0, 0xffffff))
-	until pending[id] == nil
-	pending[id] = { draft = draft, created_ms = now }
-	return id
-end
-
--- Whitelisted fields only: never the annotation text or the command line.
-local function audit(fields: { { string } })
-	local parts: { string } = {}
-	for _, f in fields do
-		table.insert(parts, f[1] .. "=" .. f[2])
-	end
-	info("annotate", table.concat(parts, " "))
 end
 
 -- Login user and the cwd's git short SHA (no shell; failures just omit it).
@@ -148,32 +106,15 @@ local function postNow(draft: Draft, cx: EffectCx)
 		toast(cx, "error", "Deploy annotation not posted", if err then err.message else "no valid config")
 		return
 	end
-	audit({ { "action", "post" }, { "outcome", "sent" }, { "context", draft.context }, { "choice", "always" } })
+	audit(Session.sentLine(draft))
 	local request = Api.request(draft, env.encode)
 	local ok, raised = pcall(function()
 		TransportHost.execute(route :: Route.Route, request, function(response)
 			local qe = Classify.classify(response, tern.json.decode)
-			if qe then
-				audit({
-					{ "action", "post" },
-					{ "outcome", "failed" },
-					{ "context", draft.context },
-					{ "choice", "always" },
-					{ "status", tostring(response.status) },
-				})
-				toast(cx, "error", "Deploy annotation failed (" .. draft.context .. ")", qe.message)
-				return
-			end
-			local id = Api.parseCreated(EnvHost.make(nil), response.body)
-			audit({
-				{ "action", "post" },
-				{ "outcome", "ok" },
-				{ "context", draft.context },
-				{ "choice", "always" },
-				{ "id", tostring(id) },
-				{ "status", tostring(response.status) },
-			})
-			toast(cx, "info", "Deploy annotated in Grafana (" .. draft.context .. ")", draft.kind)
+			local id = if qe then nil else Api.parseCreated(EnvHost.make(nil), response.body)
+			local line, t = Session.outcome(draft, response.status, qe, id)
+			audit(line)
+			toast(cx, t.level, t.text, t.sub)
 		end)
 	end)
 	if not ok then
@@ -210,11 +151,8 @@ local function onFinished(ev: CommandFinishedEvent, cx: EffectCx)
 	if plan == nil then
 		return
 	end
-	for _, problem in plan.problems do
-		if not told[problem] then
-			told[problem] = true
-			toast(cx, "info", "Tern Grafana", problem)
-		end
+	for _, problem in Session.fresh(session, plan.problems) do
+		toast(cx, "info", "Tern Grafana", problem)
 	end
 	if plan.impact then
 		open(cx, plan.impact :: string)
@@ -232,37 +170,24 @@ local function onFinished(ev: CommandFinishedEvent, cx: EffectCx)
 		if ann.decision == "post" then
 			postNow(draft, cx)
 		else
-			local id = store(draft)
+			local id = Session.store(session, draft, EnvHost.nowMs(), function()
+				return math.random(0, 0xffffff)
+			end)
 			open(cx, Scheme.encode({ action = "annotate", params = { id = id, context = ann.context }, vars = {} }))
 		end
 	end)
 end
 
 local function onLoad(e: State.LoadEffect, send: (msg: any) -> ())
-	local p: { draft: Draft, created_ms: number }? = pending[e.id]
-	if p and EnvHost.nowMs() - p.created_ms > M.PENDING_TTL_MS then
-		pending[e.id] = nil
-		p = nil
-	end
-	send({ kind = "annotate_pending", draft = if p then p.draft else nil })
+	send({ kind = "annotate_pending", draft = Session.load(session, e.id, EnvHost.nowMs()) })
 end
 
 local function onForget(e: State.ForgetEffect, _send: (msg: any) -> ())
-	pending[e.id] = nil
+	Session.forget(session, e.id)
 end
 
 local function onAudit(e: State.AuditEffect, _send: (msg: any) -> ())
-	local fields = { { "action", e.action }, { "outcome", e.outcome }, { "context", e.context } }
-	if e.choice then
-		table.insert(fields, { "choice", e.choice })
-	end
-	if e.id then
-		table.insert(fields, { "id", tostring(e.id) })
-	end
-	if e.status then
-		table.insert(fields, { "status", tostring(e.status) })
-	end
-	audit(fields)
+	audit(Session.auditLine(e :: any))
 end
 
 function M.register()

@@ -4,6 +4,7 @@
 -- a write is sent, lives in lib/irm/*_state.luau; this file only answers the
 -- machines' one host effect: the audit line of each write decision.
 
+local Audit = require("./lib/audit")
 local BlockRunner = require("./block_runner")
 local IncidentsRender = require("./lib/irm/incidents_render")
 local IncidentsState = require("./lib/irm/incidents_state")
@@ -13,21 +14,11 @@ local OnCallState = require("./lib/irm/oncall_state")
 local M = {}
 
 -- Whitelisted fields only: never titles, notes, labels or credentials.
+local AUDIT_ALWAYS = { "block", "action", "outcome", "context", "target" }
+local AUDIT_OPTIONAL = { "duration_s", "status" }
+
 local function onAudit(e: any, _send: (msg: any) -> ())
-	local parts = {
-		"block=" .. tostring(e.block),
-		"action=" .. tostring(e.action),
-		"outcome=" .. tostring(e.outcome),
-		"context=" .. tostring(e.context),
-		"target=" .. tostring(e.target),
-	}
-	if e.duration_s then
-		table.insert(parts, "duration_s=" .. tostring(e.duration_s))
-	end
-	if e.status then
-		table.insert(parts, "status=" .. tostring(e.status))
-	end
-	pcall(tern.log.info, "tern-grafana irm", table.concat(parts, " "))
+	pcall(tern.log.info, "tern-grafana irm", Audit.line(e, AUDIT_ALWAYS, AUDIT_OPTIONAL))
 end
 
 function M.register()

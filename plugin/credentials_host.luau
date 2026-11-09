@@ -11,6 +11,7 @@
 local Auth = require("./lib/auth/auth")
 local Keychain = require("./lib/auth/keychain")
 local LoginEnv = require("./lib/auth/login_env")
+local Str = require("./lib/str")
 
 type Platform = Keychain.Platform
 
@@ -78,7 +79,7 @@ local function run(argv: { string }, opts: ProcessOptions, cb: (ProcessResult?, 
 	end)
 	if not ok then
 		warn("could not start " .. argv[1], tostring(err))
-		cb(nil, Keychain.firstLine(tostring(err)))
+		cb(nil, Str.firstLine(tostring(err)))
 	end
 end
 

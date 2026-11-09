@@ -213,14 +213,4 @@ describe("explain", function()
 	end)
 end)
 
-describe("firstLine", function()
-	it("drops Lua tracebacks and the runtime error prefix", function()
-		expect(Keychain.firstLine("runtime error: tern.process.run op: No such file\nstack traceback:\n\t[C]")).toBe(
-			"tern.process.run op: No such file"
-		)
-		expect(Keychain.firstLine(nil)).toBe("unknown error")
-		expect(Keychain.firstLine("\n")).toBe("unknown error")
-	end)
-end)
-
 return nil

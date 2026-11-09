@@ -4,6 +4,7 @@
 -- only answers the machine's two host effects: the login user (the default
 -- "created by") and the audit line of each write decision.
 
+local Audit = require("./lib/audit")
 local BlockRunner = require("./block_runner")
 local Render = require("./lib/silences/render")
 local State = require("./lib/silences/state")
@@ -18,26 +19,11 @@ local function onUser(_effect: any, send: (msg: any) -> ())
 end
 
 -- Whitelisted fields only: never the comment, matcher values or headers.
+local AUDIT_ALWAYS = { "action", "outcome", "context", "target" }
+local AUDIT_OPTIONAL = { "matchers", "duration_s", "id", "status" }
+
 local function onAudit(e: State.AuditEffect, _send: (msg: any) -> ())
-	local parts = {
-		"action=" .. e.action,
-		"outcome=" .. e.outcome,
-		"context=" .. e.context,
-		"target=" .. e.target,
-	}
-	if e.matchers then
-		table.insert(parts, "matchers=" .. tostring(e.matchers))
-	end
-	if e.duration_s then
-		table.insert(parts, "duration_s=" .. tostring(e.duration_s))
-	end
-	if e.id then
-		table.insert(parts, "id=" .. e.id)
-	end
-	if e.status then
-		table.insert(parts, "status=" .. tostring(e.status))
-	end
-	pcall(tern.log.info, "tern-grafana silence", table.concat(parts, " "))
+	pcall(tern.log.info, "tern-grafana silence", Audit.line(e :: any, AUDIT_ALWAYS, AUDIT_OPTIONAL))
 end
 
 function M.register()
