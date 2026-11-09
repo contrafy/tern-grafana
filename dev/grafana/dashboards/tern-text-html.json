@@ -1,0 +1,97 @@
+{
+  "uid": "tern-text-html",
+  "title": "Tern Text HTML",
+  "schemaVersion": 39,
+  "editable": false,
+  "tags": [
+    "tern"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "utc",
+  "refresh": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Text 1",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 12
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## About usage\n\nThe **billable usage** panels show *accrued* costs.\n\n- Users are billed by <a href=\"https://example.com/docs/active-users\" target=\"_blank\">active monthly users</a>, with <b>extra</b> costs.\n- Locate your <a href=\"/d/tern-panels\" target=\"_blank\">highest cardinality metrics</a> from the dashboards\n- Profiles are subject to <a\n  href=\"https://example.com/pricing\" target=\"_blank\">Pricing</a> for Profiles.\n\n<a href=\"https://example.com/reconcile\" target=\"_blank\">Reconcile invoices</a>\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "<div>\n  <a href=\"https://example.com/invoices\" target=\"_blank\"/>\n    <h1 style=\"\n      text-align: center;\n      color: #6e9fff;\n    \">\n      View invoices\n    </h1>\n  </a>\n</div>\n\nText after the block with `<b>code</b>` kept.\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "Text 3",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 12
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "<div style=\"vertical-align: top;\"><p style=\"text-align: center;\"><b>Looking for the drilldown?</b> We moved it <i>further up</i>.</p></div>\n\nLine one<br>line two with <span style=\"color:red\">a span</span>, <u>underline</u>, <code>a &lt;code&gt;</code> and <em>emphasis</em>.\n\n<script>alert(1)</script>\n<style>p { color: red; }</style>\nUnknown <custom-tag>inner text</custom-tag> and <img src=\"https://example.com/x.png\" alt=\"an image\"> and <img src=\"/public/img/grafana_icon.svg\">.\n\n<a href=\"javascript:alert(1)\" onclick=\"alert(2)\">bad link</a>\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "text",
+      "title": "Text 4",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 16
+      },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"background:#020617;color:white;padding:20px;\">\n  <h2 style=\"margin-top:0;\">Upgrade schedule</h2>\n  <h3 style=\"color:#93c5fd;\">This week</h3>\n  <table style=\"width:100%;\">\n    <colgroup><col style=\"width:50%\"><col style=\"width:50%\"></colgroup>\n    <tr>\n      <td style=\"font-weight:bold;\">Monday - 8</td>\n      <td style=\"font-weight:bold;\">Tuesday - 9</td>\n    </tr>\n    <tr>\n      <td><div><b>Haven at Mission</b></div><div><b>Lofts at Katy</b></div></td>\n      <td><div style=\"color:#64748b;\">No upgrades</div></td>\n    </tr>\n  </table>\n  <ul><li>first</li><li>second <a href=\"https://example.com/s\">link</a></li></ul>\n  <ol><li>one</li><li>two</li></ol>\n  <hr>\n  <pre>pre  formatted\n  text</pre>\n  <p>Para with &amp; entity &#x2713; and<br>a break.</p>\n  <div><img src=\"/public/img/grafana_icon.svg\"></div>\n  <script>alert(1)</script>\n</div>\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    }
+  ]
+}

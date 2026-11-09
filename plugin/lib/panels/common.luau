@@ -62,6 +62,9 @@ export type Options = {
 	-- Grafana's frontend feature toggles (/api/frontend/settings
 	-- featureToggles), e.g. newGauge.
 	features: { [string]: boolean }?,
+	-- The Grafana's browser URL without a trailing slash: text panel links
+	-- and images with rooted paths resolve against it.
+	base_url: string?,
 }
 
 -- Context for a module's non-datasource requests.
