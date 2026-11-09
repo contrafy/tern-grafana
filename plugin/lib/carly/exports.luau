@@ -9,6 +9,7 @@
 -- answer carries credentials: only names, values and http(s) URLs from the
 -- config's endpoint `url`s, which never hold userinfo.
 
+local Tbl = require("../tbl")
 local Compact = require("./compact")
 local ConfigTypes = require("../config/types")
 local Env = require("../env")
@@ -64,11 +65,7 @@ local function fail(message: string): (nil, string)
 end
 
 local function contextNames(config: Config): string
-	local names: { string } = {}
-	for name in config.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(config.contexts)
 	return table.concat(names, ", ")
 end
 

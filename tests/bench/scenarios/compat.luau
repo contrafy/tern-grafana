@@ -1,7 +1,7 @@
 --!strict
--- Compatibility report over 100 dashboards: the Compat block's whole scan
--- (settings, search, every dashboard and library panel fetched and
--- analyzed), the 100 dashboards cycling through the five recorded Grafana 12
+-- Compatibility report over 100 and 1000 dashboards: the Compat block's
+-- whole scan (settings, search, every dashboard and library panel fetched and
+-- analyzed), the dashboards cycling through the five recorded Grafana 12
 -- fixture dashboards. `scan_ms` paints after every answer, as the runner
 -- does; `scan_one_paint_ms` paints once at the end (analysis cost alone).
 
@@ -15,28 +15,28 @@ local S = require("../../unit/dashboard/support")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 
-local COUNT = 100
+local COUNTS = { 100, 1000 }
 local DASHBOARDS = { "tern_panels", "tern_variables", "tern_all_panels", "tern_observability", "tern_sql" }
 
 local CONFIG = assert(Validate.parseFile(
-	[[{"default_context": "lab", "contexts": {
+	[[{"default_context": "lab", "compat": {"max_dashboards": 1000}, "contexts": {
 	"lab": {"grafana": {"url": "http://localhost:3000", "org_id": 1}}}}]],
 	json.decode
 ))
 
-local SEARCH = (function(): string
+local function search(count: number): string
 	local list: { any } = {}
-	for i = 1, COUNT do
+	for i = 1, count do
 		table.insert(list, { uid = "d" .. i, title = "D" .. i, type = "dash-db" })
 	end
 	return json.encode(list)
-end)()
+end
 
 local function grafana(name: string): string
 	return S.grafana("12.4.12", name)
 end
 
-local function bodyFor(e: any): string?
+local function bodyFor(e: any, searchBody: string): string?
 	local path: string = e.request.path
 	if path == "/api/search" then
 		local page = 1
@@ -45,7 +45,7 @@ local function bodyFor(e: any): string?
 				page = tonumber(q[2]) or 1
 			end
 		end
-		return if page == 1 then SEARCH else "[]"
+		return if page == 1 then searchBody else "[]"
 	elseif path == "/api/frontend/settings" then
 		return Fixtures.read(grafana("frontend_settings_all_panels.json"))
 	end
@@ -59,7 +59,7 @@ local function bodyFor(e: any): string?
 	return nil
 end
 
-local function scan(paintEach: boolean): (any, Paint.Painter, number)
+local function scan(searchBody: string, paintEach: boolean): (any, Paint.Painter, number)
 	local env = S.env(CONFIG)
 	env.decode = Probes.decoder(env.decode)
 	local p = Paint.new()
@@ -69,7 +69,7 @@ local function scan(paintEach: boolean): (any, Paint.Painter, number)
 	while #queue > 0 do
 		local nextQueue = {}
 		for _, e: any in queue do
-			local body = if e.kind == "http" then bodyFor(e) else nil
+			local body = if e.kind == "http" then bodyFor(e, searchBody) else nil
 			if body then
 				answered += 1
 				local response = { status = 200, headers = {}, body = body, timed_out = false }
@@ -90,29 +90,30 @@ end
 
 local M = {}
 
-function M.run(opts: any): { any }
-	local name = "compat/100-dashboards"
+local function case(opts: any, count: number): any?
+	local name = string.format("compat/%d-dashboards", count)
 	if not opts.match(name) then
-		return {}
+		return nil
 	end
-	local s, p, answered = scan(false)
+	local body = search(count)
+	local s, p, answered = scan(body, false)
 	local analyzed = #CompatState.ordered(s)
-	assert(analyzed == COUNT, "compat bench analyzed " .. analyzed .. " of " .. COUNT .. " dashboards")
+	assert(analyzed == count, "compat bench analyzed " .. analyzed .. " of " .. count .. " dashboards")
 	local each = Bench.sample(opts.warmup, opts.iters, function()
 		return nil
 	end, function()
-		scan(true)
+		scan(body, true)
 	end)
 	local once = Bench.sample(opts.warmup, opts.iters, function()
 		return nil
 	end, function()
-		scan(false)
+		scan(body, false)
 	end)
 	local retained = Bench.retainedKb(5, function()
-		return scan(false)
+		return scan(body, false)
 	end)
 	local phases = Bench.attribute(function()
-		scan(false)
+		scan(body, false)
 	end)
 	local metrics: { [string]: any } = {
 		requests_answered = answered,
@@ -124,7 +125,18 @@ function M.run(opts: any): { any }
 	local sizes: { [string]: any } = {}
 	Paint.metrics(p, sizes)
 	metrics.view_nodes = sizes.view_nodes
-	return { { name = name, metrics = metrics, phases = { scan = phases } } }
+	return { name = name, metrics = metrics, phases = { scan = phases } }
+end
+
+function M.run(opts: any): { any }
+	local out: { any } = {}
+	for _, count in COUNTS do
+		local r = case(opts, count)
+		if r then
+			table.insert(out, r)
+		end
+	end
+	return out
 end
 
 return M

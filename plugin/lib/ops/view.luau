@@ -3,6 +3,8 @@
 -- a key-hint dock. Tabs whose endpoint the server lacks show a note instead
 -- of an error. Class names are prefixed `tg-op-` (plugin/ops.css).
 
+local Tbl = require("../tbl")
+local Range = require("../time/range")
 local Effect = require("../effect")
 local Env = require("../env")
 local Format = require("../units/format")
@@ -37,19 +39,6 @@ local LIST_HEAD: { [string]: { title: string, name: string, value: string } } = 
 }
 
 local HEALTH_STYLE: { [string]: string } = { up = "success", down = "error", unknown = "warning" }
-
--- "42s", "5m", "3h", "2d".
-function M.age(ms: number): string
-	local sec = math.max(0, math.floor(ms / 1000))
-	if sec < 60 then
-		return sec .. "s"
-	elseif sec < 3600 then
-		return (sec // 60) .. "m"
-	elseif sec < 86400 then
-		return (sec // 3600) .. "h"
-	end
-	return (sec // 86400) .. "d"
-end
 
 -- An integer with thousands separators: "8,640".
 function M.int(n: number): string
@@ -195,11 +184,7 @@ local function targetDetail(t: Targets.Target): Node
 	if t.last_error then
 		table.insert(items, item({ "last error" }, { ui.span(t.last_error :: string, "error") }))
 	end
-	local names: { string } = {}
-	for name in t.labels do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(t.labels)
 	for _, name in names do
 		table.insert(items, { { ui.span(name, "mono") }, { ui.span(t.labels[name], "mono") } })
 	end
@@ -212,7 +197,7 @@ local function targetRow(s: State, i: number, t: Targets.Target, env: Env.Env): 
 		ui.span(t.instance, "strong"),
 	}
 	if t.last_scrape_ms then
-		table.insert(spans, ui.span("  " .. M.age(env.now_ms - (t.last_scrape_ms :: number)) .. " ago", "muted"))
+		table.insert(spans, ui.span("  " .. Range.age(env.now_ms - (t.last_scrape_ms :: number)) .. " ago", "muted"))
 	else
 		table.insert(spans, ui.span("  never scraped", "muted"))
 	end
@@ -373,7 +358,7 @@ local function headStats(t: Tsdb.Tsdb): Node
 	if h.min_time_ms and h.max_time_ms then
 		table.insert(items, {
 			{ "head span" },
-			{ M.age((h.max_time_ms :: number) - (h.min_time_ms :: number)) },
+			{ Range.age((h.max_time_ms :: number) - (h.min_time_ms :: number)) },
 		})
 	end
 	return ui.kv(items)
@@ -504,7 +489,7 @@ local function runtimeCard(s: State, env: Env.Env): Node
 				table.insert(items, item({ k }, v :: { SpanLike }))
 			end
 		end
-		add("started", if r.start_ms then { M.age(env.now_ms - (r.start_ms :: number)) .. " ago" } else nil)
+		add("started", if r.start_ms then { Range.age(env.now_ms - (r.start_ms :: number)) .. " ago" } else nil)
 		add("hostname", if r.hostname then { ui.span(r.hostname :: string, "mono") } else nil)
 		add("cwd", if r.cwd then { ui.span(r.cwd :: string, "mono") } else nil)
 		if r.reload_ok ~= nil then
@@ -512,7 +497,7 @@ local function runtimeCard(s: State, env: Env.Env): Node
 		end
 		add(
 			"last reload",
-			if r.last_config_ms then { M.age(env.now_ms - (r.last_config_ms :: number)) .. " ago" } else nil
+			if r.last_config_ms then { Range.age(env.now_ms - (r.last_config_ms :: number)) .. " ago" } else nil
 		)
 		add("retention", if r.retention then { r.retention :: string } else nil)
 		add("goroutines", if r.goroutines then { M.int(r.goroutines :: number) } else nil)

@@ -390,6 +390,29 @@ describe("compat block", function()
 		expect(#effects).toBe(2)
 	end)
 
+	-- Rows grow per answer without rescanning every dashboard; they must stay
+	-- what a full derive gives, whatever order answers arrive in and with the
+	-- row cap biting.
+	it("keeps the rows of out-of-order answers equal to a full derive", function()
+		local savedMax = CompatState.MAX_ROWS
+		CompatState.MAX_ROWS = 7
+		for _, filter in { "", "d2", "acme" } do
+			local h = start(nil, nil)
+			h.s.filter_text = filter
+			CompatState.derive(h.s)
+			answer(h, "c/1/fs", S.response(S.grafana(VERSION, "frontend_settings.json")))
+			answer(h, "c/1/s/1", S.body(200, hits(6)))
+			for _, i in { 3, 1, 4, 2, 6, 5 } do
+				answer(h, "c/1/d/" .. i, S.body(200, SYNTH.a))
+				local rows, matched = h.s.rows, h.s.matched
+				CompatState.derive(h.s)
+				expect(rows).toEqual(h.s.rows)
+				expect(matched).toBe(h.s.matched)
+			end
+		end
+		CompatState.MAX_ROWS = savedMax
+	end)
+
 	it("opens dashboards and panels natively, filters, and copies a report without URLs", function()
 		local h = start()
 		answer(h, "c/1/fs", S.response(S.grafana(VERSION, "frontend_settings.json")))

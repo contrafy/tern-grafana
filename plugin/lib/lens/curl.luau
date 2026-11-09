@@ -664,11 +664,7 @@ end
 local function readGrafana(doc: any, env: Env): { Section }
 	local sections: { Section } = {}
 	local results = FrameGrafana.parseResults(doc, env)
-	local refs: { string } = {}
-	for ref in results do
-		table.insert(refs, ref)
-	end
-	table.sort(refs)
+	local refs: { string } = Tbl.sortedKeys(results)
 	local raw = if type(doc.results) == "table" then doc.results else {}
 	for _, ref in refs do
 		local r = results[ref]

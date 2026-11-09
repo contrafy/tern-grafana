@@ -12,6 +12,7 @@
 -- format_extended.go): tabwriter tables padded with at least two spaces
 -- (widths counted in runes), and encoding/json of the API v2 models.
 
+local Route = require("../config/route")
 local ConfigTypes = require("../config/types")
 local EnvModule = require("../env")
 local GrafanaUrl = require("../links/grafana_url")
@@ -739,15 +740,6 @@ end
 
 -- Links -----------------------------------------------------------------------------
 
-local function sortedContexts(cfg: Config): { string }
-	local names: { string } = {}
-	for name in cfg.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
-	return names
-end
-
 local function samePlace(a: GrafanaUrl.ParsedUrl, b: GrafanaUrl.ParsedUrl): boolean
 	return a.scheme == b.scheme and a.authority == b.authority
 end
@@ -763,7 +755,7 @@ function M.contextFor(url: string?, cfg: Config?): string?
 	if target == nil then
 		return nil
 	end
-	local names = sortedContexts(cfg)
+	local names = Route.contextNames(cfg)
 	for _, name in names do
 		local am = cfg.contexts[name].alertmanager
 		local base = if am then GrafanaUrl.parse(am.url .. am.path_prefix) else nil

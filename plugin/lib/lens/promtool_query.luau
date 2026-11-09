@@ -11,6 +11,7 @@
 -- writes prometheus/common model values with String(), the json printer
 -- encodes the same values with encoding/json.
 
+local Tbl = require("../tbl")
 local ConfigTypes = require("../config/types")
 local EnvModule = require("../env")
 local Grid = require("../render/grid")
@@ -645,11 +646,7 @@ local function labelSetGrid(sets: { Labels }, shown: number): Node
 			end
 		end
 	end
-	local keys: { string } = {}
-	for k in keySet do
-		table.insert(keys, k)
-	end
-	table.sort(keys)
+	local keys: { string } = Tbl.sortedKeys(keySet)
 	if hasName then
 		table.insert(keys, 1, "__name__")
 	end

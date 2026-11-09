@@ -5,6 +5,7 @@
 -- alert's labels, annotations and runbook, the queries and time range, a
 -- summary of the recent values and links back to Grafana.
 
+local Tbl = require("../tbl")
 local Compact = require("../carly/compact")
 local Subject = require("./subject")
 
@@ -32,11 +33,7 @@ local function num(v: number?): string
 end
 
 local function sortedKeys(t: { [string]: string }): { string }
-	local keys: { string } = {}
-	for k in t do
-		table.insert(keys, k)
-	end
-	table.sort(keys)
+	local keys: { string } = Tbl.sortedKeys(t)
 	return keys
 end
 

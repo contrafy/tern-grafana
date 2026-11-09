@@ -9,6 +9,7 @@
 -- or the poller stopped.
 -- Pure and cheap: it runs inside the 4 ms chrome formatter budget.
 
+local Tbl = require("../tbl")
 local Common = require("./common")
 local Summary = require("./summary")
 
@@ -38,11 +39,7 @@ function M.segments(raw: any, now_ms: number, offset_min: number?): { Segment }?
 		return nil
 	end
 	local stale = M.stale(payload, now_ms)
-	local names: { string } = {}
-	for name in payload.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(payload.contexts)
 	local out: { Segment } = {}
 	local failed = 0
 	for _, name in names do

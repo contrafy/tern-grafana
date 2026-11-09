@@ -2,6 +2,8 @@
 -- The alerts inbox view: header (context, counts, filter), groups with their
 -- alerts, the open alert's detail, and a key-hint dock.
 
+local Tbl = require("../tbl")
+local Range = require("../time/range")
 local Effect = require("../effect")
 local Env = require("../env")
 local Normalize = require("./normalize")
@@ -34,19 +36,6 @@ local SPAN_STYLE: { [string]: string } = {
 	muted = "muted",
 	ok = "muted",
 }
-
--- "42s", "5m", "3h", "2d".
-function M.age(ms: number): string
-	local sec = math.max(0, math.floor(ms / 1000))
-	if sec < 60 then
-		return sec .. "s"
-	elseif sec < 3600 then
-		return (sec // 60) .. "m"
-	elseif sec < 86400 then
-		return (sec // 3600) .. "h"
-	end
-	return (sec // 86400) .. "d"
-end
 
 local function severityTone(a: Alert): string
 	if a.state == "silenced" or a.state == "inhibited" then
@@ -81,7 +70,7 @@ local function header(s: State, env: Env.Env): Node
 	if s.loading then
 		table.insert(when, ui.span("loading", "accent"))
 	elseif s.loaded_ms then
-		table.insert(when, ui.span("updated " .. M.age(env.now_ms - (s.loaded_ms :: number)) .. " ago", "muted"))
+		table.insert(when, ui.span("updated " .. Range.age(env.now_ms - (s.loaded_ms :: number)) .. " ago", "muted"))
 	end
 	table.insert(items, ui.text(when, { key = "when" }))
 	return ui.row(items, { key = "head", class = "tg-al-head", wrap = true })
@@ -160,7 +149,7 @@ local function detail(s: State, a: Alert, env: Env.Env): Node
 	end
 	pair("state", { ui.span(a.state, SPAN_STYLE[STATE_TONE[a.state]] or "muted") })
 	pair("severity", { a.severity })
-	pair("since", { M.age(env.now_ms - a.starts_at_ms) .. " ago" })
+	pair("since", { Range.age(env.now_ms - a.starts_at_ms) .. " ago" })
 	pair("source", { a.source .. " (" .. a.context .. ")" })
 	if a.value then
 		pair("value", { ui.span(a.value :: string, "mono") })
@@ -175,22 +164,14 @@ local function detail(s: State, a: Alert, env: Env.Env): Node
 		pair("receivers", { table.concat(a.receivers, ", ") })
 	end
 	local labelItems: { { { SpanLike } } } = {}
-	local names: { string } = {}
-	for name in a.labels do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(a.labels)
 	for _, name in names do
 		if not Normalize.isInternal(name) then
 			table.insert(labelItems, { { ui.span(name, "mono") }, { ui.span(a.labels[name], "mono") } })
 		end
 	end
 	local annItems: { { { SpanLike } } } = {}
-	local anns: { string } = {}
-	for name in a.annotations do
-		table.insert(anns, name)
-	end
-	table.sort(anns)
+	local anns: { string } = Tbl.sortedKeys(a.annotations)
 	for _, name in anns do
 		if not Normalize.isInternal(name) then
 			table.insert(annItems, { { name }, { a.annotations[name] } })
@@ -250,7 +231,7 @@ local function alertRow(s: State, i: number, a: Alert, skip: { [string]: boolean
 	for _, sp in labelSpans(a, skip) do
 		table.insert(spans, sp)
 	end
-	table.insert(spans, ui.span("  " .. M.age(env.now_ms - a.starts_at_ms), "muted"))
+	table.insert(spans, ui.span("  " .. Range.age(env.now_ms - a.starts_at_ms), "muted"))
 	local class = "tg-al-row tg-al-" .. tone .. (if i == s.sel then " is-sel" else "")
 	local children: { Node } = { ui.text(spans) }
 	if s.detail == a.fingerprint then

@@ -194,6 +194,22 @@ local function list(s: State): Node
 	return ui.col(children, { key = "list", gap = "none" })
 end
 
+-- The summary per state, recomputed only when a result arrived or a scan
+-- started: a scan paints after every answer.
+local summaries: { [State]: { gen: number, finished: number, sum: Analyze.Summary } } = setmetatable(
+	{},
+	{ __mode = "k" }
+) :: any
+
+local function summary(s: State): Analyze.Summary
+	local m = summaries[s]
+	if m == nil or m.gen ~= s.gen or m.finished ~= s.finished then
+		m = { gen = s.gen, finished = s.finished, sum = Analyze.summarize(State.ordered(s)) }
+		summaries[s] = m
+	end
+	return (m :: any).sum
+end
+
 function M.view(s: State, _env: Env.Env): Effect.View
 	local children: { Node } = { header(s) }
 	if s.problem then
@@ -222,7 +238,7 @@ function M.view(s: State, _env: Env.Env): Effect.View
 	if s.note then
 		table.insert(children, ui.muted(s.note :: string, { key = "note" }))
 	end
-	local sum = Analyze.summarize(State.ordered(s))
+	local sum = summary(s)
 	table.insert(children, totals(sum))
 	table.insert(children, reasons(sum))
 	table.insert(children, filterLine(s))

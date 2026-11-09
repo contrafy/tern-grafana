@@ -11,6 +11,7 @@
 -- whole stack on every Tern start. Rendering lives in ./view.
 
 local Analyze = require("./analyze")
+local BlockKit = require("../block_kit")
 local CompatConfig = require("./config")
 local Effect = require("../effect")
 local Env = require("../env")
@@ -44,6 +45,9 @@ type Pending = { uid: string, dashboard: Model.Dashboard, waiting: { [string]: b
 
 type Library = { done: boolean, model: { [string]: any }? }
 
+-- A result's filterable text, lower-cased once.
+type Lowered = { title: string?, folder: string?, uid: string?, panels: { { string? } } }
+
 export type State = {
 	contexts: { string },
 	context: string?,
@@ -73,21 +77,21 @@ export type State = {
 	rows: { Row },
 	-- Rows matching the filter (rows holds at most MAX_ROWS of them).
 	matched: number,
+	-- The lower-cased filter and native toggle `rows` was derived with.
+	derived_q: string,
+	derived_native: boolean,
+	lowered: { [number]: Lowered },
 	sel: number,
 	note: string?,
 }
 
 local function grafanaContexts(env: Env): { string }
 	local out: { string } = {}
-	local cfg = env.config
-	if cfg then
-		for name, c in cfg.contexts do
-			if c.grafana then
-				table.insert(out, name)
-			end
+	for _, name in BlockKit.contexts(env.config) do
+		if (env.config :: any).contexts[name].grafana then
+			table.insert(out, name)
 		end
 	end
-	table.sort(out)
 	return out
 end
 
@@ -119,55 +123,110 @@ function M.ordered(s: State): { Analyze.DashResult }
 	return out
 end
 
-local function lower(s: string): string
-	return string.lower(s)
+local function low(text: string?): string?
+	return if text then string.lower(text :: string) else nil
+end
+
+local function lowered(s: State, i: number, r: Analyze.DashResult): Lowered
+	local l = s.lowered[i]
+	if l == nil then
+		local panels: { { string? } } = table.create(#r.panels)
+		for j, p in r.panels do
+			panels[j] = { low(p.title), low(p.type), low(p.mode), low(p.blocker), low(p.row) }
+		end
+		l = { title = low(r.title), folder = low(r.folder), uid = low(r.uid), panels = panels }
+		s.lowered[i] = l
+	end
+	return l :: Lowered
 end
 
 local function has(text: string?, q: string): boolean
-	return text ~= nil and string.find(lower(text :: string), q, 1, true) ~= nil
+	return text ~= nil and string.find(text :: string, q, 1, true) ~= nil
 end
 
-local function panelMatches(p: Analyze.PanelResult, q: string): boolean
-	return has(p.title, q) or has(p.type, q) or has(p.mode, q) or has(p.blocker, q) or has(p.row, q)
+local function panelMatches(p: { string? }, q: string): boolean
+	return has(p[1], q) or has(p[2], q) or has(p[3], q) or has(p[4], q) or has(p[5], q)
+end
+
+local NO_ROWS: { Row } = table.freeze({})
+
+-- Dashboard `i`'s rows (its row, then its shown panels) under the derived
+-- filter; none while it is loading or when nothing in it matches.
+local function dashRows(s: State, i: number): { Row }
+	local r = s.results[i]
+	if r == nil then
+		return NO_ROWS
+	end
+	local q = s.derived_q
+	local l = if q == "" then nil else lowered(s, i, r)
+	local dashHit = l == nil or has(l.title, q) or has(l.folder, q) or has(l.uid, q)
+	local out: { Row } = {}
+	for j, p in r.panels do
+		if p.mode == "native" and not s.derived_native then
+			continue
+		end
+		if dashHit or panelMatches((l :: Lowered).panels[j], q) then
+			table.insert(out, { kind = "panel", dash = i, panel = j })
+		end
+	end
+	if dashHit or #out > 0 then
+		local dashRow: Row = { kind = "dash", dash = i }
+		table.insert(out, 1, dashRow)
+	end
+	return out
 end
 
 -- The visible rows: every dashboard with its non-native panels (native ones
 -- too with `n`), narrowed by the filter (dashboard title, folder, uid, or a
 -- panel's title, type, rung, reason, row).
 function M.derive(s: State)
-	local q = lower(s.filter_text)
+	s.derived_q = string.lower(s.filter_text)
+	s.derived_native = s.show_native
 	local rows: { Row } = {}
 	local matched = 0
-	local function add(r: Row)
-		matched += 1
-		if #rows < M.MAX_ROWS then
-			table.insert(rows, r)
-		end
-	end
 	for i = 1, #s.hits do
-		local r = s.results[i]
-		if r == nil then
-			continue
-		end
-		local dashHit = q == "" or has(r.title, q) or has(r.folder, q) or has(r.uid, q)
-		local panelRows: { Row } = {}
-		for j, p in r.panels do
-			if p.mode == "native" and not s.show_native then
-				continue
+		local list = dashRows(s, i)
+		matched += #list
+		for _, row in list do
+			if #rows >= M.MAX_ROWS then
+				break
 			end
-			if dashHit or panelMatches(p, q) then
-				table.insert(panelRows, { kind = "panel", dash = i, panel = j })
-			end
-		end
-		if dashHit or #panelRows > 0 then
-			add({ kind = "dash", dash = i })
-			for _, pr in panelRows do
-				add(pr)
-			end
+			table.insert(rows, row)
 		end
 	end
 	s.rows = rows
 	s.matched = matched
+	s.sel = math.clamp(s.sel, 1, math.max(1, #rows))
+end
+
+-- `derive` after dashboard `index`'s result arrived, touching only the rows
+-- after it: rows are in dashboard order, so the ones before stay.
+local function deriveOne(s: State, index: number)
+	local list = dashRows(s, index)
+	if #list == 0 then
+		return
+	end
+	s.matched += #list
+	local rows = s.rows
+	local at = #rows + 1
+	while at > 1 and rows[at - 1].dash > index do
+		at -= 1
+	end
+	if at > M.MAX_ROWS then
+		return
+	end
+	local after = table.move(rows, at, #rows, 1, {})
+	for k = #rows, at, -1 do
+		rows[k] = nil
+	end
+	for _, part in { list, after } do
+		for _, row in part do
+			if #rows >= M.MAX_ROWS then
+				break
+			end
+			table.insert(rows, row)
+		end
+	end
 	s.sel = math.clamp(s.sel, 1, math.max(1, #rows))
 end
 
@@ -188,6 +247,7 @@ local function record(s: State, index: number, panels: { Analyze.PanelResult }, 
 	s.results[index] = Analyze.result(hit.uid, hit.title, hit.folder, panels, err)
 	s.finished += 1
 	s.inflight -= 1
+	deriveOne(s, index)
 end
 
 -- Loads dashboards until CONCURRENCY are in flight; needs the settings
@@ -350,6 +410,7 @@ local function reset(s: State)
 	s.finished = 0
 	s.pending = {}
 	s.libraries = {}
+	s.lowered = {}
 	s.started_ms, s.finished_ms = nil, nil
 	s.sel = 1
 	s.note = nil
@@ -400,6 +461,9 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		show_native = savedT.show_native == true,
 		rows = {},
 		matched = 0,
+		derived_q = "",
+		derived_native = false,
+		lowered = {},
 		sel = 1,
 		note = nil,
 	}
@@ -541,12 +605,10 @@ local function switchContext(s: State, env: Env, name: string, effects: { Effect
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	switchContext(s, env, s.contexts[(i - 1 + step) % n + 1], effects)
 end
 
 local function startFilter(s: State, effects: { Effect })
@@ -562,16 +624,10 @@ local function editKey(s: State, key: any): boolean
 	elseif name == "enter" then
 		s.editing = nil
 		setFilter(s, text)
-	elseif name == "backspace" then
-		s.editing = string.sub(text, 1, -2)
-	elseif name == "paste" and type(key.text) == "string" then
-		s.editing = text .. string.gsub(key.text, "[%c]", " ")
-	elseif key.ctrl and name == "u" then
-		s.editing = ""
-	elseif key.text and key.text ~= "" and not key.ctrl and not key.meta then
-		s.editing = text .. key.text
 	else
-		return false
+		local edited, used = BlockKit.editText(text, key, false)
+		s.editing = edited
+		return used
 	end
 	return true
 end
@@ -653,10 +709,11 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-local function onHttp(s: State, t: string, response: TransportTypes.Response, env: Env, effects: { Effect })
+-- false for an answer of an older scan (nothing changed).
+local function onHttp(s: State, t: string, response: TransportTypes.Response, env: Env, effects: { Effect }): boolean
 	local gen, rest = string.match(t, "^c/(%d+)/(.*)$")
 	if gen == nil or tonumber(gen) ~= s.gen or s.phase ~= "scanning" then
-		return
+		return false
 	end
 	local r = rest :: string
 	if r == "fs" then
@@ -676,13 +733,13 @@ local function onHttp(s: State, t: string, response: TransportTypes.Response, en
 	if (s.phase :: Phase) == "done" and s.finished_ms == nil then
 		s.finished_ms = env.now_ms
 	end
-	M.derive(s)
+	return true
 end
 
-function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
-		onHttp(s, msg.tag, msg.response, env, effects)
+		return s, effects, onHttp(s, msg.tag, msg.response, env, effects)
 	elseif msg.kind == "key" then
 		local _, list = M.key(s, msg.key, env)
 		return s, list

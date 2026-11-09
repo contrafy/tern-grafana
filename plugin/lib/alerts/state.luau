@@ -4,6 +4,7 @@
 -- with their health). Turns keys and clicks into effects (open a link,
 -- refresh, write the status summary). Rendering lives in ./render.
 
+local BlockKit = require("../block_kit")
 local Effect = require("../effect")
 local Env = require("../env")
 local Group = require("./group")
@@ -11,7 +12,6 @@ local Handoff = require("../investigate/handoff")
 local InvestigateSubject = require("../investigate/subject")
 local Normalize = require("./normalize")
 local Rules = require("./rules")
-local Scheme = require("../links/scheme")
 local Settings = require("./settings")
 local SilenceApi = require("../silences/api")
 local Sources = require("./sources")
@@ -90,18 +90,6 @@ M.KV_KEY = Summary.KEY
 M.DEFAULT_REFRESH_S = 60
 
 local EMPTY_FILTER: Group.Filter = { matchers = {}, words = {} }
-
-local function sortedContexts(env: Env): { string }
-	local out: { string } = {}
-	local cfg = env.config
-	if cfg then
-		for name in cfg.contexts do
-			table.insert(out, name)
-		end
-	end
-	table.sort(out)
-	return out
-end
 
 function M.derive(s: State)
 	local visible: { Alert } = {}
@@ -301,23 +289,11 @@ local function settle(s: State, env: Env, effects: { Effect })
 	table.insert(effects, { kind = "timer", tag = string.format("auto:%d", s.gen), ms = refreshMs(s) })
 end
 
-local function linkParams(args: { string }): { [string]: string }
-	local first = args[1]
-	if first == nil or first == "" then
-		return {}
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "alerts" then
-		return {}
-	end
-	return link.params
-end
-
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local params = linkParams(args)
+	local params: { [string]: string } = BlockKit.linkParams(args, "alerts") or {}
 	local settings = Settings.read(env.config)
 	local s: State = {
-		contexts = sortedContexts(env),
+		contexts = BlockKit.contexts(env.config),
 		context = nil,
 		plan = nil,
 		problem = nil,
@@ -494,13 +470,10 @@ local function ruleAction(s: State, env: Env, what: string, effects: { Effect })
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	local next = s.contexts[(i - 1 + step) % n + 1]
-	switchContext(s, env, next, effects)
 end
 
 local function open(s: State, what: string, effects: { Effect })
@@ -567,16 +540,10 @@ local function editKey(s: State, key: any): boolean
 		setFilter(s, text)
 		s.sel = 1
 		M.derive(s)
-	elseif name == "backspace" then
-		s.editing = string.sub(text, 1, -2)
-	elseif name == "paste" and type(key.text) == "string" then
-		s.editing = text .. string.gsub(key.text, "[%c]", " ")
-	elseif key.text and key.text ~= "" and not key.ctrl and not key.meta then
-		s.editing = text .. key.text
-	elseif key.ctrl and name == "u" then
-		s.editing = ""
 	else
-		return false
+		local edited, used = BlockKit.editText(text, key, false)
+		s.editing = edited
+		return used
 	end
 	return true
 end
@@ -766,13 +733,13 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local rgen, rtag = string.match(msg.tag, "^r(%d+):(.+)$")
 		if rgen then
 			if tonumber(rgen) ~= s.rules_gen or s.rules_plan == nil or not s.rules_loading then
-				return s, effects
+				return s, effects, false
 			end
 			s.rules_responses[rtag :: string] = msg.response
 			for _, f in (s.rules_plan :: Rules.Plan).fetches do
@@ -785,7 +752,7 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 		end
 		local gen, tag = string.match(msg.tag, "^(%d+):(.+)$")
 		if gen == nil or tonumber(gen) ~= s.gen or s.plan == nil or not s.loading then
-			return s, effects
+			return s, effects, false
 		end
 		s.responses[tag :: string] = msg.response
 		for _, f in (s.plan :: Plan).fetches do
@@ -799,6 +766,8 @@ function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
 			load(s, env, effects)
 		elseif msg.tag == string.format("rauto:%d", s.rules_gen) and not s.rules_loading and s.view == "rules" then
 			loadRules(s, env, effects)
+		else
+			return s, effects, false
 		end
 	elseif msg.kind == "key" then
 		local _, list = M.key(s, msg.key, env)

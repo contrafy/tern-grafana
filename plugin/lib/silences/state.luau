@@ -10,6 +10,7 @@
 -- may hold anything: they go into the request body only, never into logs,
 -- saved state or block args.
 
+local BlockKit = require("../block_kit")
 local Api = require("./api")
 local Classify = require("../transport/classify")
 local Duration = require("./duration")
@@ -17,7 +18,6 @@ local Effect = require("../effect")
 local Env = require("../env")
 local Matchers = require("./matchers")
 local Normalize = require("../alerts/normalize")
-local Scheme = require("../links/scheme")
 local Sources = require("../alerts/sources")
 local TransportTypes = require("../transport/types")
 local Tbl = require("../tbl")
@@ -105,17 +105,6 @@ M.REFRESH_MS = 60 * 1000
 M.DEFAULT_PRESET = 2 -- 2h
 
 local SIL_TAG = "sil"
-
-local function sortedContexts(env: Env): { string }
-	local out: { string } = {}
-	if env.config then
-		for name in env.config.contexts do
-			table.insert(out, name)
-		end
-	end
-	table.sort(out)
-	return out
-end
 
 function M.visible(s: State): { Silence }
 	if s.show_expired then
@@ -302,23 +291,11 @@ local function settle(s: State, env: Env, effects: { Effect })
 	table.insert(effects, { kind = "timer", tag = string.format("auto:%d", s.gen), ms = M.REFRESH_MS })
 end
 
-local function linkParams(args: { string }): { [string]: string }
-	local first = args[1]
-	if first == nil or first == "" then
-		return {}
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "silence" then
-		return {}
-	end
-	return link.params
-end
-
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local params = linkParams(args)
+	local params: { [string]: string } = BlockKit.linkParams(args, "silence") or {}
 	local savedT = if type(saved) == "table" then saved else {}
 	local s: State = {
-		contexts = sortedContexts(env),
+		contexts = BlockKit.contexts(env.config),
 		context = params.context or (if type(savedT.context) == "string" then savedT.context else nil),
 		plan = nil,
 		target = nil,
@@ -526,12 +503,10 @@ local function switchContext(s: State, env: Env, name: string, effects: { Effect
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	switchContext(s, env, s.contexts[(i - 1 + step) % n + 1], effects)
 end
 
 -- Starts editing the form row `row` (or acts on it when it is not text).
@@ -605,17 +580,13 @@ local function editKey(s: State, key: any): boolean
 		s.editing = nil
 	elseif name == "enter" then
 		commitEdit(s)
-	elseif name == "backspace" then
-		e.text = string.sub(e.text, 1, (utf8.offset(e.text, -1) or (#e.text + 1)) - 1)
-		e.error = nil
-	elseif name == "paste" and type(key.text) == "string" then
-		e.text ..= string.gsub(key.text, "%c", " ")
-	elseif key.ctrl and name == "u" then
-		e.text = ""
-	elseif key.text and key.text ~= "" and not key.ctrl and not key.meta then
-		e.text ..= key.text
 	else
-		return false
+		local text, used = BlockKit.editText(e.text, key, true)
+		e.text = text
+		if name == "backspace" then
+			e.error = nil
+		end
+		return used
 	end
 	return true
 end
@@ -800,7 +771,7 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-function M.update(s: State, msg: any, env: Env): (State, { Effect })
+function M.update(s: State, msg: any, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		if s.write_tag and msg.tag == s.write_tag and s.writing then
@@ -809,7 +780,7 @@ function M.update(s: State, msg: any, env: Env): (State, { Effect })
 		end
 		local gen, tag = string.match(msg.tag, "^(%d+):(.+)$")
 		if gen == nil or tonumber(gen) ~= s.gen or s.plan == nil or not s.loading then
-			return s, effects
+			return s, effects, false
 		end
 		s.responses[tag :: string] = msg.response
 		if s.responses[SIL_TAG] == nil then
@@ -824,6 +795,8 @@ function M.update(s: State, msg: any, env: Env): (State, { Effect })
 	elseif msg.kind == "tick" then
 		if msg.tag == string.format("auto:%d", s.gen) and not s.loading then
 			load(s, env, effects)
+		else
+			return s, effects, false
 		end
 	elseif msg.kind == "user" then
 		local name = if type(msg.name) == "string" and msg.name ~= "" then msg.name else nil

@@ -3,6 +3,7 @@
 -- that reopens it: shared by the lenses that show a server's PromQL results
 -- (promtool query, curl).
 
+local Route = require("../config/route")
 local ConfigTypes = require("../config/types")
 local GrafanaUrl = require("../links/grafana_url")
 local Range = require("../time/range")
@@ -21,15 +22,6 @@ local function samePlace(a: GrafanaUrl.ParsedUrl, b: GrafanaUrl.ParsedUrl): bool
 	return a.scheme == b.scheme and a.authority == b.authority
 end
 
-local function sortedContexts(cfg: Config): { string }
-	local names: { string } = {}
-	for name in cfg.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
-	return names
-end
-
 -- The configured context a Prometheus API base URL belongs to: a context whose
 -- prometheus endpoint is that URL, else a Grafana datasource proxy URL
 -- (`<grafana>/api/datasources/proxy/uid/<uid>`) of a configured Grafana.
@@ -41,7 +33,7 @@ function M.targetFor(server: string?, cfg: Config?): Target?
 	if url == nil then
 		return nil
 	end
-	for _, name in sortedContexts(cfg) do
+	for _, name in Route.contextNames(cfg) do
 		local prom = cfg.contexts[name].prometheus
 		local base = if prom then GrafanaUrl.parse(prom.url .. prom.path_prefix) else nil
 		if base and samePlace(base, url) and base.path == url.path then

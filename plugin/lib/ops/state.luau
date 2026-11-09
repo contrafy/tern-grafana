@@ -5,6 +5,7 @@
 -- block and is only a link there. Each tab loads its endpoints the first
 -- time it shows; `r` reloads the current tab. Rendering lives in ./view.
 
+local BlockKit = require("../block_kit")
 local Effect = require("../effect")
 local Env = require("../env")
 local Group = require("../alerts/group")
@@ -90,18 +91,6 @@ local DEFAULT_OPEN_LISTS = { series_by_metric = true }
 
 local function isTab(v: any): boolean
 	return type(v) == "string" and TAB_ENDPOINTS[v] ~= nil
-end
-
-local function sortedContexts(env: Env): { string }
-	local out: { string } = {}
-	local cfg = env.config
-	if cfg then
-		for name in cfg.contexts do
-			table.insert(out, name)
-		end
-	end
-	table.sort(out)
-	return out
 end
 
 local function path(e: Endpoint): string
@@ -246,23 +235,11 @@ local function setFilter(s: State, text: string)
 	M.deriveTargets(s)
 end
 
-local function linkParams(args: { string }): { [string]: string }
-	local first = args[1]
-	if first == nil or first == "" then
-		return {}
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "ops" then
-		return {}
-	end
-	return link.params
-end
-
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local params = linkParams(args)
+	local params: { [string]: string } = BlockKit.linkParams(args, "ops") or {}
 	local savedT = if type(saved) == "table" then saved else {}
 	local s: State = {
-		contexts = sortedContexts(env),
+		contexts = BlockKit.contexts(env.config),
 		context = nil,
 		route = nil,
 		problem = nil,
@@ -404,12 +381,10 @@ local function switchContext(s: State, env: Env, name: string, effects: { Effect
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	switchContext(s, env, s.contexts[(i - 1 + step) % n + 1], effects)
 end
 
 function M.rulesLink(s: State): string?
@@ -574,16 +549,10 @@ local function editKey(s: State, key: any): boolean
 	elseif name == "enter" then
 		s.editing = nil
 		setFilter(s, text)
-	elseif name == "backspace" then
-		s.editing = string.sub(text, 1, -2)
-	elseif name == "paste" and type(key.text) == "string" then
-		s.editing = text .. string.gsub(key.text, "[%c]", " ")
-	elseif key.ctrl and name == "u" then
-		s.editing = ""
-	elseif key.text and key.text ~= "" and not key.ctrl and not key.meta then
-		s.editing = text .. key.text
 	else
-		return false
+		local edited, used = BlockKit.editText(text, key, false)
+		s.editing = edited
+		return used
 	end
 	return true
 end
@@ -693,16 +662,16 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local gen, e = string.match(msg.tag, "^(%d+):(.+)$")
 		if gen == nil or tonumber(gen) ~= s.gen then
-			return s, effects
+			return s, effects, false
 		end
 		local slot = s.slots[e :: Endpoint]
 		if slot == nil or not slot.loading then
-			return s, effects
+			return s, effects, false
 		end
 		answered(s, e :: Endpoint, msg.response, env)
 	elseif msg.kind == "key" then
@@ -739,11 +708,7 @@ end
 
 -- Only what to reopen with: never server data or credentials.
 function M.save(s: State): any
-	local open: { string } = {}
-	for name in s.open_lists do
-		table.insert(open, name)
-	end
-	table.sort(open)
+	local open: { string } = Tbl.sortedKeys(s.open_lists)
 	return {
 		context = s.context,
 		tab = s.tab,
