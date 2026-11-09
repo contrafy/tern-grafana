@@ -75,6 +75,22 @@ describe("Axis.niceScale", function()
 	end)
 end)
 
+-- Grafana's time series axes step IEC units in powers of 2 (TimeSeries/
+-- utils.ts IEC_UNITS, BIN_INCRS), so a GiB axis lands on 8 GiB, not 10 GiB.
+describe("Axis.rangeScale with IEC units", function()
+	it("steps in powers of 2 of the unit itself", function()
+		expect(Axis.rangeScale(0, 48.4, 200, "gbytes").ticks).toEqual({ 0, 8, 16, 24, 32, 40, 48 })
+		expect(Axis.rangeScale(0, 48.4, 200, "decgbytes").ticks).toEqual({ 0, 10, 20, 30, 40 })
+		expect(Axis.rangeScale(0, 5e9, 300, "bytes").step).toBe(2 ^ 29)
+	end)
+
+	-- The smallest increment is 1 in the unit, so a sub-GiB gbytes range only
+	-- has its 0 tick.
+	it("never steps below 1 unit", function()
+		expect(Axis.rangeScale(0, 0.07, 200, "gbytes").ticks).toEqual({ 0 })
+	end)
+end)
+
 describe("Axis.timeFormat (UPlotAxisBuilder formatTime)", function()
 	it("picks the format from the increment and the visible range", function()
 		expect(Axis.timeFormat(500, MINUTE)).toBe("HH:mm:ss.SSS")

@@ -221,12 +221,53 @@ function M.linearRange(lo: number?, hi: number?, r: LinearRange): (number, numbe
 	return a, b
 end
 
--- uPlot axis splits on a fixed range: the smallest nice increment (1, 2,
--- 2.5, 5 x 10^n) whose ticks are at least the y spacing apart, at its
--- multiples inside min..max.
-function M.rangeScale(min: number, max: number, plotPx: number): Scale
+-- IEC units of the time series panel (public/app/core/components/
+-- TimeSeries/utils.ts IEC_UNITS): their axes step in powers of 2.
+local IEC_UNITS: { [string]: boolean } = {
+	bytes = true,
+	bits = true,
+	kbytes = true,
+	mbytes = true,
+	gbytes = true,
+	tbytes = true,
+	pbytes = true,
+	binBps = true,
+	binbps = true,
+	KiBs = true,
+	Kibits = true,
+	MiBs = true,
+	Mibits = true,
+	GiBs = true,
+	Gibits = true,
+	TiBs = true,
+	Tibits = true,
+	PiBs = true,
+	Pibits = true,
+}
+
+-- BIN_INCRS (2^0..2^52, in the unit itself) as uPlot's findIncr walks
+-- them: the smallest whose ticks are at least `space` px apart.
+local function binaryStep(span: number, plotPx: number, space: number): number
+	for i = 0, 52 do
+		local incr = 2 ^ i
+		if incr * plotPx / span >= space then
+			return incr
+		end
+	end
+	return 2 ^ 52
+end
+
+-- uPlot axis splits on a fixed range: the smallest increment whose ticks
+-- are at least the y spacing apart, at its multiples inside min..max.
+-- Increments are nice (1, 2, 2.5, 5 x 10^n), or powers of 2 for IEC units,
+-- so a GiB axis reads 0, 8, 16 GiB and a tiny one only 0.
+function M.rangeScale(min: number, max: number, plotPx: number, unit: string?): Scale
 	local space = if plotPx <= 150 then M.Y_SPACE_SMALL else M.Y_SPACE
-	local step = M.niceStep(max - min, plotPx / space)
+	local step = if unit
+			and IEC_UNITS[unit]
+			and max > min
+		then binaryStep(max - min, plotPx, space)
+		else M.niceStep(max - min, plotPx / space)
 	local ticks: { number } = {}
 	for i = math.ceil(min / step - 1e-9), math.floor(max / step + 1e-9) do
 		table.insert(ticks, clean(i * step))

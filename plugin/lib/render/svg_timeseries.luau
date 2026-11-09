@@ -298,7 +298,7 @@ local function buildScale(spec: ScaleSpec, lo: number?, hi: number?, plotPx: num
 		percent = spec.percent,
 		decimals = st.decimals,
 	})
-	return Axis.rangeScale(a, b, plotPx)
+	return Axis.rangeScale(a, b, plotPx, st.unit)
 end
 
 -- One decimals count for every tick, the fewest that print each tick
