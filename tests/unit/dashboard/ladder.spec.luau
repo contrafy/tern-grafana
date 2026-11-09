@@ -25,7 +25,7 @@ local function supports(panel: { [string]: any }, _env: any): (boolean, string?)
 	return true, nil
 end
 
-local EXPECTED_RENDERER = { ["11.6.16"] = false, ["12.4.12"] = true }
+local EXPECTED_RENDERER = { ["11.6.16"] = false, ["12.4.12"] = true, ["13.3.0"] = true }
 
 for _, version in S.VERSIONS do
 	local env = S.env()

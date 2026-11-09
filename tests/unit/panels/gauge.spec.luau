@@ -12,6 +12,11 @@ local describe, it, expect = t.describe, t.it, t.expect
 local env = S.env
 local OPTS = { key = "g" }
 
+-- Instance order of each prom_instant capture: the first meter reading 1
+-- (up) and the `down` target.
+local UP = { ["11.6.16"] = 1, ["12.4.12"] = 1, ["13.3.0"] = 2 }
+local DOWN = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.0"] = 1 }
+
 for _, version in S.VERSIONS do
 	describe("gauge on tern-panels, Grafana " .. version, function()
 		-- Panel 7 "CPU utilisation": percentunit, min 0, max 1, steps green /
@@ -19,13 +24,13 @@ for _, version in S.VERSIONS do
 		it("fills by percent of min..max in the step's tone", function()
 			local meters = Gauge.meters(S.panel(version, 7), S.frames(version, "prom_instant"), env, OPTS, false)
 			expect(#meters).toBe(6)
-			expect(meters[1].value).toBe(1)
-			expect(meters[1].label).toBe("100%")
-			expect(meters[1].tone).toBe("error")
-			-- Instance order of the capture: the `down` target is third.
-			expect(meters[3].value).toBe(0)
-			expect(meters[3].label).toBe("0%")
-			expect(meters[3].tone).toBe("success")
+			local up, down = meters[UP[version]], meters[DOWN[version]]
+			expect(up.value).toBe(1)
+			expect(up.label).toBe("100%")
+			expect(up.tone).toBe("error")
+			expect(down.value).toBe(0)
+			expect(down.label).toBe("0%")
+			expect(down.tone).toBe("success")
 		end)
 
 		it("puts threshold markers at the steps inside the range", function()
@@ -58,14 +63,14 @@ for _, version in S.VERSIONS do
 				return n.k == "image"
 			end)
 			expect(#images).toBe(6)
-			local svg = assets[images[1].p.asset].bytes
+			local svg = assets[images[UP[version]].p.asset].bytes
 			expect(string.find(svg, "tgg-s-error", 1, true) ~= nil).toBe(true)
 			expect(string.find(svg, ">100</text>", 1, true) ~= nil).toBe(true)
 			local specs = Gauge.specs(S.panel(version, 7), S.frames(version, "prom_instant"), env, OPTS)
-			expect(specs[1].style).toBe("v1")
-			expect(specs[1].fill_to).toBe(1)
-			expect(specs[1].text_tone).toBe("error")
-			expect(specs[1].ring).toEqual({
+			expect(specs[UP[version]].style).toBe("v1")
+			expect(specs[UP[version]].fill_to).toBe(1)
+			expect(specs[UP[version]].text_tone).toBe("error")
+			expect(specs[UP[version]].ring).toEqual({
 				{ from = 0, to = 0.7, tone = "success" },
 				{ from = 0.7, to = 0.9, tone = "warning" },
 				{ from = 0.9, to = 1, tone = "error" },

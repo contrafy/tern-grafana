@@ -166,7 +166,7 @@ for _, version in S.VERSIONS do
 			end
 			local p = byId(Analyze.panels(d, settingsFor(version, "frontend_settings.json"), env))["18"]
 			expect(p.blocker).toBe("library panel could not be loaded")
-			expect(p.mode).toBe(if version == "12.4.12" then "png" else "browser")
+			expect(p.mode).toBe(if S.RENDERER[version] then "png" else "browser")
 		end)
 	end)
 end

@@ -6,7 +6,7 @@ Grafana: Settings).
 
 ## Connect Grafana
 
-The usual way in, for Grafana Cloud and any Grafana 11 or 12: the first item on the starter screen when there is no
+The usual way in, for Grafana Cloud and any Grafana 11, 12 or 13: the first item on the starter screen when there is no
 config file yet, `c` (or the Connect Grafana chip) in the context list otherwise.
 
 1. Get a token. In Grafana: **Administration > Users and access > Service accounts > Add service account** (role

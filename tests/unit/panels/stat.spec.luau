@@ -13,6 +13,11 @@ local OPTS = { key = "s" }
 
 local JOBS = { "alertmanager", "down", "loki", "node", "prometheus", "tempo" }
 
+-- Samples of prom_range refId B (sum(up) over 15m): the 13.3.0 stack was
+-- captured ~7m after it started.
+local B_SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 30 }
+local SPARK_POINTS = 60
+
 for _, version in S.VERSIONS do
 	describe("stat on tern-panels, Grafana " .. version, function()
 		-- Panel 5 "Targets up": sum(up) = 5, red below 5, green from 5,
@@ -34,7 +39,7 @@ for _, version in S.VERSIONS do
 			expect(spark.k).toBe("chart")
 			expect(spark.p.kind).toBe("spark")
 			expect(spark.p.token).toBe("success")
-			expect(#spark.p.series).toBe(60)
+			expect(#spark.p.series).toBe(math.min(B_SAMPLES[version], SPARK_POINTS))
 		end)
 
 		-- Panel 6 "Down targets": graphMode none, colorMode value; fed the
@@ -91,7 +96,7 @@ for _, version in S.VERSIONS do
 			panel.options.reduceOptions.calcs = { "min", "max", "count" }
 			local tiles = Stat.tiles(panel, S.refFrames(version, "prom_range", "B"), env, OPTS)
 			expect(#tiles).toBe(3)
-			expect(tiles[3].value).toBe("61")
+			expect(tiles[3].value).toBe(tostring(B_SAMPLES[version]))
 			local rows = S.clone(S.panel(version, 5))
 			rows.options.reduceOptions.values = true
 			rows.options.textMode = "value_and_name"

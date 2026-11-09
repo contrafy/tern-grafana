@@ -9,7 +9,13 @@ local describe, it, expect = t.describe, t.it, t.expect
 
 local env = S.env
 
-local LAST_IDLE = { ["11.6.16"] = "9.62", ["12.4.12"] = "9.45" }
+-- The idle series' legend Last * / Max per prom_range capture, the end of
+-- the 15m window each was captured in, and a sample near its middle (the
+-- 13.3.0 stack had run only ~7m: 29 samples instead of 61).
+local LAST_IDLE = { ["11.6.16"] = "9.62", ["12.4.12"] = "9.45", ["13.3.0"] = "9.48" }
+local MAX_IDLE = { ["11.6.16"] = "9.69", ["12.4.12"] = "9.69", ["13.3.0"] = "9.58" }
+local TO_MS = { ["11.6.16"] = 1791577908000, ["12.4.12"] = 1791577908000, ["13.3.0"] = 1794239763000 }
+local MID_SAMPLE = { ["11.6.16"] = 30, ["12.4.12"] = 30, ["13.3.0"] = 15 }
 
 local function count(s: string, needle: string): number
 	local n, i = 0, 1
@@ -59,8 +65,8 @@ for _, version in S.VERSIONS do
 		it("renders the SVG asset and a legend table with the panel's calcs", function()
 			local node, assets = Timeseries.view(S.panel(version, 2), S.frames(version, "prom_range"), env, {
 				key = "p2",
-				from_ms = 1791577000000,
-				to_ms = 1791577908000,
+				from_ms = TO_MS[version] - 908000,
+				to_ms = TO_MS[version],
 			})
 			local svg = assets.p2
 			assert(svg, "svg asset")
@@ -72,7 +78,7 @@ for _, version in S.VERSIONS do
 			end))
 			expect(string.find(legend, "Last *", 1, true) ~= nil).toBe(true)
 			expect(string.find(legend, "Max", 1, true) ~= nil).toBe(true)
-			expect(string.find(legend, "idle" .. LAST_IDLE[version] .. "9.69", 1, true) ~= nil).toBe(true)
+			expect(string.find(legend, "idle" .. LAST_IDLE[version] .. MAX_IDLE[version], 1, true) ~= nil).toBe(true)
 		end)
 
 		-- A fixed-color override paints that series (and its swatch) in the
@@ -122,7 +128,7 @@ for _, version in S.VERSIONS do
 		-- With the keyboard cursor on, the legend reads values at the cursor.
 		it("switches the legend to cursor read-out", function()
 			local frames = S.refFrames(version, "prom_range", "A")
-			local cursor = frames[1].fields[1].values[30]
+			local cursor = frames[1].fields[1].values[MID_SAMPLE[version]]
 			local node = Timeseries.view(S.panel(version, 2), frames, env, { key = "p", cursor = cursor })
 			local legend = S.text(S.find(node, function(n)
 				return n.p and n.p.key == "p.legend"

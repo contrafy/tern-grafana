@@ -40,6 +40,13 @@ end
 
 local CTX = { time = { from_ms = 1791840751000, to_ms = 1791844351000 }, dashboard_uid = "tern-all-panels" }
 
+-- The seeded annotations: Grafana 13's fresh stack gave them other ids and times.
+local SEEDED = {
+	["11.6.16"] = { org = 3, deploy = 2, org_range = "2026-10-12 21:28:34  -  2026-10-12 21:33:34" },
+	["12.4.12"] = { org = 3, deploy = 2, org_range = "2026-10-12 21:28:34  -  2026-10-12 21:33:34" },
+	["13.3.0"] = { org = 5, deploy = 4, org_range = "2026-11-09 15:07:29  -  2026-11-09 15:12:29" },
+}
+
 for _, version in S.VERSIONS do
 	describe("annolist " .. version, function()
 		it("is native and queries only Grafana's annotations API", function()
@@ -80,11 +87,11 @@ for _, version in S.VERSIONS do
 		it("reads organization-wide annotations as belonging to no dashboard or panel", function()
 			local list = answer(version, "annotations_annolist").annotations
 			expect(#list).toBe(3)
-			local org = byId(list, 3)
+			local org = byId(list, SEEDED[version].org)
 			expect(org.dashboard_uid).toBeNil()
 			expect(org.panel_id).toBeNil()
 			expect(org.time_end - org.time).toBe(5 * MIN)
-			expect(byId(list, 2).tags).toEqual({ "tern-seed", "deploy" })
+			expect(byId(list, SEEDED[version].deploy).tags).toEqual({ "tern-seed", "deploy" })
 		end)
 
 		it("shows text, time range, author and colored tags", function()
@@ -95,7 +102,7 @@ for _, version in S.VERSIONS do
 			})
 			local text = S.text(node)
 			expect(text).toContain("helm upgrade checkout --version 1.4.2")
-			expect(text).toContain("2026-10-12 21:28:34  -  2026-10-12 21:33:34")
+			expect(text).toContain(SEEDED[version].org_range)
 			expect(text).toContain("sa-1-tern-dev")
 			local tags = S.findAll(node, function(n: any): boolean
 				return n.k == "el"

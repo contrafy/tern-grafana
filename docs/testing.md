@@ -57,7 +57,7 @@ Details, the capture layout and how to add a fixture: [dev-stack.md](dev-stack.m
 
 ## Dev stack
 
-`make stack-up` starts Grafana 12 and 11, Prometheus 3 and 2.53, Alertmanager, Loki, Tempo, the image renderer and
+`make stack-up` starts Grafana 12, 11 and 13, Prometheus 3 and 2.53, Alertmanager, Loki, Tempo, the image renderer and
 the generators, waits until healthy and mints one token per Grafana; `make stack-down` removes it all.
 `sh scripts/stack.sh status` shows what is up. Everything about it: [dev-stack.md](dev-stack.md).
 

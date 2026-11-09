@@ -12,6 +12,11 @@ local describe, it, expect = t.describe, t.it, t.expect
 local env = S.env
 local OPTS = { key = "t" }
 
+-- Row order follows the series order of each prom_table capture: the `down`
+-- target's row and a row of an up target.
+local DOWN_ROW = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.0"] = 1 }
+local UP_ROW = { ["11.6.16"] = 1, ["12.4.12"] = 1, ["13.3.0"] = 2 }
+
 local function build(panel: any, version: string): Table.Table
 	return Table.build(panel, Transform.prepare(panel, S.frames(version, "prom_table"), env), env, OPTS)
 end
@@ -43,13 +48,15 @@ for _, version in S.VERSIONS do
 			local tbl = build(S.panel(version, 9), version)
 			expect(heads(tbl)).toEqual({ "instance", "job", "env", "up" })
 			expect(#tbl.rows).toBe(6)
-			expect(column(tbl, "up")).toEqual({ "UP", "UP", "DOWN", "UP", "UP", "UP" })
-			expect(column(tbl, "job")[3]).toBe("down")
-			local down = tbl.rows[3][4]
+			local ups = { "UP", "UP", "UP", "UP", "UP", "UP" }
+			ups[DOWN_ROW[version]] = "DOWN"
+			expect(column(tbl, "up")).toEqual(ups)
+			expect(column(tbl, "job")[DOWN_ROW[version]]).toBe("down")
+			local down = tbl.rows[DOWN_ROW[version]][4]
 			expect(down.kind).toBe("color-background")
 			expect(down.tone).toBe("error")
-			expect(tbl.rows[1][4].tone).toBe("success")
-			expect(tbl.rows[1][1].kind).toBe("auto")
+			expect(tbl.rows[UP_ROW[version]][4].tone).toBe("success")
+			expect(tbl.rows[UP_ROW[version]][1].kind).toBe("auto")
 			expect(tbl.columns[4].numeric).toBe(true)
 			expect(tbl.columns[1].numeric).toBe(false)
 		end)

@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"label_replace(vector(0/0), \"kind\", \"nan\", \"\", \"\") or label_replace(vector(1/0), \"kind\", \"inf\", \"\", \"\") or label_replace(vector(-1/0), \"kind\", \"neginf\", \"\", \"\")","range":true,"instant":false,"intervalMs":60000,"maxDataPoints":20}],"from":"now-5m","to":"now"}

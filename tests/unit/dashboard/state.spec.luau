@@ -203,7 +203,7 @@ end
 local PANELS = "tern-grafana://dashboard?context=lab&uid=tern-panels"
 
 for _, version in S.VERSIONS do
-	local renderer = version == "12.4.12"
+	local renderer = S.RENDERER[version]
 
 	describe("dashboard block loading tern-panels on Grafana " .. version, function()
 		it("only fetches in init: the dashboard, Grafana's settings and the signed-in user", function()
@@ -573,6 +573,13 @@ local function answer(h: Harness, panel: string, path: string)
 	error("no pending query for " .. panel)
 end
 
+-- Exemplars each capture returned: Grafana 13's fresh stack had only minutes
+-- of spanmetrics behind it.
+local EXEMPLARS = { ["11.6.16"] = 120, ["12.4.12"] = 120, ["13.3.0"] = 58 }
+-- Exemplars outside the range are not drawn, so the block must look at the
+-- hour the capture covered (Grafana 13: 2026-11-09T15:56:10Z).
+local EXEMPLARS_AT = { ["11.6.16"] = S.NOW_MS, ["12.4.12"] = S.NOW_MS, ["13.3.0"] = 1794239770000 }
+
 for _, version in S.VERSIONS do
 	describe("dashboard exemplars on Grafana " .. version, function()
 		it("asks time series range targets for exemplars, and no other panel", function()
@@ -592,11 +599,15 @@ for _, version in S.VERSIONS do
 		end)
 
 		it("draws the exemplars as markers, keeps them out of the series, and opens a trace from one", function()
-			local h = start(version, PANELS)
+			local env = S.env()
+			env.now_ms = EXEMPLARS_AT[version]
+			local s, effects = State.init({ PANELS }, nil, env)
+			local h: Harness = { s = s, env = env, pending = {}, opened = {} }
+			apply(h, version, "tern-panels", effects)
 			answer(h, "p2", S.grafana(version, "ds_query_prom_exemplars.json"))
 			local data = h.s.panels.p2.data :: any
 			expect(#data.frames).toBe(2)
-			expect(#data.exemplars).toBe(120)
+			expect(#data.exemplars).toBe(EXEMPLARS[version])
 			local _, assets = View.view(h.s, h.env)
 			local svg = (assets :: any).p2.bytes :: string
 			expect(svg).toContain('class="tg-exemplar"')
@@ -605,12 +616,12 @@ for _, version in S.VERSIONS do
 			press(h, version, char("x"))
 			local e = State.selectedExemplar(h.s) :: any
 			expect(h.s.cursor).toBe(e.time_ms)
-			local _, effects = press(h, version, key("enter"))
+			local _, opened = press(h, version, key("enter"))
 			expect(h.s.expanded).toBe(true)
 			local l = Scheme.decode(h.opened[#h.opened]) :: any
 			expect(l.action).toBe("trace")
 			expect(l.params.id).toBe(e.labels.traceID)
-			expect(#effects).toBe(1)
+			expect(#opened).toBe(1)
 			-- L follows the exemplar's series labels to the logs block.
 			press(h, version, char("L"))
 			local logs = Scheme.decode(h.opened[#h.opened]) :: any

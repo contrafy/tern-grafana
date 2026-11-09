@@ -5,10 +5,10 @@
 --
 -- Gauge: one SVG radial gauge (lib/render/svg_gauge) per field display
 -- value (lib/panels/values), laid out like VizRepeater's autoGrid. Grafana
--- 12 with the newGauge feature toggle draws gauge/v2 (RadialGauge: shape,
--- barWidthFactor, barShape, segmentCount/Spacing, neutral, sparkline,
--- effects.gradient, endpointMarker, textMode, text sizes); otherwise
--- gauge/v1 (the flot gauge). Both scale the value over the field's
+-- 12 with the newGauge feature toggle, and every Grafana 13, draws gauge/v2
+-- (RadialGauge: shape, barWidthFactor, barShape, segmentCount/Spacing,
+-- neutral, sparkline, effects.gradient, endpointMarker, textMode, text
+-- sizes); otherwise gauge/v1 (the flot gauge). Both scale the value over the field's
 -- min..max, put threshold markers in an outer ring and threshold labels at
 -- min, each step and max (getFormattedThresholds).
 --

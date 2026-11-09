@@ -46,7 +46,9 @@ for version, count in PROM do
 	end)
 end
 
-for _, version in { "11.6.16", "12.4.12" } do
+local GRAFANA_EXEMPLARS = { ["11.6.16"] = 120, ["12.4.12"] = 120, ["13.3.0"] = 58 }
+
+for _, version in { "11.6.16", "12.4.12", "13.3.0" } do
 	describe("Grafana " .. version .. " exemplar frames", function()
 		local doc = json.decode(Fixtures.read("grafana/" .. version .. "/ds_query_prom_exemplars.json"))
 		local result = FrameGrafana.parseResults(doc, env).A :: any
@@ -58,7 +60,7 @@ for _, version in { "11.6.16", "12.4.12" } do
 				expect(FrameGrafana.isExemplarFrame(f)).toBe(false)
 				expect(#Frame.numberFields(f)).toBe(1)
 			end
-			expect(#exemplars).toBe(120)
+			expect(#exemplars).toBe(GRAFANA_EXEMPLARS[version])
 			for i = 2, #exemplars do
 				expect(exemplars[i - 1].time_ms <= exemplars[i].time_ms).toBe(true)
 			end

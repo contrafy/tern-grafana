@@ -18,8 +18,9 @@ local function near(a: any, b: number)
 	end
 end
 
--- prom_range refId A, the `user` CPU series (61 samples, no gaps), with
--- the expected values computed from the capture by Grafana's definitions.
+-- prom_range refId A, the `user` CPU series (no gaps; 61 samples over 15m,
+-- 29 on the 13.3.0 stack that had run only ~7m), with the expected values
+-- computed from the capture by Grafana's definitions.
 local USER = {
 	["11.6.16"] = {
 		first = 0.14899999999999636,
@@ -31,6 +32,7 @@ local USER = {
 		range = 0.29698243270270147,
 		delta = 0.4502130142851432,
 		diff = 0.032200000000004836,
+		count = 61,
 	},
 	["12.4.12"] = {
 		first = 0.10023976111110837,
@@ -42,6 +44,19 @@ local USER = {
 		range = 0.3389426715915888,
 		delta = 0.49897325317403113,
 		diff = 0.1665602388888877,
+		count = 61,
+	},
+	["13.3.0"] = {
+		first = 0.052253761025129006,
+		lastNotNull = 0.24643450083011625,
+		min = 0.052253761025129006,
+		max = 0.33199336013279734,
+		mean = 0.2293439090674368,
+		sum = 6.650973362955667,
+		range = 0.2797395991076683,
+		delta = 0.320501894414536,
+		diff = 0.19418073980498723,
+		count = 29,
 	},
 }
 
@@ -64,7 +79,7 @@ for _, version in S.VERSIONS do
 			for _, id in ids do
 				near(c[id], (USER :: any)[version][id])
 			end
-			expect(c.count).toBe(61)
+			expect(c.count).toBe((USER :: any)[version].count)
 			near(c.last, (USER :: any)[version].lastNotNull)
 		end)
 	end)

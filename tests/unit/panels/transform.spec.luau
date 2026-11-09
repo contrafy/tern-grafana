@@ -15,6 +15,13 @@ local describe, it, expect = t.describe, t.it, t.expect
 
 local env = S.env
 
+-- The row of the one prom_table series labeled env="dev" (node), in each
+-- capture's series order.
+local DEV_ROW = { ["11.6.16"] = 2, ["12.4.12"] = 2, ["13.3.0"] = 6 }
+-- Samples per prom_range series: 15m at 15s, but the 13.3.0 stack had run
+-- only ~7m.
+local SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 29 }
+
 local function names(frame: Frame.Frame, frames: { Frame.Frame }): { string }
 	local out: { string } = {}
 	for _, f in frame.fields do
@@ -35,7 +42,7 @@ for _, version in S.VERSIONS do
 			expect(#out[1].fields[1].values).toBe(6)
 			-- A series without the label gets "" (getLabelValue).
 			expect(out[1].fields[5].values[1]).toBe("")
-			expect(out[1].fields[5].values[2]).toBe("dev")
+			expect(out[1].fields[5].values[DEV_ROW[version]]).toBe("dev")
 		end)
 
 		it("applies organize: excludeByName drops columns, renameByName renames", function()
@@ -54,8 +61,8 @@ for _, version in S.VERSIONS do
 			expect(#out).toBe(2)
 			local a = out[1].fields
 			expect(a[#a].name).toBe("Value #A")
-			-- 8 series x 61 samples, ordered by time (sortDataFrame).
-			expect(#a[1].values).toBe(8 * 61)
+			-- 8 series x their samples, ordered by time (sortDataFrame).
+			expect(#a[1].values).toBe(8 * SAMPLES[version])
 			local times = a[1].values
 			for i = 2, #times do
 				assert(times[i - 1] <= times[i], "times must be sorted")

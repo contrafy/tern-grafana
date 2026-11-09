@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"{job=\"loggen\"}","queryType":"range","maxLines":50,"direction":"backward"}],"from":"now-5m","to":"now"}

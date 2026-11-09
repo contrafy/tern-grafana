@@ -16,6 +16,7 @@ local env = S.env
 local LEVELS = {
 	["11.6.16"] = { info = 26, debug = 11, warning = 11, error = 2 },
 	["12.4.12"] = { info = 27, debug = 10, warning = 10, error = 3 },
+	["13.3.0"] = { info = 27, debug = 10, warning = 10, error = 3 },
 }
 
 -- The same rows read from the lines alone: the access-log lines
@@ -24,6 +25,7 @@ local LEVELS = {
 local FROM_LINES = {
 	["11.6.16"] = { info = 13, unknown = 13, debug = 11, warning = 11, error = 2 },
 	["12.4.12"] = { info = 13, unknown = 14, debug = 10, warning = 10, error = 3 },
+	["13.3.0"] = { info = 13, unknown = 14, debug = 10, warning = 10, error = 3 },
 }
 
 local function tally(rows: { Logs.Row }): { [string]: number }

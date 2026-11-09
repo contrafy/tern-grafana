@@ -1,6 +1,7 @@
 --!strict
--- The dashboard JSON model from `/api/dashboards/uid/<uid>` (Grafana 11 and
--- 12, schema v1) as sections of panels. Rows are flattened the way Grafana's
+-- The dashboard JSON model from `/api/dashboards/uid/<uid>` (Grafana 11 to
+-- 13, schema v1; 13 answers schema v2 dashboards here converted to v1, tabs
+-- and rows as rows) as sections of panels. Rows are flattened the way Grafana's
 -- classic dashboard model lays them out: an open row owns the top-level
 -- panels after it up to the next row; a collapsed row keeps its own panels in
 -- `row.panels`, and top-level panels after a collapsed row are not part of it.

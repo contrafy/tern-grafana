@@ -53,6 +53,10 @@ local function directRoute(): Route.Route
 	return r
 end
 
+-- `up` of the first series in each instant capture: Prometheus answers a
+-- vector in no fixed order, and Grafana 13's capture led with the down target.
+local FIRST_UP = { ["11.6.16"] = "1", ["12.4.12"] = "1", ["13.3.0"] = "0" }
+
 for _, version in S.VERSIONS do
 	local env = S.env()
 	local function load(): { Variables.Variable }
@@ -177,7 +181,8 @@ for _, version in S.VERSIONS do
 					env
 				)
 			)
-			expect(string.match(raw[1], '^up{instance="[^"]+",job="[^"]+"} 1 %d+$') ~= nil).toBe(true)
+			local pattern = '^up{instance="[^"]+",job="[^"]+"} ' .. FIRST_UP[version] .. " %d+$"
+			expect(string.match(raw[1], pattern) ~= nil).toBe(true)
 			local options = assert(Variables.optionsFrom(topjob, raw, Variables.scope(vars)))
 			expect(values(options)).toEqual({ "alertmanager", "down", "loki", "node", "prometheus", "tempo" })
 		end)

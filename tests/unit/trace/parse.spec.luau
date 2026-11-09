@@ -19,7 +19,7 @@ local describe, it, expect = t.describe, t.it, t.expect
 local env = { now_ms = 0, decode = json.decode, encode = json.encode, null = json.null } :: any
 
 local TRACE = "0082c9f1c2bda850d878e52762cc0816"
-local ROOT, FIRST, SECOND = "fd222e3b400b8c5e", "a0f1187d5c9dc4d6", "93f869ac82c50e2b"
+local ROOT, FIRST = "fd222e3b400b8c5e", "a0f1187d5c9dc4d6"
 
 local function byName(spans: { any }): { [string]: any }
 	local out: { [string]: any } = {}
@@ -92,11 +92,13 @@ describe("OTLP JSON", function()
 		expect(Nanos.diff(s["okey-dokey-1"].start, root.start)).toBe(120000000)
 	end)
 
-	it("reads the v2 envelope the same way", function()
-		local v1 = Otlp.parse(json.decode(Fixtures.read("tempo/2.10.8/trace.json")), env)
-		local v2 = Otlp.parse(json.decode(Fixtures.read("tempo/2.10.8/trace_v2.json")), env)
-		expect(v2).toEqual(v1)
-	end)
+	for _, dir in { "tempo/2.10.8/", "tempo/3.1.1/" } do
+		it("reads " .. dir .. "'s v2 envelope the same way", function()
+			local v1 = Otlp.parse(json.decode(Fixtures.read(dir .. "trace.json")), env)
+			local v2 = Otlp.parse(json.decode(Fixtures.read(dir .. "trace_v2.json")), env)
+			expect(v2).toEqual(v1)
+		end)
+	end
 
 	it("reads plain OTLP JSON: hex ids, numeric enums, events, links, typed values", function()
 		local doc = json.decode([[{"resourceSpans":[{"resource":{"attributes":[
@@ -146,18 +148,23 @@ describe("OTLP JSON", function()
 end)
 
 describe("Grafana Trace frame", function()
-	it("reads the same spans as Tempo's own answer", function()
-		for _, v in { "11.6.16", "12.4.12" } do
-			local doc = json.decode(Fixtures.read("grafana/" .. v .. "/ds_query_tempo_trace.json"))
+	-- Each Grafana proxied the Tempo of its capture run, so it answers that run's trace.
+	local PAIRS = { { "11.6.16", "tempo/2.10.8/" }, { "12.4.12", "tempo/2.10.8/" }, { "13.3.0", "tempo/3.1.1/" } }
+	for _, pair in PAIRS do
+		it("reads the same spans as Tempo's own answer on Grafana " .. pair[1], function()
+			local tempo = byName(Otlp.parse(json.decode(Fixtures.read(pair[2] .. "trace.json")), env) :: { any })
+			local root, second = tempo["lets-go"].span_id, tempo["okey-dokey-1"].span_id
+			local doc = json.decode(Fixtures.read("grafana/" .. pair[1] .. "/ds_query_tempo_trace.json"))
 			local frame = FrameGrafana.frames(doc.results.A.frames, env)[1]
 			local spans = TraceFrame.spans(frame, env) :: { any }
 			expect(#spans).toBe(3)
 			local s = byName(spans)
-			expect(s["lets-go"].span_id).toBe(ROOT)
+			expect(s["lets-go"].trace_id).toBe(tempo["lets-go"].trace_id)
+			expect(s["lets-go"].span_id).toBe(root)
 			expect(s["lets-go"].parent_id).toBeNil()
 			expect(s["lets-go"].kind).toBe("client")
-			expect(s["okey-dokey-0"].parent_id).toBe(ROOT)
-			expect(s["okey-dokey-1"].span_id).toBe(SECOND)
+			expect(s["okey-dokey-0"].parent_id).toBe(root)
+			expect(s["okey-dokey-1"].span_id).toBe(second)
 			expect(s["okey-dokey-1"].status).toBe("error")
 			expect(s["okey-dokey-1"].scope).toBe("telemetrygen")
 			expect(s["okey-dokey-1"].resource).toEqual({ { key = "service.name", value = "payments", kind = "string" } })
@@ -167,8 +174,8 @@ describe("Grafana Trace frame", function()
 				kind = "string",
 			})
 			expect(Nanos.diff(s["lets-go"].stop, s["lets-go"].start)).toBe(240000000)
-		end
-	end)
+		end)
+	end
 
 	it("ignores frames that are not traces", function()
 		expect(TraceFrame.spans({ name = "Traces", fields = {} } :: any, env)).toBeNil()

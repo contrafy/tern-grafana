@@ -12,7 +12,9 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
+-- 15 minutes at 15 s steps, or as much history as the stack had when 13.3.0 was captured.
+local RANGE_POINTS = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 29 }
 
 local env: any = { now_ms = 0, decode = json.decode, encode = json.encode, null = json.null }
 
@@ -41,7 +43,7 @@ for _, v in VERSIONS do
 			end
 			expect(names).toEqual({ "idle", "iowait", "irq", "nice", "softirq", "steal", "system", "user" })
 			local time = Frame.timeField(r.A.frames[1]) :: Frame.Field
-			expect(#time.values).toBe(61)
+			expect(#time.values).toBe(RANGE_POINTS[v])
 			expect((time.config :: Frame.FieldConfig).interval).toBe(15000)
 			-- No legend: Grafana names the series by its expression.
 			expect(Frame.displayName(value(r.B.frames[1]), r.B.frames[1])).toBe("sum(up)")

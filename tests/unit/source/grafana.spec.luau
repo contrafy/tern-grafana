@@ -12,7 +12,7 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
 
 local function url(request: any): string
 	return Http.url(S.grafana.endpoint, request)
@@ -88,16 +88,20 @@ for _, v in VERSIONS do
 		it("lists datasources by name with the default marked", function()
 			local r: any = Grafana.parseDatasources(S.grafana, S.response(dir .. "datasources.json"), S.env)
 			local uids: { string } = {}
-			local default: string? = nil
+			local default: any = nil
 			for _, ds in r.datasources do
 				table.insert(uids, ds.uid)
 				if ds.is_default then
-					default = ds.uid
+					default = ds
 				end
 			end
-			expect(uids).toEqual({ "alertmanager", "loki", "prom2", "prom3", "tempo" })
-			expect(default).toBe("prom3")
-			expect(r.datasources[4]).toEqual({
+			-- PostgreSQL and TestData joined the stack after the 11 and 12 captures.
+			expect(uids).toEqual(
+				if v == "13.3.0"
+					then { "alertmanager", "loki", "postgres", "prom2", "prom3", "tempo", "testdata" }
+					else { "alertmanager", "loki", "prom2", "prom3", "tempo" }
+			)
+			expect(default).toEqual({
 				uid = "prom3",
 				type = "prometheus",
 				name = "Prometheus 3",
@@ -108,11 +112,16 @@ for _, v in VERSIONS do
 end
 
 describe("frontend settings", function()
-	-- The dev stack runs the image renderer next to Grafana 12 only.
+	-- The dev stack runs the image renderer next to Grafana 12 and 13 only.
 	it("knows when the image renderer is available", function()
-		local g12: any =
-			Grafana.parseFrontendSettings(S.grafana, S.response("grafana/12.4.12/frontend_settings.json"), S.env)
-		expect(g12.settings).toEqual({ renderer_available = true, renderer_version = "5.0.0", version = "12.4.12" })
+		for _, v in { "12.4.12", "13.3.0" } do
+			local g: any = Grafana.parseFrontendSettings(
+				S.grafana,
+				S.response("grafana/" .. v .. "/frontend_settings.json"),
+				S.env
+			)
+			expect(g.settings).toEqual({ renderer_available = true, renderer_version = "5.0.0", version = v })
+		end
 		local g11: any =
 			Grafana.parseFrontendSettings(S.grafana, S.response("grafana/11.6.16/frontend_settings.json"), S.env)
 		expect(g11.settings).toEqual({ renderer_available = false, version = "11.6.16" })

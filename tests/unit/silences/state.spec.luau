@@ -311,7 +311,7 @@ describe("expire", function()
 		expect(s.confirm).toBeNil()
 	end)
 
-	for _, v in { "11.6.16", "12.4.12" } do
+	for _, v in { "11.6.16", "12.4.12", "13.3.0" } do
 		it(v .. ": reads Grafana's expire answer as success", function()
 			local env = makeEnv()
 			local s: any, effects = State.init({ "tern-grafana://silence?context=graf" }, nil, env)
