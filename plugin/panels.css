@@ -60,11 +60,85 @@
 
 /* Gauge cells (BarGaugeCell): the bar needs a width in a content-sized
    column; the value sits after it. */
-.tgp-gc { display: flex; align-items: center; gap: 8px; width: 16em; max-width: 100%; }
-.tgp-gc .sf-meter { flex: 1 1 0; min-width: 2em; }
+.tgp-gc { display: flex; align-items: center; gap: 8px; }
+.tgp-gc .sf-meter { flex: 1 1 auto; width: 10em; min-width: 3em; }
 .tgp-gc .sf-meter,
 .tgp-gc .sf-mt-track { height: 14px; border-radius: 3px; }
-.tgp-gc-v { flex: none; min-width: 4.5em; text-align: right; }
+/* The value box is at least the column's longest value wide (0.6em a character:
+   the monospace advance), and never narrower than its own text. */
+.tgp-gc-v { flex: none; text-align: right; white-space: nowrap; }
+.tgp-gw-0 { min-width: 0em; }
+.tgp-gw-1 { min-width: 0.6em; }
+.tgp-gw-2 { min-width: 1.2em; }
+.tgp-gw-3 { min-width: 1.8em; }
+.tgp-gw-4 { min-width: 2.4em; }
+.tgp-gw-5 { min-width: 3em; }
+.tgp-gw-6 { min-width: 3.6em; }
+.tgp-gw-7 { min-width: 4.2em; }
+.tgp-gw-8 { min-width: 4.8em; }
+.tgp-gw-9 { min-width: 5.4em; }
+.tgp-gw-10 { min-width: 6em; }
+.tgp-gw-11 { min-width: 6.6em; }
+.tgp-gw-12 { min-width: 7.2em; }
+.tgp-gw-13 { min-width: 7.8em; }
+.tgp-gw-14 { min-width: 8.4em; }
+.tgp-gw-15 { min-width: 9em; }
+.tgp-gw-16 { min-width: 9.6em; }
+.tgp-gw-17 { min-width: 10.2em; }
+.tgp-gw-18 { min-width: 10.8em; }
+.tgp-gw-19 { min-width: 11.4em; }
+.tgp-gw-20 { min-width: 12em; }
+.tgp-gw-21 { min-width: 12.6em; }
+.tgp-gw-22 { min-width: 13.2em; }
+.tgp-gw-23 { min-width: 13.8em; }
+.tgp-gw-24 { min-width: 14.4em; }
+
+/* The table panel's grid: tracks may shrink to their cells' minimum, which is
+   0 for text (tg-c min-width: 0, headers clip) but, for gauge cells, the
+   padding, the bar's 3em minimum, the gap and tgp-gw-N: 5.5em + 0.6em a value
+   character. A narrow pane squeezes text, never gauge values. */
+.tgp-table .tg-h { min-width: 0; }
+.tg-table .tg-c.tgp-gcw-0 { min-width: 5.5em; }
+.tg-table .tg-c.tgp-gcw-1 { min-width: 6.1em; }
+.tg-table .tg-c.tgp-gcw-2 { min-width: 6.7em; }
+.tg-table .tg-c.tgp-gcw-3 { min-width: 7.3em; }
+.tg-table .tg-c.tgp-gcw-4 { min-width: 7.9em; }
+.tg-table .tg-c.tgp-gcw-5 { min-width: 8.5em; }
+.tg-table .tg-c.tgp-gcw-6 { min-width: 9.1em; }
+.tg-table .tg-c.tgp-gcw-7 { min-width: 9.7em; }
+.tg-table .tg-c.tgp-gcw-8 { min-width: 10.3em; }
+.tg-table .tg-c.tgp-gcw-9 { min-width: 10.9em; }
+.tg-table .tg-c.tgp-gcw-10 { min-width: 11.5em; }
+.tg-table .tg-c.tgp-gcw-11 { min-width: 12.1em; }
+.tg-table .tg-c.tgp-gcw-12 { min-width: 12.7em; }
+.tg-table .tg-c.tgp-gcw-13 { min-width: 13.3em; }
+.tg-table .tg-c.tgp-gcw-14 { min-width: 13.9em; }
+.tg-table .tg-c.tgp-gcw-15 { min-width: 14.5em; }
+.tg-table .tg-c.tgp-gcw-16 { min-width: 15.1em; }
+.tg-table .tg-c.tgp-gcw-17 { min-width: 15.7em; }
+.tg-table .tg-c.tgp-gcw-18 { min-width: 16.3em; }
+.tg-table .tg-c.tgp-gcw-19 { min-width: 16.9em; }
+.tg-table .tg-c.tgp-gcw-20 { min-width: 17.5em; }
+.tg-table .tg-c.tgp-gcw-21 { min-width: 18.1em; }
+.tg-table .tg-c.tgp-gcw-22 { min-width: 18.7em; }
+.tg-table .tg-c.tgp-gcw-23 { min-width: 19.3em; }
+.tg-table .tg-c.tgp-gcw-24 { min-width: 19.9em; }
+.tgp-table .tg-cols-1 { grid-template-columns: repeat(1, minmax(auto, max-content)); }
+.tgp-table .tg-cols-2 { grid-template-columns: repeat(2, minmax(auto, max-content)); }
+.tgp-table .tg-cols-3 { grid-template-columns: repeat(3, minmax(auto, max-content)); }
+.tgp-table .tg-cols-4 { grid-template-columns: repeat(4, minmax(auto, max-content)); }
+.tgp-table .tg-cols-5 { grid-template-columns: repeat(5, minmax(auto, max-content)); }
+.tgp-table .tg-cols-6 { grid-template-columns: repeat(6, minmax(auto, max-content)); }
+.tgp-table .tg-cols-7 { grid-template-columns: repeat(7, minmax(auto, max-content)); }
+.tgp-table .tg-cols-8 { grid-template-columns: repeat(8, minmax(auto, max-content)); }
+.tgp-table .tg-cols-9 { grid-template-columns: repeat(9, minmax(auto, max-content)); }
+.tgp-table .tg-cols-10 { grid-template-columns: repeat(10, minmax(auto, max-content)); }
+.tgp-table .tg-cols-11 { grid-template-columns: repeat(11, minmax(auto, max-content)); }
+.tgp-table .tg-cols-12 { grid-template-columns: repeat(12, minmax(auto, max-content)); }
+.tgp-table .tg-cols-13 { grid-template-columns: repeat(13, minmax(auto, max-content)); }
+.tgp-table .tg-cols-14 { grid-template-columns: repeat(14, minmax(auto, max-content)); }
+.tgp-table .tg-cols-15 { grid-template-columns: repeat(15, minmax(auto, max-content)); }
+.tgp-table .tg-cols-16 { grid-template-columns: repeat(16, minmax(auto, max-content)); }
 
 /* color-background cells (and applyToRow rows): Grafana's solid color, or
    a 120deg gradient from a darker copy of it, with contrasting text; the

@@ -531,6 +531,121 @@
           "csvContent": "Service,Tags,Notes,Payload,Errors,Load,Usage\ncheckout,\"prod, eu, web\",**hot** path,\"{\"\"v\"\":1}\",3,35,0.4\npayments,\"prod, us\",see _runbook_,\"[1,2]\",91,88,0.9\nsearch,dev,plain,\"{}\",40,12,0.1"
         }
       ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "MDU battery status",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Charge"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AC lost"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "ok",
+                        "color": "green"
+                      },
+                      "1": {
+                        "text": "LOST",
+                        "color": "red"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "device_id,Device,Site,Charge,Device 2,AC lost\n604b9061c6972a0c81f5e2d7,Caldwell Heights MDF,Caldwell Heights Apartments,1,Caldwell Heights MDF,0\n640ba8f10a577e585468a1c2,Red Caboose MDF,The Andre Apartments,0.83,Red Caboose MDF,0\n62a0fbd57a39aac77b4a9e10,Life Tower MDF,Life Tower,0.52,Life Tower MDF,1\n62df00429682a1ef1618a3b4,Venue MDF UPS,Villas on Guadalupe,0.21,Venue MDF UPS,1\n63ed16ae7b09c871c99c0d4e,Villas Outdoor Hut MDF,Villas on Guadalupe,0.05,Villas Outdoor Hut MDF,0"
+        }
+      ]
     }
   ]
 }

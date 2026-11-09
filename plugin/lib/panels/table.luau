@@ -59,7 +59,14 @@ export type Cell = {
 	pills: { Pill }?,
 }
 
-export type Column = { head: string, numeric: boolean, item: Item }
+export type Column = {
+	head: string,
+	numeric: boolean,
+	item: Item,
+	-- Gauge columns: the longest shown value in characters (0 with
+	-- valueDisplayMode hidden), capped at MAX_VALUE_WIDTH.
+	value_width: number?,
+}
 
 export type Table = {
 	columns: { Column },
@@ -75,6 +82,9 @@ export type Table = {
 local M = {}
 
 M.MAX_ROWS = 500
+
+-- panels.css has tgp-gw-0 .. tgp-gw-<MAX_VALUE_WIDTH>.
+M.MAX_VALUE_WIDTH = 24
 
 -- Cell types drawn natively; the others ladder with their reason.
 local UNSUPPORTED: { [string]: string } = {
@@ -481,6 +491,18 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		end
 		table.insert(rows, cells)
 	end
+	for c, col in columns do
+		if kinds[c] == "gauge" then
+			local width = 0
+			for _, row in rows do
+				local cell = row[c]
+				if cell.value_mode ~= "hidden" then
+					width = math.max(width, utf8.len(cell.text) or #cell.text)
+				end
+			end
+			col.value_width = math.min(width, M.MAX_VALUE_WIDTH)
+		end
+	end
 	-- Footer: the panel-wide reducer (options.footer) or per-field reducers.
 	local footerOpts = Json.obj(env, Json.path(env, panel, "options", "footer"))
 	local panelReducer: string? = nil
@@ -527,8 +549,10 @@ end
 
 -- BarGaugeCell: a horizontal bar gauge filling the cell, the value after
 -- it (valueDisplayMode text: plain, color: in the value's color, hidden:
--- none). The wrapper gives the bar a width in the content-sized column.
-local function gaugeNode(cell: Cell): Node
+-- none). The wrapper gives the bar a width in the content-sized column; the
+-- value box is `width` characters wide (getAlignmentFactor: the column's
+-- longest value), so the bar shrinks first and the value is never cut.
+local function gaugeNode(cell: Cell, width: number): Node
 	local p: { [string]: any } = {
 		key = "m",
 		value = math.clamp(if cell.percent == cell.percent then cell.percent else 0, 0, 1),
@@ -547,16 +571,16 @@ local function gaugeNode(cell: Cell): Node
 		local token = if cell.value_mode == "color" then Common.token(cell.tone :: any) else ""
 		table.insert(children, {
 			k = "el",
-			p = { tag = "div", key = "v", class = "tgp-gc-v" },
+			p = { tag = "div", key = "v", class = "tgp-gc-v tgp-gw-" .. width },
 			c = { Grid.text(cell.text, if token ~= "" then token else nil) },
 		})
 	end
 	return { k = "el", p = { tag = "div", class = "tgp-gc" }, c = children }
 end
 
-local function contentNode(cell: Cell): Node
+local function contentNode(cell: Cell, width: number): Node
 	if cell.kind == "gauge" then
-		return gaugeNode(cell)
+		return gaugeNode(cell, width)
 	elseif cell.kind == "pill" then
 		local list: { Pill } = cell.pills or {}
 		local pills: { Node } = table.create(#list)
@@ -581,8 +605,8 @@ local function contentNode(cell: Cell): Node
 	return Grid.text(cell.text)
 end
 
-local function cellNode(cell: Cell): Node
-	local content = contentNode(cell)
+local function cellNode(cell: Cell, width: number): Node
+	local content = contentNode(cell, width)
 	if cell.bg_tone == nil then
 		return content
 	end
@@ -602,13 +626,18 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	local showHeader = Json.bool(env, Json.path(env, panel, "options", "showHeader")) ~= false
 	local columns: { Grid.Column } = table.create(#t.columns)
 	for i, c in t.columns do
-		columns[i] = { head = if showHeader then c.head else "", numeric = c.numeric }
+		columns[i] = {
+			head = if showHeader then c.head else "",
+			numeric = c.numeric,
+			-- Gauge columns do not shrink below the bar's minimum and the value.
+			class = if c.value_width then "tgp-gcw-" .. c.value_width else nil,
+		}
 	end
 	local gridRows: { Grid.Row } = table.create(#t.rows)
 	for r, row in t.rows do
 		local cells: { Node } = table.create(#row)
 		for c, cell in row do
-			cells[c] = cellNode(cell)
+			cells[c] = cellNode(cell, t.columns[c].value_width or 0)
 		end
 		gridRows[r] = { key = "r" .. r, cells = cells }
 	end
@@ -619,7 +648,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		end
 		table.insert(gridRows, { key = "footer", cells = cells })
 	end
-	local children: { Node } = { Grid.grid(opts.key .. ".grid", columns, gridRows, "tern-grafana.table") }
+	local children: { Node } = {
+		{
+			k = "el",
+			p = { tag = "div", class = "tgp-table" },
+			c = { Grid.grid(opts.key .. ".grid", columns, gridRows, "tern-grafana.table") },
+		},
+	}
 	local notes: { string } = {}
 	if t.more_rows > 0 then
 		table.insert(notes, string.format("%d more rows", t.more_rows))

@@ -198,8 +198,40 @@ for _, version in S.VERSIONS do
 			expect(meter.p.label).toBeNil()
 			-- valueDisplayMode text: the value in the plain text color.
 			local value = gauges[1].c[2]
-			expect(value.p.class).toBe("tgp-gc-v")
+			expect(value.p.class).toBe("tgp-gc-v tgp-gw-4")
 			expect(value.c[1].p.spans[1]).toEqual({ t = "100%" })
+		end)
+
+		-- getAlignmentFactor: every value box of a gauge column is as wide as
+		-- the column's longest value ("100%", "58.0%"), and the column's
+		-- cells claim that room plus the bar's minimum, so a narrow pane
+		-- squeezes the text columns instead of cutting the value to "10".
+		it("reserves the column's longest value in gauge cells", function()
+			local panel, frames = cells(version, 1)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			expect(tbl.columns[col(tbl, "Charge")].value_width).toBe(4)
+			expect(tbl.columns[col(tbl, "Load")].value_width).toBe(5)
+			expect(tbl.columns[col(tbl, "Device")].value_width).toBeNil()
+			local node = Table.view(panel, frames, env, OPTS)
+			local load = S.findAll(node, function(n)
+				return n.p and n.p.class == "tgp-gc-v tgp-gw-5"
+			end)
+			expect(#load).toBe(5)
+			local reserved = S.findAll(node, function(n)
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "^tg%-c .*tgp%-gcw%-[45]$") ~= nil
+			end)
+			expect(#reserved).toBe(10)
+		end)
+
+		-- Panel 4 is the user's MDU table: the gauge column sits between
+		-- long text columns.
+		it("reserves the value between long text columns", function()
+			local panel, frames = cells(version, 4)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			expect(heads(tbl)).toEqual({ "device_id", "Device", "Site", "Charge", "Device 2", "AC lost" })
+			local charge = tbl.columns[col(tbl, "Charge")]
+			expect(charge.value_width).toBe(4)
+			expect(column(tbl, "Charge")).toEqual({ "100%", "83%", "52%", "21%", "5%" })
 		end)
 
 		it("fills color-background cells by mode", function()
@@ -242,6 +274,9 @@ for _, version in S.VERSIONS do
 			expect(first.c[2].c[1].p.spans[1]).toEqual({ t = "92", s = "error" })
 			expect(gauges[2].c[1].p.style).toBe("blocks")
 			expect(gauges[3].c[2]).toBeNil()
+			-- valueDisplayMode hidden reserves no value room.
+			expect(tbl.columns[col(tbl, "Hidden")].value_width).toBe(0)
+			expect(tbl.columns[col(tbl, "MTTR")].value_width).toBe(7)
 		end)
 
 		-- Panel 3: pill tags, markdown notes, a json-view payload, color-text
