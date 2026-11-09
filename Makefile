@@ -11,7 +11,7 @@ LUAU_DIRS = $(wildcard plugin tests)
 FILTER =
 
 .PHONY: bootstrap tools fixtures test test-runner-selfcheck e2e lint fmt fmt-check typecheck window-load check \
-	stack-up stack-down fixtures-capture
+	stack-up stack-down fixtures-capture bench bench-compare bench-profile
 
 bootstrap:
 	sh scripts/bootstrap.sh
@@ -56,6 +56,18 @@ window-load:
 	@sh scripts/check-window-load.sh
 
 check: fmt-check lint typecheck window-load test-runner-selfcheck test
+
+# Benchmarks of the pure core (docs/benchmarks.md); reports land in gitignored tests/bench/out/.
+# BENCH_ARGS passes runner flags (--iters N, --warmup N, --only NAME).
+bench: tools
+	@sh tests/bench/bench.sh run $(BENCH_ARGS)
+
+bench-compare: tools
+	@[ -n "$(BASE)" ] || { echo "usage: make bench-compare BASE=tests/bench/out/<stamp>.json [NEW=<report>]" >&2; exit 2; }
+	@sh tests/bench/bench.sh compare "$(BASE)" $(NEW)
+
+bench-profile: tools
+	@sh tests/bench/bench.sh profile $(BENCH_ARGS)
 
 # Docker dev stack (dev/); scripts/stack.sh owns the details.
 STACK = @[ -f scripts/stack.sh ] || { echo "scripts/stack.sh is missing: the dev stack is not set up" >&2; exit 1; }; sh scripts/stack.sh
