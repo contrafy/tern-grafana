@@ -18,6 +18,7 @@ styles = [
 	"plugin/annotations.css",
 	"plugin/trace.css",
 	"plugin/irm.css",
+	"plugin/dynamictext.css",
 ]
 
 [[blocks]]

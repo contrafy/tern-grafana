@@ -323,6 +323,12 @@ local LAZY: { { types: { string }, load: () -> any } } = {
 			return require("./treemap")
 		end,
 	},
+	{
+		types = { "marcusolsson-dynamictext-panel" },
+		load = function(): any
+			return require("./dynamictext")
+		end,
+	},
 }
 M.LAZY = LAZY
 

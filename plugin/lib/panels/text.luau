@@ -14,10 +14,13 @@
 --   disallowed ones are backslash-escaped to show as plain text, as Grafana
 --   escapes them.
 -- Rooted link and image paths resolve against the Grafana's browser URL.
+-- Inline styles keep the declarations Grafana's sanitizer allows
+-- (HtmlStyle.TEXT_PANEL_CSS), drawn by plugin/dynamictext.css classes.
 
 local Common = require("./common")
 local Env = require("../env")
 local Html = require("./html")
+local HtmlStyle = require("./html_style")
 local Json = require("./json")
 local ui = require("../ui")
 
@@ -25,6 +28,15 @@ type Env = Env.Env
 type Node = ui.Node
 
 local M = {}
+
+local function textStyle(style: string): string?
+	return HtmlStyle.compile(style, HtmlStyle.TEXT_PANEL_CSS).class
+end
+
+-- Html.view options for text panel HTML.
+local function htmlOptions(key: string?, base: string?): Html.Options
+	return { key = key, base_url = base, style = textStyle, class = "tgx tgd" }
+end
 
 -- HTML as plain text: scripts and styles dropped, block ends and <br> as
 -- line breaks, list items bulleted, tags removed, entities decoded,
@@ -477,8 +489,9 @@ function M.inline(src: string, base: string?): string
 end
 
 -- Markdown with Grafana's HTML handling: one `md` node when the content has
--- no HTML block, else the blocks in order in a column.
-function M.markdown(content: string, key: string, base: string?): Node
+-- no HTML block, else the blocks in order in a column. `html` draws the
+-- HTML blocks (default: Html.view with `base`).
+function M.markdown(content: string, key: string, base: string?, html: Html.Options?): Node
 	local nodes: { Node } = {}
 	local md: { string } = {}
 	local function flush()
@@ -493,7 +506,7 @@ function M.markdown(content: string, key: string, base: string?): Node
 	for _, seg in segments(content) do
 		if seg.kind == "html" then
 			flush()
-			local view = Html.view(seg.text, { base_url = base })
+			local view = Html.view(seg.text, html or htmlOptions(nil, base))
 			if #(view.c :: { Node }) > 0 or (view.p :: { [string]: any }).text then
 				table.insert(nodes, view)
 			end
@@ -524,7 +537,7 @@ function M.view(panel: any, env: Env, opts: Common.Options): Node
 	end
 	local mode = Json.str(env, options.mode) or "markdown"
 	if mode == "html" then
-		return Html.view(content, { key = opts.key, base_url = opts.base_url })
+		return Html.view(content, htmlOptions(opts.key, opts.base_url))
 	elseif mode == "code" then
 		local lang = Json.str(env, Json.path(env, options, "code", "language"))
 		return ui.code(content, lang, nil, { key = opts.key })

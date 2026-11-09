@@ -165,17 +165,23 @@ describe("text markdown with HTML blocks", function()
 		-- The billing dashboard's pattern: a self-closed <a/> that still wraps
 		-- the heading below it (browsers ignore the slash), then Markdown.
 		local node = md(
-			'<div>\n  <a href="https://example.com/invoices" target="_blank"/>\n    <h1 style="\n      text-align: center;\n    ">\n'
+			'<div>\n  <a href="https://example.com/invoices" target="_blank"/>\n    <h1 style="\n      text-align: center;\n'
+				.. '      background: linear-gradient(90deg, #1f6feb, #8250df); position: absolute; font-size: 1.5em;\n    ">\n'
 				.. "      View invoices\n    </h1>\n  </a>\n</div>\n\nText after with `<b>code</b>`."
 		)
 		expect(node.k).toBe("col")
 		expect(#node.c).toBe(2)
 		local block = node.c[1]
 		expect(block.k).toBe("el")
-		expect(block.p.class).toBe("tgx")
+		expect(block.p.class).toBe("tgx tgd")
 		local h1 = find(block, "h1")
 		expect(h1.p.href).toBe("https://example.com/invoices")
-		expect(h1.p.class).toBe("tgx-center")
+		-- Grafana's sanitizer keeps the gradient and size and drops `position`.
+		local classes = h1.p.class
+		expect(string.find(classes, "dt-ta-center", 1, true) ~= nil).toBe(true)
+		expect(string.find(classes, "dt-lg2", 1, true) ~= nil).toBe(true)
+		expect(string.find(classes, "dt-fs1", 1, true) ~= nil).toBe(true)
+		expect((string.find(classes, "dt-pos", 1, true))).toBeNil()
 		expect(S.text(h1)).toBe(" View invoices ")
 		expect(node.c[2].k).toBe("md")
 		expect(node.c[2].p.text).toBe("\nText after with `<b>code</b>`.")
@@ -218,7 +224,7 @@ describe("text html mode", function()
 			table.insert(tags, e.p.tag)
 		end
 		expect(table.concat(tags, " ")).toBe("div table tr td td tr td div b div b td div")
-		expect(find(node, "td").p.class).toBe("tgx-b")
+		expect(find(node, "td").p.class).toBe("dt-fwt-bold")
 		expect(S.text(node)).toBe("MondayTuesdayHavenLoftsNo upgrades")
 	end)
 

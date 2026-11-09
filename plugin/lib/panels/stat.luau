@@ -111,7 +111,9 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		local d = v.display
 		local text = FieldConfig.joined(d)
 		local cfg = if v.item then (v.item :: FieldConfig.Item).config else nil
-		local fixed = cfg and (cfg.color_mode == "fixed" or cfg.color_mode == "shades") and cfg.fixed_color
+		local fixed: string? = if cfg and (cfg.color_mode == "fixed" or cfg.color_mode == "shades")
+			then cfg.fixed_color
+			else nil
 		local colorClass = d.class
 			or (
 				if fixed

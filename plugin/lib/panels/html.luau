@@ -14,7 +14,8 @@
 -- Markdown image in an `md` node (Tern loads http(s) and data sources and
 -- shows the alt text when it cannot), br a preformatted newline, and
 -- iframe/video/audio a link to their source. Inline styles become classes for
--- bold, italic and alignment only (colors and boxes follow the Tern theme).
+-- bold, italic and alignment only (colors and boxes follow the Tern theme),
+-- unless Options.style compiles them (lib/panels/html_style, dynamictext).
 
 local Str = require("../str")
 local ui = require("../ui")
@@ -35,6 +36,14 @@ export type Options = {
 	key: string?,
 	-- The Grafana's browser URL without a trailing slash, for rooted paths.
 	base_url: string?,
+	-- An element's inline `style` as classes; replaces the bold, italic and
+	-- alignment classes.
+	style: ((style: string) -> string?)?,
+	-- Draws an img (nil: the default Markdown image); `href` is the link
+	-- around it.
+	image: ((e: Element, href: string?) -> Node?)?,
+	-- The root's class (default "tgx").
+	class: string?,
 }
 
 local M = {}
@@ -494,9 +503,23 @@ function M.mdImage(alt: string, src: string, href: string?): string
 	return if href then "[" .. img .. "](" .. M.mdUrl(href) .. ")" else img
 end
 
-type Ctx = { base: string?, href: string?, pre: boolean }
+type Ctx = { base: string?, href: string?, pre: boolean, opts: Options }
 
-local function styleClasses(e: Element, classes: { string })
+local function styleClasses(e: Element, classes: { string }, compile: ((string) -> string?)?)
+	if compile then
+		local align = string.lower(e.attrs.align or "")
+		if align == "center" or e.tag == "center" then
+			table.insert(classes, "tgx-center")
+		elseif align == "right" then
+			table.insert(classes, "tgx-right")
+		end
+		local style = e.attrs.style
+		local c = if style and style ~= "" then compile(style) else nil
+		if c and c ~= "" then
+			table.insert(classes, c)
+		end
+		return
+	end
 	local style = string.lower(e.attrs.style or "")
 	local align = string.lower(e.attrs.align or "")
 	local weight = string.match(style, "font%-weight%s*:%s*([%w]+)")
@@ -572,6 +595,11 @@ build = function(e: Element, ctx: Ctx): Node?
 	elseif name == "br" then
 		return { k = "el", p = { tag = "span", class = "tgx-br", text = "\n" } }
 	elseif name == "img" then
+		local custom = ctx.opts.image
+		local node = if custom then custom(e, ctx.href) else nil
+		if node then
+			return node
+		end
 		local alt = Str.trim(e.attrs.alt or "")
 		local src = M.resolve(e.attrs.src, ctx.base, true)
 		if src then
@@ -602,9 +630,11 @@ build = function(e: Element, ctx: Ctx): Node?
 	elseif name == "u" or name == "ins" then
 		table.insert(classes, "tgx-u")
 	end
-	styleClasses(e, classes)
+	styleClasses(e, classes, ctx.opts.style)
 	local pre = ctx.pre or name == "pre"
-	local inner = if href ~= ctx.href or pre ~= ctx.pre then { base = ctx.base, href = href, pre = pre } else ctx
+	local inner = if href ~= ctx.href or pre ~= ctx.pre
+		then { base = ctx.base, href = href, pre = pre, opts = ctx.opts }
+		else ctx
 	local kids, lead = children(e, inner)
 	local p: { [string]: any } = { tag = tag, text = lead, href = href }
 	if #classes > 0 then
@@ -622,11 +652,11 @@ build = function(e: Element, ctx: Ctx): Node?
 	return { k = "el", p = p, c = if #kids > 0 then kids else nil }
 end
 
--- Sanitized HTML as one `el` div of class tgx.
+-- Sanitized HTML as one `el` div of class opts.class (default tgx).
 function M.view(src: string, opts: Options): Node
 	local root = M.parse(src)
-	local kids, lead = children(root, { base = opts.base_url, pre = false })
-	local p: { [string]: any } = { tag = "div", class = "tgx", text = lead }
+	local kids, lead = children(root, { base = opts.base_url, pre = false, opts = opts })
+	local p: { [string]: any } = { tag = "div", class = opts.class or "tgx", text = lead }
 	if opts.key then
 		p.key = opts.key
 	end

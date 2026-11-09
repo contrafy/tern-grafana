@@ -92,6 +92,21 @@
           "showMiniMap": false
         }
       }
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 3,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "<div>\n  <a href=\"https://example.com/invoices\" target=\"_blank\">\n    <h1 style=\"background: linear-gradient(90deg, #1f6feb, #8250df); text-align: center; font-size: 1.5em; padding: 0.3em; color: #ffffff; position: relative\">View Invoices</h1>\n  </a>\n</div>\n"
+      }
     }
   ]
 }
