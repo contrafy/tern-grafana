@@ -454,13 +454,14 @@ end
 
 -- Join gaps leave the transforms as the plugin's missing value.
 local function settle(frames: { Frame }): { Frame }
+	local GAP = Shared.GAP
 	local out: { Frame } = frames
 	for fi, frame in frames do
 		local fields: { Field }? = nil
 		for xi, field in frame.fields do
 			local values: { any }? = nil
 			for i, v in field.values do
-				if v == Shared.GAP then
+				if v == GAP then
 					if values == nil then
 						values = Tbl.copy(field.values)
 					end
@@ -507,6 +508,8 @@ function M.prepare(panel: any, frames: { Frame }, env: Env, interpolate: ((strin
 		end
 	end
 	local ctx: Ctx = { env = env, interpolate = interpolate }
+	-- GAP only comes out of transformers; frames none touched skip settle.
+	local ran = false
 	for _, t in Json.list(env, Json.path(env, panel, "transformations")) do
 		if not active(env, t) then
 			continue
@@ -516,6 +519,7 @@ function M.prepare(panel: any, frames: { Frame }, env: Env, interpolate: ((strin
 		if tr == nil then
 			continue
 		end
+		ran = true
 		local raw = Json.path(env, t, "options")
 		local options: any = if interpolate then interpolated(raw, interpolate, env) else raw
 		local staticRef = Json.str(env, Json.path(env, t, "refId"))
@@ -554,7 +558,7 @@ function M.prepare(panel: any, frames: { Frame }, env: Env, interpolate: ((strin
 			data = tr.apply(data, options, ctx)
 		end
 	end
-	return settle(data)
+	return if ran then settle(data) else data
 end
 
 return M

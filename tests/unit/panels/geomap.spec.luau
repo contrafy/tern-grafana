@@ -21,32 +21,40 @@ local function allPanels(version: string, id: number): any
 	error("no panel " .. id)
 end
 
-for _, version in S.VERSIONS do
-	describe("geomap " .. version, function()
-		it("is native for markers layers", function()
-			expect((Geomap.supports(allPanels(version, 33), env))).toBe(true)
-		end)
-
-		-- Size scales requests 45..310 into radius 4..20; colors follow the
-		-- thresholds; labels sit 14 px above in the marker color.
-		it("draws sized, colored and labeled markers over the outline", function()
-			local node, assets = Geomap.view(allPanels(version, 33), S.frames(version, "all_panels_33"), env, {
-				key = "gm",
-				size = { w = 1000, h = 460 },
-			})
-			local svg = (assets :: any).gm.bytes
-			expect(#svg <= 262144).toBe(true)
-			expect(string.find(svg, 'class="tgm-land"', 1, true) ~= nil).toBe(true)
-			expect(string.find(svg, 'r="20.0" fill="#F2495C" fill-opacity="0.60"', 1, true) ~= nil).toBe(true)
-			expect(string.find(svg, 'r="4.0" fill="#73BF69"', 1, true) ~= nil).toBe(true)
-			expect(string.find(svg, 'fill="#FF9830">virginia</text>', 1, true) ~= nil).toBe(true)
-			local legend = S.find(node, function(n)
-				return n.p and n.p.role == "tern-grafana.legend"
-			end)
-			expect(S.text(legend)).toBe("< 100 req/s100 req/s+250 req/s+")
-		end)
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+describe("geomap " .. version, function()
+	it("is native for markers layers", function()
+		expect((Geomap.supports(allPanels(version, 33), env))).toBe(true)
 	end)
-end
+
+	-- Size scales requests 45..310 into radius 4..20; colors follow the
+	-- thresholds; labels sit 14 px above in the marker color.
+	it("draws sized, colored and labeled markers over the outline", function()
+		local node, assets = Geomap.view(allPanels(version, 33), S.frames(version, "all_panels_33"), env, {
+			key = "gm",
+			size = { w = 1000, h = 460 },
+		})
+		-- Markers painted alike share a <g> carrying their paint: read each
+		-- one with its group's attributes.
+		local ungroup = function(paint: string, body: string): string
+			return (string.gsub(body, "/>", function()
+				return " " .. paint .. "/>"
+			end))
+		end
+		local svg = string.gsub((assets :: any).gm.bytes, "<g ([^>]*)>(.-)</g>", ungroup :: any)
+		expect(#(assets :: any).gm.bytes <= 262144).toBe(true)
+		expect(string.find(svg, 'class="tgm-land"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, 'r="20.0" fill="#F2495C" fill-opacity="0.60"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, 'r="4.0" fill="#73BF69"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, 'fill="#FF9830">virginia</text>', 1, true) ~= nil).toBe(true)
+		local legend = S.find(node, function(n)
+			return n.p and n.p.role == "tern-grafana.legend"
+		end)
+		expect(S.text(legend)).toBe("< 100 req/s100 req/s+250 req/s+")
+	end)
+end)
 
 describe("geomap view", function()
 	-- The "zero" view centers 0,0; the world spans at least the panel.

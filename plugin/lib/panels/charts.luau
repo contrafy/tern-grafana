@@ -11,7 +11,7 @@ local Common = require("./common")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
-local Grid = require("../render/grid")
+local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgXY = require("../render/svg_xy")
@@ -109,7 +109,7 @@ function M.unsupportedLegend(panel: any, env: Env): string?
 	return nil
 end
 
-export type Row = { class: string, name: string, values: { string } }
+export type Row = Legend.Row
 
 function M.hiddenFromLegend(item: Item): boolean
 	local hideFrom = item.config.custom.hideFrom
@@ -143,44 +143,9 @@ function M.calcLegend(key: string, rows: { Row }, legend: Legend): Node
 	return M.legend(key, rows, heads, legend.mode)
 end
 
-local function swatch(class: string): Node
-	return { k = "el", p = { tag = "span", class = "tg-swatch " .. class } }
-end
-
 -- VizLegend: a wrapping list (name, then the values in bold) or a table
 -- with a column per value heading.
-function M.legend(key: string, rows: { Row }, heads: { string }, mode: "list" | "table"): Node
-	if mode == "table" then
-		local columns: { Grid.Column } = { { head = "Name" } }
-		for _, h in heads do
-			table.insert(columns, { head = h, numeric = true })
-		end
-		local gridRows: { Grid.Row } = table.create(#rows)
-		for i, r in rows do
-			local cells: { Node } = {
-				{ k = "row", p = { gap = "xs", align = "center" }, c = { swatch(r.class), Grid.text(r.name) } },
-			}
-			for _, v in r.values do
-				table.insert(cells, Grid.text(v))
-			end
-			gridRows[i] = { key = "s" .. i, cells = cells }
-		end
-		return Grid.grid(key, columns, gridRows, "tern-grafana.legend")
-	end
-	local entries: { Node } = table.create(#rows)
-	for i, r in rows do
-		local spans: { ui.SpanLike } = { r.name }
-		if #r.values > 0 then
-			table.insert(spans, ui.span(" " .. table.concat(r.values, " "), "strong"))
-		end
-		entries[i] = {
-			k = "row",
-			p = { key = "s" .. i, gap = "xs", align = "center" },
-			c = { swatch(r.class), ui.text(spans) },
-		}
-	end
-	return { k = "row", p = { key = key, gap = "md", wrap = true, role = "tern-grafana.legend" }, c = entries }
-end
+M.legend = Legend.rowsNode
 
 -- Chart node -------------------------------------------------------------------
 
@@ -341,9 +306,7 @@ end
 
 -- Graph field config ------------------------------------------------------------
 
-local function num(v: any): number?
-	return if type(v) == "number" and v == v then v else nil
-end
+local num = Json.number
 
 -- GraphFieldConfig (packages/grafana-schema common.gen.ts) of one series as
 -- a lib/render/svg_xy line: drawStyle line|bars|points, lineWidth (1),

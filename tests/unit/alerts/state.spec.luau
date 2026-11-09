@@ -5,13 +5,14 @@
 -- muted alerts stay out of the way until asked for. Opening the inbox also
 -- refreshes the status segment's summary, but only for contexts the poller
 -- watches, and the block's saved state never holds alert data.
-local Fixtures = require("../../lib/fixtures")
 local Render = require("../../../plugin/lib/alerts/render")
 local State = require("../../../plugin/lib/alerts/state")
 local Summary = require("../../../plugin/lib/alerts/summary")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 local Scheme = require("../../../plugin/lib/links/scheme")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -43,20 +44,9 @@ local function makeEnv(kv: { [string]: any }?): any
 	}
 end
 
-local function ok(path: string): any
-	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local ok = Support.response
 
-local function key(text: string, name: string?): any
-	return {
-		name = name or text,
-		text = if name then nil else text,
-		ctrl = false,
-		alt = false,
-		shift = false,
-		meta = false,
-	}
-end
+local key = Keys.press
 
 local function kinds(effects: { any }): { string }
 	local out = {}
@@ -66,14 +56,7 @@ local function kinds(effects: { any }): { string }
 	return out
 end
 
-local function find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
+local find = Support.find
 
 -- Answers every http effect with the fixture for its tag.
 local function answer(s: any, effects: { any }, env: any, bodies: { [string]: any }): { any }

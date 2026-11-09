@@ -11,10 +11,16 @@ describe("regions", function()
 		local node = { k = "col", c = {} }
 		expect(Effect.regions(node).main).toBe(node)
 	end)
+end)
 
-	it("passes named regions through, so a layer or dock survives", function()
-		local view = { main = { k = "col" }, layer = { k = "col" } }
-		expect(Effect.regions(view :: any)).toBe(view)
+describe("toastLevel", function()
+	-- Tern raises on a level it does not know, which would lose the toast.
+	it("keeps Tern's levels and shows anything else as info", function()
+		expect(Effect.toastLevel("success")).toBe("success")
+		expect(Effect.toastLevel("error")).toBe("error")
+		expect(Effect.toastLevel("info")).toBe("info")
+		expect(Effect.toastLevel("warn")).toBe("info")
+		expect(Effect.toastLevel(nil)).toBe("info")
 	end)
 end)
 

@@ -16,6 +16,7 @@ local Fixtures = require("../../lib/fixtures")
 local Validate = require("../../../plugin/lib/config/validate")
 local View = require("../../../plugin/lib/investigate/view")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -62,14 +63,7 @@ local SUBJECT: any = {
 	links = { { label = "Runbook", url = "https://example.com/runbooks/tern-always-firing" } },
 }
 
-local function find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
+local find = Support.find
 
 local function noKv(effects: { any })
 	expect(find(effects, "kv_set")).toBeNil()

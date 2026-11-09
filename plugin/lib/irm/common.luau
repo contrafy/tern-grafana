@@ -89,19 +89,4 @@ function M.absolute(url: string?, grafana_url: string?): string?
 	return nil
 end
 
--- Edits a one-line text field from a key; true when the key was used.
-function M.editKey(text: string, key: any): (string, boolean)
-	local name = key.name
-	if name == "backspace" then
-		return string.sub(text, 1, (utf8.offset(text, -1) or (#text + 1)) - 1), true
-	elseif name == "paste" and type(key.text) == "string" then
-		return text .. string.gsub(key.text, "%c", " "), true
-	elseif key.ctrl and name == "u" then
-		return "", true
-	elseif key.text and key.text ~= "" and not key.ctrl and not key.meta then
-		return text .. key.text, true
-	end
-	return text, false
-end
-
 return M

@@ -11,6 +11,7 @@ local Scheme = require("../../../plugin/lib/links/scheme")
 local SeriesView = require("../../../plugin/lib/lens/series")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -106,7 +107,7 @@ local LAB = cfg([[{"contexts": {
 	"sub": {"prometheus": {"url": "https://ops.example.com", "path_prefix": "/prometheus"}}}}]])
 
 local function env(config: any?): any
-	return { now_ms = 0, decode = json.decode, encode = json.encode, null = json.null, config = config }
+	return Support.env({ config = config })
 end
 
 local function run(args: { string }): any

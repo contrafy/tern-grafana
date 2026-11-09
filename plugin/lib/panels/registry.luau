@@ -17,42 +17,18 @@
 -- expanded); `frames` are the panel's query results through the frame
 -- converters, every refId together.
 
-local Alertlist = require("./alertlist")
-local Annolist = require("./annolist")
+-- Panel modules load on first use of their type (see LAZY below), so a
+-- block that never draws a clock or a geomap never compiles them.
 local Assets = require("../render/assets")
-local Barchart = require("./barchart")
-local Candlestick = require("./candlestick")
-local Canvas = require("./canvas")
-local Clock = require("./clock")
 local Common = require("./common")
-local Dashlist = require("./dashlist")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
-local Flamegraph = require("./flamegraph")
 local Frame = require("../frame/types")
-local Gauge = require("./gauge")
-local Geomap = require("./geomap")
-local Heatmap = require("./heatmap")
-local Histogram = require("./histogram")
 local Json = require("./json")
-local Logs = require("./logs")
 local Migrate = require("./migrate")
-local News = require("./news")
-local NodeGraph = require("./nodegraph")
-local Stat = require("./stat")
-local Piechart = require("./piechart")
-local StateTimeline = require("./statetimeline")
-local Table = require("./table")
-local Text = require("./text")
-local Timeseries = require("./timeseries")
 local Transform = require("./transform")
-local Traces = require("./traces")
 local TransportTypes = require("../transport/types")
-local Trend = require("./trend")
-local Values = require("./values")
 local ui = require("../ui")
-local Xychart = require("./xychart")
-
 type Env = Env.Env
 type Frame = Frame.Frame
 type Node = ui.Node
@@ -117,35 +93,75 @@ local function supportsWith(check: ((any, Env) -> string?)?): (any, Env) -> (boo
 	end
 end
 
+-- The module `load` requires, required on the first call only (a require
+-- per supports()/view() call is not free).
+local function once(load: () -> any): () -> any
+	local m: any = nil
+	return function(): any
+		if m == nil then
+			m = load()
+		end
+		return m
+	end
+end
+
+local timeseries = once(function(): any
+	return require("./timeseries")
+end)
+local values = once(function(): any
+	return require("./values")
+end)
+local stat = once(function(): any
+	return require("./stat")
+end)
+local gauge = once(function(): any
+	return require("./gauge")
+end)
+local tablePanel = once(function(): any
+	return require("./table")
+end)
+local logs = once(function(): any
+	return require("./logs")
+end)
+local text = once(function(): any
+	return require("./text")
+end)
+
 local TIMESERIES: PanelModule = {
 	types = { "timeseries" },
-	supports = supportsWith(Timeseries.unsupported),
+	supports = supportsWith(function(panel: any, env: Env): string?
+		return timeseries().unsupported(panel, env)
+	end),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return Timeseries.view(panel, frames, env, opts)
+		return timeseries().view(panel, frames, env, opts)
 	end,
 }
 
+local function valuesWhy(panel: any, env: Env): string?
+	return values().unsupported(panel, env)
+end
+
 local STAT: PanelModule = {
 	types = { "stat" },
-	supports = supportsWith(Values.unsupported),
+	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return Stat.view(panel, frames, env, opts)
+		return stat().view(panel, frames, env, opts)
 	end,
 }
 
 local GAUGE: PanelModule = {
 	types = { "gauge" },
-	supports = supportsWith(Values.unsupported),
+	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return Gauge.view(panel, frames, env, opts)
+		return gauge().view(panel, frames, env, opts)
 	end,
 }
 
 local BARGAUGE: PanelModule = {
 	types = { "bargauge" },
-	supports = supportsWith(Values.unsupported),
+	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return Gauge.barView(panel, frames, env, opts), nil
+		return gauge().barView(panel, frames, env, opts), nil
 	end,
 }
 
@@ -164,7 +180,7 @@ local TABLE: PanelModule = {
 		if #frames == 0 then
 			return Common.noData(panel, env, opts.key), nil
 		end
-		return Table.view(panel, frames, env, opts), nil
+		return tablePanel().view(panel, frames, env, opts), nil
 	end,
 }
 
@@ -175,7 +191,7 @@ local LOGS: PanelModule = {
 		if not Common.hasData(frames) then
 			return Common.noData(panel, env, opts.key), nil
 		end
-		return Logs.view(panel, frames, env, opts), nil
+		return logs().view(panel, frames, env, opts), nil
 	end,
 }
 
@@ -185,7 +201,7 @@ local TEXT: PanelModule = {
 		return true, nil
 	end,
 	view = function(panel: any, _: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return Text.view(panel, env, opts), nil
+		return text().view(panel, env, opts), nil
 	end,
 	queries = function(_: any): boolean
 		return false
@@ -198,12 +214,17 @@ local BY_TYPE: { [string]: PanelModule } = {}
 
 M.TYPES = {} :: { string }
 
+-- Types whose module file is not loaded yet -> its loader (cleared once the
+-- module is loaded or the type is registered again).
+local PENDING: { [string]: () -> PanelModule } = {}
+
 function M.register(m: PanelModule)
 	for _, t in m.types do
-		if BY_TYPE[t] == nil then
+		if BY_TYPE[t] == nil and PENDING[t] == nil then
 			table.insert(M.TYPES, t)
 		end
 		BY_TYPE[t] = m
+		PENDING[t] = nil
 	end
 end
 
@@ -211,55 +232,182 @@ for _, m in { TIMESERIES, STAT, GAUGE, BARGAUGE, TABLE, LOGS, TEXT } do
 	M.register(m)
 end
 
--- Panel modules in their own files (local://PANELS2.md).
-local MODULES: { any } = {
-	Clock,
-	Piechart,
-	Barchart,
-	Histogram,
-	Trend,
-	Xychart,
-	Candlestick,
-	Alertlist,
-	Annolist,
-	Dashlist,
-	News,
-	Heatmap,
-	StateTimeline,
-	Flamegraph,
-	Traces,
-	NodeGraph,
-	Geomap,
-	Canvas,
+-- Panel modules in their own files (local://PANELS2.md), in registration
+-- order; `types` repeats each module's M.types (tests/unit/panels/
+-- registry.spec checks they agree).
+local LAZY: { { types: { string }, load: () -> any } } = {
+	{
+		types = { "grafana-clock-panel" },
+		load = function(): any
+			return require("./clock")
+		end,
+	},
+	{
+		types = { "piechart" },
+		load = function(): any
+			return require("./piechart")
+		end,
+	},
+	{
+		types = { "barchart" },
+		load = function(): any
+			return require("./barchart")
+		end,
+	},
+	{
+		types = { "histogram" },
+		load = function(): any
+			return require("./histogram")
+		end,
+	},
+	{
+		types = { "trend" },
+		load = function(): any
+			return require("./trend")
+		end,
+	},
+	{
+		types = { "xychart" },
+		load = function(): any
+			return require("./xychart")
+		end,
+	},
+	{
+		types = { "candlestick" },
+		load = function(): any
+			return require("./candlestick")
+		end,
+	},
+	{
+		types = { "alertlist" },
+		load = function(): any
+			return require("./alertlist")
+		end,
+	},
+	{
+		types = { "annolist" },
+		load = function(): any
+			return require("./annolist")
+		end,
+	},
+	{
+		types = { "dashlist" },
+		load = function(): any
+			return require("./dashlist")
+		end,
+	},
+	{
+		types = { "news" },
+		load = function(): any
+			return require("./news")
+		end,
+	},
+	{
+		types = { "heatmap" },
+		load = function(): any
+			return require("./heatmap")
+		end,
+	},
+	{
+		types = { "state-timeline", "status-history" },
+		load = function(): any
+			return require("./statetimeline")
+		end,
+	},
+	{
+		types = { "flamegraph" },
+		load = function(): any
+			return require("./flamegraph")
+		end,
+	},
+	{
+		types = { "traces" },
+		load = function(): any
+			return require("./traces")
+		end,
+	},
+	{
+		types = { "nodeGraph" },
+		load = function(): any
+			return require("./nodegraph")
+		end,
+	},
+	{
+		types = { "geomap" },
+		load = function(): any
+			return require("./geomap")
+		end,
+	},
+	{
+		types = { "canvas" },
+		load = function(): any
+			return require("./canvas")
+		end,
+	},
 }
-for _, m in MODULES do
-	M.register(m :: PanelModule)
+M.LAZY = LAZY
+
+for _, entry in LAZY do
+	local load = entry.load
+	local function loader(): PanelModule
+		local m = load() :: PanelModule
+		for _, t in entry.types do
+			if PENDING[t] == loader then
+				BY_TYPE[t] = m
+				PENDING[t] = nil
+			end
+		end
+		return m
+	end
+	for _, t in entry.types do
+		if BY_TYPE[t] == nil and PENDING[t] == nil then
+			table.insert(M.TYPES, t)
+		end
+		PENDING[t] = loader
+	end
+end
+
+local function byType(t: string): PanelModule?
+	local m = BY_TYPE[t]
+	if m == nil then
+		local load = PENDING[t]
+		if load then
+			load()
+			m = BY_TYPE[t]
+		end
+	end
+	return m
 end
 
 -- Migration ------------------------------------------------------------------------
 
 -- Migrated copies by source panel table (decoded JSON is never mutated, so
 -- identity is a sound key); weak so dropped dashboards are collected.
-local migrated: { [any]: { panel: any?, why: string? } } = setmetatable({}, { __mode = "k" }) :: any
+-- `title` is the title of the panel migrated: callers may pass a copy of
+-- `source` whose title differs (variables), which must re-migrate.
+local migrated: { [any]: { panel: any?, why: string?, title: any } } = setmetatable({}, { __mode = "k" }) :: any
 
--- The panel as Grafana renders it: legacy types auto-migrated.
-function M.effective(panel: any, envArg: Env?): (any?, string?)
+-- The panel as Grafana renders it: legacy types auto-migrated. `source` is
+-- the decoded panel `panel` was copied from (only the title may differ); it
+-- keys the cache so fresh copies migrate once.
+function M.effective(panel: any, envArg: Env?, source: any?): (any?, string?)
 	local env = envArg or NO_ENV
 	local kind = Json.str(env, panel.type)
 	if kind == nil or Migrate.LEGACY[kind] == nil then
 		return panel, nil
 	end
-	local hit = migrated[panel]
-	if hit == nil then
+	local key = source or panel
+	local hit = migrated[key]
+	if hit == nil or hit.title ~= panel.title then
 		local p, why = Migrate.migrate(panel, env)
-		hit = { panel = p, why = why }
-		migrated[panel] = hit
+		hit = { panel = p, why = why, title = panel.title }
+		migrated[key] = hit
 	end
-	local h = hit :: { panel: any?, why: string? }
+	local h = hit :: { panel: any?, why: string?, title: any }
 	return h.panel, h.why
 end
 
-local function moduleOf(panel: any, env: Env): (PanelModule?, any?, string?)
+local function moduleOf(panel: any, env: Env, source: any?): (PanelModule?, any?, string?)
 	if Json.tbl(env, panel) == nil then
 		return nil, nil, "the panel is not an object"
 	end
@@ -270,12 +418,12 @@ local function moduleOf(panel: any, env: Env): (PanelModule?, any?, string?)
 		end
 		return nil, nil, "the panel has no type"
 	end
-	local p, why = M.effective(panel, env)
+	local p, why = M.effective(panel, env, source)
 	if p == nil then
 		return nil, nil, why or string.format("the legacy %s panel could not be migrated", kind)
 	end
 	local effKind = Json.str(env, p.type) or kind
-	local m = BY_TYPE[effKind]
+	local m = byType(effKind)
 	if m == nil then
 		return nil, p, REASONS[effKind] or string.format("panel type %s is not rendered natively", effKind)
 	end
@@ -362,7 +510,7 @@ function M.liveMs(panel: any, env: Env): number?
 end
 
 local function render(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets)
-	local m, p, why = moduleOf(panel, env)
+	local m, p, why = moduleOf(panel, env, opts.source)
 	if m == nil then
 		return ui.muted(why or "Not supported", { key = opts.key }), {}
 	end

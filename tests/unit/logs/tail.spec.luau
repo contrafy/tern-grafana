@@ -73,6 +73,38 @@ describe("merge", function()
 		local merged = Tail.merge(window(1791577874, 1791577897), late, 500)
 		expect(ids(merged)).toEqual(ids(all))
 	end)
+
+	-- The merge used to concatenate new lines before the shown ones and sort
+	-- everything; the sorted merge must give the very same order, ties too.
+	it("orders exactly as sorting everything did, new lines first on a tie", function()
+		local shown = window(1791577874, 1791577890)
+		local tie = FrameLoki.streams({
+			result = { { stream = { app = "tie" }, values = { { shown[3].ts_ns, "same instant" } } } },
+		}, S.env)
+		local incoming = table.clone(window(1791577873, 1791577897))
+		table.insert(incoming, tie[1])
+		local before = Tail.ids(shown)
+		local fresh = {}
+		for _, l in incoming do
+			if not before[l.id] then
+				table.insert(fresh, l)
+			end
+		end
+		local everything = table.clone(fresh)
+		table.move(shown, 1, #shown, #everything + 1, everything)
+		FrameLoki.sort(everything)
+		for _, limit in { 500, 20, 5 } do
+			local merged = Tail.merge(shown, incoming, limit, Tail.ids(shown))
+			expect(ids(merged)).toEqual(table.move(ids(everything), 1, math.min(limit, #everything), 1, {}))
+		end
+	end)
+
+	it("keeps the seen ids equal to the lines shown", function()
+		local seen = Tail.ids(window(1791577874, 1791577885))
+		local merged, _, dropped = Tail.merge(window(1791577874, 1791577885), all, 10, seen)
+		expect(seen).toEqual(Tail.ids(merged))
+		expect(#dropped).toBe(#all - 10)
+	end)
 end)
 
 describe("window start", function()

@@ -2,8 +2,8 @@
 -- Window glue for threshold watches: the status-line segments (from the kv
 -- summary watches_poll_host writes; alerts_window's formatter shows them,
 -- since Tern keeps one status formatter per plugin, and refreshes the chrome
--- when they change), a timer that toasts transitions (decisions in
--- lib/watches/toasts.luau, deduped across windows through kv), and the
+-- when they change), `check` (on alerts_window's timer) toasting transitions
+-- (decisions in lib/watches/toasts.luau, deduped across windows through kv), and the
 -- "Grafana: Watches" palette command, which is also what clicking the
 -- segment runs: it opens the most urgent watch's query.
 --
@@ -17,9 +17,6 @@ M.COMMAND_ID = "watches"
 M.QUERY_BLOCK = "tern-grafana.query"
 -- lib/watches/segment.luau ICON; a literal so the command needs no lib module.
 M.ICON = "eye"
--- How often the window re-reads the kv summary for toasts.
-M.CHECK_MS = 5000
-
 type Stack = { Poll: any, Segment: any, Toasts: any }
 
 local stack: Stack? = nil
@@ -73,6 +70,25 @@ local function open(t: any, cx: any)
 	cx:new_block(M.QUERY_BLOCK, { Scheme.encode(s.Segment.link(entry) :: any) }, "beside")
 end
 
+-- Records before toasting, so a second window finds the transition announced.
+function M.check(t: any, cx: any)
+	M.load()
+	local s = stack :: Stack
+	local okNotified, notified = pcall(t.kv.get, s.Toasts.KEY)
+	if not okNotified then
+		return
+	end
+	local record, toasts = s.Toasts.check(summary(t, s), notified, nowMs())
+	if record then
+		t.kv.set(s.Toasts.KEY, record)
+	end
+	if cx then
+		for _, toast in toasts do
+			cx:toast(toast.level, toast.text, toast.sub)
+		end
+	end
+end
+
 function M.register(t: any)
 	t.command({
 		id = M.COMMAND_ID,
@@ -88,31 +104,6 @@ function M.register(t: any)
 			end
 		end,
 	})
-
-	-- Records before toasting, so a second window finds the transition announced.
-	local function announce(cx: any)
-		M.load()
-		local s = stack :: Stack
-		local okNotified, notified = pcall(t.kv.get, s.Toasts.KEY)
-		if not okNotified then
-			return
-		end
-		local record, toasts = s.Toasts.check(summary(t, s), notified, nowMs())
-		if record then
-			t.kv.set(s.Toasts.KEY, record)
-		end
-		if cx then
-			for _, toast in toasts do
-				cx:toast(toast.level, toast.text, toast.sub)
-			end
-		end
-	end
-
-	local function check(cx: any)
-		pcall(announce, cx)
-		t.timer(M.CHECK_MS, check)
-	end
-	t.timer(M.CHECK_MS, check)
 end
 
 return M

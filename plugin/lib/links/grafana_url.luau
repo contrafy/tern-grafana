@@ -8,6 +8,8 @@
 
 local Scheme = require("./scheme")
 local Types = require("../config/types")
+local Tbl = require("../tbl")
+local Url = require("../url")
 
 type Config = Types.Config
 type Link = Scheme.Link
@@ -65,15 +67,6 @@ function M.parse(url: string): ParsedUrl?
 	return parsed
 end
 
-local function sortedNames(t: { [string]: any }): { string }
-	local names = {}
-	for k in t do
-		table.insert(names, k)
-	end
-	table.sort(names)
-	return names
-end
-
 -- Every Grafana base URL in the config (`url` + `path_prefix`, and
 -- `browser_url`), longest path first so sub-path installs win.
 function M.bases(cfg: Config?): { Base }
@@ -81,7 +74,7 @@ function M.bases(cfg: Config?): { Base }
 	if not cfg then
 		return out
 	end
-	for _, name in sortedNames(cfg.contexts) do
+	for _, name in Tbl.sortedKeys(cfg.contexts) do
 		local g = cfg.contexts[name].grafana
 		if not g then
 			continue
@@ -215,7 +208,7 @@ local function explore(query: { [string]: string }, decode: (string) -> any): Pa
 	if query.panes then
 		-- Pane ids are random; the left pane is the first in the URL, but
 		-- decoded objects lose order, so prefer the lowest id deterministically.
-		local ids = sortedNames(state)
+		local ids = Tbl.sortedKeys(state)
 		return if ids[1] then paneState(state[ids[1]]) else nil
 	end
 	return legacyState(state)
@@ -308,7 +301,7 @@ end
 
 local function addQuery(parts: { string }, name: string, value: string?)
 	if value then
-		table.insert(parts, name .. "=" .. Scheme.percentEncode(value))
+		table.insert(parts, name .. "=" .. Url.percentEncode(value))
 	end
 end
 
@@ -326,15 +319,15 @@ function M.build(l: Link, baseUrl: string, encode: (any) -> string): string?
 		addQuery(parts, "from", p.from)
 		addQuery(parts, "to", p.to)
 		addQuery(parts, "viewPanel", p.panel)
-		for _, name in sortedNames(l.vars) do
+		for _, name in Tbl.sortedKeys(l.vars) do
 			for _, v in l.vars[name] do
-				addQuery(parts, "var-" .. Scheme.percentEncode(name), v)
+				addQuery(parts, "var-" .. Url.percentEncode(name), v)
 			end
 		end
-		return withQuery(baseUrl .. "/d/" .. Scheme.percentEncode(p.uid), parts)
+		return withQuery(baseUrl .. "/d/" .. Url.percentEncode(p.uid), parts)
 	elseif l.action == "alerts" then
 		if p.rule then
-			return baseUrl .. "/alerting/grafana/" .. Scheme.percentEncode(p.rule) .. "/view"
+			return baseUrl .. "/alerting/grafana/" .. Url.percentEncode(p.rule) .. "/view"
 		end
 		return baseUrl .. "/alerting/list"
 	elseif (l.action == "query" or l.action == "logs") and p.expr then

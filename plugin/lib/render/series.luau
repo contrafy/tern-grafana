@@ -56,7 +56,9 @@ function M.calcs(values: { any }): Calcs
 end
 
 -- Every number field of every frame with a time field, in order. Values
--- that are not numbers become NULL.
+-- that are not numbers become NULL. A field whose values are already dense
+-- (numbers or NULL, one per time) is shared, not copied: series are read
+-- only.
 function M.extract(frames: { Frame }, legend: string?): { Series }
 	local out: { Series } = {}
 	for _, frame in frames do
@@ -65,11 +67,29 @@ function M.extract(frames: { Frame }, legend: string?): { Series }
 			continue
 		end
 		local times = timeField.values :: { number }
+		local n = #times
 		for _, field in Frame.numberFields(frame) do
-			local values: { any } = table.create(#times)
-			for i = 1, #times do
-				local v = field.values[i]
-				values[i] = if type(v) == "number" then v else NULL
+			local src = field.values
+			local values: { any } = src
+			if #src ~= n then
+				values = table.create(n)
+				for i = 1, n do
+					local v = src[i]
+					values[i] = if type(v) == "number" then v else NULL
+				end
+			else
+				for i = 1, n do
+					local v = src[i]
+					if type(v) ~= "number" and v ~= NULL then
+						values = table.create(n)
+						table.move(src, 1, i - 1, 1, values)
+						for j = i, n do
+							local w = src[j]
+							values[j] = if type(w) == "number" then w else NULL
+						end
+						break
+					end
+				end
 			end
 			local config = field.config
 			table.insert(out, {
@@ -85,16 +105,57 @@ function M.extract(frames: { Frame }, legend: string?): { Series }
 	return out
 end
 
+-- Strictly increasing times shared (or repeated element for element) by
+-- every series: the join is that array as is.
+local function aligned(list: { Series }): { number }?
+	local first = list[1].times
+	local n = #first
+	for i = 2, n do
+		if first[i] <= first[i - 1] then
+			return nil
+		end
+	end
+	for k = 2, #list do
+		local times = list[k].times
+		if times ~= first then
+			if #times ~= n then
+				return nil
+			end
+			for i = 1, n do
+				if times[i] ~= first[i] then
+					return nil
+				end
+			end
+		end
+	end
+	return first
+end
+
 -- Outer join on time: the sorted union of all times and, per series, its
 -- values on that grid (NULL where the series has no sample).
 function M.join(list: { Series }): ({ number }, { { any } })
+	if #list > 0 then
+		local shared = aligned(list)
+		if shared then
+			local n = #shared
+			local columns: { { any } } = table.create(#list)
+			for c, s in list do
+				local col: { any } = table.create(n)
+				table.move(s.values, 1, n, 1, col)
+				columns[c] = col
+			end
+			return shared, columns
+		end
+	end
 	local seen: { [number]: boolean } = {}
 	local times: { number } = {}
+	local count = 0
 	for _, s in list do
 		for _, t in s.times do
 			if not seen[t] then
 				seen[t] = true
-				table.insert(times, t)
+				count += 1
+				times[count] = t
 			end
 		end
 	end

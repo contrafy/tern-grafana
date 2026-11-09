@@ -141,12 +141,8 @@ local function parseFloat(v: any): number?
 	return if num then tonumber(num) else nil
 end
 
-local function isNull(v: any): boolean
-	return v == nil or v == Frame.NULL
-end
-
 function M.apply(mappings: { Mapping }, value: any): Result?
-	local null = isNull(value)
+	local null = Frame.isNull(value)
 	for _, m in mappings do
 		if m.kind == "value" then
 			if null then

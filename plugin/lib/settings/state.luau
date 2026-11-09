@@ -81,6 +81,19 @@ export type Test = { gen: number, steps: { TestStep }, error: string? }
 
 export type Edit = { id: string, text: string }
 
+-- Lists derived from `raw`, `form` and `connect`, built once per value: those
+-- three are only ever replaced, never changed in place, so identity tells
+-- whether a list is current.
+type Memo = {
+	rows_raw: Raw?,
+	rows: { Row }?,
+	fields_form: Form?,
+	fields_raw: Raw?,
+	fields: { Field }?,
+	connect: Connect.Conn?,
+	connect_fields: { Connect.Field }?,
+}
+
 export type State = {
 	loaded: boolean,
 	path: string?,
@@ -116,6 +129,7 @@ export type State = {
 	platform: string?,
 	-- Keychain items to delete once the pending removal is written.
 	pending_deletes: { string },
+	memo: Memo,
 }
 
 M.EDIT_INPUT = "main.edit"
@@ -153,6 +167,7 @@ function M.init(_args: { string }, saved: any, _env: Env): (State, { Effect })
 		connect_writing = false,
 		platform = nil,
 		pending_deletes = {},
+		memo = {},
 	}
 	return s, { { kind = "config_read" }, { kind = "credentials_probe" } }
 end
@@ -217,6 +232,10 @@ end
 -- Rows ------------------------------------------------------------------------------
 
 function M.rows(s: State): { Row }
+	local memo = s.memo
+	if memo.rows and memo.rows_raw == s.raw then
+		return memo.rows
+	end
 	local out: { Row } = {}
 	for _, name in Model.contextNames(s.raw) do
 		table.insert(out, { key = name, kind = "context", context = name })
@@ -227,6 +246,8 @@ function M.rows(s: State): { Row }
 	if s.raw then
 		table.insert(out, { key = "+", kind = "add" })
 	end
+	memo.rows_raw = s.raw
+	memo.rows = out
 	return out
 end
 
@@ -330,10 +351,19 @@ function M.formTitle(form: Form): string
 end
 
 function M.formFields(s: State): { Field }
-	if s.form == nil then
+	local form = s.form
+	if form == nil then
 		return {}
 	end
-	return Model.fields(s.form :: Form, s.raw)
+	local memo = s.memo
+	if memo.fields and memo.fields_form == form and memo.fields_raw == s.raw then
+		return memo.fields
+	end
+	local fields = Model.fields(form, s.raw)
+	memo.fields_form = form
+	memo.fields_raw = s.raw
+	memo.fields = fields
+	return fields
 end
 
 local function openForm(s: State, form: Form?)
@@ -533,7 +563,7 @@ local function confirm(s: State, env: Env, effects: { Effect }, deleteItems: boo
 	if #problems > 0 then
 		blocked(s, "remove", problems)
 	elseif deleteItems then
-		s.pending_deletes = Tbl.copy(c.items)
+		s.pending_deletes = c.items
 	end
 end
 
@@ -577,7 +607,6 @@ local function testEndpoint(s: State, context: string, endpoint: string, effects
 end
 
 local function testRow(s: State, row: Row, effects: { Effect })
-	s.tests = Tbl.copy(s.tests)
 	if row.kind == "endpoint" then
 		testEndpoint(s, row.context :: string, row.endpoint :: string, effects)
 	elseif row.kind == "context" then
@@ -602,14 +631,12 @@ local function onHttp(s: State, tag: string, response: any, env: Env): boolean
 		return false
 	end
 	local result = Probe.parse(route, step :: any, response, env)
-	local steps = Tbl.copy(test.steps)
-	for i, st in steps do
+	for _, st in test.steps do
 		if st.step == step then
-			steps[i] = { step = st.step, result = result }
+			st.result = result
 		end
 	end
-	s.tests = Tbl.copy(s.tests)
-	s.tests[key] = { gen = test.gen, steps = steps, error = nil }
+	test.error = nil
 	return true
 end
 
@@ -634,7 +661,18 @@ end
 local CONNECT_TAG = "connect"
 
 function M.connectFields(s: State): { Connect.Field }
-	return if s.connect then Connect.fields(s.connect :: Connect.Conn) else {}
+	local c = s.connect
+	if c == nil then
+		return {}
+	end
+	local memo = s.memo
+	if memo.connect_fields and memo.connect == c then
+		return memo.connect_fields
+	end
+	local fields = Connect.fields(c)
+	memo.connect = c
+	memo.connect_fields = fields
+	return fields
 end
 
 local function startConnectEdit(s: State, f: Connect.Field, effects: { Effect })
@@ -1218,37 +1256,37 @@ function M.selectionViewId(s: State): string?
 	return nil
 end
 
+-- What addReveal compares against, taken before the message is applied.
+type Before = { editing: boolean, id: string? }
+
 -- The main region scrolls only with the wheel. Starting an edit reveals the
 -- input at the top of the form (the field may be far below it); finishing
 -- one, or a key that moved the selection or switched page, reveals the
 -- selection. Clicks leave the selection where the user can see it.
-local function addReveal(prev: State, s: State, moved: boolean, effects: { Effect })
-	if s.editing and not prev.editing then
+local function addReveal(before: Before, s: State, moved: boolean, effects: { Effect })
+	if s.editing and not before.editing then
 		table.insert(effects, { kind = "reveal", id = M.EDIT_INPUT, at = "nearest" })
 		return
 	end
 	local id = M.selectionViewId(s)
-	if id and ((prev.editing and not s.editing) or (moved and id ~= M.selectionViewId(prev))) then
+	if id and ((before.editing and not s.editing) or (moved and id ~= before.id)) then
 		table.insert(effects, { kind = "reveal", id = id, at = "nearest" })
 	end
 end
 
-local function keyWithReveal(prev: State, s: State, key: Key, env: Env, effects: { Effect }): boolean
+local function keyWithReveal(s: State, key: Key, env: Env, effects: { Effect }): boolean
+	local before: Before = { editing = s.editing ~= nil, id = M.selectionViewId(s) }
 	local changed = onKey(s, key, env, effects)
 	if changed then
-		addReveal(prev, s, true, effects)
+		addReveal(before, s, true, effects)
 	end
 	return changed
 end
 
-function M.key(prev: State, key: Key, env: Env): (State, { Effect }, boolean)
-	local s = Tbl.copy(prev)
+function M.key(s: State, key: Key, env: Env): (State, { Effect }, boolean)
 	local effects: { Effect } = {}
-	local changed = keyWithReveal(prev, s, key, env, effects)
-	if not changed and #effects == 0 then
-		return prev, effects, false
-	end
-	return s, effects, true
+	local changed = keyWithReveal(s, key, env, effects)
+	return s, effects, changed or #effects > 0
 end
 
 -- Click actions ("act=value") -------------------------------------------------------------
@@ -1399,8 +1437,7 @@ end
 
 -- Update ----------------------------------------------------------------------------------
 
-function M.update(prev: State, msg: Msg, env: Env): (State, { Effect })
-	local s = Tbl.copy(prev)
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	local m: any = msg
 	local changed = false
@@ -1460,18 +1497,19 @@ function M.update(prev: State, msg: Msg, env: Env): (State, { Effect })
 	elseif m.kind == "http_done" then
 		changed = onHttp(s, m.tag, m.response, env) or onConnectHttp(s, m.tag, m.response, env)
 	elseif m.kind == "key" then
-		changed = keyWithReveal(prev, s, m.key, env, effects)
+		changed = keyWithReveal(s, m.key, env, effects)
 	elseif m.kind == "event" then
 		local ev = m.ev
 		if type(ev) == "table" and ev.ev == "action" and type(ev.act) == "string" then
+			local before: Before = { editing = s.editing ~= nil }
 			changed = onAction(s, ev.act, if type(ev.value) == "string" then ev.value else "", env, effects)
 			if changed then
-				addReveal(prev, s, false, effects)
+				addReveal(before, s, false, effects)
 			end
 		end
 	end
 	if not changed and #effects == 0 then
-		return prev, effects
+		return s, effects, false
 	end
 	return s, effects
 end

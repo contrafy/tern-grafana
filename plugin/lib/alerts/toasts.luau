@@ -84,11 +84,7 @@ function M.check(summaryRaw: any, notifiedRaw: any): (Notified?, { Toast })
 	local notified = M.read(notifiedRaw)
 	local gap = math.max(M.GAP_POLLS * payload.poll_s * 1000, M.MIN_GAP_MS)
 	local changed = false
-	local names: { string } = {}
-	for name in payload.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(payload.contexts)
 	for _, name in names do
 		local sum = payload.contexts[name]
 		local entry = notified.contexts[name]

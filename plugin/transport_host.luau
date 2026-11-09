@@ -16,6 +16,7 @@ local Http = require("./lib/transport/http")
 local Keychain = require("./lib/auth/keychain")
 local ReadFile = require("./lib/read_file")
 local Route = require("./lib/config/route")
+local Str = require("./lib/str")
 local TransportTypes = require("./lib/transport/types")
 
 type Route = Route.Route
@@ -38,6 +39,21 @@ local cache: { [string]: Entry } = {}
 local pending: { [string]: { (string?, Explained?) -> () } } = {}
 -- Bumped by forget(); a resolution started before it is not cached.
 local generation = 0
+
+-- Auth.plan and Curl.needsCurl per endpoint, recomputed only when the config
+-- reloads (new endpoint tables, weak keys) or HOME changes. Plans are read,
+-- never mutated.
+type Memo = { curl: boolean, planned: boolean, home: string?, plan: Plan?, err: Explained? }
+local memo: { [any]: Memo } = setmetatable({}, { __mode = "k" }) :: any
+
+local function memoOf(endpoint: any): Memo
+	local m = memo[endpoint]
+	if m == nil then
+		m = { curl = Curl.needsCurl(endpoint), planned = false, home = nil, plan = nil, err = nil }
+		memo[endpoint] = m
+	end
+	return m :: Memo
+end
 
 local function failure(kind: "auth" | "network", message: string, hint: string?): Response
 	return {
@@ -129,7 +145,7 @@ local function send(route: Route, request: Request, secret: string?, cb: Callbac
 	local endpoint = route.endpoint
 	local authHeaders = Auth.headers(endpoint.auth, secret)
 	local headers = Http.headers(endpoint, request, authHeaders)
-	if Curl.needsCurl(endpoint) then
+	if memoOf(endpoint).curl then
 		local plan, err = Curl.curlPlan(endpoint, request, headers, home())
 		if plan == nil then
 			cb(failure("network", err or "curl request could not be built"))
@@ -148,7 +164,7 @@ local function send(route: Route, request: Request, secret: string?, cb: Callbac
 			cb(
 				failure(
 					"network",
-					"curl (needed for tls options) could not be started: " .. Keychain.firstLine(tostring(spawnErr)),
+					"curl (needed for tls options) could not be started: " .. Str.firstLine(tostring(spawnErr)),
 					"install curl and make sure it is on Tern's PATH"
 				)
 			)
@@ -177,13 +193,20 @@ local function send(route: Route, request: Request, secret: string?, cb: Callbac
 		for _, value in authHeaders do
 			table.insert(hide, value)
 		end
-		cb(failure("network", "invalid request: " .. Keychain.firstLine(Auth.redact(tostring(fetchErr), hide))))
+		cb(failure("network", "invalid request: " .. Str.firstLine(Auth.redact(tostring(fetchErr), hide))))
 	end
 end
 
 -- Calls `cb` exactly once with the Response.
 function M.execute(route: Route, request: Request, cb: Callback)
-	local plan, planErr = Auth.plan(route.endpoint.auth, home())
+	local endpoint = route.endpoint
+	local h = home()
+	local m = memoOf(endpoint)
+	if not m.planned or m.home ~= h then
+		m.plan, m.err = Auth.plan(endpoint.auth, h)
+		m.home, m.planned = h, true
+	end
+	local plan, planErr = m.plan, m.err
 	if planErr then
 		cb(authFailure(planErr))
 		return

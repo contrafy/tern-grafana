@@ -4,12 +4,13 @@
 -- every server version, single out rules whose evaluation fails, keep showing
 -- what loaded when one source fails, and lead from a rule to its query and
 -- to its alerts.
-local Fixtures = require("../../lib/fixtures")
 local Rules = require("../../../plugin/lib/alerts/rules")
 local Scheme = require("../../../plugin/lib/links/scheme")
 local State = require("../../../plugin/lib/alerts/state")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -30,9 +31,7 @@ end)()
 
 local env: any = { now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null, config = CFG }
 
-local function ok(path: string): any
-	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local ok = Support.response
 
 local function paths(plan: any): { string }
 	local out = {}
@@ -150,16 +149,7 @@ describe("rules normalization", function()
 	end)
 end)
 
-local function key(text: string, name: string?): any
-	return {
-		name = name or text,
-		text = if name then nil else text,
-		ctrl = false,
-		alt = false,
-		shift = false,
-		meta = false,
-	}
-end
+local key = Keys.press
 
 -- Answers rules requests (tags `r<gen>:<source>`) and inbox requests.
 local function answer(s: any, effects: { any }, bodies: { [string]: any }): { any }

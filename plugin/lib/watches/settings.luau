@@ -5,7 +5,8 @@
 -- skipped with a problem naming its path, so one typo never disables the
 -- others.
 
-local BlobCache = require("../render/blob_cache")
+local Tbl = require("../tbl")
+local Hash = require("../hash")
 local Step = require("../time/step")
 local Types = require("../config/types")
 
@@ -101,11 +102,7 @@ local function readWatch(config: Config, raw: any, path: string, problems: { Pro
 	end
 	local context = raw.context
 	if context ~= nil and (type(context) ~= "string" or config.contexts[context] == nil) then
-		local names: { string } = {}
-		for n in config.contexts do
-			table.insert(names, n)
-		end
-		table.sort(names)
+		local names: { string } = Tbl.sortedKeys(config.contexts)
 		fail(
 			"context",
 			string.format("no context named %q (defined: %s)", tostring(context), table.concat(names, ", "))
@@ -156,8 +153,7 @@ local function readWatch(config: Config, raw: any, path: string, problems: { Pro
 	if bad then
 		return nil
 	end
-	local def =
-		BlobCache.fnv1a64(table.concat({ context or "", expr, op, tostring(threshold), tostring(for_ms) }, "\1"))
+	local def = Hash.fnv1a64(table.concat({ context or "", expr, op, tostring(threshold), tostring(for_ms) }, "\1"))
 	return {
 		name = name,
 		context = context,

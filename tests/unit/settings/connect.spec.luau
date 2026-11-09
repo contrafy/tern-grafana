@@ -12,6 +12,8 @@ local State: any = require("../../../plugin/lib/settings/state")
 local Validate: any = require("../../../plugin/lib/config/validate")
 local View = require("../../../plugin/lib/settings/view")
 local json = require("../../lib/json")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -37,16 +39,7 @@ local EXISTING = [[
 -- Every effect and message produced while driving the flow, checked for the token.
 local seen: { any } = {}
 
-local function key(name: string, text: string?): any
-	return {
-		name = name,
-		text = text or (if #name == 1 then name else nil),
-		ctrl = false,
-		alt = false,
-		shift = false,
-		meta = false,
-	}
-end
+local key = Keys.key
 
 local function record(effects: { any })
 	for _, e in effects do
@@ -110,9 +103,7 @@ local function ofKind(effects: { any }, kind: string): { any }
 	return out
 end
 
-local function ok(body: string, status: number?): any
-	return { status = status or 200, headers = {}, body = body, timed_out = false }
-end
+local ok = Support.body
 
 local ACTIONS_EDITOR = '{"annotations:create": true, "alert.silences:create": true, "dashboards:read": true}'
 local ACTIONS_VIEWER = '{"annotations:read": true, "alert.silences:read": true, "dashboards:read": true}'

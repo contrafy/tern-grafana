@@ -29,7 +29,7 @@ local PROBES: { { any } } = {
 	{ "render/axis", { "timeTicks", "niceScale", "formatTime" }, "render: axis" },
 	{ "render/chart_view", { "view", "overlay" }, "render: chart view" },
 	{ "render/assets", { "materialize" }, "host: assets materialize" },
-	{ "render/blob_cache", { "fnv1a64" }, "host: blob hash (fnv1a64)" },
+	{ "render/blob_cache", { "digest" }, "host: blob hash (digest)" },
 	{ "time/lttb", { "downsample" }, "time: lttb" },
 	{ "units/format", { "format" }, "units: format" },
 	{ "query/view", { "view" }, "query: view" },

@@ -39,6 +39,9 @@ local function jsString(n: number): string
 		return "0"
 	end
 	local s = tostring(n)
+	if not string.find(s, "e", 1, true) then
+		return s
+	end
 	local mantissa, sign, digits = string.match(s, "^(.-)e([%+%-])0*(%d+)$")
 	if mantissa and sign and digits then
 		return mantissa .. "e" .. sign .. digits

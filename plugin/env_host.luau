@@ -34,14 +34,24 @@ function M.nowMs(): number
 	return now
 end
 
+local offsetMinute: number? = nil
+local offsetMin = 0
+
 -- Minutes east of UTC on this machine now: the UTC wall fields read back as
--- local time (with the local DST flag) differ from now by the offset.
+-- local time (with the local DST flag) differ from now by the offset. Offsets
+-- change on minute boundaries, so it is computed once per minute.
 function M.localOffsetMin(): number
 	local t = os.time()
+	local minute = t // 60
+	if minute == offsetMinute then
+		return offsetMin
+	end
 	local utc: any = os.date("!*t", t)
 	local here: any = os.date("*t", t)
 	utc.isdst = here.isdst
-	return math.floor(os.difftime(t, os.time(utc)) / 60 + 0.5)
+	offsetMinute = minute
+	offsetMin = math.floor(os.difftime(t, os.time(utc)) / 60 + 0.5)
+	return offsetMin
 end
 
 function M.make(cx: BlockCx?): Env.Env

@@ -24,19 +24,23 @@ function M.new(): Painter
 end
 
 function M.paint(p: Painter, view: any, assets: any)
+	-- As plugin/blob_host.luau: no assets table, no walk; then end the pass.
 	local regions = Effect.regions(view)
 	local all = assets or {}
 	local function mint(_bytes: string, _mime: string): string
 		p.minted += 1
 		return "blob-" .. p.minted
 	end
-	for _, region in { regions.main, regions.dock, regions.layer } do
-		if region then
-			Assets.materialize(region :: any, all, function(key: string, asset: Assets.Asset): string
-				return BlobCache.get(p.cache, key, asset.bytes, asset.mime, mint)
-			end)
+	if assets ~= nil then
+		for _, region in { regions.main, regions.dock, regions.layer } do
+			if region then
+				Assets.materialize(region :: any, all, function(key: string, asset: Assets.Asset): string
+					return BlobCache.get(p.cache, key, asset.bytes, asset.mime, mint)
+				end)
+			end
 		end
 	end
+	BlobCache.sweep(p.cache)
 	p.views += 1
 	p.regions, p.assets = regions, all
 end

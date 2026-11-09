@@ -15,35 +15,36 @@ local function parse(raw: any): { Mappings.Mapping }
 	return Mappings.parse(raw, env)
 end
 
-for _, version in S.VERSIONS do
-	describe("mappings from the tern-panels dashboard, Grafana " .. version, function()
-		-- Panel 9 "Targets": override on `up` maps 0/1 to DOWN/UP.
-		it("maps the up values of the Targets table to UP/DOWN with colors", function()
-			local panel = S.panel(version, 9)
-			local m = parse(panel.fieldConfig.overrides[1].properties[2].value)
-			local up = Mappings.apply(m, 1)
-			assert(up, "1 must map")
-			expect(up.text).toBe("UP")
-			expect(up.color).toBe("green")
-			local down = Mappings.apply(m, 0)
-			assert(down, "0 must map")
-			expect(down.text).toBe("DOWN")
-			expect(down.color).toBe("red")
-			expect(Mappings.apply(m, 2)).toBeNil()
-		end)
-
-		-- Value maps key on String(value): 1.0 is "1", and "1" matches too.
-		it("matches numbers and numeric strings by their JavaScript string", function()
-			local m = parse(S.panel(version, 14).fieldConfig.defaults.mappings)
-			local a = Mappings.apply(m, 1.0)
-			local b = Mappings.apply(m, "1")
-			assert(a and b, "both must map")
-			expect(a.text).toBe("Up")
-			expect(b.text).toBe("Up")
-			expect(Mappings.apply(m, Frame.NULL)).toBeNil()
-		end)
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+describe("mappings from the tern-panels dashboard, Grafana " .. version, function()
+	-- Panel 9 "Targets": override on `up` maps 0/1 to DOWN/UP.
+	it("maps the up values of the Targets table to UP/DOWN with colors", function()
+		local panel = S.panel(version, 9)
+		local m = parse(panel.fieldConfig.overrides[1].properties[2].value)
+		local up = Mappings.apply(m, 1)
+		assert(up, "1 must map")
+		expect(up.text).toBe("UP")
+		expect(up.color).toBe("green")
+		local down = Mappings.apply(m, 0)
+		assert(down, "0 must map")
+		expect(down.text).toBe("DOWN")
+		expect(down.color).toBe("red")
+		expect(Mappings.apply(m, 2)).toBeNil()
 	end)
-end
+
+	-- Value maps key on String(value): 1.0 is "1", and "1" matches too.
+	it("matches numbers and numeric strings by their JavaScript string", function()
+		local m = parse(S.panel(version, 14).fieldConfig.defaults.mappings)
+		local a = Mappings.apply(m, 1.0)
+		local b = Mappings.apply(m, "1")
+		assert(a and b, "both must map")
+		expect(a.text).toBe("Up")
+		expect(b.text).toBe("Up")
+		expect(Mappings.apply(m, Frame.NULL)).toBeNil()
+	end)
+end)
 
 describe("mappings range/regex/special (valueMappings.ts)", function()
 	-- `from` absent on the third mapping: open below.

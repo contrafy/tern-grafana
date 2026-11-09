@@ -18,6 +18,7 @@ local State = require("../../../plugin/lib/dashboard/state")
 local Tbl = require("../../../plugin/lib/tbl")
 local View = require("../../../plugin/lib/dashboard/view")
 local json = require("../../lib/json")
+local Keys = require("../../lib/keys")
 local t = require("../../lib/test")
 local Visibility = require("../../../plugin/lib/visibility")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -26,17 +27,9 @@ local function key(name: string, text: string?, shift: boolean?): any
 	return { name = name, text = text, ctrl = false, alt = false, shift = shift == true, meta = false }
 end
 
-local function char(c: string): any
-	return key(c, c, string.upper(c) == c and string.lower(c) ~= c)
-end
+local char = Keys.char
 
-type Harness = {
-	s: State.State,
-	env: any,
-	-- Requests not answered yet, by tag.
-	pending: { [string]: any },
-	opened: { string },
-}
+type Harness = S.Harness
 
 local function fixtureFor(version: string, uid: string, e: any): string?
 	local tag = e.tag
@@ -99,25 +92,22 @@ local function panelsDashboard(path: string): string
 	return json.encode(doc)
 end
 
--- Applies effects, answering loading requests from fixtures right away and
--- keeping panel queries and renders pending for the test to answer.
-local function apply(h: Harness, version: string, uid: string, effects: { any })
-	for _, e in effects do
-		if e.kind == "open" then
-			table.insert(h.opened, e.target)
-		elseif e.kind == "http" then
-			local path = fixtureFor(version, uid, e)
-			if path then
-				local response = if uid == "tern-panels" and string.match(e.tag, "^dash/")
-					then S.body(200, panelsDashboard(path))
-					else S.response(path)
-				local _, more = State.update(h.s, { kind = "http_done", tag = e.tag, response = response }, h.env)
-				apply(h, version, uid, more)
-			else
-				h.pending[e.tag] = e
-			end
+-- A harness answering loading requests from fixtures right away and
+-- keeping panel queries and renders pending for the test to answer. The
+-- dashboard is `uid` until the block has one of its own (a pick).
+local function harness(version: string, uid: string, s: any, env: any): Harness
+	local h: Harness
+	h = S.harness(s, env, function(e: any): any
+		local current = h.s.uid or uid
+		local path = fixtureFor(version, current, e)
+		if path == nil then
+			return nil
 		end
-	end
+		return if current == "tern-panels" and string.match(e.tag, "^dash/")
+			then S.body(200, panelsDashboard(path))
+			else S.response(path)
+	end)
+	return h
 end
 
 local function start(version: string, link: string, solo: boolean?): (Harness, { any })
@@ -129,8 +119,8 @@ local function start(version: string, link: string, solo: boolean?): (Harness, {
 		s, effects = State.init({ link }, nil, env)
 	end
 	local uid = assert((Scheme.decode(link))).params.uid
-	local h: Harness = { s = s, env = env, pending = {}, opened = {} }
-	apply(h, version, uid, effects)
+	local h = harness(version, uid, s, env)
+	S.drive(h, effects)
 	return h, effects
 end
 
@@ -145,9 +135,9 @@ local function pendingKinds(h: Harness, prefix: string): { string }
 	return out
 end
 
-local function press(h: Harness, version: string, k: any): (boolean, { any })
+local function press(h: Harness, k: any): (boolean, { any })
 	local _, effects, changed = State.key(h.s, k, h.env)
-	apply(h, version, h.s.uid or "", effects)
+	S.drive(h, effects)
 	return changed, effects
 end
 
@@ -258,7 +248,7 @@ for _, version in S.VERSIONS do
 			local tag = "q/1/1/p2"
 			expect(h.pending[tag] ~= nil).toBe(true)
 			-- A range key re-sends every query with a new generation.
-			press(h, version, char("3"))
+			press(h, char("3"))
 			expect(h.s.from).toBe("now-1h")
 			expect(h.pending["q/1/2/p2"] ~= nil).toBe(true)
 			local ok = S.response(S.grafana(version, "ds_query_prom_range.json"))
@@ -275,7 +265,7 @@ for _, version in S.VERSIONS do
 			local h = start(version, PANELS)
 			local _, effects =
 				State.update(h.s, { kind = "event", ev = { ev = "action", act = "row", value = "r15" } }, h.env)
-			apply(h, version, "tern-panels", effects)
+			S.drive(h, effects)
 			expect(table.find(h.s.order, "p16") ~= nil).toBe(true)
 			-- Expanding a row queries the panels it hid.
 			expect(h.pending["q/1/1/p16"] ~= nil).toBe(true)
@@ -288,16 +278,16 @@ for _, version in S.VERSIONS do
 		it("moves focus by grid geometry and expands the focused panel", function()
 			local h = start(version, PANELS)
 			expect(h.s.focus).toBe("p2")
-			press(h, version, key("down"))
+			press(h, key("down"))
 			expect(h.s.focus).toBe("p4")
-			press(h, version, key("right"))
+			press(h, key("right"))
 			expect(h.s.focus).toBe("p5")
-			press(h, version, key("enter"))
+			press(h, key("enter"))
 			expect(h.s.expanded).toBe(true)
 			expect(Scheme.encode(assert(State.link(h.s)))).toBe(
 				"tern-grafana://dashboard?context=lab&from=now-1h&panel=5&to=now&uid=tern-panels"
 			)
-			press(h, version, key("escape"))
+			press(h, key("escape"))
 			expect(h.s.expanded).toBe(false)
 		end)
 
@@ -317,22 +307,22 @@ for _, version in S.VERSIONS do
 				response = S.response(S.grafana(version, "ds_query_loki_logs.json")),
 			}, h.env)
 			local before = flatten((View.view(h.s, h.env) :: any).main)
-			expect((press(h, version, char("l")))).toBe(true)
+			expect((press(h, char("l")))).toBe(true)
 			expect(h.s.labels.p12).toBe(true)
 			local after = flatten((View.view(h.s, h.env) :: any).main)
 			expect(before == after).toBe(false)
-			press(h, version, char("l"))
+			press(h, char("l"))
 			expect(h.s.labels.p12).toBe(false)
 			-- Not a logs panel: l does nothing.
 			h.s.focus = "p2"
-			expect((press(h, version, char("l")))).toBe(false)
+			expect((press(h, char("l")))).toBe(false)
 		end)
 
 		it("scrolls the newly focused card into view, by the id Tern gives it", function()
 			local h = start(version, PANELS)
 			local view = View.view(h.s, h.env) :: any
 			local nodes = ids("main", view.main)
-			local _, effects = press(h, version, key("down"))
+			local _, effects = press(h, key("down"))
 			expect(h.s.focus).toBe("p4")
 			local reveal: any = nil
 			for _, e in effects do
@@ -348,7 +338,7 @@ for _, version in S.VERSIONS do
 			-- Grafana's 8-row panel height (296 px) in 16 px lines.
 			expect(card.p.max).toEqual({ h = "18lines" })
 			-- A key that does not move focus scrolls nothing.
-			local _, none = press(h, version, char("r"))
+			local _, none = press(h, char("r"))
 			for _, e in none do
 				expect(e.kind == "reveal").toBe(false)
 			end
@@ -356,9 +346,9 @@ for _, version in S.VERSIONS do
 
 		it("pins the focused panel as a panel block and opens solo pages in the browser pane", function()
 			local h = start(version, PANELS)
-			press(h, version, char("p"))
+			press(h, char("p"))
 			expect(h.opened[1]).toBe("tern-grafana://panel?context=lab&from=now-1h&panel=2&to=now&uid=tern-panels")
-			press(h, version, char("o"))
+			press(h, char("o"))
 			local browse = assert((Scheme.decode(h.opened[2])), "the browse link must decode")
 			expect(browse.action).toBe("browse")
 			expect(browse.params.url).toBe(
@@ -368,7 +358,7 @@ for _, version in S.VERSIONS do
 
 		it("saves a link that restores the same view without fetching anything else", function()
 			local h = start(version, PANELS)
-			press(h, version, char("6"))
+			press(h, char("6"))
 			local saved = State.save(h.s)
 			expect(saved.link).toBe("tern-grafana://dashboard?context=lab&from=now-12h&to=now&uid=tern-panels")
 			local again, effects = State.init({}, saved, S.env())
@@ -379,7 +369,7 @@ for _, version in S.VERSIONS do
 		it("re-runs every panel on r and keeps auto-refresh at the dashboard's 30s", function()
 			local h = start(version, PANELS)
 			expect(h.s.refresh_ms).toBe(30000)
-			press(h, version, char("r"))
+			press(h, char("r"))
 			expect(h.pending["q/1/2/p2"] ~= nil).toBe(true)
 		end)
 	end)
@@ -408,12 +398,12 @@ for _, version in S.VERSIONS do
 			State.update(h.s, { kind = "event", ev = { ev = "action", act = "var", value = "handler" } }, h.env)
 			expect(h.s.picker and h.s.picker.kind).toBe("var")
 			for _ = 1, #"/api/v1/.*" do
-				press(h, version, key("backspace"))
+				press(h, key("backspace"))
 			end
 			for c in string.gmatch("/metrics", ".") do
-				press(h, version, key(c, c))
+				press(h, key(c, c))
 			end
-			press(h, version, key("enter"))
+			press(h, key("enter"))
 			expect(h.s.picker).toBeNil()
 			expect(pendingKinds(h, "q/")).toEqual({ "p2" })
 		end)
@@ -436,7 +426,7 @@ for _, version in S.VERSIONS do
 				grid = { x = 0, y = 40, w = 24, h = 4 },
 				json = json_,
 			})
-			press(h, version, char("r"))
+			press(h, char("r"))
 			local view = View.view(h.s, h.env) :: any
 			local text = flatten(view.main)
 			expect(string.find(text, "Mode idle for All (.*) via Prometheus 3", 1, true) ~= nil).toBe(true)
@@ -447,10 +437,81 @@ for _, version in S.VERSIONS do
 			State.update(h.s, { kind = "event", ev = { ev = "action", act = "var", value = "mode" } }, h.env)
 			State.update(h.s, { kind = "event", ev = { ev = "select", item = "user" } }, h.env)
 			State.update(h.s, { kind = "event", ev = { ev = "select", item = "system" } }, h.env)
-			press(h, version, key("enter"))
+			press(h, key("enter"))
 			expect(h.s.vars[6].values).toEqual({ "idle", "user", "system" })
 			local view = View.view(h.s, h.env) :: any
 			expect(view.layer).toBeNil()
+		end)
+
+		-- Repeat copies of a deselected value hold frames and drawn nodes:
+		-- they go, and the titles drawn before follow the new selection.
+		it("drops the panels of deselected repeat values and retitles the rest", function()
+			-- Card titles (card heads) of the grid.
+			local function heads(node: any, out: { string }?): { string }
+				local acc = out or {}
+				if type(node) == "table" then
+					if node.k == "card" then
+						local spans = node.p.head
+						table.insert(acc, if type(spans) == "table" and spans[1] then spans[1].t else "")
+					end
+					for _, c in node.c or {} do
+						heads(c, acc)
+					end
+				end
+				return acc
+			end
+			local h = start(version, VARS)
+			expect(h.s.panels["p3.1"] ~= nil).toBe(true)
+			local options = h.s.vars[2].options
+			local before = heads((View.view(h.s, h.env) :: any).main)
+			expect(table.find(before, "up for " .. options[1].text) ~= nil).toBe(true)
+			State.update(h.s, { kind = "event", ev = { ev = "action", act = "var", value = "job" } }, h.env)
+			State.update(h.s, { kind = "event", ev = { ev = "select", item = options[2].value } }, h.env)
+			press(h, key("enter"))
+			expect(h.s.vars[2].values).toEqual({ options[2].value })
+			for k in h.s.panels do
+				expect(Repeat.find(h.s.sections, (string.gsub(k, "^=", ""))) ~= nil).toBe(true)
+			end
+			for k in h.s.memo do
+				expect(Repeat.find(h.s.sections, k) ~= nil).toBe(true)
+			end
+			expect(h.s.panels["p3.1"]).toBeNil()
+			local after = heads((View.view(h.s, h.env) :: any).main)
+			expect(table.find(after, "up for " .. options[2].text) ~= nil).toBe(true)
+			expect(table.find(after, "up for " .. options[1].text)).toBeNil()
+		end)
+
+		-- Repeat instance keys are positional: p3.1 is the second value
+		-- shown, whichever it is. A slow answer for the value deselected must
+		-- not land on the value that takes its key later.
+		it("drops a late answer for a deselected repeat value that another value replaced", function()
+			local h = start(version, VARS)
+			local options = h.s.vars[2].options
+			expect(#options >= 3).toBe(true)
+			local old: string? = nil
+			for pendingTag in h.pending do
+				if string.match(pendingTag, "^q/%d+/%d+/p3%.1$") then
+					old = pendingTag
+				end
+			end
+			local slow = assert(old, "p3.1 must be querying")
+			local function choose(values: { string })
+				State.update(h.s, { kind = "event", ev = { ev = "action", act = "var", value = "job" } }, h.env)
+				for _, v in values do
+					State.update(h.s, { kind = "event", ev = { ev = "select", item = v } }, h.env)
+				end
+				press(h, key("enter"))
+			end
+			choose({ options[1].value })
+			expect(h.s.panels["p3.1"]).toBeNil()
+			choose({ options[3].value })
+			expect(h.s.vars[2].values).toEqual({ options[1].value, options[3].value })
+			expect(h.s.panels["p3.1"].status).toBe("loading")
+			local response = S.response(S.grafana(version, "ds_query_prom_instant.json"))
+			local _, _, changed = State.update(h.s, { kind = "http_done", tag = slow, response = response }, h.env)
+			expect(changed).toBe(false)
+			expect(h.s.panels["p3.1"].data).toBeNil()
+			expect(h.s.panels["p3.1"].status).toBe("loading")
 		end)
 	end)
 
@@ -522,6 +583,16 @@ for _, version in S.VERSIONS do
 					end
 				end
 				expect(failed).toBe(1)
+				-- The next refresh forgets the failure and renders it again.
+				local _, again = State.key(h.s, char("r"), h.env)
+				expect((next(h.s.png_errors))).toBeNil()
+				local renders = 0
+				for _, e in again do
+					if e.kind == "http" and string.match(e.tag, "^png/") then
+						renders += 1
+					end
+				end
+				expect(renders).toBe(1)
 			end)
 
 			it("caches the render and draws it as an image asset", function()
@@ -593,8 +664,8 @@ for _, version in S.VERSIONS do
 			cfg.query = { exemplars = false }
 			local env = S.env(cfg)
 			local s, effects = State.init({ PANELS }, nil, env)
-			local h: Harness = { s = s, env = env, pending = {}, opened = {} }
-			apply(h, version, "tern-panels", effects)
+			local h = harness(version, "tern-panels", s, env)
+			S.drive(h, effects)
 			expect(panelBody(h, "p2").queries[1].exemplar).toBe(false)
 		end)
 
@@ -602,8 +673,8 @@ for _, version in S.VERSIONS do
 			local env = S.env()
 			env.now_ms = EXEMPLARS_AT[version]
 			local s, effects = State.init({ PANELS }, nil, env)
-			local h: Harness = { s = s, env = env, pending = {}, opened = {} }
-			apply(h, version, "tern-panels", effects)
+			local h = harness(version, "tern-panels", s, env)
+			S.drive(h, effects)
 			answer(h, "p2", S.grafana(version, "ds_query_prom_exemplars.json"))
 			local data = h.s.panels.p2.data :: any
 			expect(#data.frames).toBe(2)
@@ -611,25 +682,25 @@ for _, version in S.VERSIONS do
 			local _, assets = View.view(h.s, h.env)
 			local svg = (assets :: any).p2.bytes :: string
 			expect(svg).toContain('class="tg-exemplar"')
-			press(h, version, key("enter"))
+			press(h, key("enter"))
 			expect(h.s.expanded).toBe(true)
-			press(h, version, char("x"))
+			press(h, char("x"))
 			local e = State.selectedExemplar(h.s) :: any
 			expect(h.s.cursor).toBe(e.time_ms)
-			local _, opened = press(h, version, key("enter"))
+			local _, opened = press(h, key("enter"))
 			expect(h.s.expanded).toBe(true)
 			local l = Scheme.decode(h.opened[#h.opened]) :: any
 			expect(l.action).toBe("trace")
 			expect(l.params.id).toBe(e.labels.traceID)
 			expect(#opened).toBe(1)
 			-- L follows the exemplar's series labels to the logs block.
-			press(h, version, char("L"))
+			press(h, char("L"))
 			local logs = Scheme.decode(h.opened[#h.opened]) :: any
 			expect(logs.action).toBe("logs")
 			expect(logs.params.expr).toBe('{service="' .. e.labels.service .. '"}')
 			expect(logs.params.from).toBe(h.s.from or "now-1h")
 			-- escape drops the selection first, then leaves the expanded view.
-			press(h, version, key("escape"))
+			press(h, key("escape"))
 			expect(h.s.exemplar).toBeNil()
 			expect(h.s.expanded).toBe(true)
 		end)
@@ -666,7 +737,7 @@ describe("dashboard refreshes and blobs", function()
 		local drawn = h.s.panels.p2.drawn :: State.Drawn
 		h.env.now_ms += drawn.interval_ms - drawn.range.to_ms % drawn.interval_ms - 1
 		local data = h.s.panels.p2.data
-		press(h, "12.4.12", char("r"))
+		press(h, char("r"))
 		expect(h.s.panels.p2.status).toBe("loading")
 		draw(h, cache, minted)
 		expect(minted.n).toBe(shown)
@@ -677,7 +748,7 @@ describe("dashboard refreshes and blobs", function()
 		expect(minted.n).toBe(shown)
 		-- The next step brings new samples: one new picture.
 		h.env.now_ms += drawn.interval_ms
-		press(h, "12.4.12", char("r"))
+		press(h, char("r"))
 		draw(h, cache, minted)
 		expect(minted.n).toBe(shown)
 		answer(h, "p2", S.grafana("12.4.12", "ds_query_prom2_range.json"))
@@ -709,23 +780,43 @@ describe("dashboard refreshes and blobs", function()
 		expect(period).toBe(h.s.refresh_ms)
 	end)
 
+	-- The runner skips render and save on `changed == false` (lib/effect.luau).
+	it("reports no change for dropped answers and ticks that change nothing", function()
+		local h = start("12.4.12", PANELS)
+		local hidden = true
+		h.env.pane = 7
+		h.env.kv_get = function(k: string): any
+			return if k == Visibility.KEY then Visibility.record({ 5, 7 }, if hidden then { 5 } else { 5, 7 }) else nil
+		end
+		local tick: any = { kind = "tick", tag = "refresh/" .. h.s.gen .. "/" .. h.s.timer_gen }
+		expect(select(3, State.update(h.s, tick, h.env))).toBe(false)
+		local stale: any = { kind = "http_done", tag = "q/" .. h.s.gen .. "/0/p2", response = S.response(RANGE) }
+		expect(select(3, State.update(h.s, stale, h.env))).toBe(false)
+		local old: any = { kind = "http_done", tag = "dash/" .. (h.s.gen - 1), response = S.response(RANGE) }
+		expect(select(3, State.update(h.s, old, h.env))).toBe(false)
+		expect(select(3, State.update(h.s, { kind = "tick", tag = "nothing/1" }, h.env))).toBe(false)
+		hidden = false
+		expect(select(3, State.update(h.s, tick, h.env))).toBe(true)
+	end)
+
 	it("refreshes only the expanded panel, and the others once they are shown again", function()
 		local h = start("12.4.12", PANELS)
-		press(h, "12.4.12", key("enter"))
+		press(h, key("enter"))
 		expect(h.s.expanded).toBe(true)
 		h.pending = {}
-		press(h, "12.4.12", char("r"))
+		press(h, char("r"))
 		expect(pendingKinds(h, "q/")).toEqual({ "p2" })
-		press(h, "12.4.12", key("escape"))
+		press(h, key("escape"))
 		expect(pendingKinds(h, "q/")).toEqual({ "p12", "p18", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9" })
 	end)
 end)
 
-describe("dashboard logs jump and time sync", function()
+-- Time sync is in time/sync_blocks.spec with the other synced blocks.
+describe("dashboard logs jump", function()
 	it("L on a panel opens logs for the labels its series share", function()
 		local h = start("12.4.12", PANELS)
 		answer(h, "p2", S.grafana("12.4.12", "ds_query_prom_range.json"))
-		local _, effects = press(h, "12.4.12", char("L"))
+		local _, effects = press(h, char("L"))
 		-- CPU by mode: the series share no correlating label.
 		expect(#h.opened).toBe(0)
 		expect(effects[1].kind).toBe("toast")
@@ -734,7 +825,7 @@ describe("dashboard logs jump and time sync", function()
 			errors = {},
 			warnings = {},
 		}
-		press(h, "12.4.12", char("L"))
+		press(h, char("L"))
 		local l = Scheme.decode(h.opened[1]) :: any
 		expect(l.params).toEqual({
 			context = "lab",
@@ -742,37 +833,6 @@ describe("dashboard logs jump and time sync", function()
 			from = h.s.from or "now-1h",
 			to = h.s.to or "now",
 		})
-	end)
-
-	it("S syncs the dashboard's range with a query block and persists", function()
-		local h = start("12.4.12", PANELS)
-		local env = h.env
-		local kv: { [string]: any } = {}
-		env.kv_get = function(k: string): any
-			return kv[k]
-		end
-		local _, effects = press(h, "12.4.12", char("S"))
-		for _, e in effects do
-			if e.kind == "kv_set" then
-				kv[e.key] = e.value
-			end
-		end
-		expect(kv["tern-grafana.time.shared"] ~= nil).toBe(true)
-		expect(State.save(h.s).sync).toBe(true)
-		-- Another block publishes a new range; the next poll re-queries the panels.
-		kv["tern-grafana.time.shared"] = { from = "now-6h", to = "now", origin = "other", seq = 99 }
-		local _, fx = State.update(h.s, { kind = "tick", tag = "sync:" .. h.s.sync.gen }, env)
-		expect(h.s.from).toBe("now-6h")
-		local queries = 0
-		for _, e in fx do
-			if e.kind == "http" and string.match(e.tag, "^q/") then
-				queries += 1
-			end
-		end
-		expect(queries > 0).toBe(true)
-		local again, restored = State.init({}, State.save(h.s), S.env())
-		expect(again.sync.on).toBe(true)
-		expect((restored[1] :: any).tag).toBe("sync:0")
 	end)
 end)
 

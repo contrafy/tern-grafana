@@ -154,7 +154,14 @@ export type Context = {
 	user_login: string?,
 	-- Config query.exemplars.
 	exemplars: boolean?,
+	-- Queries.resolve answers already computed for this scope (see Resolved).
+	resolved: Resolved?,
 }
+
+-- Queries.resolve answers by panel JSON table, all for one scope and
+-- datasource list (one panel instance): the ladder and the query build of
+-- one advance resolve each panel once.
+export type Resolved = { [any]: { refs: { DsRef }?, err: string? } }
 
 export type PanelQuery = {
 	queries: { { [string]: any } },
@@ -395,6 +402,26 @@ function M.resolve(panel: { [string]: any }, scope: Scope, list: { Datasource },
 	return out, nil
 end
 
+-- M.resolve through `resolved` (nil: no memo).
+function M.resolveIn(
+	resolved: Resolved?,
+	panel: { [string]: any },
+	scope: Scope,
+	list: { Datasource },
+	env: Env
+): ({ DsRef }?, string?)
+	if resolved == nil then
+		return M.resolve(panel, scope, list, env)
+	end
+	local hit = resolved[panel]
+	if hit == nil then
+		local refs, err = M.resolve(panel, scope, list, env)
+		hit = { refs = refs, err = err }
+		resolved[panel] = hit
+	end
+	return hit.refs, hit.err
+end
+
 -- The `-- Dashboard --` query of a panel whose datasource is
 -- `-- Dashboard --` (its first target, as DashboardDatasource.query reads
 -- it), nil for other panels and for one with no source panel id; or why it
@@ -546,7 +573,7 @@ end
 -- The /api/ds/query objects for a panel; nil when it has nothing to query
 -- (a `-- Dashboard --` panel gets its frames from the source panel).
 function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?, string?)
-	local refs, err = M.resolve(panel, ctx.scope, ctx.datasources, env)
+	local refs, err = M.resolveIn(ctx.resolved, panel, ctx.scope, ctx.datasources, env)
 	if refs == nil then
 		return nil, err
 	end

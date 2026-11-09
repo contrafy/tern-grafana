@@ -12,6 +12,7 @@
 -- and never retried. Titles and notes are user text: they go into the
 -- request body only, never into logs, saved state or block args.
 
+local BlockKit = require("../block_kit")
 local Effect = require("../effect")
 local Env = require("../env")
 local Irm = require("../source/irm")
@@ -226,20 +227,8 @@ local function openDetail(s: State, env: Env, effects: { Effect }, id: string)
 	loadDetail(s, env, effects, id)
 end
 
-local function linkParams(args: { string }): { [string]: string }
-	local first = args[1]
-	if first == nil or first == "" then
-		return {}
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "incidents" then
-		return {}
-	end
-	return link.params
-end
-
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local params = linkParams(args)
+	local params: { [string]: string } = BlockKit.linkParams(args, "incidents") or {}
 	local savedT = if type(saved) == "table" then saved else {}
 	local s: State = {
 		contexts = Target.contexts(env.config),
@@ -604,12 +593,10 @@ local function switchContext(s: State, env: Env, name: string, effects: { Effect
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	switchContext(s, env, s.contexts[(i - 1 + step) % n + 1], effects)
 end
 
 local function openBrowser(s: State, effects: { Effect })
@@ -642,7 +629,7 @@ local function editKey(s: State, key: any): boolean
 		end
 		return true
 	end
-	local text, used = Common.editKey(e.text, key)
+	local text, used = BlockKit.editText(e.text, key, true)
 	e.text = text
 	return used
 end
@@ -863,7 +850,7 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-function M.update(s: State, msg: any, env: Env): (State, { Effect })
+function M.update(s: State, msg: any, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local tag: string = msg.tag
@@ -880,7 +867,7 @@ function M.update(s: State, msg: any, env: Env): (State, { Effect })
 		end
 		local gen, name = string.match(tag, "^(%d+):(.+)$")
 		if gen == nil or tonumber(gen) ~= s.gen or not s.waiting[name :: string] then
-			return s, effects
+			return s, effects, false
 		end
 		s.waiting[name :: string] = nil
 		settle(s, env, name :: string, msg.response)

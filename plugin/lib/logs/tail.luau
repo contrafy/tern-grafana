@@ -7,7 +7,6 @@
 -- kept once.
 
 local FrameLoki = require("../frame/loki")
-local Tbl = require("../tbl")
 
 type Line = FrameLoki.Line
 
@@ -31,33 +30,65 @@ function M.windowStart(lines: { Line }, range_from_ms: number, tail_ms: number):
 	return math.max(range_from_ms, math.floor(newest.time_ms) - M.overlapMs(tail_ms))
 end
 
--- `incoming` (any order) merged into `lines` (newest first): new ids only,
--- newest first, at most `limit` (the oldest drop). Returns the merged list
--- and how many lines were new.
-function M.merge(lines: { Line }, incoming: { Line }, limit: number): ({ Line }, number)
+-- The ids of `lines`, for merge's `seen`.
+function M.ids(lines: { Line }): { [string]: boolean }
 	local seen: { [string]: boolean } = {}
 	for _, l in lines do
 		seen[l.id] = true
 	end
+	return seen
+end
+
+-- `incoming` (any order) merged into `lines` (newest first): new ids only,
+-- newest first (a new line before a shown one of the same nanosecond), at
+-- most `limit` (the oldest drop). Returns the merged list (`lines` itself
+-- when nothing is new), how many lines were new and the lines dropped.
+-- `seen` (the ids of `lines`, see M.ids) is kept up to date when given, so
+-- a caller polling again needs no rebuild.
+function M.merge(
+	lines: { Line },
+	incoming: { Line },
+	limit: number,
+	seen: { [string]: boolean }?
+): ({ Line }, number, { Line })
+	local ids = seen or M.ids(lines)
 	local fresh: { Line } = {}
 	for _, l in incoming do
-		if not seen[l.id] then
-			seen[l.id] = true
+		if not ids[l.id] then
+			ids[l.id] = true
 			table.insert(fresh, l)
 		end
 	end
 	if #fresh == 0 then
-		return lines, 0
+		return lines, 0, {}
 	end
-	local merged = Tbl.copy(fresh)
-	table.move(lines, 1, #lines, #merged + 1, merged)
-	FrameLoki.sort(merged)
-	if #merged > limit then
-		for i = #merged, limit + 1, -1 do
-			merged[i] = nil
+	FrameLoki.sort(fresh)
+	local nf, nl = #fresh, #lines
+	local total = nf + nl
+	local keep = math.min(total, limit)
+	local merged: { Line } = table.create(keep)
+	local i, j = 1, 1
+	for k = 1, keep do
+		local a, b = fresh[i], lines[j]
+		if a and (b == nil or FrameLoki.compareNs(a.ts_ns, b.ts_ns) >= 0) then
+			merged[k] = a
+			i += 1
+		else
+			merged[k] = b
+			j += 1
 		end
 	end
-	return merged, #fresh
+	local dropped: { Line } = {}
+	for k = i, nf do
+		table.insert(dropped, fresh[k])
+	end
+	for k = j, nl do
+		table.insert(dropped, lines[k])
+	end
+	for _, l in dropped do
+		ids[l.id] = nil
+	end
+	return merged, nf, dropped
 end
 
 return M

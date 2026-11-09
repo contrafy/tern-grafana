@@ -103,3 +103,51 @@ No scenario grows between refreshes once warm.
 - SVG bytes: path data is 90% (8 series x 600 points) to 98% (20 x 11000) of a time series chart. Writing series
   paths with relative coordinates and without trailing `.0` would make them 36-42% smaller (measured on the Query
   scenario's charts); element attributes are under 2%.
+
+## After the performance round
+
+Before: `tests/bench/out/base-phaseB.json` (commit `73f5a6c`, 17:01Z). After: commit `8ea0bd6` plus the uncommitted
+time series gradient work, 18:09Z. Same machine and flags as the baseline (Apple M5, luau `--codegen`, 10 iterations
+after 2 warmups); CPU otherwise idle, load average about 5 from idle background VMs. Medians in ms, `nodecode` in
+parentheses (see Metrics); "same answer" refreshes are sub-millisecond and move with noise.
+
+| Scenario | Metric | Before | After | Change |
+| --- | --- | --- | --- | --- |
+| tern-all-panels | first paint | 37.6 (23.5) | 30.1 (15.4) | -20% (-35%) |
+| | refresh, new data | 23.7 (14.5) | 20.7 (11.2) | -13% (-23%) |
+| | painted after each answer | 28.9 (19.5) | 24.9 (15.5) | -14% (-21%) |
+| | refresh, same answer | 1.04 | 1.17 | +13% |
+| tern-panels | first paint | 13.9 (6.1) | 12.4 (4.6) | -11% (-25%) |
+| | refresh, new data | 7.3 (3.9) | 7.0 (3.6) | -4% (-8%) |
+| tern-sql | first paint | 5.8 (1.2) | 5.6 (1.1) | -4% |
+| | refresh, new data | 0.86 (0.65) | 1.18 (0.96) | +38% (+49%) |
+| large, 60 x 50 x 1000 | first paint | 2044 (806) | 1644 (342) | -20% (-58%) |
+| | refresh, new data | 2016 (769) | 1591 (305) | -21% (-60%) |
+| | painted after each answer | 2114 (831) | 1643 (352) | -22% (-58%) |
+| | refresh, same answer | 2.05 | 3.49 | +70% |
+| Query, 7 d, 20 x 11000 | refresh | 214 (28.1) | 227 (17.0) | +6% (-40%) |
+| | cursor move | 0.014 | 0.015 | |
+| Logs, 5000 lines | first paint | 131 (121) | 116 (105) | -11% (-13%) |
+| | tail poll | 14.1 (13.8) | 1.65 (1.43) | -88% (-90%) |
+| Compat, 100 dashboards | scan | 58.9 (20.1) | 72.4 (33.5) | +23% (+67%) |
+| | one paint at the end | 46.9 (6.8) | 63.6 (24.6) | +36% (+263%) |
+| IRM poll | cold / warm | 0.65 / 0.64 | 0.65 / 0.91 | warm is noise-level (0.04 -> 0.09 without decode) |
+
+| Scenario | Sizes and memory, before -> after |
+| --- | --- |
+| tern-all-panels | SVG assets 347 KB -> 261 KB (largest 72 -> 44 KB); retained when open 1.44 -> 1.36 MB |
+| tern-panels | 83 -> 66 KB; 719 -> 613 KB retained |
+| tern-sql | 12.6 -> 10.5 KB |
+| large | 13.7 MB -> 8.2 MB of SVG (229 -> 136 KB per chart) |
+| Query | one SVG 115 -> 73 KB; heap per refresh 50.9 -> 41.9 MB |
+| Logs | heap per tail poll 18 MB -> 0.7 MB; 19.3 -> 20.5 MB live after 600 polls, still flat from poll 300 to 600 |
+| Window | entry 23.4 KB in 9 modules, unchanged; all modules 2.60 -> 2.67 MB (272 -> 286), 68 -> 74 ms compile |
+
+New scenarios (no before): expanded-panel cursor move 0.15 ms against a full 10 x 1000 time series render of
+3.1 ms; Settings block 40 list keys 21.7 ms with views (0.04 ms state only), 32 form keys 0.43 ms; Compat over
+1000 dashboards 1491 ms (1084 without decode).
+
+The Compat scan is slower than before (reproduced in a second run: 37.8 ms without decode). In `make bench-profile`
+the top plugin entries are the `panels/registry` support wrappers (`valuesWhy` and the time series `supports`, both
+`require` their module on each call since panel modules load lazily), 9-10% self each, and `compat/analyze`
+`summarize`, 10%. Same-answer refreshes are 0.1-1.4 ms slower on every dashboard.

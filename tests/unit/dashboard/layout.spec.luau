@@ -33,52 +33,53 @@ local function shape(nodes: { Layout.Node }): { any }
 	return out
 end
 
-for _, version in S.VERSIONS do
-	local env = S.env()
-	local d = assert(Model.parseResponse(S.response(S.grafana(version, "dashboard_tern_panels.json")), env))
-	local overview = items(d.sections[1].panels)
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+local env = S.env()
+local d = assert(Model.parseResponse(S.response(S.grafana(version, "dashboard_tern_panels.json")), env))
+local overview = items(d.sections[1].panels)
 
-	describe("layout of tern-panels Overview on Grafana " .. version, function()
-		it("splits into bands by y and columns by x, stacking the stats over the bar gauge", function()
-			local stacked: any = {
-				["col@0.333"] = {
-					{ ["row@1.000"] = { "p5@0.500", "p6@0.500" } },
-					{ ["row@1.000"] = { "p8@1.000" } },
-				},
-			}
-			local expected: { any } = {
-				{ ["row@1.000"] = { "p2@0.500", "p3@0.500" } },
-				{ ["row@1.000"] = { "p4@0.500", stacked, "p7@0.167" } },
-				{ ["row@1.000"] = { "p9@0.500", "p10@0.500" } },
-			}
-			expect(shape(Layout.arrange(overview))).toEqual(expected)
-		end)
-
-		it("orders panels for reading: band by band, stacked columns top to bottom", function()
-			expect(Layout.order(Layout.arrange(overview))).toEqual({
-				"p2",
-				"p3",
-				"p4",
-				"p5",
-				"p6",
-				"p8",
-				"p7",
-				"p9",
-				"p10",
-			})
-		end)
-
-		it("moves focus to the visually adjacent panel", function()
-			expect(Layout.neighbor(overview, "p4", "right")).toBe("p5")
-			expect(Layout.neighbor(overview, "p5", "down")).toBe("p8")
-			expect(Layout.neighbor(overview, "p8", "right")).toBe("p7")
-			expect(Layout.neighbor(overview, "p7", "up")).toBe("p3")
-			expect(Layout.neighbor(overview, "p2", "down")).toBe("p4")
-			expect(Layout.neighbor(overview, "p9", "down")).toBeNil()
-			expect(Layout.neighbor(overview, "p2", "left")).toBeNil()
-		end)
+describe("layout of tern-panels Overview on Grafana " .. version, function()
+	it("splits into bands by y and columns by x, stacking the stats over the bar gauge", function()
+		local stacked: any = {
+			["col@0.333"] = {
+				{ ["row@1.000"] = { "p5@0.500", "p6@0.500" } },
+				{ ["row@1.000"] = { "p8@1.000" } },
+			},
+		}
+		local expected: { any } = {
+			{ ["row@1.000"] = { "p2@0.500", "p3@0.500" } },
+			{ ["row@1.000"] = { "p4@0.500", stacked, "p7@0.167" } },
+			{ ["row@1.000"] = { "p9@0.500", "p10@0.500" } },
+		}
+		expect(shape(Layout.arrange(overview))).toEqual(expected)
 	end)
-end
+
+	it("orders panels for reading: band by band, stacked columns top to bottom", function()
+		expect(Layout.order(Layout.arrange(overview))).toEqual({
+			"p2",
+			"p3",
+			"p4",
+			"p5",
+			"p6",
+			"p8",
+			"p7",
+			"p9",
+			"p10",
+		})
+	end)
+
+	it("moves focus to the visually adjacent panel", function()
+		expect(Layout.neighbor(overview, "p4", "right")).toBe("p5")
+		expect(Layout.neighbor(overview, "p5", "down")).toBe("p8")
+		expect(Layout.neighbor(overview, "p8", "right")).toBe("p7")
+		expect(Layout.neighbor(overview, "p7", "up")).toBe("p3")
+		expect(Layout.neighbor(overview, "p2", "down")).toBe("p4")
+		expect(Layout.neighbor(overview, "p9", "down")).toBeNil()
+		expect(Layout.neighbor(overview, "p2", "left")).toBeNil()
+	end)
+end)
 
 describe("layout edge cases", function()
 	it("keeps empty grid space as a gap so a right-half panel stays on the right", function()

@@ -99,7 +99,9 @@ local function compare(a: any, b: any): boolean
 end
 
 function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options): Table
-	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "thresholds" })
+	-- Only the first frame becomes columns; the others still name and range
+	-- its fields.
+	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "thresholds" }, true)
 	local first = frames[1]
 	local columns: { Column } = {}
 	for _, item in items do
@@ -153,19 +155,23 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		end
 	end
 	local disp = { theme = opts.theme, offset_min = opts.offset_min }
+	local kinds: { string } = table.create(#columns)
+	local gaugeModes: { string? } = table.create(#columns)
+	for c, col in columns do
+		kinds[c], gaugeModes[c] = cellKind(col.item)
+	end
 	local rows: { { Cell } } = {}
 	for r = 1, math.min(n, M.MAX_ROWS) do
 		local idx = order[r]
 		local cells: { Cell } = table.create(#columns)
 		for c, col in columns do
 			local d = FieldConfig.display(col.item, col.item.field.values[idx], disp)
-			local kind, gaugeMode = cellKind(col.item)
 			cells[c] = {
 				text = FieldConfig.joined(d),
-				kind = kind,
+				kind = kinds[c],
 				tone = d.tone,
 				percent = d.percent,
-				gauge_mode = gaugeMode,
+				gauge_mode = gaugeModes[c],
 			}
 		end
 		table.insert(rows, cells)

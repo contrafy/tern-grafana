@@ -4,6 +4,7 @@
 -- a 4 ms provider budget and Tern keeps at most 400 characters per plugin,
 -- so it reads only that small payload and cuts itself to MAX_CHARS.
 
+local Range = require("../time/range")
 local Normalize = require("../alerts/normalize")
 local Summary = require("../alerts/summary")
 
@@ -12,18 +13,6 @@ local M = {}
 M.MAX_CHARS = 400
 -- A summary older than this many poll intervals is reported as stale.
 M.STALE_POLLS = 5
-
-local function age(ms: number): string
-	local sec = math.max(0, math.floor(ms / 1000))
-	if sec < 60 then
-		return sec .. "s"
-	elseif sec < 3600 then
-		return (sec // 60) .. "m"
-	elseif sec < 86400 then
-		return (sec // 3600) .. "h"
-	end
-	return (sec // 86400) .. "d"
-end
 
 local ORDER: { Normalize.Severity } = { "critical", "error", "warning", "info", "none" }
 
@@ -76,7 +65,7 @@ function M.text(raw: any, now_ms: number): string?
 		end
 		return a < b
 	end)
-	local head = string.format("Tern Grafana alerts (as of %s ago", age(now_ms - p.updated_ms))
+	local head = string.format("Tern Grafana alerts (as of %s ago", Range.age(now_ms - p.updated_ms))
 	if p.poll_s > 0 and now_ms - p.updated_ms > p.poll_s * 1000 * M.STALE_POLLS then
 		head ..= ", stale"
 	end

@@ -11,6 +11,7 @@
 -- chips, and transparent panels without card chrome.
 
 local Assets = require("../render/assets")
+local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
@@ -60,12 +61,19 @@ end
 M.SOLO_HINT = "left/right cursor  x exemplar  enter trace  1-9 [ ] - + range  r refresh  l labels  L logs  S sync  "
 	.. "o browser  y copy URL  I investigate"
 
+-- The panel's title with its variables, kept in the scope memo per instance.
 local function title(s: State, inst: Repeat.Instance): string
 	local t = inst.panel.title
 	if t == "" then
 		return "Panel " .. inst.panel.id
 	end
-	return Interpolate.replace(t, State.panelScope(s, inst), { format = Interpolate.text })
+	local titles = Core.memo(s).titles
+	local text = titles[inst]
+	if text == nil then
+		text = Interpolate.replace(t, State.panelScope(s, inst), { format = Interpolate.text })
+		titles[inst] = text
+	end
+	return text :: string
 end
 
 local function muted(text: string, key: string?): Node
@@ -104,7 +112,7 @@ local function nativeBody(
 	local exemplar = if single then s.exemplar else nil
 	local labels = s.labels[inst.key]
 	-- Text panels interpolate variables into their content.
-	local signature = Variables.signature(s.vars, s.range)
+	local signature = Core.signature(s)
 	local memo = s.memo[inst.key]
 	-- Snapped to the query interval: a refresh with the same answer is a memo hit.
 	local pr = State.drawRange(s, ps)
@@ -155,6 +163,9 @@ local function nativeBody(
 		local_offset_min = env.local_offset_min,
 		features = s.settings.features,
 		show_labels = labels,
+		-- The panel JSON before the title was replaced: the registry's
+		-- migration cache key.
+		source = json,
 		interpolate = function(text: string): string
 			return Interpolate.replace(text, scope, { format = Interpolate.text })
 		end,
@@ -240,15 +251,25 @@ local MODE_BADGE: { [string]: { string } } = {
 	browser = { "browser", "neutral" },
 }
 
--- The panel description (Markdown in Grafana), interpolated.
+-- The panel description (Markdown in Grafana), interpolated; kept in the
+-- scope memo per instance.
 local function description(s: State, inst: Repeat.Instance): string?
 	local raw = inst.panel.json.description
 	if type(raw) ~= "string" then
 		return nil
 	end
-	local text =
-		string.match(Interpolate.replace(raw, State.panelScope(s, inst), { format = Interpolate.text }), "^%s*(.-)%s*$")
-	return if text and text ~= "" then text else nil
+	local descriptions = Core.memo(s).descriptions
+	local cached: string | false | nil = descriptions[inst]
+	if cached == nil then
+		local text = string.match(
+			Interpolate.replace(raw, State.panelScope(s, inst), { format = Interpolate.text }),
+			"^%s*(.-)%s*$"
+		)
+		local found: string | false = if text and text ~= "" then text else false
+		descriptions[inst] = found
+		cached = found
+	end
+	return if cached then cached else nil
 end
 
 -- Info marker and link chips above the body; nil when the panel has neither.
@@ -444,7 +465,7 @@ end
 
 local function rowHeader(s: State, sec: Repeat.SectionInstance, collapsed: boolean): Node
 	local row = sec.row :: any
-	local text = Interpolate.replace(row.title, Interpolate.merge(Variables.scope(s.vars), sec.scoped), {
+	local text = Interpolate.replace(row.title, Interpolate.merge(Core.plainScope(s), sec.scoped), {
 		format = Interpolate.text,
 	})
 	local count = #sec.panels
@@ -559,7 +580,7 @@ function M.view(s: State, env: Env): (Effect.View, Assets.Assets)
 		if not Variables.settled(s.vars) and #s.order == 0 then
 			table.insert(main, muted("Resolving variables", "vwait"))
 		elseif single then
-			local inst = if s.focus then Repeat.find(s.sections, s.focus :: string) else nil
+			local inst = if s.focus then Core.find(s, s.focus :: string) else nil
 			if inst then
 				table.insert(main, panelCard(s, inst, env, assets, true))
 			else

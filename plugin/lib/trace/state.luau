@@ -5,6 +5,7 @@
 -- `{}`) over `from`/`to`; `span` selects a span once the trace loads.
 -- Rendering lives in ./view.
 
+local BlockKit = require("../block_kit")
 local Correlate = require("../logs/correlate")
 local Edit = require("../query/edit")
 local Effect = require("../effect")
@@ -87,18 +88,6 @@ M.MAX_ROWS = 1000
 M.DEFAULT_QUERY = "{}"
 M.INPUT_ID = "main.input"
 M.PAGE = 10
-
-local function sortedContexts(env: Env): { string }
-	local out: { string } = {}
-	local cfg = env.config
-	if cfg then
-		for name in cfg.contexts do
-			table.insert(out, name)
-		end
-	end
-	table.sort(out)
-	return out
-end
 
 function M.loading(s: State, kind: Kind): boolean
 	return s.pending[kind] ~= nil
@@ -232,24 +221,12 @@ local function connect(s: State, env: Env, effects: { Effect })
 	end
 end
 
-local function linkParams(args: { string }): { [string]: string }
-	local first = args[1]
-	if first == nil or first == "" then
-		return {}
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "trace" then
-		return {}
-	end
-	return link.params
-end
-
 local function str(v: any): string?
 	return if type(v) == "string" and v ~= "" then v else nil
 end
 
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local params = linkParams(args)
+	local params: { [string]: string } = BlockKit.linkParams(args, "trace") or {}
 	local savedT = if type(saved) == "table" then saved else {}
 	local settings, problems = Settings.read(env.config)
 	local configProblems: { string } = {}
@@ -257,7 +234,7 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		table.insert(configProblems, p.path .. ": " .. p.message)
 	end
 	local s: State = {
-		contexts = sortedContexts(env),
+		contexts = BlockKit.contexts(env.config),
 		context = nil,
 		route = nil,
 		modes = { trace = "direct", search = "direct" },
@@ -593,12 +570,10 @@ local function switchContext(s: State, env: Env, name: string, effects: { Effect
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	switchContext(s, env, s.contexts[(i - 1 + step) % n + 1], effects)
 end
 
 local function copy(s: State, what: "span" | "trace", effects: { Effect })
@@ -954,12 +929,12 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-function M.update(s: State, msg: Msg, env: Env): (State, { Effect })
+function M.update(s: State, msg: Msg, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local kind, seq = string.match(msg.tag, "^(%a+):(%d+)$")
 		if kind == nil or s.pending[kind :: string] ~= tonumber(seq) then
-			return s, effects
+			return s, effects, false
 		end
 		s.pending[kind :: string] = nil
 		answered(s, kind :: Kind, msg.response, env, effects)

@@ -3,7 +3,8 @@
 -- scrubbed fixtures captured from a Grafana Cloud stack running IRM 0.128.0
 -- (tests/fixtures/irm/0.128.0) and the docs-based write responses
 -- (tests/fixtures/irm/docs), and a driver that answers a machine's requests.
-local Fixtures = require("../../lib/fixtures")
+local Keys = require("../../lib/keys")
+local Support = require("../../lib/support")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
 
@@ -43,24 +44,13 @@ function M.env(cfg: any?): any
 	}
 end
 
-function M.ok(path: string, status: number?): any
-	return { status = status or 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+M.ok = Support.response
 
 function M.raw(body: string, status: number): any
-	return { status = status, headers = {}, body = body, timed_out = false }
+	return Support.body(body, status)
 end
 
-function M.key(text: string, name: string?): any
-	return {
-		name = name or text,
-		text = if name then nil else text,
-		ctrl = false,
-		alt = false,
-		shift = false,
-		meta = false,
-	}
-end
+M.key = Keys.press
 
 -- Whether an http effect writes: any OnCall POST, or an Incident API call
 -- that is not a query.
@@ -86,14 +76,7 @@ function M.writes(effects: { any }): { any }
 	return out
 end
 
-function M.find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
+M.find = Support.find
 
 -- Answers every read request among `effects` (and the ones their answers
 -- trigger) with `respond(name, effect)`, the tag without its generation

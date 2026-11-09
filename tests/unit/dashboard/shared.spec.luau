@@ -15,30 +15,21 @@ local describe, it, expect = t.describe, t.it, t.expect
 
 local LINK = "tern-grafana://dashboard?context=lab&uid=tern-sql"
 
-type Harness = { s: State.State, env: any, pending: { [string]: any } }
+type Harness = S.Harness
 
 -- Answers the loading requests from fixtures; panel queries stay pending.
-local function apply(h: Harness, version: string, dashboard: string?, effects: { any })
-	for _, e in effects do
-		if e.kind ~= "http" then
-			continue
-		end
-		local response: any = nil
+local function loading(version: string, dashboard: string?): (e: any) -> any
+	return function(e: any): any
 		if string.match(e.tag, "^dash/") then
-			response = if dashboard
+			return if dashboard
 				then S.body(200, dashboard)
 				else S.response(S.grafana(version, "dashboard_tern_sql.json"))
 		elseif string.match(e.tag, "^fs/") then
-			response = S.response(S.grafana(version, "frontend_settings_sql.json"))
+			return S.response(S.grafana(version, "frontend_settings_sql.json"))
 		elseif string.match(e.tag, "^user/") then
-			response = S.response(S.grafana(version, "user.json"))
+			return S.response(S.grafana(version, "user.json"))
 		end
-		if response then
-			local _, more = State.update(h.s, { kind = "http_done", tag = e.tag, response = response }, h.env)
-			apply(h, version, dashboard, more)
-		else
-			h.pending[e.tag] = e
-		end
+		return nil
 	end
 end
 
@@ -50,8 +41,8 @@ local function start(version: string, link: string, solo: boolean, dashboard: st
 	else
 		s, effects = State.init({ link }, nil, env)
 	end
-	local h: Harness = { s = s, env = env, pending = {} }
-	apply(h, version, dashboard, effects)
+	local h = S.harness(s, env, loading(version, dashboard))
+	S.drive(h, effects)
 	return h
 end
 

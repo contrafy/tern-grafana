@@ -83,9 +83,7 @@ local function steps(item: FieldConfig.Item): { { at: number, value: number, nam
 	return out
 end
 
-local function clamp01(x: number): number
-	return if x ~= x then 0 else math.clamp(x, 0, 1)
-end
+local clamp01 = SvgGauge.clamp01
 
 -- LCD cells from 0 up to `fill`, each run in its threshold band's tone; the
 -- run holding the value takes the value's own tone, so a value sitting

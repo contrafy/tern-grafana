@@ -14,14 +14,13 @@
 -- switch where its exact hue would not.
 
 local Env = require("../env")
-local Format = require("../units/format")
+local FieldDisplay = require("./fielddisplay")
+local FieldMatch = require("./fieldmatch")
+local FieldName = require("./fieldname")
 local Frame = require("../frame/types")
-local Interpolate = require("../dashboard/interpolate")
 local Json = require("./json")
 local Mappings = require("./mappings")
-local Range = require("../time/range")
 local Reduce = require("./reduce")
-local Regex = require("../regex")
 local Thresholds = require("../units/thresholds")
 local Tbl = require("../tbl")
 
@@ -29,60 +28,14 @@ type Env = Env.Env
 type Frame = Frame.Frame
 type Field = Frame.Field
 
-export type Config = {
-	unit: string?,
-	decimals: number?,
-	min: number?,
-	max: number?,
-	display_name: string?,
-	no_value: string?,
-	thresholds: Thresholds.Thresholds,
-	mappings: { Mappings.Mapping },
-	-- fieldColor mode id ("thresholds", "fixed", "palette-classic", "shades",
-	-- "continuous-GrYlRd", ...) and its fixed color.
-	color_mode: string,
-	fixed_color: string?,
-	-- Reducer that picks a by-value series color (color.seriesBy, default last).
-	series_by: string?,
-	-- fieldConfig `custom.*`, merged defaults then overrides.
-	custom: { [string]: any },
-	null_mode: Reduce.NullMode?,
-	field_min_max: boolean,
-}
-
-export type Item = {
-	frame: Frame,
-	field: Field,
-	frame_index: number,
-	field_index: number,
-	-- Display name after overrides (Grafana getFieldDisplayName).
-	name: string,
-	config: Config,
-	-- 1-based position among non-time fields across frames (palette colors).
-	series_index: number,
-	-- field.state.range: the scale for percent and gauges.
-	range_min: number?,
-	range_max: number?,
-}
-
-export type Display = {
-	text: string,
-	prefix: string,
-	suffix: string,
-	-- The value as a number (nil when it is not one).
-	numeric: number?,
-	color: string,
-	tone: Thresholds.Tone,
-	-- Position in the field's range, 0..1.
-	percent: number,
-	-- Palette color modes: the series class (tg-s1..tg-s10).
-	class: string?,
-	icon: string?,
-}
-
-export type Options = { theme: Thresholds.Theme?, offset_min: number? }
-
-export type Defaults = { color_mode: string? }
+-- Names, matchers and the display processor live in fieldname, fieldmatch
+-- and fielddisplay; this module's API keeps them.
+export type Config = FieldDisplay.Config
+export type Item = FieldDisplay.Item
+export type Display = FieldDisplay.Display
+export type Options = FieldDisplay.Options
+export type Defaults = FieldDisplay.Defaults
+export type Scale = FieldDisplay.Scale
 
 local M = {}
 
@@ -91,7 +44,7 @@ function M.defaultThresholds(): Thresholds.Thresholds
 	return { mode = "absolute", steps = { { color = "green" }, { color = "red", value = 80 } } }
 end
 
-M.PALETTE = 10
+M.PALETTE = FieldDisplay.PALETTE
 
 local function parseThresholds(env: Env, raw: any): Thresholds.Thresholds?
 	local t = Json.tbl(env, raw)
@@ -199,449 +152,15 @@ local function cloneConfig(c: Config): Config
 	out.custom = Tbl.copy(c.custom)
 	return out
 end
-
--- Display names ---------------------------------------------------------------
-
--- Grafana formatLabels (utils/labels.ts): every label, sorted,
--- `{a="1", b="2"}`; without the braces for `${__field.labels}`.
-local function formatLabels(labels: { [string]: string }, withoutBraces: boolean?): string
-	local keys: { string } = {}
-	for k in labels do
-		table.insert(keys, k)
-	end
-	if #keys == 0 then
-		return ""
-	end
-	table.sort(keys)
-	local parts: { string } = table.create(#keys)
-	for i, k in keys do
-		parts[i] = string.format('%s="%s"', k, labels[k])
-	end
-	local text = table.concat(parts, ", ")
-	return if withoutBraces then text else "{" .. text .. "}"
-end
-
--- getSingleLabelName: the label key when every labeled field across the
--- frames has that one key only.
-local function singleLabelName(frames: { Frame }): string?
-	local single: string? = nil
-	for _, frame in frames do
-		for _, field in frame.fields do
-			if field.labels then
-				for k in field.labels do
-					if single == nil then
-						single = k
-					elseif k ~= single then
-						return nil
-					end
-				end
-			end
-		end
-	end
-	return single
-end
-
--- getUniqueFieldName (field/fieldState.ts): a name other fields of the
--- frame share gets " <n>", n counting the duplicates up to this field.
-local function uniqueName(field: Field, frame: Frame?): string
-	if frame == nil then
-		return field.name
-	end
-	local dupes, foundSelf = 0, false
-	for _, other in frame.fields do
-		if other == field then
-			foundSelf = true
-			if dupes > 0 then
-				dupes += 1
-				break
-			end
-		elseif other.name == field.name then
-			dupes += 1
-			if foundSelf then
-				break
-			end
-		end
-	end
-	return if dupes > 0 then field.name .. " " .. dupes else field.name
-end
-
--- calculateFieldDisplayName. The frame converters store Grafana's
--- displayNameFromDS in config.displayName, so it comes first here exactly
--- as it does in Grafana (a panel displayName replaces it beforehand).
-function M.displayName(field: Field, frame: Frame?, frames: { Frame }?): string
-	local config = field.config
-	if config and config.displayName and config.displayName ~= "" then
-		return config.displayName
-	end
-	if field.type == "time" and field.labels == nil then
-		return if field.name ~= "" then field.name else "Time"
-	end
-	local all = frames or (if frame then { frame } else {})
-	local parts: { string } = {}
-	local namesDiffer = false
-	for i = 2, #all do
-		if all[i].name ~= all[i - 1].name then
-			namesDiffer = true
-			break
-		end
-	end
-	local frameNameAdded, labelsAdded = false, false
-	if namesDiffer and frame and frame.name and frame.name ~= "" then
-		table.insert(parts, frame.name)
-		frameNameAdded = true
-	end
-	if field.name ~= "" and field.name ~= "Value" then
-		table.insert(parts, field.name)
-	end
-	if field.labels and frame then
-		local single = singleLabelName(all)
-		if single == nil then
-			local text = formatLabels(field.labels)
-			if text ~= "" then
-				table.insert(parts, text)
-				labelsAdded = true
-			end
-		elseif field.labels[single] and field.labels[single] ~= "" then
-			table.insert(parts, field.labels[single])
-			labelsAdded = true
-		end
-	end
-	if frame and not frameNameAdded and not labelsAdded and field.name == "Value" then
-		if frame.name and frame.name ~= "" then
-			table.insert(parts, frame.name)
-		end
-	end
-	local name = if #parts > 0 then table.concat(parts, " ") elseif field.name ~= "" then field.name else "Value"
-	-- "Ensure unique field name": a joined table's two Time columns read
-	-- "Time 1" and "Time 2", the names organize/rename/sortBy refer to.
-	if name == field.name then
-		return uniqueName(field, frame)
-	end
-	return name
-end
-
--- Field macros ----------------------------------------------------------------
-
--- getFrameDisplayName (field/fieldState.ts) of the frame at 0-based `index`:
--- its name, else its one value field's display name, else "Series (refId)",
--- else "Series (index)".
-local function frameDisplayName(frame: Frame, index: number): string
-	if frame.name and frame.name ~= "" then
-		return frame.name
-	end
-	local names: { string } = {}
-	for _, f in frame.fields do
-		if f.type ~= "time" then
-			if #names > 1 then
-				break
-			end
-			table.insert(names, M.displayName(f, frame))
-		end
-	end
-	if #names == 1 then
-		return names[1]
-	end
-	if frame.refId and frame.refId ~= "" then
-		return "Series (" .. frame.refId .. ")"
-	end
-	return "Series (" .. tostring(index) .. ")"
-end
-
--- The data macros a display name can use (public/app/features/templating/
--- dataMacros.ts fieldMacro and seriesNameMacro over templateProxies.ts
--- getTemplateProxyForField): `${__field.name}`, `${__field.displayName}`,
--- `${__field.labels}` (`a="1", b="2"`), `${__field.labels.<key>}`,
--- `${__field.labels.__values}` (the sorted values) and `${__series.name}`.
--- Another `__field` path reads "" (lodash property finds nothing); a
--- reference without a path stays as written.
-local function fieldMacro(field: Field, frame: Frame, frameIndex: number, frames: { Frame })
-	return function(name: string, path: string?): Interpolate.Var?
-		if path == nil or path == "" then
-			return nil
-		elseif name == "__series" then
-			return if path == "name" then Interpolate.value(frameDisplayName(frame, frameIndex - 1)) else nil
-		elseif name ~= "__field" then
-			return nil
-		end
-		local labels = field.labels
-		local text = ""
-		if path == "name" then
-			text = field.name
-		elseif path == "displayName" then
-			text = M.displayName(field, frame, frames)
-		elseif path == "labels" or path == "formattedLabels" then
-			text = if labels then formatLabels(labels, true) else ""
-		else
-			local key = string.match(path, "^labels%.(.+)$") or string.match(path, "^formattedLabels%.(.+)$")
-			if key == "__values" and labels then
-				local values: { string } = {}
-				for _, v in labels do
-					table.insert(values, v)
-				end
-				table.sort(values)
-				text = table.concat(values, ", ")
-			elseif key and labels then
-				text = labels[key] or ""
-			end
-		end
-		return Interpolate.value(text)
-	end
-end
-
-local NO_SCOPE: Interpolate.Scope = table.freeze({})
-
--- A displayName with the field's macros replaced (stringOverrideProcessor
--- with the field's scopedVars); nil when it reads "", which Grafana treats
--- as no displayName.
-local function scopedName(text: string, field: Field, frame: Frame, frameIndex: number, frames: { Frame }): string?
-	if not string.find(text, "${__", 1, true) then
-		return text
-	end
-	local out = Interpolate.replace(text, NO_SCOPE, { macro = fieldMacro(field, frame, frameIndex, frames) })
-	return if out ~= "" then out else nil
-end
-
--- The panel with its displayName strings (fieldConfig defaults and
--- overrides; the one standard field option registered with
--- expandTemplateVars, public/app/core/components/OptionsUI/registry.tsx)
--- passed through `replace`, the dashboard variables. Field macros are left
--- for resolve, which knows each field. The panel itself when none changes.
-function M.withVariables(panel: any, env: Env, replace: (string) -> string): any
-	local fc = Json.tbl(env, Json.path(env, panel, "fieldConfig"))
-	if fc == nil then
-		return panel
-	end
-	local changed = false
-	local function sub(t: { [any]: any }, key: string): { [any]: any }
-		local v = t[key]
-		local s = if type(v) == "string" then replace(v) else v
-		if s == v then
-			return t
-		end
-		changed = true
-		local c = Tbl.copy(t)
-		c[key] = s
-		return c
-	end
-	local newFc = Tbl.copy(fc)
-	local defaults = Json.tbl(env, fc.defaults)
-	if defaults then
-		newFc.defaults = sub(defaults, "displayName")
-	end
-	local overrides: { any } = {}
-	for i, o in Json.list(env, fc.overrides) do
-		local ot = Json.tbl(env, o)
-		if ot == nil then
-			overrides[i] = o
-			continue
-		end
-		local props: { any } = {}
-		for j, p in Json.list(env, ot.properties) do
-			local pt = Json.tbl(env, p)
-			props[j] = if pt and pt.id == "displayName" then sub(pt, "value") else p
-		end
-		local no = Tbl.copy(ot)
-		no.properties = props
-		overrides[i] = no
-	end
-	if not changed then
-		return panel
-	end
-	newFc.overrides = overrides
-	local out = Tbl.copy(panel)
-	out.fieldConfig = newFc
-	return out
-end
-
--- Matchers --------------------------------------------------------------------
-
-type Matcher = (field: Field, frame: Frame, frames: { Frame }) -> boolean
-
-local MATCHERS: { [string]: boolean } = {
-	byName = true,
-	byRegexp = true,
-	byFrameRefID = true,
-	byType = true,
-	byNames = true,
-	byRegexpOrNames = true,
-	byValue = true,
-}
-
--- JS `${v}` for the values a reducer or a matcher option holds.
-local function jsString(v: any): string
-	if v == nil then
-		return "null"
-	elseif type(v) == "number" then
-		if v ~= v then
-			return "NaN"
-		elseif v == math.huge then
-			return "Infinity"
-		elseif v == -math.huge then
-			return "-Infinity"
-		elseif v == math.floor(v) and math.abs(v) < 1e21 then
-			return string.format("%d", v)
-		end
-	end
-	return tostring(v)
-end
-
--- JS relational comparison: strings compare as strings, anything else as
--- numbers (a non-numeric string or "null" is NaN, so never ordered).
-local function jsNumber(v: any): number
-	if type(v) == "number" then
-		return v
-	elseif type(v) == "boolean" then
-		return if v then 1 else 0
-	elseif type(v) == "string" then
-		local s = string.match(v, "^%s*(.-)%s*$") or ""
-		if s == "" then
-			return 0
-		end
-		return tonumber(s) or 0 / 0
-	end
-	return 0 / 0
-end
-
--- compareValues (transformations/matchers/compareValues.ts): a missing side
--- reads as "null", and gte/lte against it become equality.
-function M.compareValues(left: any, op: string, right: any): boolean
-	if left == nil or right == nil then
-		left = if left == nil then "null" else left
-		right = if right == nil then "null" else right
-		if op == "gte" or op == "lte" then
-			op = "eq"
-		end
-	end
-	if op == "eq" then
-		return jsString(left) == jsString(right)
-	elseif op == "neq" then
-		return jsString(left) ~= jsString(right)
-	end
-	local a: any, b: any = left, right
-	if type(a) ~= "string" or type(b) ~= "string" then
-		a, b = jsNumber(a), jsNumber(b)
-	end
-	if op == "gt" then
-		return a > b
-	elseif op == "gte" then
-		return a >= b
-	elseif op == "lt" then
-		return a < b
-	elseif op == "lte" then
-		return a <= b
-	end
-	return false
-end
-
-local function regexMatcher(pattern: string?): Matcher
-	local re = if pattern and pattern ~= "" then Regex.parseJs(pattern) else nil
-	return function(field: Field, frame: Frame, frames: { Frame }): boolean
-		return re ~= nil and (Regex.test(re, M.displayName(field, frame, frames)))
-	end
-end
-
-local function namesMatcher(names: { string }): Matcher
-	local set: { [string]: boolean } = {}
-	for _, n in names do
-		set[n] = true
-	end
-	return function(field: Field, frame: Frame, frames: { Frame }): boolean
-		return set[M.displayName(field, frame, frames)] == true
-	end
-end
-
-local function matcherFor(env: Env, raw: any): Matcher?
-	local m = Json.tbl(env, raw)
-	if m == nil then
-		return nil
-	end
-	local id = Json.str(env, m.id)
-	local options = if m.options == env.null then nil else m.options
-	if id == "byName" then
-		local name = Json.str(env, options)
-		if name == nil then
-			return nil
-		end
-		local n = name :: string
-		return function(field: Field, frame: Frame, frames: { Frame }): boolean
-			if n == field.name or n == M.displayName(field, frame, frames) then
-				return true
-			end
-			-- fieldNameFallback: names saved before the dataplane rename.
-			if n == "Value" then
-				return field.labels ~= nil and field.labels.__name__ == field.name
-			elseif n == "Time" or n == "time" then
-				return field.type == "time" and (frame.meta == nil or frame.meta.type == nil)
-			end
-			return false
-		end
-	elseif id == "byRegexp" then
-		return regexMatcher(Json.str(env, options))
-	elseif id == "byFrameRefID" then
-		local ref = Json.str(env, options)
-		return function(_field: Field, frame: Frame): boolean
-			return ref ~= nil and frame.refId == ref
-		end
-	elseif id == "byType" then
-		local kind = Json.str(env, options)
-		return function(field: Field): boolean
-			return field.type == kind
-		end
-	elseif id == "byNames" then
-		local o = Json.obj(env, options)
-		local names: { string } = {}
-		for _, n in Json.list(env, o.names) do
-			if type(n) == "string" then
-				table.insert(names, n)
-			end
-		end
-		local inner = namesMatcher(names)
-		if Json.str(env, o.mode) == "exclude" then
-			return function(field: Field, frame: Frame, frames: { Frame }): boolean
-				return not inner(field, frame, frames)
-			end
-		end
-		return inner
-	elseif id == "byRegexpOrNames" then
-		local o = Json.obj(env, options)
-		local names: { string } = {}
-		for _, n in Json.list(env, o.names) do
-			if type(n) == "string" then
-				table.insert(names, n)
-			end
-		end
-		local byNames = namesMatcher(names)
-		local byRegex = regexMatcher(Json.str(env, o.pattern))
-		return function(field: Field, frame: Frame, frames: { Frame }): boolean
-			return byNames(field, frame, frames) or byRegex(field, frame, frames)
-		end
-	elseif id == "byValue" then
-		-- fieldValueMatcher.ts: the field reduced by `reducer`, compared to
-		-- `value` with `op` (eq when unset); allIsNull/allIsZero match on
-		-- their own truth. Fields of every type are reduced, as in Grafana.
-		local o = Json.obj(env, options)
-		local reducer = Json.str(env, o.reducer)
-		if reducer == nil or reducer == "" then
-			return function(): boolean
-				return false
-			end
-		end
-		local r = reducer :: string
-		local op = Json.str(env, o.op) or "eq"
-		local value: any = if o.value == env.null then nil else o.value
-		local boolean = r == "allIsNull" or r == "allIsZero"
-		return function(field: Field): boolean
-			local left = Reduce.reduce(field.values, r, field.type)
-			if boolean then
-				return left == true
-			end
-			return M.compareValues(left, op, value)
-		end
-	end
-	return nil
-end
-
-M.matcherFor = matcherFor
+M.displayName = FieldName.displayName
+M.withVariables = FieldName.withVariables
+M.compareValues = FieldMatch.compareValues
+M.matcherFor = FieldMatch.matcherFor
+M.paletteClass = FieldDisplay.paletteClass
+M.display = FieldDisplay.display
+M.seriesColor = FieldDisplay.seriesColor
+M.joined = FieldDisplay.joined
+M.hidden = FieldDisplay.hidden
 
 -- Panel types whose renderer honors custom.transform (negative-Y, constant)
 -- and log/symlog scaleDistribution (lib/render/svg_timeseries).
@@ -678,7 +197,7 @@ function M.unsupported(panel: any, env: Env): string?
 	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
 		local matcher = Json.tbl(env, Json.path(env, o, "matcher"))
 		local id = if matcher then Json.str(env, matcher.id) else nil
-		if id == nil or not MATCHERS[id] then
+		if id == nil or not FieldMatch.MATCHERS[id] then
 			return string.format("override matcher %s is not supported", tostring(id))
 		end
 		if id == "byValue" then
@@ -700,12 +219,12 @@ end
 
 -- Resolution ------------------------------------------------------------------
 
-type Override = { match: Matcher, properties: { { id: string, value: any } } }
+type Override = { match: FieldMatch.Matcher, properties: { { id: string, value: any } } }
 
 local function overridesOf(panel: any, env: Env): { Override }
 	local out: { Override } = {}
 	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
-		local match = matcherFor(env, Json.path(env, o, "matcher"))
+		local match = FieldMatch.matcherFor(env, Json.path(env, o, "matcher"))
 		if match then
 			local props: { { id: string, value: any } } = {}
 			for _, p in Json.list(env, Json.path(env, o, "properties")) do
@@ -727,12 +246,12 @@ local function globalRange(frames: { Frame }): (number?, number?)
 	for _, frame in frames do
 		for _, field in frame.fields do
 			if field.type == "number" then
-				local c = Reduce.calcs(field.values, {}, "number")
-				if c.min ~= nil and (lo == nil or c.min < lo) then
-					lo = c.min
+				local min, max = Reduce.minMax(field.values)
+				if min ~= nil and (lo == nil or min < lo) then
+					lo = min
 				end
-				if c.max ~= nil and (hi == nil or c.max > hi) then
-					hi = c.max
+				if max ~= nil and (hi == nil or max > hi) then
+					hi = max
 				end
 			end
 		end
@@ -740,23 +259,40 @@ local function globalRange(frames: { Frame }): (number?, number?)
 	return lo, hi
 end
 
--- Every field of every frame with its resolved config, display name and
--- range: datasource config first, panel defaults fill what it leaves unset
--- (setFieldConfigDefaults), overrides apply in order. The panel's
--- displayName replaces the datasource's, as displayName outranks
--- displayNameFromDS in Grafana.
-function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Item }
-	local base = M.defaults(panel, env, d)
-	local overrides = overridesOf(panel, env)
-	local items: { Item } = {}
+-- Whether a datasource field config sets anything resolve copies.
+local function dsTouches(ds: Frame.FieldConfig): boolean
+	return ds.unit ~= nil
+		or ds.decimals ~= nil
+		or ds.min ~= nil
+		or ds.max ~= nil
+		or ds.custom ~= nil
+		or ds.thresholds ~= nil
+		or ds.mappings ~= nil
+		or ds.color ~= nil
+end
+
+local function resolveAll(
+	env: Env,
+	base: Config,
+	overrides: { Override },
+	frames: { Frame },
+	items: { Item },
+	firstOnly: boolean
+)
 	local seriesIndex = 0
 	local gLo: number?, gHi: number?
 	local gDone = false
 	for fi, frame in frames do
+		if firstOnly and fi > 1 then
+			break
+		end
 		for xi, field in frame.fields do
-			local cfg = cloneConfig(base)
+			-- Fields nothing changes share the panel defaults (Items are read
+			-- only); a copy is made before the first write.
+			local cfg = base
 			local ds = field.config
-			if ds then
+			if ds and dsTouches(ds) then
+				cfg = cloneConfig(base)
 				cfg.unit = ds.unit or cfg.unit
 				if ds.decimals ~= nil then
 					cfg.decimals = ds.decimals
@@ -786,18 +322,23 @@ function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Ite
 			end
 			for _, o in overrides do
 				if o.match(field, frame, frames) then
+					if cfg == base then
+						cfg = cloneConfig(base)
+					end
 					for _, p in o.properties do
 						applyProperty(env, cfg, p.id, p.value)
 					end
 				end
 			end
-			local scoped = if cfg.display_name then scopedName(cfg.display_name, field, frame, fi, frames) else nil
+			local scoped = if cfg.display_name
+				then FieldName.scoped(cfg.display_name, field, frame, fi, frames)
+				else nil
 			local name: string = scoped or M.displayName(field, frame, frames)
 			local lo, hi = cfg.min, cfg.max
 			if field.type == "number" and (lo == nil or hi == nil) then
 				if cfg.field_min_max then
-					local c = Reduce.calcs(field.values, {}, "number")
-					lo, hi = lo or c.min, hi or c.max
+					local min, max = Reduce.minMax(field.values)
+					lo, hi = lo or min, hi or max
 				else
 					if not gDone then
 						gLo, gHi = globalRange(frames)
@@ -822,6 +363,19 @@ function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?): { Ite
 			})
 		end
 	end
+end
+
+-- Every field of every frame with its resolved config, display name and
+-- range: datasource config first, panel defaults fill what it leaves unset
+-- (setFieldConfigDefaults), overrides apply in order. The panel's
+-- displayName replaces the datasource's, as displayName outranks
+-- displayNameFromDS in Grafana. `firstOnly` returns the first frame's items
+-- only (names and ranges still see every frame).
+function M.resolve(panel: any, frames: { Frame }, env: Env, d: Defaults?, firstOnly: boolean?): { Item }
+	local base = M.defaults(panel, env, d)
+	local overrides = overridesOf(panel, env)
+	local items: { Item } = {}
+	FieldName.within(frames, resolveAll :: any, env, base, overrides, frames, items, firstOnly == true)
 	return items
 end
 
@@ -837,236 +391,6 @@ function M.bake(item: Item): Field
 	c.max = item.config.max
 	f.config = c
 	return f
-end
-
--- Display processor -----------------------------------------------------------
-
-local DATE_UNITS: { [string]: boolean } = {
-	dateTimeAsIso = true,
-	dateTimeAsIsoNoDateIfToday = true,
-	dateTimeAsUS = true,
-	dateTimeAsUSNoDateIfToday = true,
-	dateTimeAsLocal = true,
-	dateTimeAsLocalNoDateIfToday = true,
-	dateTimeAsSystem = true,
-	dateTimeFromNow = true,
-}
-
-local BOOL_UNITS: { [string]: { string } } = {
-	bool = { "True", "False" },
-	bool_yes_no = { "Yes", "No" },
-	bool_on_off = { "On", "Off" },
-}
-
-local function isDateUnit(unit: string?): boolean
-	return unit ~= nil and (DATE_UNITS[unit] == true or string.sub(unit, 1, 5) == "time:")
-end
-
--- anyToNumber (packages/grafana-data/src/utils/anyToNumber.ts).
-local function anyToNumber(v: any): number
-	if type(v) == "number" then
-		return v
-	elseif type(v) == "boolean" then
-		return if v then 1 else 0
-	elseif type(v) == "string" then
-		local s = string.match(v, "^%s*(.-)%s*$") or ""
-		if s == "" then
-			return 0 / 0
-		end
-		return tonumber(s) or 0 / 0
-	end
-	return 0 / 0
-end
-
-local function formatDate(ms: number, unit: string, offsetMin: number?): string
-	local iso = Range.formatMs(ms, offsetMin)
-	if unit == "dateTimeAsUS" or unit == "dateTimeAsUSNoDateIfToday" then
-		-- MM/DD/YYYY h:mm:ss a
-		local Y, Mo, D = string.sub(iso, 1, 4), string.sub(iso, 6, 7), string.sub(iso, 9, 10)
-		local h = tonumber(string.sub(iso, 12, 13)) :: number
-		local rest = string.sub(iso, 14)
-		local ampm = if h >= 12 then "pm" else "am"
-		local h12 = h % 12
-		if h12 == 0 then
-			h12 = 12
-		end
-		return string.format("%s/%s/%s %d%s %s", Mo, D, Y, h12, rest, ampm)
-	end
-	return iso
-end
-
--- Grafana's continuous color schemes, read as severity along the scale.
-local function continuousTone(mode: string, percent: number): Thresholds.Tone
-	local scheme = string.sub(mode, 12)
-	local p = math.clamp(percent, 0, 1)
-	if scheme == "GrYlRd" then
-		return if p < 1 / 3 then "success" elseif p < 2 / 3 then "warning" else "error"
-	elseif scheme == "RdYlGr" then
-		return if p < 1 / 3 then "error" elseif p < 2 / 3 then "warning" else "success"
-	elseif scheme == "BlYlRd" then
-		return if p < 1 / 3 then "info" elseif p < 2 / 3 then "warning" else "error"
-	elseif scheme == "YlRd" then
-		return if p < 0.5 then "warning" else "error"
-	elseif scheme == "BlPu" then
-		return if p < 0.5 then "info" else "accent"
-	elseif scheme == "YlBl" then
-		return if p < 0.5 then "warning" else "info"
-	elseif scheme == "blues" then
-		return "info"
-	elseif scheme == "reds" then
-		return "error"
-	elseif scheme == "greens" then
-		return "success"
-	elseif scheme == "purples" then
-		return "accent"
-	end
-	return "accent"
-end
-
--- The series class of a palette position (lib/render/svg_timeseries).
-function M.paletteClass(seriesIndex: number): string
-	return "tg-s" .. tostring((seriesIndex - 1) % M.PALETTE + 1)
-end
-
-export type Scale = { color: string, tone: Thresholds.Tone, percent: number, class: string? }
-
-local function scale(item: Item, value: number, o: Options): Scale
-	local cfg = item.config
-	local lo, hi = item.range_min, item.range_max
-	local percent = 0
-	if value ~= -math.huge then
-		local lo_ = lo or 0
-		local delta = (hi or 100) - lo_
-		percent = (value - lo_) / delta
-		if percent ~= percent then
-			percent = 0
-		end
-	end
-	local mode = cfg.color_mode
-	if mode == "fixed" or mode == "shades" then
-		local name = cfg.fixed_color
-		return { color = Thresholds.color(name, o.theme), tone = Thresholds.tone(name), percent = percent }
-	elseif mode == "palette-classic" or mode == "palette-classic-by-name" then
-		local class = M.paletteClass(item.series_index)
-		return { color = "", tone = "neutral", percent = percent, class = class }
-	elseif string.sub(mode, 1, 11) == "continuous-" then
-		return { color = "", tone = continuousTone(mode, percent), percent = percent }
-	end
-	local probe: number? = if value == -math.huge then nil else value
-	local a = Thresholds.active(probe, cfg.thresholds, lo, hi, o.theme)
-	return { color = a.color, tone = a.tone, percent = percent }
-end
-
--- getDisplayProcessor(field)(value): mappings first, then the unit, then the
--- color scale; no value reads as the field's noValue (or "").
-function M.display(item: Item, value: any, opts: Options?): Display
-	local o: Options = opts or {}
-	local cfg = item.config
-	local fieldType = item.field.type
-	local unit = cfg.unit
-	local hasDate = isDateUnit(unit)
-	if fieldType == "time" and not hasDate then
-		unit = "dateTimeAsSystem"
-		hasDate = true
-	elseif fieldType == "boolean" and (unit == nil or BOOL_UNITS[unit] == nil) then
-		unit = "bool"
-	elseif unit == nil and fieldType == "string" then
-		unit = "string"
-	end
-	if value == Frame.NULL then
-		value = nil
-	end
-	local numeric = if unit == "string" then 0 / 0 else anyToNumber(value)
-	if value == nil then
-		numeric = 0 / 0
-	end
-	local text: string?, prefix: string?, suffix: string? = nil, nil, nil
-	local color: string?, tone: Thresholds.Tone?, class: string? = nil, nil, nil
-	local icon: string? = nil
-	local percent = 0
-	if #cfg.mappings > 0 then
-		local r = Mappings.apply(cfg.mappings, value)
-		if r then
-			text = r.text
-			if r.color then
-				color = Thresholds.color(r.color, o.theme)
-				tone = Thresholds.tone(r.color)
-			end
-			icon = r.icon
-		end
-	end
-	if numeric == numeric then
-		if text == nil and type(value) ~= "boolean" then
-			local u = unit :: string?
-			if u and hasDate then
-				text = formatDate(numeric, u, o.offset_min)
-			elseif u and BOOL_UNITS[u] then
-				local labels = BOOL_UNITS[u]
-				text = if numeric ~= 0 then labels[1] else labels[2]
-			else
-				local f = Format.format(numeric, u, cfg.decimals)
-				text, prefix, suffix = f.text, f.prefix, f.suffix
-			end
-		end
-		if color == nil then
-			local s = scale(item, numeric, o)
-			color, tone, class, percent = s.color, s.tone, s.class, s.percent
-		end
-	end
-	if text == nil and type(value) == "boolean" then
-		local labels = BOOL_UNITS[unit or "bool"] or BOOL_UNITS.bool
-		text = if value then labels[1] else labels[2]
-	end
-	if text == nil then
-		text = if value == nil then "" elseif type(value) == "string" then value else tostring(value)
-		if text == "" then
-			text = cfg.no_value or ""
-		end
-	end
-	if color == nil then
-		local s = scale(item, -math.huge, o)
-		color, tone, class, percent = s.color, s.tone, s.class, s.percent
-	end
-	return {
-		text = text :: string,
-		prefix = prefix or "",
-		suffix = suffix or "",
-		numeric = if numeric == numeric then numeric else nil,
-		color = color :: string,
-		tone = tone or "neutral",
-		percent = percent,
-		class = class,
-		icon = icon,
-	}
-end
-
--- getFieldSeriesColor: the one color a whole series is drawn in. Palette
--- modes give the series class; by-value modes (thresholds, continuous)
--- color it by the `seriesBy` reduction (default: the raw last value).
-function M.seriesColor(item: Item, opts: Options?): Scale
-	local o: Options = opts or {}
-	local mode = item.config.color_mode
-	if mode == "fixed" or mode == "shades" or mode == "palette-classic" or mode == "palette-classic-by-name" then
-		return scale(item, 0, o)
-	end
-	local by = item.config.series_by or "last"
-	local v = Reduce.reduce(item.field.values, by, item.field.type, item.config.null_mode)
-	return scale(item, if type(v) == "number" then v else 0, o)
-end
-
-function M.joined(d: Display): string
-	return d.prefix .. d.text .. d.suffix
-end
-
--- Fields Grafana hides from a visualization: `custom.hidden` (tables, and
--- the converters' labelTypes) or `custom.hideFrom.viz`.
-function M.hidden(item: Item): boolean
-	local custom = item.config.custom
-	if custom.hidden == true then
-		return true
-	end
-	local hideFrom = custom.hideFrom
-	return type(hideFrom) == "table" and hideFrom.viz == true
 end
 
 return M

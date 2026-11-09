@@ -17,9 +17,11 @@
 --   as off);
 -- - overrides (lib/panels/fieldconfig) for display names, colors and
 --   hidden series (custom.hideFrom.viz, .legend, .tooltip);
--- - series colors: palette-classic keeps the chart palette; fixed and
---   by-value modes (thresholds, continuous) paint the whole series in the
---   tone of its `seriesBy` value (getFieldSeriesColor);
+-- - series colors: palette-classic keeps the chart palette; a fixed color
+--   and a continuous scheme paint the series (and its swatch) in Grafana's
+--   color at the series' `seriesBy` value, thresholds in its step's tone
+--   (getFieldSeriesColor); gradientMode hue and scheme paint line and fill
+--   through a gradient (lib/render/ts_gradient);
 -- - options.legend: showLegend, displayMode list|table|hidden, calcs (any
 --   lib/panels/reduce reducer, formatted with the series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
@@ -32,10 +34,11 @@ local Common = require("./common")
 local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
-local Grid = require("../render/grid")
+local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgTimeseries = require("../render/svg_timeseries")
+local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -66,39 +69,7 @@ local function legendWhy(panel: any, env: Env): string?
 	return nil
 end
 
--- gradientMode hue (a hue shift along the fill) and scheme (line and fill
--- colored by value along the color scheme; drawn plainly with a fixed
--- color, UPlotSeriesBuilder getLineColor/getFill) need colors the
--- class-only SVG cannot express.
-local function gradientWhy(mode: string?, fixedColor: boolean): string?
-	if mode == "hue" then
-		return "custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
-	elseif mode == "scheme" and not fixedColor then
-		return "custom.gradientMode scheme (series colored by value) is not drawn natively"
-	end
-	return nil
-end
-
 function M.unsupported(panel: any, env: Env): string?
-	local defaults = Json.obj(env, Json.path(env, panel, "fieldConfig", "defaults"))
-	local fixed = Json.str(env, Json.path(env, defaults.color, "mode")) == "fixed"
-	local why = gradientWhy(Json.str(env, Json.path(env, defaults.custom, "gradientMode")), fixed)
-	if why then
-		return why
-	end
-	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
-		for _, p in Json.list(env, Json.path(env, o, "properties")) do
-			local id = Json.str(env, Json.path(env, p, "id"))
-			if id == "custom.gradientMode" then
-				why = gradientWhy(Json.str(env, Json.path(env, p, "value")), fixed)
-			elseif id == "custom" then
-				why = gradientWhy(Json.str(env, Json.path(env, p, "value", "gradientMode")), fixed)
-			end
-			if why then
-				return "override " .. why
-			end
-		end
-	end
 	return legendWhy(panel, env)
 end
 
@@ -130,10 +101,6 @@ local THRESHOLD_STYLES: { [string]: SvgTimeseries.ThresholdStyle } = {
 
 type Drawn = { item: FieldConfig.Item, class: string }
 
-local function swatch(class: string): Node
-	return { k = "el", p = { tag = "span", class = "tg-swatch " .. class } }
-end
-
 local function legendView(
 	key: string,
 	drawn: { Drawn },
@@ -143,7 +110,8 @@ local function legendView(
 	opts: Common.Options,
 	env: Env
 ): Node
-	local rows: { { class: string, name: string, values: { string } } } = {}
+	local rows: { Legend.Row } = {}
+	local disp = { theme = opts.theme, offset_min = opts.offset_min }
 	for _, d in drawn do
 		local item = d.item
 		if Json.bool(env, Json.path(env, item.config.custom.hideFrom, "legend")) == true then
@@ -153,49 +121,19 @@ local function legendView(
 		local values: { string } = {}
 		for k, c in calcs do
 			local v = results[c]
-			values[k] = if v == nil
-				then "-"
-				else FieldConfig.joined(
-					FieldConfig.display(item, v, { theme = opts.theme, offset_min = opts.offset_min })
-				)
+			values[k] = if v == nil then "-" else FieldConfig.joined(FieldConfig.display(item, v, disp))
 		end
 		table.insert(rows, { class = d.class, name = item.name, values = values })
 	end
 	local children: { Node } = {}
 	if mode == "table" then
-		local columns: { Grid.Column } = { { head = "Name" } }
-		for _, c in calcs do
-			table.insert(columns, { head = Reduce.name(c), numeric = true })
+		local heads: { string } = table.create(#calcs)
+		for i, c in calcs do
+			heads[i] = Reduce.name(c)
 		end
-		local gridRows: { Grid.Row } = table.create(#rows)
-		for i, r in rows do
-			local cells: { Node } = {
-				{ k = "row", p = { gap = "xs", align = "center" }, c = { swatch(r.class), Grid.text(r.name) } },
-			}
-			for _, v in r.values do
-				table.insert(cells, Grid.text(v))
-			end
-			gridRows[i] = { key = "s" .. i, cells = cells }
-		end
-		table.insert(children, Grid.grid(key .. ".t", columns, gridRows, "tern-grafana.legend"))
+		table.insert(children, Legend.rowsNode(key .. ".t", rows, heads, "table"))
 	else
-		local entries: { Node } = table.create(#rows)
-		for i, r in rows do
-			local spans: { ui.SpanLike } = { r.name }
-			if #r.values > 0 then
-				table.insert(spans, ui.span(" " .. table.concat(r.values, " "), "strong"))
-			end
-			entries[i] = {
-				k = "row",
-				p = { key = "s" .. i, gap = "xs", align = "center" },
-				c = { swatch(r.class), ui.text(spans) },
-			}
-		end
-		table.insert(children, {
-			k = "row",
-			p = { key = key .. ".l", gap = "md", wrap = true, role = "tern-grafana.legend" },
-			c = entries,
-		})
+		table.insert(children, Legend.rowsNode(key .. ".l", rows, {}, "list"))
 	end
 	if dropped > 0 then
 		table.insert(
@@ -248,12 +186,14 @@ local DRAWS: { [string]: SvgTimeseries.Draw } = { line = "line", bars = "bars", 
 local INTERPOLATIONS: { [string]: SvgTimeseries.Interpolation } =
 	{ linear = "linear", smooth = "smooth", stepBefore = "stepBefore", stepAfter = "stepAfter" }
 local SHOW_POINTS: { [string]: SvgTimeseries.ShowPoints } = { auto = "auto", always = "always", never = "never" }
+local GRADIENTS: { [string]: SvgTimeseries.Gradient } = { opacity = "opacity", hue = "hue", scheme = "scheme" }
 
 -- One series' resolved GraphFieldConfig as the renderer's scale, stacking,
 -- transform and draw settings (TimeSeries/utils.ts preparePlotConfigBuilder
 -- and UPlotSeriesBuilder.ts): drawStyle, lineWidth, lineStyle (dash/dot),
--- lineInterpolation, fillOpacity, gradientMode opacity, showPoints,
--- pointSize, spanNulls (true or a gap in ms) and the bar options.
+-- lineInterpolation, fillOpacity, gradientMode (hue and scheme get their
+-- stops in M.view), showPoints, pointSize, spanNulls (true or a gap in ms)
+-- and the bar options.
 function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesStyle
 	local cfg = item.config
 	local custom = cfg.custom
@@ -284,7 +224,7 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 	if span == nil then
 		span = Json.num(env, custom.spanNulls)
 	end
-	local gradient = Json.str(env, custom.gradientMode)
+	local gradient: SvgTimeseries.Gradient = GRADIENTS[Json.str(env, custom.gradientMode) or ""] or "none"
 	return {
 		unit = cfg.unit,
 		decimals = cfg.decimals,
@@ -316,7 +256,7 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 		dot = lineFill == "dot",
 		interpolation = INTERPOLATIONS[Json.str(env, custom.lineInterpolation) or ""],
 		fill_opacity = Json.num(env, custom.fillOpacity) or 0,
-		gradient = if gradient == "opacity" then "opacity" else "none",
+		gradient = gradient,
 		show_points = SHOW_POINTS[Json.str(env, custom.showPoints) or ""],
 		point_size = Json.num(env, custom.pointSize),
 		span_nulls = span or false,
@@ -324,6 +264,51 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 		bar_width_factor = Json.num(env, custom.barWidthFactor),
 		bar_max_width = Json.num(env, custom.barMaxWidth),
 	}
+end
+
+-- The class a series and its legend swatch are painted with
+-- (getFieldSeriesColor): the palette class; a fixed color (or shades) and
+-- a continuous scheme's color at the series' `seriesBy` value as the
+-- nearest Grafana color class; thresholds in their step's tone, as
+-- threshold lines and areas are drawn.
+local function seriesClass(item: FieldConfig.Item, color: FieldConfig.Scale, opts: Common.Options): string
+	local mode = item.config.color_mode
+	if mode == "fixed" or mode == "shades" then
+		return TsGradient.stopClass(item.config.fixed_color or "", opts.theme)
+	elseif string.sub(mode, 1, 11) == "continuous-" then
+		local c = TsGradient.schemeColor(mode, color.percent, opts.theme)
+		if c then
+			return TsGradient.stopClass(c, opts.theme)
+		end
+	end
+	return color.class or (FieldConfig.paletteClass(item.series_index) .. " tgp-fx " .. Common.toneClass(color.tone))
+end
+
+-- gradientMode hue and scheme stops for one series (UPlotSeriesBuilder
+-- getLineColor/getFill). Hue shifts the series color; scheme runs through
+-- the color mode's thresholds or scheme colors, and with a fixed color (or
+-- shades, or another palette) draws plainly.
+local function gradientStops(
+	st: SvgTimeseries.SeriesStyle,
+	item: FieldConfig.Item,
+	color: FieldConfig.Scale,
+	opts: Common.Options
+)
+	local cfg = item.config
+	local mode = cfg.color_mode
+	if st.gradient == "hue" then
+		local base: string
+		if mode == "palette-classic" or mode == "palette-classic-by-name" then
+			base = TsGradient.PALETTE_HEX[(item.series_index - 1) % #TsGradient.PALETTE_HEX + 1]
+		elseif mode == "fixed" or mode == "shades" then
+			base = cfg.fixed_color or ""
+		else
+			base = TsGradient.schemeColor(mode, color.percent, opts.theme) or color.color
+		end
+		st.hue = TsGradient.hue(base, opts.theme)
+	elseif st.gradient == "scheme" then
+		st.scheme = TsGradient.scheme(mode, cfg.thresholds, opts.theme)
+	end
 end
 
 -- setClassicPaletteIdxs (public/app/plugins/panel/timeseries/utils.ts,
@@ -367,6 +352,54 @@ local function fillBelowIndex(name: string, visible: { FieldConfig.Item }): numb
 		end
 	end
 	return nil
+end
+
+-- The last renders by panel key. A cursor move in an expanded panel redraws
+-- the same chart with only the overlay changed; SvgTimeseries.render is a
+-- pure function of (frames, options), so equal arguments reuse its result.
+-- Value columns compare by identity (frames are never mutated), everything
+-- else structurally. A handful of keys: one expanded panel is the case.
+type RenderMemo = { baked: { Frame }, render: SvgTimeseries.Options, result: SvgTimeseries.Result }
+
+local renders: { [string]: RenderMemo } = {}
+local renderCount = 0
+local RENDER_MEMO_MAX = 4
+local BY_IDENTITY: { [any]: boolean } = { values = true, exemplars = true }
+
+local function same(a: any, b: any, key: any): boolean
+	if a == b then
+		return true
+	elseif type(a) ~= "table" or type(b) ~= "table" or BY_IDENTITY[key] then
+		return false
+	end
+	for k, v in a do
+		if not same(v, b[k], k) then
+			return false
+		end
+	end
+	for k in b do
+		if a[k] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.Options): SvgTimeseries.Result
+	local hit = renders[key]
+	if hit and same(hit.render, render, nil) and same(hit.baked, baked, nil) then
+		return hit.result
+	end
+	local result = SvgTimeseries.render(baked, render)
+	if hit == nil then
+		if renderCount >= RENDER_MEMO_MAX then
+			table.clear(renders)
+			renderCount = 0
+		end
+		renderCount += 1
+	end
+	renders[key] = { baked = baked, render = render, result = result }
+	return result
 end
 
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
@@ -417,8 +450,8 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		item.series_index = palette[item.field] or item.series_index
 		local st = M.seriesStyle(item, env)
 		local color = FieldConfig.seriesColor(item, { theme = opts.theme })
-		st.class = color.class
-			or (FieldConfig.paletteClass(item.series_index) .. " tgp-fx " .. Common.toneClass(color.tone))
+		st.class = seriesClass(item, color, opts)
+		gradientStops(st, item, color, opts)
 		local below = Json.str(env, item.config.custom.fillBelowTo)
 		if below and below ~= "" then
 			st.fill_below = fillBelowIndex(below, visible)
@@ -430,7 +463,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		styles[i] = st
 	end
 	render.series = styles
-	local result = SvgTimeseries.render(baked, render)
+	local result = renderMemo(opts.key, baked, render)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
 		drawn[i] = { item = visible[i], class = s.class }

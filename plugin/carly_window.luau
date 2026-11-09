@@ -25,11 +25,11 @@ local function answer(name: string, args: { any }, call: any): any
 	local ConfigHost = require("./config_host")
 	local EnvHost = require("./env_host")
 	local Exports = require("./lib/carly/exports")
-	local Keychain = require("./lib/auth/keychain")
+	local Str = require("./lib/str")
 	local TransportHost = require("./transport_host")
 	local function raised(what: string, err: any)
 		pcall(tern.log.warn, "tern-grafana carly " .. name .. " " .. what .. " failed", tostring(err))
-		call:fail(string.format("%s failed: %s", name, Keychain.firstLine(tostring(err))))
+		call:fail(string.format("%s failed: %s", name, Str.firstLine(tostring(err))))
 	end
 	pcall(ConfigHost.load)
 	local ok, plan, err = pcall(Exports.plan, name, args, EnvHost.make(nil))

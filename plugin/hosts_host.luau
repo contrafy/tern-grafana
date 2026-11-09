@@ -62,10 +62,9 @@ function M.apply(config: Config?): Config?
 			pcall(tern.log.warn, "tern-grafana config: " .. Validate.format(p))
 		end
 	end
+	-- Cached also before `hostname` answers: the answer clears the cache.
 	local out = Hosts.apply(config, hostname)
-	if hostname ~= nil then
-		lastIn, lastOut = config, out
-	end
+	lastIn, lastOut = config, out
 	return out
 end
 

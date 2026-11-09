@@ -3,6 +3,7 @@
 -- last evaluation), grouped under their source and rule group, and the open
 -- rule's details (query, last error, labels, annotations).
 
+local Tbl = require("../tbl")
 local Env = require("../env")
 local Normalize = require("./normalize")
 local Rules = require("./rules")
@@ -94,11 +95,7 @@ local function detail(r: Rule, env: Env.Env): Node
 		table.insert(children, ui.code(r.query, "promql", nil, { key = "q" }))
 	end
 	local labels: { { { SpanLike } } } = {}
-	local names: { string } = {}
-	for name in r.labels do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(r.labels)
 	for _, name in names do
 		if not Normalize.isInternal(name) then
 			local k: { SpanLike } = { ui.span(name, "mono") }

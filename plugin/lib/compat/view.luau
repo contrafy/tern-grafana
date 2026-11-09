@@ -222,7 +222,7 @@ function M.view(s: State, _env: Env.Env): Effect.View
 	if s.note then
 		table.insert(children, ui.muted(s.note :: string, { key = "note" }))
 	end
-	local sum = Analyze.summarize(State.ordered(s))
+	local sum = Analyze.finish(s.tally)
 	table.insert(children, totals(sum))
 	table.insert(children, reasons(sum))
 	table.insert(children, filterLine(s))

@@ -92,8 +92,44 @@ function M.rows(layout: Layout, opts: Options?): ({ string }, { Row })
 	return heads, rows
 end
 
-local function swatch(class: string): Node
+function M.swatch(class: string): Node
 	return { k = "el", p = { tag = "span", class = "tg-swatch " .. class } }
+end
+
+-- VizLegend rows under `key`: a wrapping list (name, then the values in
+-- bold) or a table with a column per value heading. Shared by every panel
+-- legend (lib/panels/charts).
+function M.rowsNode(key: string, rows: { Row }, heads: { string }, mode: Mode): Node
+	if mode == "table" then
+		local columns: { Grid.Column } = { { head = "Name" } }
+		for _, h in heads do
+			table.insert(columns, { head = h, numeric = true })
+		end
+		local gridRows: { Grid.Row } = table.create(#rows)
+		for i, r in rows do
+			local cells: { Node } = {
+				{ k = "row", p = { gap = "xs", align = "center" }, c = { M.swatch(r.class), Grid.text(r.name) } },
+			}
+			for _, v in r.values do
+				table.insert(cells, Grid.text(v))
+			end
+			gridRows[i] = { key = "s" .. i, cells = cells }
+		end
+		return Grid.grid(key, columns, gridRows, "tern-grafana.legend")
+	end
+	local entries: { Node } = table.create(#rows)
+	for i, r in rows do
+		local spans: { ui.Span } = { { t = r.name } }
+		if #r.values > 0 then
+			table.insert(spans, { t = " " .. table.concat(r.values, " "), s = "strong" })
+		end
+		entries[i] = {
+			k = "row",
+			p = { key = "s" .. i, gap = "xs", align = "center" },
+			c = { M.swatch(r.class), { k = "text", p = { spans = spans } } },
+		}
+	end
+	return { k = "row", p = { key = key, gap = "md", wrap = true, role = "tern-grafana.legend" }, c = entries }
 end
 
 function M.view(layout: Layout, opts: Options?): Node
@@ -105,39 +141,9 @@ function M.view(layout: Layout, opts: Options?): Node
 		table.insert(children, ui.muted(Range.formatMs(o.cursor, o.offset_min), { key = "at" }))
 	end
 	if o.mode == "table" then
-		local columns: { Grid.Column } = { { head = "Name" } }
-		for _, h in heads do
-			table.insert(columns, { head = h, numeric = true })
-		end
-		local gridRows: { Grid.Row } = table.create(#rows)
-		for i, r in rows do
-			local cells: { Node } = {
-				{ k = "row", p = { gap = "xs", align = "center" }, c = { swatch(r.class), Grid.text(r.name) } },
-			}
-			for _, v in r.values do
-				table.insert(cells, Grid.text(v))
-			end
-			gridRows[i] = { key = "s" .. i, cells = cells }
-		end
-		table.insert(children, Grid.grid(key .. ".t", columns, gridRows, "tern-grafana.legend"))
+		table.insert(children, M.rowsNode(key .. ".t", rows, heads, "table"))
 	else
-		local entries: { Node } = table.create(#rows)
-		for i, r in rows do
-			local spans = { { t = r.name } }
-			if #r.values > 0 then
-				table.insert(spans, { t = " " .. table.concat(r.values, " "), s = "strong" })
-			end
-			entries[i] = {
-				k = "row",
-				p = { key = "s" .. i, gap = "xs", align = "center" },
-				c = { swatch(r.class), { k = "text", p = { spans = spans } } },
-			}
-		end
-		table.insert(children, {
-			k = "row",
-			p = { key = key .. ".l", gap = "md", wrap = true, role = "tern-grafana.legend" },
-			c = entries,
-		})
+		table.insert(children, M.rowsNode(key .. ".l", rows, heads, "list"))
 	end
 	if layout.dropped > 0 then
 		table.insert(

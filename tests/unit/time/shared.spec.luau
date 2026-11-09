@@ -4,22 +4,12 @@
 -- already seen never rolls the range back, joining adopts the others' range
 -- instead of yanking them to the newcomer's, and sync off writes nothing.
 local Shared = require("../../../plugin/lib/time/shared")
-local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local function env(): any
-	local kv: { [string]: any } = {}
-	return {
-		now_ms = 1791577898000,
-		decode = json.decode,
-		encode = json.encode,
-		null = json.null,
-		kv = kv,
-		kv_get = function(key: string): any
-			return kv[key]
-		end,
-	}
+	return Support.env({ now_ms = 1791577898000 })
 end
 
 local function apply(e: any, effect: any)

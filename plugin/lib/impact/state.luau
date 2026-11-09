@@ -7,6 +7,7 @@
 -- names (lib/impact/signals.luau). Read-only: init may query (a restored
 -- block shows the same comparison again).
 
+local BlockKit = require("../block_kit")
 local Delta = require("./delta")
 local Effect = require("../effect")
 local Env = require("../env")
@@ -85,18 +86,6 @@ end
 -- The rate window of guessed queries: Grafana's $__rate_interval at the step.
 function M.rateWindow(s: State): string
 	return Step.formatDuration(Step.rateInterval(M.stepMs(s)))
-end
-
-local function linkParams(args: { string }): { [string]: string }?
-	local first = args[1]
-	if first == nil or first == "" then
-		return nil
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "impact" then
-		return nil
-	end
-	return link.params
 end
 
 local function blank(): State
@@ -179,7 +168,7 @@ end
 function M.init(args: { string }, _saved: any, env: Env): (State, { Effect })
 	local s = blank()
 	local effects: { Effect } = {}
-	local params = linkParams(args)
+	local params = BlockKit.linkParams(args, "impact")
 	if params == nil then
 		s.problem = "This block is opened by a deploy command (see docs/annotations.md, impact)."
 		return s, effects
@@ -379,12 +368,12 @@ function M.key(s: State, key: any, env: Env): (State, { Effect }, boolean)
 	return s, effects, true
 end
 
-function M.update(s: State, msg: any, env: Env): (State, { Effect })
+function M.update(s: State, msg: any, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local gen, what, idx = string.match(msg.tag, "^(%d+):(%a+):?(%d*)$")
 		if gen == nil or tonumber(gen) ~= s.gen or s.route == nil then
-			return s, effects
+			return s, effects, false
 		end
 		local phase: string = s.phase
 		if what == "names" and phase == "probing" then

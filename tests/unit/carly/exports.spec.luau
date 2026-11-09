@@ -10,6 +10,7 @@ local Frame = require("../../../plugin/lib/frame/types")
 local Specs = require("../../../plugin/lib/carly/specs")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 local JSON_ENV = { encode = json.encode, array = json.array }
@@ -45,9 +46,7 @@ local env: any = {
 	config = CFG,
 }
 
-local function ok(path: string): any
-	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local ok = Support.response
 
 local function plan(name: string, args: { any }): any
 	local p, err = Exports.plan(name, args, env)

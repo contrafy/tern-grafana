@@ -3,6 +3,7 @@
 -- alerts, toned by its worst severity, or one quiet segment when nothing
 -- fires. Pure and cheap: it runs inside the 4 ms chrome formatter budget.
 
+local Tbl = require("../tbl")
 local Summary = require("./summary")
 
 type Payload = Summary.Payload
@@ -19,11 +20,7 @@ M.STALE_POLLS = 3
 M.MIN_STALE_MS = 5 * 60 * 1000
 
 local function sortedNames(contexts: { [string]: any }): { string }
-	local names: { string } = {}
-	for name in contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
+	local names: { string } = Tbl.sortedKeys(contexts)
 	return names
 end
 

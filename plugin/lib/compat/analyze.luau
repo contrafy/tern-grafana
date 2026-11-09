@@ -197,8 +197,6 @@ local function count(c: Counts, mode: Ladder.Mode)
 	end
 end
 
-type Acc = { row: ReasonRow, types: { [string]: number }, seen: { [string]: boolean } }
-
 function M.result(uid: string, title: string, folder: string?, panels: { PanelResult }, err: string?): DashResult
 	local r: DashResult =
 		{ uid = uid, title = title, folder = folder, panels = panels, error = err, native = 0, png = 0, browser = 0 }
@@ -222,58 +220,79 @@ local function sortedTypes(counts: { [string]: number }): { TypeCount }
 	return out
 end
 
--- Totals and the non-native causes, most panels first.
-function M.summarize(results: { DashResult }): Summary
-	local s: Summary = {
-		dashboards = 0,
-		failed = 0,
-		panels = 0,
-		native = 0,
-		png = 0,
-		browser = 0,
-		reasons = {},
-		native_types = {},
-	}
-	local byGroup: { [string]: Acc } = {}
-	local order: { Acc } = {}
-	local nativeTypes: { [string]: number } = {}
-	for _, r in results do
-		s.dashboards += 1
-		if r.error then
-			s.failed += 1
+type Acc = {
+	reason: string,
+	mode: Ladder.Mode,
+	-- Search index of the dashboard `mode` came from: a cause takes the rung
+	-- of its first panel in search order.
+	first: number,
+	panels: number,
+	dashboards: number,
+	types: { [string]: number },
+	-- Dashboard uids counted in `dashboards`.
+	seen: { [string]: boolean },
+}
+
+-- Summary counts that grow one dashboard at a time, in any order.
+export type Tally = {
+	dashboards: number,
+	failed: number,
+	panels: number,
+	native: number,
+	png: number,
+	browser: number,
+	groups: { [string]: Acc },
+	native_types: { [string]: number },
+}
+
+function M.tally(): Tally
+	return { dashboards = 0, failed = 0, panels = 0, native = 0, png = 0, browser = 0, groups = {}, native_types = {} }
+end
+
+-- Adds the dashboard at search position `index`; each dashboard once.
+function M.add(t: Tally, index: number, r: DashResult)
+	t.dashboards += 1
+	if r.error then
+		t.failed += 1
+	end
+	for _, p in r.panels do
+		t.panels += 1
+		count(t, p.mode)
+		if p.mode == "native" then
+			t.native_types[p.type] = (t.native_types[p.type] or 0) + 1
+			continue
 		end
-		for _, p in r.panels do
-			s.panels += 1
-			count(s, p.mode)
-			if p.mode == "native" then
-				nativeTypes[p.type] = (nativeTypes[p.type] or 0) + 1
-				continue
-			end
-			local key = p.group or "unknown"
-			local acc = byGroup[key]
-			if acc == nil then
-				acc = {
-					row = { reason = key, mode = p.mode, panels = 0, dashboards = 0, types = {} },
-					types = {},
-					seen = {},
-				}
-				byGroup[key] = acc
-				table.insert(order, acc)
-			end
-			local a = acc :: Acc
-			a.row.panels += 1
-			a.types[p.type] = (a.types[p.type] or 0) + 1
-			if not a.seen[r.uid] then
-				a.seen[r.uid] = true
-				a.row.dashboards += 1
-			end
+		local key = p.group or "unknown"
+		local a = t.groups[key]
+		if a == nil then
+			a = { reason = key, mode = p.mode, first = index, panels = 0, dashboards = 0, types = {}, seen = {} }
+			t.groups[key] = a
+		elseif index < (a :: Acc).first then
+			(a :: Acc).first, (a :: Acc).mode = index, p.mode
+		end
+		local acc = a :: Acc
+		acc.panels += 1
+		acc.types[p.type] = (acc.types[p.type] or 0) + 1
+		if not acc.seen[r.uid] then
+			acc.seen[r.uid] = true
+			acc.dashboards += 1
 		end
 	end
-	for _, a in order do
-		a.row.types = sortedTypes(a.types)
-		table.insert(s.reasons, a.row)
+end
+
+-- The summary of a tally (the tally stays usable).
+function M.finish(t: Tally): Summary
+	local reasons: { ReasonRow } = {}
+	for _, a in t.groups do
+		table.insert(reasons, {
+			reason = a.reason,
+			mode = a.mode,
+			panels = a.panels,
+			dashboards = a.dashboards,
+			types = sortedTypes(a.types),
+		})
 	end
-	table.sort(s.reasons, function(a, b)
+	table.sort(reasons, function(a, b)
 		if a.panels ~= b.panels then
 			return a.panels > b.panels
 		end
@@ -282,8 +301,25 @@ function M.summarize(results: { DashResult }): Summary
 		end
 		return a.reason < b.reason
 	end)
-	s.native_types = sortedTypes(nativeTypes)
-	return s
+	return {
+		dashboards = t.dashboards,
+		failed = t.failed,
+		panels = t.panels,
+		native = t.native,
+		png = t.png,
+		browser = t.browser,
+		reasons = reasons,
+		native_types = sortedTypes(t.native_types),
+	}
+end
+
+-- Totals and the non-native causes, most panels first.
+function M.summarize(results: { DashResult }): Summary
+	local t = M.tally()
+	for i, r in results do
+		M.add(t, i, r)
+	end
+	return M.finish(t)
 end
 
 function M.typesText(types: { TypeCount }): string

@@ -201,9 +201,22 @@ local function failure(s: State): Node?
 	})
 end
 
+-- Clock text per line (lines never change once shown, so each is
+-- formatted once).
+local clocks: { [Line]: string } = setmetatable({} :: any, { __mode = "k" })
+
 local function clock(ms: number): string
 	local whole = math.floor(ms)
 	return Range.formatMs(whole) .. string.format(".%03d", whole % 1000)
+end
+
+local function lineClock(l: Line): string
+	local text = clocks[l]
+	if text == nil then
+		text = clock(l.time_ms) .. " "
+		clocks[l] = text
+	end
+	return text
 end
 
 local function volume(s: State): Node?
@@ -282,8 +295,14 @@ local function volume(s: State): Node?
 end
 
 -- Stream labels whose value is not the same on every line (shown dim after
--- the line, so a long label set never hides the line itself).
+-- the line, so a long label set never hides the line itself). The list of
+-- the last lines asked for is kept (a list of lines never changes in place).
+local varyingOf: { lines: { Line }?, names: { string } } = { lines = nil, names = {} }
+
 local function varying(lines: { Line }): { string }
+	if varyingOf.lines == lines then
+		return varyingOf.names
+	end
 	local first = lines[1]
 	if first == nil then
 		return {}
@@ -309,7 +328,51 @@ local function varying(lines: { Line }): { string }
 		end
 	end
 	table.sort(out)
+	varyingOf.lines, varyingOf.names = lines, out
 	return out
+end
+
+-- A closed row as drawn last time, with what it was drawn for.
+type Row = { node: Node, sel: boolean, trace: boolean, show: string }
+local rowsOf: { [Line]: Row } = setmetatable({} :: any, { __mode = "k" })
+
+local function row(l: Line, show: { string }, sel: boolean, trace: boolean): Node
+	local spans: { ui.SpanLike } = {
+		ui.span(lineClock(l), "muted"),
+		ui.span(LEVEL_TAGS[l.level] .. " ", LogsPanel.tone(l.level)),
+	}
+	table.insert(spans, ui.span(l.line))
+	if #show > 0 then
+		local parts: { string } = {}
+		for _, k in show do
+			local v = l.labels[k]
+			if v then
+				table.insert(parts, k .. "=" .. v)
+			end
+		end
+		if #parts > 0 then
+			table.insert(spans, ui.span("  " .. table.concat(parts, " "), "dim"))
+		end
+	end
+	local class = "tg-lg-row tg-lg-" .. LogsPanel.tone(l.level) .. (if sel then " is-sel" else "")
+	local children: { Node }
+	if trace then
+		children = {
+			ui.row({
+				ui.text(spans, { key = "t", truncate = "end", grow = 1, basis = 0 }),
+				ui.badge("trace", "accent", {
+					key = "tr",
+					class = "tg-lg-chip",
+					shrink = 0,
+					actions = { click = "trace=" .. l.id },
+					title = "Open this line's trace (T)",
+				}),
+			}, { key = "tl", gap = "xs", align = "center" }),
+		}
+	else
+		children = { ui.text(spans, { key = "t", truncate = "end" }) }
+	end
+	return ui.el("div", { key = "r" .. l.id, class = class, actions = { click = "row=" .. l.id } }, children)
 end
 
 local function detail(s: State, line: Line): Node
@@ -364,48 +427,23 @@ local function lines(s: State): Node
 		return ui.muted(text, { key = "lines" })
 	end
 	local show = varying(s.lines)
+	local showKey = table.concat(show, "\n")
 	local rows: { Node } = table.create(#s.lines)
 	for i, l in s.lines do
-		local spans: { ui.SpanLike } = {
-			ui.span(clock(l.time_ms) .. " ", "muted"),
-			ui.span(LEVEL_TAGS[l.level] .. " ", LogsPanel.tone(l.level)),
-		}
-		table.insert(spans, ui.span(l.line))
-		if #show > 0 then
-			local parts: { string } = {}
-			for _, k in show do
-				local v = l.labels[k]
-				if v then
-					table.insert(parts, k .. "=" .. v)
-				end
-			end
-			if #parts > 0 then
-				table.insert(spans, ui.span("  " .. table.concat(parts, " "), "dim"))
-			end
+		local sel = s.sel == i
+		local trace = State.traceIdOf(s, l) ~= nil
+		if s.detail == l.id then
+			local node = row(l, show, sel, trace)
+			table.insert(node.c :: { Node }, detail(s, l))
+			rows[i] = node
+			continue
 		end
-		local open = s.detail == l.id
-		local class = "tg-lg-row tg-lg-" .. LogsPanel.tone(l.level) .. (if s.sel == i then " is-sel" else "")
-		local children: { Node }
-		if State.traceIdOf(s, l) then
-			children = {
-				ui.row({
-					ui.text(spans, { key = "t", truncate = "end", grow = 1, basis = 0 }),
-					ui.badge("trace", "accent", {
-						key = "tr",
-						class = "tg-lg-chip",
-						shrink = 0,
-						actions = { click = "trace=" .. l.id },
-						title = "Open this line's trace (T)",
-					}),
-				}, { key = "tl", gap = "xs", align = "center" }),
-			}
-		else
-			children = { ui.text(spans, { key = "t", truncate = "end" }) }
+		local memo = rowsOf[l]
+		if memo == nil or memo.sel ~= sel or memo.trace ~= trace or memo.show ~= showKey then
+			memo = { node = row(l, show, sel, trace), sel = sel, trace = trace, show = showKey }
+			rowsOf[l] = memo
 		end
-		if open then
-			table.insert(children, detail(s, l))
-		end
-		rows[i] = ui.el("div", { key = "r" .. l.id, class = class, actions = { click = "row=" .. l.id } }, children)
+		rows[i] = memo.node
 	end
 	return ui.col(rows, { key = "lines", gap = "none", role = "tern-grafana.logs-lines" })
 end

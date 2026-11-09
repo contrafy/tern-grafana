@@ -13,6 +13,7 @@
 -- service account cannot act on alert groups, nothing is staged and the
 -- view says which permission is missing.
 
+local BlockKit = require("../block_kit")
 local Actions = require("./actions")
 local Effect = require("../effect")
 local Env = require("../env")
@@ -263,20 +264,8 @@ local function load(s: State, env: Env, effects: { Effect }, full: boolean)
 	readGroups(s, env, effects)
 end
 
-local function linkParams(args: { string }): { [string]: string }
-	local first = args[1]
-	if first == nil or first == "" then
-		return {}
-	end
-	local link = Scheme.decode(first)
-	if link == nil or link.action ~= "oncall" then
-		return {}
-	end
-	return link.params
-end
-
 function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
-	local params = linkParams(args)
+	local params: { [string]: string } = BlockKit.linkParams(args, "oncall") or {}
 	local savedT = if type(saved) == "table" then saved else {}
 	local view: "groups" | "schedules" = if params.view == "schedules"
 			or (params.view == nil and savedT.view == "schedules")
@@ -577,12 +566,10 @@ local function switchContext(s: State, env: Env, name: string, effects: { Effect
 end
 
 local function cycleContext(s: State, env: Env, step: number, effects: { Effect })
-	local n = #s.contexts
-	if n < 2 then
-		return
+	local name = BlockKit.cycle(s.contexts, s.context, step)
+	if name then
+		switchContext(s, env, name, effects)
 	end
-	local i = table.find(s.contexts, s.context or "") or 0
-	switchContext(s, env, s.contexts[(i - 1 + step) % n + 1], effects)
 end
 
 local function setView(s: State, env: Env, view: "groups" | "schedules", effects: { Effect })
@@ -774,7 +761,7 @@ local function onAction(s: State, act: string, value: string?, env: Env, effects
 	end
 end
 
-function M.update(s: State, msg: any, env: Env): (State, { Effect })
+function M.update(s: State, msg: any, env: Env): (State, { Effect }, boolean?)
 	local effects: { Effect } = {}
 	if msg.kind == "http_done" then
 		local tag: string = msg.tag
@@ -789,7 +776,7 @@ function M.update(s: State, msg: any, env: Env): (State, { Effect })
 		end
 		local gen, name = string.match(tag, "^(%d+):(.+)$")
 		if gen == nil or tonumber(gen) ~= s.gen or not s.waiting[name :: string] then
-			return s, effects
+			return s, effects, false
 		end
 		s.waiting[name :: string] = nil
 		settle(s, env, name :: string, msg.response, effects)

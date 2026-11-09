@@ -36,6 +36,8 @@ export type Context = {
 	-- The dashboard's panel with this id (the source of a `-- Dashboard --`
 	-- query), nil when there is none.
 	source: ((panel_id: number) -> Model.Panel?)?,
+	-- Queries.resolve answers for this scope (Queries.Resolved).
+	resolved: Queries.Resolved?,
 }
 
 -- Chained `-- Dashboard --` queries followed at most this deep.
@@ -43,7 +45,7 @@ local MAX_CHAIN = 8
 
 -- Why the data of a panel cannot be produced natively; nil when it can.
 local function queryBlocker(panel: Model.Panel, ctx: Context, env: Env, depth: number): string?
-	local _, err = Queries.resolve(panel.json, ctx.scope, ctx.datasources, env)
+	local _, err = Queries.resolveIn(ctx.resolved, panel.json, ctx.scope, ctx.datasources, env)
 	if err then
 		return err
 	end

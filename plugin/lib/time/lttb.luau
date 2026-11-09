@@ -11,10 +11,14 @@
 
 local M = {}
 
+local HUGE = math.huge
+
 local function present(v: any, missing: any): boolean
-	return v ~= missing and type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+	return v ~= missing and type(v) == "number" and v == v and v ~= HUGE and v ~= -HUGE
 end
 
+-- Appends run s..e of present samples to outT/outV after index `k`; returns
+-- the new last index.
 local function appendRun(
 	times: { number },
 	values: { any },
@@ -22,18 +26,18 @@ local function appendRun(
 	e: number,
 	budget: number,
 	outT: { number },
-	outV: { any }
-)
+	outV: { any },
+	k: number
+): number
 	local n = e - s + 1
 	if budget >= n then
-		for i = s, e do
-			table.insert(outT, times[i])
-			table.insert(outV, values[i])
-		end
-		return
+		table.move(times, s, e, k + 1, outT)
+		table.move(values, s, e, k + 1, outV)
+		return k + n
 	end
-	table.insert(outT, times[s])
-	table.insert(outV, values[s])
+	k += 1
+	outT[k] = times[s]
+	outV[k] = values[s]
 	if budget >= 3 then
 		local every = (n - 2) / (budget - 2)
 		local a = s
@@ -60,15 +64,18 @@ local function appendRun(
 					chosen = i
 				end
 			end
-			table.insert(outT, times[chosen])
-			table.insert(outV, values[chosen])
+			k += 1
+			outT[k] = times[chosen]
+			outV[k] = values[chosen]
 			a = chosen
 		end
 	end
 	if n > 1 then
-		table.insert(outT, times[e])
-		table.insert(outV, values[e])
+		k += 1
+		outT[k] = times[e]
+		outV[k] = values[e]
 	end
+	return k
 end
 
 -- Returns new arrays, or the inputs themselves when they already fit
@@ -87,8 +94,13 @@ function M.downsample(times: { number }, values: { any }, threshold: number, mis
 	while i <= n do
 		if present(values[i], missing) then
 			local s = i
-			while i + 1 <= n and present(values[i + 1], missing) do
-				i += 1
+			while i < n do
+				local v = values[i + 1]
+				if v ~= missing and type(v) == "number" and v == v and v ~= HUGE and v ~= -HUGE then
+					i += 1
+				else
+					break
+				end
 			end
 			table.insert(runs, s)
 			table.insert(runs, i)
@@ -105,6 +117,7 @@ function M.downsample(times: { number }, values: { any }, threshold: number, mis
 	local budget = math.max(0, threshold - gapCount)
 	local outT: { number } = table.create(threshold)
 	local outV: { any } = table.create(threshold)
+	local k = 0
 	local r = 1
 	i = 1
 	while i <= n do
@@ -112,12 +125,13 @@ function M.downsample(times: { number }, values: { any }, threshold: number, mis
 			local s, e = runs[r], runs[r + 1]
 			local len = e - s + 1
 			local share = math.max(math.min(len, 2), math.floor(budget * len / validCount))
-			appendRun(times, values, s, e, share, outT, outV)
+			k = appendRun(times, values, s, e, share, outT, outV, k)
 			r += 2
 			i = e + 1
 		else
-			table.insert(outT, times[i])
-			table.insert(outV, values[i])
+			k += 1
+			outT[k] = times[i]
+			outV[k] = values[i]
 			while i <= n and not present(values[i], missing) do
 				i += 1
 			end

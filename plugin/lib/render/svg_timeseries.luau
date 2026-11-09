@@ -29,93 +29,36 @@
 -- EXEMPLAR_CAP of them (thinned evenly over time); layout.exemplars lists
 -- the ones drawn so a block can select one by index. They share the first
 -- series' scale.
+--
+-- Series preparation (transforms, stacking, downsampling) lives in
+-- lib/render/ts_data, the series path data in lib/render/svg_paths.
 
 local Axis = require("./axis")
-local Format = require("../units/format")
+local Data = require("./ts_data")
 local Frame = require("../frame/types")
 local FrameProm = require("../frame/prom")
+local Kit = require("./svg_kit")
 local Layout = require("./layout")
-local Lttb = require("../time/lttb")
+local Paths = require("./svg_paths")
 local Series = require("./series")
 local Thresholds = require("../units/thresholds")
-local Tbl = require("../tbl")
 
 type Frame = Frame.Frame
 type Layout = Layout.Layout
 type DrawnSeries = Layout.DrawnSeries
 type YAxis = Layout.YAxis
+type Geometry = Paths.Geometry
+type Plot = Data.Plot
 
-export type ThresholdStyle = "off" | "line" | "area" | "line+area"
-export type Draw = "line" | "bars" | "points"
-export type Placement = "auto" | "left" | "right" | "hidden"
-export type Transform = "negative-Y" | "constant"
--- Grafana custom.scaleDistribution: type linear|log|symlog, log base 2|10,
--- linearThreshold for symlog.
-export type Distribution = { type: Axis.Distr, log: number?, linear_threshold: number? }
-
-export type Interpolation = "linear" | "smooth" | "stepBefore" | "stepAfter"
-export type ShowPoints = "auto" | "always" | "never"
-export type Gradient = "none" | "opacity"
-
--- One series' GraphFieldConfig: its scale, stacking and how it is drawn
--- (packages/grafana-ui/src/components/uPlot/config/UPlotSeriesBuilder.ts).
--- Draw fields left nil fall back to the shared Options (draw,
--- fill_opacity, null_mode) and Grafana's defaults.
-export type SeriesStyle = {
-	unit: string?,
-	decimals: number?,
-	-- Hard bounds (fieldConfig min/max).
-	min: number?,
-	max: number?,
-	-- custom.axisSoftMin/Max: the scale reaches at least this far.
-	soft_min: number?,
-	soft_max: number?,
-	-- custom.axisCenteredZero.
-	centered_zero: boolean?,
-	placement: Placement?,
-	-- custom.axisLabel.
-	label: string?,
-	-- custom.axisGridShow (default true).
-	grid: boolean?,
-	distribution: Distribution?,
-	transform: Transform?,
-	stack: Series.StackMode?,
-	-- custom.stacking.group (default "A").
-	stack_group: string?,
-	thresholds: Thresholds.Thresholds?,
-	threshold_style: ThresholdStyle?,
-	hide_legend: boolean?,
-	hide_tooltip: boolean?,
-	-- Class list the series is painted with (default the palette class of
-	-- its position, M.seriesClass).
-	class: string?,
-	-- custom.drawStyle.
-	draw: Draw?,
-	-- custom.lineWidth in px (default 1; 0 draws no line).
-	line_width: number?,
-	-- custom.lineStyle: dash lengths (nil solid) and whether it is dotted
-	-- (round caps).
-	dash: { number }?,
-	dot: boolean?,
-	interpolation: Interpolation?,
-	-- custom.fillOpacity 0..100 and custom.gradientMode.
-	fill_opacity: number?,
-	gradient: Gradient?,
-	-- custom.showPoints and custom.pointSize (diameter px, default 5).
-	show_points: ShowPoints?,
-	point_size: number?,
-	-- custom.spanNulls: true joins across missing samples, a number joins
-	-- only gaps up to that many ms.
-	span_nulls: (boolean | number)?,
-	-- custom.fillBelowTo: index (in extraction order) of the series the
-	-- fill runs down to.
-	fill_below: number?,
-	-- custom.barAlignment (-1 before, 0 center, 1 after), barWidthFactor,
-	-- barMaxWidth (px).
-	bar_alignment: number?,
-	bar_width_factor: number?,
-	bar_max_width: number?,
-}
+export type ThresholdStyle = Data.ThresholdStyle
+export type Draw = Data.Draw
+export type Placement = Data.Placement
+export type Transform = Data.Transform
+export type Distribution = Data.Distribution
+export type Interpolation = Data.Interpolation
+export type ShowPoints = Data.ShowPoints
+export type Gradient = Data.Gradient
+export type SeriesStyle = Data.SeriesStyle
 
 export type Options = {
 	-- Design size in px (the image scales down to the pane).
@@ -168,7 +111,6 @@ M.EXEMPLAR_R = 4
 -- scaled down to its pane, so a 1 px Grafana line is drawn 1.5 wide.
 M.LINE_SCALE = 1.5
 
-local NULL = Frame.NULL
 local finite = Frame.finite
 local fmt = string.format
 
@@ -178,41 +120,20 @@ local X_AXIS_H = 24
 -- Narrowest y axis band, and the extra band an axis label takes.
 local AXIS_MIN_W = 36
 local AXIS_LABEL_W = 18
--- Bytes per drawn sample, measured on this generator's output.
+-- Bytes per drawn sample, measured on absolute "%.1f" path data. The size
+-- checks below count series paths that way too (svg_paths reports it), so
+-- the shorter relative path data keeps the same samples drawn.
 local BYTES_LINE = 12
 local BYTES_BAR = 30
 local FIXED_BYTES = 8 * 1024
 -- "M123.4 56.7l4 4l-4 4l-4 -4Z" per exemplar marker.
 local BYTES_EXEMPLAR = 32
--- Beyond this, tick labels use automatic decimals.
-local MAX_TICK_DECIMALS = 4
-
-local function escape(s: string): string
-	return (string.gsub(s, '[&<>"]', { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }))
-end
+-- A gradient definition without its stops, and one `<stop>`.
+local BYTES_GRADIENT = 140
+local BYTES_STOP = 40
 
 function M.seriesClass(i: number): string
 	return "tg-s" .. tostring((i - 1) % M.PALETTE + 1)
-end
-
--- Values at chosen indices of a column.
-local function pick(col: { any }, idx: { number }): { any }
-	local out: { any } = table.create(#idx)
-	for k, i in idx do
-		out[k] = col[i]
-	end
-	return out
-end
-
-local function presentOnly(times: { number }, values: { any }): ({ number }, { any })
-	local t2: { number }, v2: { any } = {}, {}
-	for i, t in times do
-		if finite(values[i]) then
-			table.insert(t2, t)
-			table.insert(v2, values[i])
-		end
-	end
-	return t2, v2
 end
 
 -- Scales -----------------------------------------------------------------------
@@ -279,200 +200,16 @@ local function scaleSpecs(styles: { SeriesStyle }): ({ ScaleSpec }, { number })
 	return specs, scaleOf
 end
 
-local function distr(st: SeriesStyle): Axis.Distr
-	local d = st.distribution
-	return if d then d.type else "linear"
-end
-
--- The series as drawn: negated (negative-Y), flattened to its first value
--- across the time range (constant), non-positive values dropped on a log
--- scale (uPlot cannot place them).
-local function transformed(
-	list: { Series.Series },
-	styles: { SeriesStyle },
-	tFrom: number,
-	tTo: number
-): { Series.Series }
-	local out: { Series.Series } = table.create(#list)
-	for i, s in list do
-		local st = styles[i]
-		local log = distr(st) == "log"
-		if st.transform == "constant" then
-			local first: number? = nil
-			for _, v in s.values do
-				first = finite(v)
-				if first then
-					break
-				end
-			end
-			local copy = Tbl.copy(s)
-			copy.times = { tFrom, tTo }
-			local v: any = if first == nil or (log and first <= 0) then NULL else first
-			copy.values = { v, v }
-			out[i] = copy
-		elseif st.transform == "negative-Y" or log then
-			local neg = st.transform == "negative-Y"
-			local values: { any } = table.create(#s.values)
-			for j, raw in s.values do
-				local v = finite(raw)
-				if v and neg then
-					v = -v
-				end
-				values[j] = if v == nil or (log and v <= 0) then NULL else v
-			end
-			local copy = Tbl.copy(s)
-			copy.values = values
-			out[i] = copy
-		else
-			out[i] = s
-		end
-	end
-	return out
-end
-
-type StackGroup = { mode: Series.StackMode, neg: boolean, members: { number } }
-
--- getStackingGroups: one group per direction (a series with a negative
--- sample after its transform stacks down), mode, group and scale.
-local function stackGroups(shown: { Series.Series }, styles: { SeriesStyle }, scaleOf: { number }): { StackGroup }
-	local groups: { StackGroup } = {}
-	local byKey: { [string]: StackGroup } = {}
-	for i = 1, #shown do
-		local st = styles[i]
-		local mode: Series.StackMode = st.stack or "none"
-		if mode == "none" or st.transform == "constant" then
-			continue
-		end
-		local neg = false
-		for _, v in shown[i].values do
-			local n = finite(v)
-			if n and n < 0 then
-				neg = true
-				break
-			end
-		end
-		local key = fmt("%s|%s|%s|%d", if neg then "neg" else "pos", mode, st.stack_group or "A", scaleOf[i])
-		local g = byKey[key]
-		if g == nil then
-			g = { mode = mode, neg = neg, members = {} }
-			byKey[key] = g
-			table.insert(groups, g :: StackGroup)
-		end
-		table.insert((g :: StackGroup).members, i)
-	end
-	return groups
-end
-
-type Plot = {
-	-- Per series: times, values as drawn (transformed, not stacked), values
-	-- to plot (stacked tops), and the base each fill or bar starts from
-	-- (nil: the axis baseline).
-	times: { { number } },
-	raw: { { any } },
-	tops: { { any } },
-	bottoms: { { number }? },
-	stacked: { [number]: boolean },
-}
-
--- spanNulls: true drops the missing samples (the line joins across them);
--- a number joins only where the present samples around a gap are at most
--- that many ms apart, a longer gap keeps its first missing sample.
-local function spanned(times: { number }, values: { any }, span: boolean | number): ({ number }, { any })
-	if span == true then
-		return presentOnly(times, values)
-	end
-	local limit = span :: number
-	local t2: { number }, v2: { any } = {}, {}
-	local lastT: number? = nil
-	local gapAt: number? = nil
-	for i, t in times do
-		if finite(values[i]) then
-			if gapAt and lastT and t - lastT > limit then
-				table.insert(t2, gapAt)
-				table.insert(v2, NULL)
-			end
-			table.insert(t2, t)
-			table.insert(v2, values[i])
-			lastT, gapAt = t, nil
-		elseif gapAt == nil then
-			gapAt = t
-		end
-	end
-	return t2, v2
-end
-
-local function downsample(
-	shown: { Series.Series },
-	groups: { StackGroup },
-	spans: { boolean | number },
-	perSeries: number
-): Plot
-	local plot: Plot = { times = {}, raw = {}, tops = {}, bottoms = {}, stacked = {} }
-	for _, g in groups do
-		local sub: { Series.Series } = table.create(#g.members)
-		for k, i in g.members do
-			sub[k] = shown[i]
-			plot.stacked[i] = true
-		end
-		local times, columns = Series.join(sub)
-		local tops, bottoms = Series.stack(columns, g.mode)
-		-- One index set for the whole group keeps the stack aligned: LTTB on
-		-- the stack's outer envelope.
-		local envelope: { any } = table.create(#times)
-		for j = 1, #times do
-			local edge: number? = nil
-			for k = 1, #tops do
-				local v = finite(tops[k][j])
-				if v and (edge == nil or (if g.neg then v < edge else v > edge)) then
-					edge = v
-				end
-			end
-			envelope[j] = if edge == nil then NULL else edge
-		end
-		local keptT = Lttb.downsample(times, envelope, perSeries, NULL)
-		local idx: { number }
-		if keptT == times then
-			idx = table.create(#times)
-			for j = 1, #times do
-				idx[j] = j
-			end
-		else
-			local at: { [number]: number } = {}
-			for j, t in times do
-				at[t] = j
-			end
-			idx = table.create(#keptT)
-			for k, t in keptT do
-				idx[k] = at[t]
-			end
-		end
-		local drawnT = pick(times, idx) :: { number }
-		for k, i in g.members do
-			plot.times[i] = drawnT
-			plot.raw[i] = pick(columns[k], idx)
-			plot.tops[i] = pick(tops[k], idx)
-			plot.bottoms[i] = pick(bottoms[k], idx) :: { number }
-		end
-	end
-	for i, s in shown do
-		if plot.stacked[i] then
-			continue
-		end
-		local t, v = s.times, s.values
-		if spans[i] ~= false then
-			t, v = spanned(t, v, spans[i])
-		end
-		local dt, dv = Lttb.downsample(t, v, perSeries, NULL)
-		plot.times[i] = dt
-		plot.raw[i] = dv
-		plot.tops[i] = dv
-	end
-	return plot
-end
-
 -- The data extent of each scale: stacked tops and bases, or the full-
--- resolution values (so downsampling never moves an axis).
-local function scaleRange(shown: { Series.Series }, plot: Plot, members: { number }): (number?, number?)
+-- resolution values (so downsampling never moves an axis). `calcs` holds
+-- the calcs of `list`, which a series drawn untransformed shares.
+local function scaleRange(
+	shown: { Series.Series },
+	list: { Series.Series },
+	calcs: { Series.Calcs },
+	plot: Plot,
+	members: { number }
+): (number?, number?)
 	local lo: number?, hi: number? = nil, nil
 	local function see(v: any)
 		local n = finite(v)
@@ -497,7 +234,7 @@ local function scaleRange(shown: { Series.Series }, plot: Plot, members: { numbe
 				end
 			end
 		else
-			local c = Series.calcs(shown[i].values)
+			local c = if shown[i] == list[i] then calcs[i] else Series.calcs(shown[i].values)
 			see(c.min)
 			see(c.max)
 		end
@@ -512,7 +249,7 @@ end
 local function buildScale(spec: ScaleSpec, lo: number?, hi: number?, plotPx: number): Axis.Scale
 	local st = spec.style
 	local d = st.distribution
-	local kind = distr(st)
+	local kind = Data.distr(st)
 	local hardMin, hardMax = st.min, st.max
 	if kind == "log" then
 		if spec.percent then
@@ -564,317 +301,12 @@ local function buildScale(spec: ScaleSpec, lo: number?, hi: number?, plotPx: num
 	return Axis.rangeScale(a, b, plotPx)
 end
 
--- The fewest decimals (up to MAX_TICK_DECIMALS) that print `v` exactly in
--- its display unit, or nil when none does.
-local function exactDecimals(v: number, unit: string?): number?
-	local function trimmed(s: string): string
-		if string.find(s, ".", 1, true) then
-			s = string.gsub(string.gsub(s, "0+$", ""), "%.$", "")
-		end
-		return s
-	end
-	local exact = trimmed(Format.format(v, unit, 10).text)
-	for d = 0, MAX_TICK_DECIMALS do
-		if trimmed(Format.format(v, unit, d).text) == exact then
-			return d
-		end
-	end
-	return nil
-end
-
+-- One decimals count for every tick, the fewest that print each tick
+-- exactly in its display unit: a 0.25 step reads 0.25/0.50 (not 0.3), a 0.2
+-- percentunit step reads 20% (not 20.0%), 1.5 MiB keeps its .5. Log and
+-- symlog ticks are a magnitude apart: each prints with its own decimals.
 local function yLabels(scale: Axis.Scale, unit: string?, decimals: number?): { string }
-	local function render(d: number?): { string }
-		local out: { string } = table.create(#scale.ticks)
-		for i, v in scale.ticks do
-			out[i] = Format.text(v, unit, d)
-		end
-		return out
-	end
-	if decimals ~= nil then
-		return render(decimals)
-	end
-	if (scale.distr or "linear") ~= "linear" then
-		-- Ticks a magnitude apart: each prints with its own decimals.
-		local out: { string } = table.create(#scale.ticks)
-		for i, v in scale.ticks do
-			out[i] = Format.text(v, unit, exactDecimals(v, unit))
-		end
-		return out
-	end
-	-- One decimals count for every tick, the fewest that print each tick
-	-- exactly in its display unit: a 0.25 step reads 0.25/0.50 (not 0.3),
-	-- a 0.2 percentunit step reads 20% (not 20.0%), 1.5 MiB keeps its .5.
-	local common = 0
-	for _, v in scale.ticks do
-		local d = exactDecimals(v, unit)
-		if d == nil then
-			-- Not a short decimal in this unit (1500 B = 1.46484375 KiB):
-			-- Grafana's automatic three significant digits.
-			return render(nil)
-		end
-		common = math.max(common, d)
-	end
-	local labels = render(common)
-	for i = 2, #labels do
-		if labels[i] == labels[i - 1] then
-			return render(nil)
-		end
-	end
-	return labels
-end
-
-local function num(v: number): string
-	return fmt("%.1f", v)
-end
-
-type Geometry = {
-	layout: Layout,
-	xOf: (number) -> number,
-	yOf: (number) -> number,
-}
-
--- Runs of present samples as pixel points {x1, y1, x2, y2, ...}, split at
--- missing samples.
-local function runs(g: Geometry, times: { number }, values: { any }): { { number } }
-	local out: { { number } } = {}
-	local cur: { number }? = nil
-	for i, t in times do
-		local v = finite(values[i])
-		if v then
-			if cur == nil then
-				cur = {}
-				table.insert(out, cur :: { number })
-			end
-			local c = cur :: { number }
-			table.insert(c, g.xOf(t))
-			table.insert(c, g.yOf(v))
-		else
-			cur = nil
-		end
-	end
-	return out
-end
-
--- Monotone cubic tangents (Steffen; uPlot's spline path builder uses a
--- monotone cubic), so a smoothed line never overshoots its samples.
-local function tangents(p: { number }): { number }
-	local n = #p // 2
-	local m: { number } = table.create(n, 0)
-	local function slope(k: number): number
-		local h = p[2 * k + 1] - p[2 * k - 1]
-		return if h ~= 0 then (p[2 * k + 2] - p[2 * k]) / h else 0
-	end
-	for k = 2, n - 1 do
-		local h0 = p[2 * k - 1] - p[2 * k - 3]
-		local h1 = p[2 * k + 1] - p[2 * k - 1]
-		local s0, s1 = slope(k - 1), slope(k)
-		local q = if h0 + h1 ~= 0 then (s0 * h1 + s1 * h0) / (h0 + h1) else 0
-		local sign = (if s0 > 0 then 1 elseif s0 < 0 then -1 else 0) + (if s1 > 0 then 1 elseif s1 < 0 then -1 else 0)
-		m[k] = sign * math.min(math.abs(s0), math.abs(s1), 0.5 * math.abs(q))
-	end
-	if n >= 2 then
-		local s = slope(1)
-		m[1] = if n > 2 then (3 * s - m[2]) / 2 else s
-		local e = slope(n - 1)
-		m[n] = if n > 2 then (3 * e - m[n - 1]) / 2 else e
-	end
-	return m
-end
-
--- One edge through pixel points `p` in order, starting with `first` ("M" or
--- "L") at its first point: straight, stepped (stepAfter holds a value until
--- the next sample, stepBefore takes the next value at once) or smoothed.
-local function edge(buf: { string }, p: { number }, interp: Interpolation, first: string)
-	table.insert(buf, fmt("%s%.1f %.1f", first, p[1], p[2]))
-	local n = #p // 2
-	if n == 1 then
-		return
-	end
-	if interp == "stepAfter" or interp == "stepBefore" then
-		-- Walking right to left swaps which end of a step comes first.
-		local after = (interp == "stepAfter") == (p[3] >= p[1])
-		for k = 2, n do
-			local x, y = p[2 * k - 1], p[2 * k]
-			if after then
-				table.insert(buf, fmt("H%.1fV%.1f", x, y))
-			else
-				table.insert(buf, fmt("V%.1fH%.1f", y, x))
-			end
-		end
-	elseif interp == "smooth" and n > 2 then
-		local m = tangents(p)
-		for k = 1, n - 1 do
-			local x0, y0, x1, y1 = p[2 * k - 1], p[2 * k], p[2 * k + 1], p[2 * k + 2]
-			local h = (x1 - x0) / 3
-			table.insert(
-				buf,
-				fmt("C%.1f %.1f %.1f %.1f %.1f %.1f", x0 + h, y0 + h * m[k], x1 - h, y1 - h * m[k + 1], x1, y1)
-			)
-		end
-	else
-		table.insert(buf, "L")
-		for k = 2, n do
-			table.insert(buf, fmt(if k == 2 then "%.1f %.1f" else " %.1f %.1f", p[2 * k - 1], p[2 * k]))
-		end
-	end
-end
-
--- The line through each run. A lone sample becomes a zero-length segment,
--- which a round cap still draws as a dot.
-local function pathLine(buf: { string }, g: Geometry, times: { number }, values: { any }, interp: Interpolation)
-	for _, p in runs(g, times, values) do
-		edge(buf, p, interp, "M")
-		if #p == 2 then
-			table.insert(buf, "h0")
-		end
-	end
-end
-
--- Dots (zero-length round-capped segments) at the samples; `lone` keeps
--- only samples with no present neighbor (uPlot's points filter for gaps).
-local function pathDots(buf: { string }, g: Geometry, times: { number }, values: { any }, lone: boolean)
-	for _, p in runs(g, times, values) do
-		if not lone or #p == 2 then
-			for k = 1, #p, 2 do
-				table.insert(buf, fmt("M%.1f %.1fh0", p[k], p[k + 1]))
-			end
-		end
-	end
-end
-
--- Closed areas between each run of present values and its base: the
--- stacked bottoms, the values of the fillBelowTo series (`below`, by
--- time), or the axis baseline.
-local function pathArea(
-	buf: { string },
-	g: Geometry,
-	times: { number },
-	tops: { any },
-	bottoms: { number }?,
-	below: { [number]: number }?,
-	base: number,
-	interp: Interpolation
-)
-	local n = #times
-	local runStart: number? = nil
-	for i = 1, n + 1 do
-		local v = if i <= n then finite(tops[i]) else nil
-		if v and below and below[times[i]] == nil then
-			v = nil
-		end
-		if v and runStart == nil then
-			runStart = i
-		elseif v == nil and runStart ~= nil then
-			local s, e = runStart, i - 1
-			local top: { number } = {}
-			for j = s, e do
-				table.insert(top, g.xOf(times[j]))
-				table.insert(top, g.yOf(finite(tops[j]) :: number))
-			end
-			edge(buf, top, interp, "M")
-			if bottoms or below then
-				local bot: { number } = {}
-				for j = e, s, -1 do
-					table.insert(bot, g.xOf(times[j]))
-					local b = if bottoms then bottoms[j] else (below :: { [number]: number })[times[j]]
-					table.insert(bot, g.yOf(b))
-				end
-				edge(buf, bot, interp, "L")
-			else
-				local yb = num(g.yOf(base))
-				table.insert(buf, fmt("L%.1f %s %.1f %s", g.xOf(times[e]), yb, g.xOf(times[s]), yb))
-			end
-			table.insert(buf, "Z")
-			runStart = nil
-		end
-	end
-end
-
--- Bars `barW` wide, centered on their time (align 0), ending at it (-1) or
--- starting at it (1), as uPlot's bars path builder places them.
-local function pathBars(
-	buf: { string },
-	g: Geometry,
-	times: { number },
-	tops: { any },
-	bottoms: { number }?,
-	base: number,
-	barW: number,
-	align: number
-)
-	local shift = if align == 1 then 0 elseif align == -1 then -barW else -barW / 2
-	for i, t in times do
-		local v = finite(tops[i])
-		if v then
-			-- uPlot clips the plot; bars at its edges are cut to it.
-			local layout = g.layout
-			local x = math.max(layout.plot_left, g.xOf(t) + shift)
-			local w = math.min(layout.plot_right, g.xOf(t) + shift + barW) - x
-			if w > 0 then
-				local y0 = g.yOf(if bottoms then bottoms[i] else base)
-				table.insert(buf, fmt("M%.1f %.1fV%.1fh%.1fV%.1fZ", x, y0, g.yOf(v), w, y0))
-			end
-		end
-	end
-end
-
-local function thresholdShapes(out: { string }, g: Geometry, scale: Axis.Scale, st: SeriesStyle)
-	local style = st.threshold_style or "off"
-	local spec = st.thresholds
-	if style == "off" or spec == nil or #spec.steps == 0 then
-		return
-	end
-	local layout = g.layout
-	local percent = spec.mode == "percentage"
-	local steps = Tbl.copy(spec.steps)
-	local function at(step: Thresholds.Step): number
-		local v = step.value
-		if type(v) ~= "number" then
-			return -math.huge
-		end
-		return if percent then scale.min + (scale.max - scale.min) * v / 100 else v
-	end
-	table.sort(steps, function(a, b)
-		return at(a) < at(b)
-	end)
-	local l, r = layout.plot_left, layout.plot_right
-	if style == "area" or style == "line+area" then
-		for k, step in steps do
-			local lo = math.max(at(step), scale.min)
-			local hi = if k < #steps then math.min(at(steps[k + 1]), scale.max) else scale.max
-			if hi > lo then
-				local yTop, yBot = g.yOf(hi), g.yOf(lo)
-				table.insert(
-					out,
-					fmt(
-						'<rect class="tg-tharea tg-th-%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill-opacity="0.12"/>',
-						Thresholds.tone(step.color),
-						l,
-						yTop,
-						r - l,
-						yBot - yTop
-					)
-				)
-			end
-		end
-	end
-	if style == "line" or style == "line+area" then
-		for _, step in steps do
-			local v = at(step)
-			if v > scale.min and v <= scale.max then
-				table.insert(
-					out,
-					fmt(
-						'<path class="tg-th tg-th-%s" d="M%.1f %.1fH%.1f" fill="none" stroke-width="1" stroke-dasharray="10 10"/>',
-						Thresholds.tone(step.color),
-						l,
-						g.yOf(v),
-						r
-					)
-				)
-			end
-		end
-	end
+	return Kit.tickLabels(scale.ticks, unit, decimals, (scale.distr or "linear") ~= "linear")
 end
 
 -- How one series is drawn, its SeriesStyle resolved against the shared
@@ -885,6 +317,8 @@ type Look = {
 	-- 0..1.
 	fill: number,
 	gradient: Gradient,
+	hue: { string }?,
+	scheme: Data.Scheme?,
 	line_width: number,
 	dash: { number }?,
 	dot: boolean,
@@ -925,6 +359,8 @@ local function lookOf(i: number, st: SeriesStyle, opts: Options, count: number):
 		draw = draw,
 		fill = math.clamp(fillPct :: number, 0, 100) / 100,
 		gradient = st.gradient or "none",
+		hue = if st.gradient == "hue" then st.hue else nil,
+		scheme = if st.gradient == "scheme" then st.scheme else nil,
 		line_width = if plainBars then 0 else math.max(0, st.line_width or 1),
 		dash = st.dash,
 		dot = st.dot == true,
@@ -958,49 +394,155 @@ local function axisLabel(out: { string }, a: YAxis, cy: number)
 		return
 	end
 	local x = if a.side == "left" then a.x0 + 14 else a.x1 - 14
-	table.insert(
-		out,
-		fmt(
-			'<text class="tg-label" x="%.1f" y="%.1f" font-size="12" text-anchor="middle" transform="rotate(%d %.1f %.1f)">%s</text>',
-			x,
-			cy,
-			if a.side == "left" then -90 else 90,
-			x,
-			cy,
-			escape(label)
-		)
-	)
+	table.insert(out, Kit.text(x, cy, label, { rotate = if a.side == "left" then -90 else 90 }))
 end
 
-local function build(ctx: Ctx): string
+-- The class list of a stroked series shape: its color class, or none when
+-- a gradient paints it through the stroke attribute (a class color would
+-- win over the attribute).
+local function strokeClass(class: string, role: string, gradient: string?): string
+	if gradient then
+		return fmt('%s" stroke="url(#%s)', role, gradient)
+	end
+	return class .. " " .. role
+end
+
+-- Gradient ids from their content (a 32-bit polynomial hash).
+local function hash(s: string): number
+	local h = 0
+	for k = 1, #s do
+		h = (h * 31 + string.byte(s, k)) % 4294967296
+	end
+	return h
+end
+
+local function stopTag(offset: number, class: string): string
+	return fmt('<stop offset="%.4g" class="%s"/>', math.clamp(offset, 0, 1), class)
+end
+
+local function verticalGradient(y1: number, y2: number, stops: string): string
+	return fmt(' gradientUnits="userSpaceOnUse" x1="0" y1="%.1f" x2="0" y2="%.1f">%s', y1, y2, stops)
+end
+
+-- getGradientRange: hard min/max, else soft min/max, else the range of the
+-- data drawn on the series' scale (its scale's range when flat).
+local function gradientRange(ctx: Ctx, i: number, scale: Axis.Scale): (number, number)
+	local st = ctx.styles[i]
+	local lo, hi = st.min or st.soft_min, st.max or st.soft_max
+	if lo == nil or hi == nil then
+		local dlo, dhi = math.huge, -math.huge
+		for _, j in ctx.specs[ctx.scaleOf[i]].members do
+			for _, v in ctx.plot.tops[j] do
+				local n = finite(v)
+				if n then
+					dlo, dhi = math.min(dlo, n), math.max(dhi, n)
+				end
+			end
+		end
+		if dlo >= dhi then
+			dlo, dhi = scale.min, scale.max
+		end
+		lo, hi = lo or dlo, hi or dhi
+	end
+	return lo :: number, hi :: number
+end
+
+-- The attributes and stops (after the id) of series i's hue or scheme
+-- gradient, or nil when it has none. Hue runs down the plot
+-- (getHueGradientFn); scheme follows scaleGradient: the stops between the
+-- one at or below the scale's min and the first at or above its max, placed
+-- at their values' pixels.
+local function gradientDef(ctx: Ctx, i: number, geo: { Geometry }, top: number, bottom: number): string?
+	local look = ctx.looks[i]
+	local hue = look.hue
+	if hue then
+		return verticalGradient(top, bottom, stopTag(0, hue[1]) .. stopTag(1, hue[2]))
+	end
+	local scheme = look.scheme
+	if scheme == nil or #scheme.stops == 0 then
+		return nil
+	end
+	local k = ctx.scaleOf[i]
+	local scale, g = ctx.scales[k], geo[k]
+	local stops = scheme.stops
+	local values: { number } = table.create(#stops)
+	local lo, span = 0, 1
+	if scheme.relative then
+		local a, b = gradientRange(ctx, i, scale)
+		lo, span = a, b - a
+	end
+	for n, s in stops do
+		values[n] = if math.abs(s.at) == math.huge or not scheme.relative then s.at else lo + span * s.at
+	end
+	local minIdx, maxIdx = 1, 1
+	for n, v in values do
+		if v <= scale.min or n == 1 then
+			minIdx = n
+		end
+		maxIdx = n
+		if v >= scale.max then
+			break
+		end
+	end
+	local function solid(class: string): string
+		return verticalGradient(top, bottom, stopTag(0, class))
+	end
+	if minIdx == maxIdx then
+		return solid(stops[minIdx].class)
+	end
+	local minV, maxV = values[minIdx], values[maxIdx]
+	if minV == -math.huge then
+		minV = scale.min
+	end
+	if maxV == math.huge then
+		maxV = scale.max
+	end
+	local minPos = math.floor(Paths.y(g, minV) + 0.5)
+	local maxPos = math.floor(Paths.y(g, maxV) + 0.5)
+	local range = minPos - maxPos
+	if range == 0 then
+		return solid(stops[maxIdx].class)
+	end
+	local buf: { string } = {}
+	local prev = ""
+	for n = minIdx, maxIdx do
+		local pos = if n == minIdx
+			then minPos
+			elseif n == maxIdx then maxPos
+			else math.floor(Paths.y(g, values[n]) + 0.5)
+		local pct = (minPos - pos) / range
+		if scheme.discrete and n > minIdx then
+			table.insert(buf, stopTag(pct, prev))
+		end
+		prev = stops[n].class
+		table.insert(buf, stopTag(pct, prev))
+	end
+	return verticalGradient(minPos, maxPos, table.concat(buf))
+end
+
+-- The document, and how many bytes longer it would be with absolute "%.1f"
+-- series path data (the size the point budget is measured against).
+local function build(ctx: Ctx): (string, number)
 	local layout, plot, opts = ctx.layout, ctx.plot, ctx.opts
 	local out: { string } = {}
 	local W, H = layout.width, layout.height
 	local top, bottom = layout.plot_top, layout.plot_bottom
 	local axes = layout.axes :: { YAxis }
-	local function xOf(t: number): number
-		return math.clamp(Layout.xOfTime(layout, t), layout.plot_left, layout.plot_right)
-	end
 	local geo: { Geometry } = table.create(#axes)
 	for k in axes do
-		geo[k] = {
-			layout = layout,
-			xOf = xOf,
-			yOf = function(v: number): number
-				return math.clamp(Layout.yOfValue(layout, v, k), top, bottom)
-			end,
-		}
+		geo[k] = Paths.geometry(layout, k)
 	end
-	table.insert(
-		out,
-		fmt(
-			'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" class="tg-chart">',
-			W,
-			H,
-			W,
-			H
-		)
-	)
+	local g1 = geo[1]
+	local function xOf(t: number): number
+		return Paths.x(g1, t)
+	end
+	-- "%d" of the size, as the viewBox always printed it.
+	table.insert(out, Kit.open(math.floor(W), math.floor(H)))
+	local extra = 0
+	local function seriesPath(d: string, legacy: number): string
+		extra += legacy - #d
+		return d
+	end
 
 	-- Grid and axis labels.
 	local ticks = Axis.timeTicks(layout.t_from, layout.t_to, layout.plot_right - layout.plot_left, opts.offset_min)
@@ -1010,7 +552,7 @@ local function build(ctx: Ctx): string
 		if a.side ~= "hidden" and ctx.specs[k].style.grid ~= false then
 			for _, v in scale.ticks do
 				if v >= scale.min and v <= scale.max then
-					table.insert(grid, fmt("M%.1f %.1fH%.1f", layout.plot_left, geo[k].yOf(v), layout.plot_right))
+					table.insert(grid, fmt("M%.1f %.1fH%.1f", layout.plot_left, Paths.y(geo[k], v), layout.plot_right))
 				end
 			end
 		end
@@ -1041,12 +583,11 @@ local function build(ctx: Ctx): string
 			if v >= scale.min and v <= scale.max then
 				table.insert(
 					out,
-					fmt(
-						'<text class="tg-label" x="%.1f" y="%.1f" font-size="12" text-anchor="%s">%s</text>',
+					Kit.text(
 						if left then a.x1 - 6 else a.x0 + 6,
-						geo[k].yOf(v) + 4,
-						if left then "end" else "start",
-						escape(labels[i])
+						Paths.y(geo[k], v) + 4,
+						labels[i],
+						{ anchor = if left then "end" else "start" }
 					)
 				)
 			end
@@ -1057,15 +598,7 @@ local function build(ctx: Ctx): string
 		local x = xOf(t)
 		local half = #ticks.labels[i] * Axis.CHAR_PX / 2
 		if x - half >= 0 and x + half <= W then
-			table.insert(
-				out,
-				fmt(
-					'<text class="tg-label" x="%.1f" y="%.1f" font-size="12" text-anchor="middle">%s</text>',
-					x,
-					H - 6,
-					escape(ticks.labels[i])
-				)
-			)
+			table.insert(out, Kit.text(x, H - 6, ticks.labels[i]))
 		end
 	end
 
@@ -1075,7 +608,16 @@ local function build(ctx: Ctx): string
 		for _, i in spec.members do
 			local st = ctx.styles[i]
 			if (st.threshold_style or "off") ~= "off" and st.thresholds then
-				thresholdShapes(out, geo[k], ctx.scales[k], st)
+				local g, scale = geo[k], ctx.scales[k]
+				Kit.thresholds(out, {
+					min = scale.min,
+					max = scale.max,
+					toPx = function(v: number): number
+						return Paths.y(g, v)
+					end,
+					from = layout.plot_left,
+					to = layout.plot_right,
+				}, st.thresholds, st.threshold_style or "off")
 				break
 			end
 		end
@@ -1098,6 +640,25 @@ local function build(ctx: Ctx): string
 		if looks[i].draw == "bars" then
 			slots = math.max(slots, #plot.times[i])
 		end
+	end
+	-- A bar series' fill and outline share one path.
+	local barPaths: { [number]: string } = {}
+	local barLegacy: { [number]: number } = {}
+	local function bars(i: number): string
+		if barPaths[i] == nil then
+			local look = looks[i]
+			local barW = math.max(1, math.min(look.bar_max_width, plotW / slots * look.bar_width_factor))
+			barPaths[i], barLegacy[i] = Paths.bars(
+				geo[ctx.scaleOf[i]],
+				plot.times[i],
+				plot.tops[i],
+				plot.bottoms[i],
+				baseOf(i),
+				barW,
+				look.bar_alignment
+			)
+		end
+		return seriesPath(barPaths[i], barLegacy[i])
 	end
 	local fade: string? = nil
 	for i = 1, #list do
@@ -1123,18 +684,33 @@ local function build(ctx: Ctx): string
 			break
 		end
 	end
+	-- gradientMode hue and scheme: one userSpaceOnUse gradient per series
+	-- strokes its line and points and fills its area at the fill opacity
+	-- (UPlotSeriesBuilder getLineColor/getFill). Ids hash the gradient, so
+	-- equal gradients share one.
+	local paint: { [number]: string } = {}
+	local defined: { [string]: boolean } = {}
+	for i = 1, #list do
+		local def = gradientDef(ctx, i, geo, top, bottom)
+		if def then
+			local id = fmt("tgg%08x", hash(def))
+			if not defined[id] then
+				defined[id] = true
+				table.insert(out, fmt('<defs><linearGradient id="%s"%s</linearGradient></defs>', id, def))
+			end
+			paint[i] = id
+		end
+	end
 	for i = 1, #list do
 		local look = looks[i]
 		if look.fill <= 0 or look.draw == "points" then
 			continue
 		end
-		local g = geo[ctx.scaleOf[i]]
-		local buf: { string } = {}
+		local d: string
 		local role = "tg-area"
 		if look.draw == "bars" then
 			role = "tg-bar"
-			local barW = math.max(1, math.min(look.bar_max_width, plotW / slots * look.bar_width_factor))
-			pathBars(buf, g, plot.times[i], plot.tops[i], plot.bottoms[i], baseOf(i), barW, look.bar_alignment)
+			d = bars(i)
 		else
 			local below: { [number]: number }? = nil
 			local j = look.fill_below
@@ -1148,21 +724,23 @@ local function build(ctx: Ctx): string
 				end
 				below = map
 			end
-			pathArea(buf, g, plot.times[i], plot.tops[i], plot.bottoms[i], below, baseOf(i), look.interpolation)
-		end
-		if #buf > 0 then
-			local mask = if fade and look.gradient == "opacity" then fmt(' mask="url(#%s)"', fade) else ""
-			table.insert(
-				out,
-				fmt(
-					'<path class="%s %s" fill-opacity="%.2f"%s d="%s"/>',
-					look.class,
-					role,
-					look.fill,
-					mask,
-					table.concat(buf)
+			d = seriesPath(
+				Paths.area(
+					geo[ctx.scaleOf[i]],
+					plot.times[i],
+					plot.tops[i],
+					plot.bottoms[i],
+					below,
+					baseOf(i),
+					look.interpolation
 				)
 			)
+		end
+		if d ~= "" then
+			local mask = if fade and look.gradient == "opacity" then fmt(' mask="url(#%s)"', fade) else ""
+			local id = paint[i]
+			local color = if id then fmt('%s" fill="url(#%s)', role, id) else look.class .. " " .. role
+			table.insert(out, fmt('<path class="%s" fill-opacity="%.2f"%s d="%s"/>', color, look.fill, mask, d))
 		end
 	end
 	for i = 1, #list do
@@ -1170,19 +748,15 @@ local function build(ctx: Ctx): string
 		local g = geo[ctx.scaleOf[i]]
 		local stroke = look.line_width * M.LINE_SCALE
 		if look.draw ~= "points" and stroke > 0 then
-			local buf: { string } = {}
-			if look.draw == "bars" then
-				local barW = math.max(1, math.min(look.bar_max_width, plotW / slots * look.bar_width_factor))
-				pathBars(buf, g, plot.times[i], plot.tops[i], plot.bottoms[i], baseOf(i), barW, look.bar_alignment)
-			else
-				pathLine(buf, g, plot.times[i], plot.tops[i], look.interpolation)
-			end
-			if #buf > 0 then
+			local d = if look.draw == "bars"
+				then bars(i)
+				else seriesPath(Paths.line(g, plot.times[i], plot.tops[i], look.interpolation))
+			if d ~= "" then
 				local dash = ""
 				if look.dash then
 					local parts: { string } = table.create(#look.dash)
-					for k, d in look.dash do
-						parts[k] = fmt("%g", d * M.LINE_SCALE)
+					for k, v in look.dash do
+						parts[k] = fmt("%g", v * M.LINE_SCALE)
 					end
 					dash = ' stroke-dasharray="' .. table.concat(parts, " ") .. '"'
 				end
@@ -1192,12 +766,12 @@ local function build(ctx: Ctx): string
 				table.insert(
 					out,
 					fmt(
-						'<path class="%s tg-line" fill="none" stroke-width="%s" stroke-linecap="%s" stroke-linejoin="round"%s d="%s"/>',
-						look.class,
+						'<path class="%s" fill="none" stroke-width="%s" stroke-linecap="%s" stroke-linejoin="round"%s d="%s"/>',
+						strokeClass(look.class, "tg-line", paint[i]),
 						fmt("%g", stroke),
 						cap,
 						dash,
-						table.concat(buf)
+						d
 					)
 				)
 			end
@@ -1222,16 +796,15 @@ local function build(ctx: Ctx): string
 		if not all and look.span == true then
 			continue
 		end
-		local buf: { string } = {}
-		pathDots(buf, g, plot.times[i], plot.tops[i], not all)
-		if #buf > 0 then
+		local d = seriesPath(Paths.dots(g, plot.times[i], plot.tops[i], not all))
+		if d ~= "" then
 			table.insert(
 				out,
 				fmt(
-					'<path class="%s tg-dots" fill="none" stroke-width="%s" stroke-linecap="round" d="%s"/>',
-					look.class,
+					'<path class="%s" fill="none" stroke-width="%s" stroke-linecap="round" d="%s"/>',
+					strokeClass(look.class, "tg-dots", paint[i]),
 					fmt("%g", look.point_size * M.LINE_SCALE),
-					table.concat(buf)
+					d
 				)
 			)
 		end
@@ -1241,92 +814,24 @@ local function build(ctx: Ctx): string
 	local exemplars = layout.exemplars
 	if exemplars and #exemplars > 0 and #geo > 0 then
 		local r = M.EXEMPLAR_R
-		local yOf = geo[1].yOf
 		local buf: { string } = table.create(#exemplars)
 		for i, e in exemplars do
-			buf[i] = fmt("M%.1f %.1fl%d %dl%d %dl%d %dZ", xOf(e.time_ms), yOf(e.value) - r, r, r, -r, r, -r, -r)
+			buf[i] = fmt("M%.1f %.1fl%d %dl%d %dl%d %dZ", xOf(e.time_ms), Paths.y(g1, e.value) - r, r, r, -r, r, -r, -r)
 		end
 		table.insert(out, '<path class="tg-exemplar" stroke-width="1" d="' .. table.concat(buf) .. '"/>')
 	end
 
 	if #list == 0 then
-		table.insert(
-			out,
-			fmt(
-				'<text class="tg-label" x="%.1f" y="%.1f" font-size="14" text-anchor="middle">No data</text>',
-				(layout.plot_left + layout.plot_right) / 2,
-				(top + bottom) / 2
-			)
-		)
+		Kit.noData(out, (layout.plot_left + layout.plot_right) / 2, (top + bottom) / 2)
 	end
-	table.insert(out, "</svg>")
-	return table.concat(out)
+	table.insert(out, Kit.CLOSE)
+	return table.concat(out), extra
 end
 
 -- Narrowest slot a bar gets, in viewBox px. Thinner bars blend into their
 -- neighbors once the image is scaled down, so sparse series stacked over many
 -- samples (Loki counts over a short step) read as fewer colors than the legend.
 M.MIN_BAR_PX = 3
-
--- Bars over more distinct times than the plot has slots: each series' samples
--- are grouped into equal time buckets (the bucket's largest value, at the
--- bucket's center), so every stacked series lands in the same slots.
-local function bucketBars(list: { Series.Series }, tFrom: number, tTo: number, slots: number): { Series.Series }
-	local distinct: { [number]: boolean } = {}
-	local n = 0
-	for _, s in list do
-		for _, t in s.times do
-			if not distinct[t] then
-				distinct[t] = true
-				n += 1
-			end
-		end
-	end
-	if n <= slots or slots < 1 or tTo <= tFrom then
-		return list
-	end
-	local width = (tTo - tFrom) / slots
-	local out: { Series.Series } = table.create(#list)
-	for i, s in list do
-		local best: { [number]: number } = {}
-		for j, t in s.times do
-			local v = finite(s.values[j])
-			if v then
-				local b = math.clamp(math.floor((t - tFrom) / width), 0, slots - 1)
-				if best[b] == nil or v > best[b] then
-					best[b] = v
-				end
-			end
-		end
-		local times, values = {}, {}
-		for b = 0, slots - 1 do
-			local v = best[b]
-			if v ~= nil then
-				table.insert(times, math.floor(tFrom + (b + 0.5) * width))
-				table.insert(values, v)
-			end
-		end
-		local copy = Tbl.copy(s)
-		copy.times, copy.values = times, values
-		out[i] = copy
-	end
-	return out
-end
-
-local function unionTimes(plot: Plot): { number }
-	local seen: { [number]: boolean } = {}
-	local out: { number } = {}
-	for _, times in plot.times do
-		for _, t in times do
-			if not seen[t] then
-				seen[t] = true
-				table.insert(out, t)
-			end
-		end
-	end
-	table.sort(out)
-	return out
-end
 
 -- The exemplars a chart over [from_ms, to_ms] draws, sorted by time and
 -- thinned evenly to EXEMPLAR_CAP, and how many in range were left out.
@@ -1378,28 +883,6 @@ local function stylesFor(list: { Series.Series }, opts: Options): { SeriesStyle 
 	return out
 end
 
--- The series' own value at each drawn time: the source sample when the time
--- is one of its samples, else the drawn value with its transform undone.
-local function ownValues(source: Series.Series, st: SeriesStyle, times: { number }, drawn: { any }): { any }
-	local at: { [number]: any } = {}
-	for j, t in source.times do
-		at[t] = source.values[j]
-	end
-	local out: { any } = table.create(#times)
-	for k, t in times do
-		local v = at[t]
-		if v == nil then
-			v = drawn[k]
-			local n = finite(v)
-			if n and st.transform == "negative-Y" then
-				v = -n
-			end
-		end
-		out[k] = v
-	end
-	return out
-end
-
 function M.render(frames: { Frame }, options: Options?): Result
 	local opts: Options = options or {}
 	local W = opts.width or 960
@@ -1440,7 +923,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 	for i = 1, #list do
 		table.insert(specs[scaleOf[i]].members, i)
 	end
-	local shown = transformed(list, styles, tFrom_, tTo_)
+	local shown = Data.transformed(list, styles, tFrom_, tTo_)
 	local looks: { Look } = table.create(#list)
 	local spans: { boolean | number } = table.create(#list)
 	for i = 1, #list do
@@ -1470,6 +953,14 @@ function M.render(frames: { Frame }, options: Options?): Result
 		marks, marksDropped = M.drawnExemplars(opts.exemplars, tFrom_, tTo_)
 	end
 	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
+	-- Gradient definitions: their stops, doubled for discrete edges.
+	for _, look in looks do
+		if look.hue then
+			fixed += BYTES_GRADIENT + 2 * BYTES_STOP
+		elseif look.scheme then
+			fixed += BYTES_GRADIENT + 2 * #look.scheme.stops * BYTES_STOP
+		end
+	end
 
 	local perSeries = opts.point_budget or math.floor(W - PAD_RIGHT)
 	if #list > 0 then
@@ -1488,20 +979,26 @@ function M.render(frames: { Frame }, options: Options?): Result
 	end
 	if #barList > 0 then
 		local slots = math.floor((W - PAD_RIGHT - 36) / M.MIN_BAR_PX)
-		for k, s in bucketBars(barList, tFrom_, tTo_, slots) do
+		for k, s in Data.bucketBars(barList, tFrom_, tTo_, slots) do
 			shown[barAt[k]] = s
 		end
 	end
-	local groups = stackGroups(shown, styles, scaleOf)
+	local groups = Data.stackGroups(shown, styles, scaleOf)
+	-- The legend calcs over each full-resolution series; they also bound
+	-- the scale of a series drawn as extracted.
+	local calcs: { Series.Calcs } = table.create(#list)
+	for i, s in list do
+		calcs[i] = Series.calcs(s.values)
+	end
 
 	-- Scales and axis bands depend on the plot height only.
-	local plot = downsample(shown, groups, spans, perSeries)
+	local plot = Data.downsample(shown, groups, spans, perSeries)
 	local scales: { Axis.Scale } = table.create(#specs)
 	local labels: { { string } } = table.create(#specs)
 	local widths: { number } = table.create(#specs)
 	local leftW, rightW = 0, 0
 	for k, spec in specs do
-		local lo, hi = scaleRange(shown, plot, spec.members)
+		local lo, hi = scaleRange(shown, list, calcs, plot, spec.members)
 		-- Exemplars share the first scale (as in Grafana): a marker pinned
 		-- to the plot edge would misstate its value. Percent stacks keep 0..1.
 		if k == 1 and marks and not spec.percent then
@@ -1563,29 +1060,10 @@ function M.render(frames: { Frame }, options: Options?): Result
 		}
 	end
 
-	local svg, layout, points = "", (nil :: any) :: Layout, 0
+	local svg, layout = "", (nil :: any) :: Layout
 	for attempt = 1, 8 do
 		if attempt > 1 then
-			plot = downsample(shown, groups, spans, perSeries)
-		end
-		local drawn: { DrawnSeries } = table.create(#list)
-		points = 0
-		for i, s in list do
-			local st = styles[i]
-			drawn[i] = {
-				name = s.name,
-				class = looks[i].class,
-				labels = s.labels,
-				times = plot.times[i],
-				values = ownValues(s, st, plot.times[i], plot.raw[i]),
-				calcs = Series.calcs(s.values),
-				axis = scaleOf[i],
-				unit = st.unit,
-				decimals = st.decimals,
-				hide_legend = st.hide_legend,
-				hide_tooltip = st.hide_tooltip,
-			}
-			points += #plot.times[i]
+			plot = Data.downsample(shown, groups, spans, perSeries)
 		end
 		local first = axes[1]
 		layout = {
@@ -1602,13 +1080,14 @@ function M.render(frames: { Frame }, options: Options?): Result
 			unit = first.unit,
 			decimals = first.decimals,
 			axes = axes,
-			times = unionTimes(plot),
-			series = drawn,
+			times = {},
+			series = {},
 			dropped = dropped,
 			exemplars = marks,
 			exemplars_dropped = if marks then marksDropped else nil,
 		}
-		svg = build({
+		local extra: number
+		svg, extra = build({
 			shown = shown,
 			plot = plot,
 			layout = layout,
@@ -1620,12 +1099,34 @@ function M.render(frames: { Frame }, options: Options?): Result
 			labels = labels,
 			scaleOf = scaleOf,
 		})
-		if #svg <= M.TARGET or perSeries <= 3 then
+		local size = #svg + extra
+		if size <= M.TARGET or perSeries <= 3 then
 			break
 		end
-		perSeries = math.max(3, math.floor(perSeries * M.TARGET / #svg * 0.9))
+		perSeries = math.max(3, math.floor(perSeries * M.TARGET / size * 0.9))
 	end
 	assert(#svg <= M.CAP, "svg_timeseries: chart exceeds the 256 KiB SVG cap")
+	local drawn: { DrawnSeries } = table.create(#list)
+	local points = 0
+	for i, s in list do
+		local st = styles[i]
+		drawn[i] = {
+			name = s.name,
+			class = looks[i].class,
+			labels = s.labels,
+			times = plot.times[i],
+			values = Data.ownValues(s, shown[i], st, plot, i, spans),
+			calcs = calcs[i],
+			axis = scaleOf[i],
+			unit = st.unit,
+			decimals = st.decimals,
+			hide_legend = st.hide_legend,
+			hide_tooltip = st.hide_tooltip,
+		}
+		points += #plot.times[i]
+	end
+	layout.series = drawn
+	layout.times = Data.unionTimes(plot)
 	return { svg = svg, layout = layout, dropped = dropped, points = points }
 end
 

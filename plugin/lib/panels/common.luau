@@ -54,6 +54,9 @@ export type Options = {
 	extra: { [string]: any }?,
 	-- The dashboard's timezone as written ("", "browser", "utc", IANA).
 	timezone: string?,
+	-- The decoded panel JSON the rendered `panel` was copied from (only the
+	-- title may differ); keys the legacy-migration cache (Registry.view).
+	source: any?,
 	-- The viewer's local UTC offset (minutes east) at env.now_ms.
 	local_offset_min: number?,
 	-- Grafana's frontend feature toggles (/api/frontend/settings
@@ -158,13 +161,30 @@ function M.spark(
 	min: number?,
 	max: number?
 ): Node?
-	local ts: { number } = {}
-	local vs: { any } = {}
-	for i, v in values do
-		local t = if times then times[i] else i
-		if type(t) == "number" then
-			table.insert(ts, t)
-			table.insert(vs, if Frame.finite(v) then v else Frame.NULL)
+	local ts: { number }, vs: { any }
+	local count = #values
+	local dense = times ~= nil and #times == count
+	if dense then
+		local tt = times :: { any }
+		for i = 1, count do
+			if type(tt[i]) ~= "number" then
+				dense = false
+				break
+			end
+		end
+	end
+	if dense then
+		-- Lttb treats non-finite values as gaps itself and every reader below
+		-- goes through Frame.finite, so the column needs no NULL-mapped copy.
+		ts, vs = times :: { number }, values
+	else
+		ts, vs = {}, {}
+		for i, v in values do
+			local t = if times then times[i] else i
+			if type(t) == "number" then
+				table.insert(ts, t)
+				table.insert(vs, if Frame.finite(v) then v else Frame.NULL)
+			end
 		end
 	end
 	if #ts < 2 then

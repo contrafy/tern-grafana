@@ -220,9 +220,11 @@ function M.dimensions(s: Spec): Dimensions
 	return if s.style == "v1" then v1Dimensions(s) else v2Dimensions(s)
 end
 
+-- `x` within 0..1, NaN as 0.
 local function clamp01(x: number): number
 	return if x ~= x then 0 else math.clamp(x, 0, 1)
 end
+M.clamp01 = clamp01
 
 -- The colored runs of the filled part: the bands clipped to from..to.
 function M.fillRuns(bands: { Band }, from: number, to: number): { Band }

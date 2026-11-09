@@ -11,6 +11,7 @@ local Fixtures = require("../../lib/fixtures")
 local Pairing = require("../../../plugin/lib/annotations/pairing")
 local Settings = require("../../../plugin/lib/annotations/settings")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -20,9 +21,7 @@ local function list(...: any): { any }
 	return { ... }
 end
 
-local function env(): any
-	return { now_ms = 0, decode = json.decode, encode = json.encode, null = json.null }
-end
+local env = Support.env
 
 local function settings(raw: any): Settings.Settings
 	local s = Settings.read({ version = 1, contexts = { lab = {} }, annotations = raw } :: any)

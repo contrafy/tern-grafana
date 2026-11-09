@@ -7,6 +7,7 @@
 -- environment variable name, a file path) and header values, which the
 -- config already stores in plain text.
 
+local Str = require("../str")
 local Tbl = require("../tbl")
 
 local M = {}
@@ -57,10 +58,6 @@ export type Field = {
 
 local function isTable(v: any): boolean
 	return type(v) == "table"
-end
-
-local function trim(s: string): string
-	return string.match(s, "^%s*(.-)%s*$") :: string
 end
 
 function M.contextNames(raw: Raw?): { string }
@@ -394,7 +391,7 @@ end
 
 function M.formContext(form: Form): string
 	if form.mode == "new_context" then
-		return trim(form.values.context or "")
+		return Str.trim(form.values.context or "")
 	end
 	return form.context
 end
@@ -427,7 +424,7 @@ function M.fields(form: Form, raw: Raw?): { Field }
 			id = "context",
 			label = "context",
 			kind = "text",
-			path = "contexts." .. trim(form.values.context or ""),
+			path = "contexts." .. Str.trim(form.values.context or ""),
 			exact = true,
 			hint = "letters, digits, '.', '_' and '-'",
 		})
@@ -621,7 +618,7 @@ function M.setField(form: Form, id: string, text: string): (Form, string?)
 	local out = Tbl.copy(form)
 	out.values = Tbl.copy(form.values)
 	if id == "header_new" then
-		local t = trim(text)
+		local t = Str.trim(text)
 		if t == "" then
 			return form, nil
 		end
@@ -646,7 +643,7 @@ function M.setField(form: Form, id: string, text: string): (Form, string?)
 		out.values[id] = text
 		return out, nil
 	end
-	out.values[id] = if id == "auth.reference" then text else trim(text)
+	out.values[id] = if id == "auth.reference" then text else Str.trim(text)
 	return out, nil
 end
 
@@ -703,7 +700,7 @@ local function numberOr(text: string): any
 end
 
 local function parseArgv(text: string, decode: (string) -> any): (any, string?)
-	local t = trim(text)
+	local t = Str.trim(text)
 	if t == "" then
 		return nil, nil
 	end
@@ -797,8 +794,8 @@ function M.endpointFromForm(form: Form, original: Raw?, decode: (string) -> any)
 			elseif argv ~= nil then
 				auth[field] = argv
 			end
-		elseif trim(ref) ~= "" then
-			auth[field] = trim(ref)
+		elseif Str.trim(ref) ~= "" then
+			auth[field] = Str.trim(ref)
 		end
 		ep.auth = auth
 	end
@@ -866,7 +863,7 @@ local NAME_PATTERN = "^[%w_.%-]+$"
 function M.applyForm(raw: Raw?, form: Form, decode: (string) -> any): (Raw?, { Problem })
 	local out, contexts = withContexts(raw)
 	if form.mode == "rename_context" then
-		local name = trim(form.values.context or "")
+		local name = Str.trim(form.values.context or "")
 		if name == "" then
 			return nil, { { path = "contexts.", message = "enter a context name" } }
 		end

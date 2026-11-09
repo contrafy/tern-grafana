@@ -23,6 +23,7 @@
 -- userinfo or credential-named query parameters (lib/investigate/subject),
 -- and the scheme refuses credential-named parameters.
 
+local Hash = require("../hash")
 local Base64 = require("../auth/base64")
 local Compact = require("../carly/compact")
 local Effect = require("../effect")
@@ -101,19 +102,9 @@ function M.decodePayload(s: string): string?
 	return table.concat(out)
 end
 
--- FNV-1a 32-bit; the prime 16777619 = 2^24 + 403 keeps products exact.
-local function fnv32(s: string): number
-	local h = 2166136261
-	for i = 1, #s do
-		h = bit32.bxor(h, string.byte(s, i))
-		h = (h * 403 + bit32.lshift(h, 24)) % 4294967296
-	end
-	return h
-end
-
 -- A fresh ticket: the time and a hash of `seed` mixed with `rand`, lower-case hex.
 function M.nonce(now_ms: number, seed: string, rand: number): string
-	return string.format("%x-%08x", math.floor(math.max(0, now_ms)), bit32.bxor(fnv32(seed), rand))
+	return string.format("%x-%08x", math.floor(math.max(0, now_ms)), bit32.bxor(Hash.fnv1a32(seed), rand))
 end
 
 -- A one-line title the scheme accepts.

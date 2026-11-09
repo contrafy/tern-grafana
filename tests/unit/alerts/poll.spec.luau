@@ -3,11 +3,11 @@
 -- watched context: polling off must remove the segment rather than freeze
 -- it, an unroutable context must show as unknown, and a failed context keeps
 -- its last counts while the others update.
-local Fixtures = require("../../lib/fixtures")
 local Poll = require("../../../plugin/lib/alerts/poll")
 local Summary = require("../../../plugin/lib/alerts/summary")
 local Validate = require("../../../plugin/lib/config/validate")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -23,9 +23,7 @@ local function config(alerts: string): any
 	return cfg
 end
 
-local function ok(path: string): any
-	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local ok = Support.response
 
 describe("poll", function()
 	it("polls nothing when turned off or without config", function()

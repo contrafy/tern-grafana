@@ -10,21 +10,34 @@ local ui = require("./lib/ui")
 
 local M = {}
 
+export type Regions = { main: ui.Node?, dock: ui.Node?, layer: ui.Node? }
+
 local caches: { [BlockCx]: BlobCache.Cache } = setmetatable({}, { __mode = "k" }) :: any
 
--- Replaces every `p.asset` in `node` (in place) with a blob id; returns `node`.
-function M.materialize(node: ui.Node, assets: Assets.Assets, cx: BlockCx): ui.Node
+-- Replaces every `p.asset` in the regions (in place) with a blob id. A view
+-- without an assets table references none, so its tree is not walked.
+function M.materialize(regions: Regions, assets: Assets.Assets?, cx: BlockCx)
 	local cache = caches[cx]
 	if cache == nil then
+		if assets == nil then
+			return
+		end
 		cache = BlobCache.new()
 		caches[cx] = cache
 	end
-	local mint = function(bytes: string, mime: string): string
-		return cx:blob(bytes, mime)
+	local c = cache :: BlobCache.Cache
+	if assets ~= nil then
+		local mint = function(bytes: string, mime: string): string
+			return cx:blob(bytes, mime)
+		end
+		local resolve = function(key: string, asset: Assets.Asset): string
+			return BlobCache.get(c, key, asset.bytes, asset.mime, mint)
+		end
+		for _, region in { regions.main, regions.dock, regions.layer } :: { any } do
+			Assets.materialize(region, assets, resolve)
+		end
 	end
-	return Assets.materialize(node, assets, function(key: string, asset: Assets.Asset): string
-		return BlobCache.get(cache :: BlobCache.Cache, key, asset.bytes, asset.mime, mint)
-	end)
+	BlobCache.sweep(c)
 end
 
 return M

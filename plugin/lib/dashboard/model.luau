@@ -14,9 +14,9 @@
 
 local Env = require("../env")
 local Response = require("../source/response")
-local Scheme = require("../links/scheme")
 local TransportTypes = require("../transport/types")
 local Tbl = require("../tbl")
+local Url = require("../url")
 
 type Env = Env.Env
 type QueryError = TransportTypes.QueryError
@@ -238,7 +238,7 @@ function M.parseResponse(response: Response, env: Env): (Dashboard?, string?)
 end
 
 function M.request(uid: string): Request
-	return { method = "GET", path = "/api/dashboards/uid/" .. Scheme.percentEncode(uid) }
+	return { method = "GET", path = "/api/dashboards/uid/" .. Url.percentEncode(uid) }
 end
 
 -- Every panel, row by row, in model order.
@@ -278,7 +278,7 @@ function M.libraryRefs(d: Dashboard): { string }
 end
 
 function M.libraryRequest(uid: string): Request
-	return { method = "GET", path = "/api/library-elements/" .. Scheme.percentEncode(uid) }
+	return { method = "GET", path = "/api/library-elements/" .. Url.percentEncode(uid) }
 end
 
 -- The element's panel model from `/api/library-elements/<uid>`.

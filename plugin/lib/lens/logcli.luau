@@ -17,6 +17,7 @@
 -- the configured context whose Loki (or Grafana Loki datasource proxy) is
 -- logcli's --addr.
 
+local Route = require("../config/route")
 local ConfigTypes = require("../config/types")
 local EnvModule = require("../env")
 local GrafanaUrl = require("../links/grafana_url")
@@ -808,15 +809,6 @@ local function trimSlash(path: string): string
 	return (string.gsub(path, "/+$", ""))
 end
 
-local function sortedContexts(cfg: Config): { string }
-	local names: { string } = {}
-	for name in cfg.contexts do
-		table.insert(names, name)
-	end
-	table.sort(names)
-	return names
-end
-
 -- The configured context serving logcli's --addr: one whose Loki endpoint is
 -- that URL, else one whose Grafana proxies a datasource there
 -- (`<grafana>/api/datasources/proxy/uid/<uid>`, whose uid is returned too,
@@ -830,7 +822,7 @@ function M.contextFor(addr: string?, cfg: Config?): (string?, string?)
 		return nil, nil
 	end
 	local path = trimSlash(target.path)
-	local names = sortedContexts(cfg)
+	local names = Route.contextNames(cfg)
 	for _, name in names do
 		local loki = cfg.contexts[name].loki
 		local base = if loki then GrafanaUrl.parse(loki.url .. loki.path_prefix) else nil

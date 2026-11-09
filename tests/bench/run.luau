@@ -74,7 +74,9 @@ local SCENARIOS = {
 	"./scenarios/logs",
 	"./scenarios/compat",
 	"./scenarios/irm",
+	"./scenarios/settings",
 	"./scenarios/window",
+	"./scenarios/panel_cursor",
 }
 
 local function fmt(v: number): string

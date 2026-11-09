@@ -5,13 +5,13 @@
 -- range (`S`): range keys publish, other blocks' ranges are adopted on the
 -- poll tick. Responses are the recorded Tempo 2.10.8 trace and search.
 local Correlate = require("../../../plugin/lib/logs/correlate")
-local Fixtures = require("../../lib/fixtures")
 local Scheme = require("../../../plugin/lib/links/scheme")
 local Shared = require("../../../plugin/lib/time/shared")
 local State: any = require("../../../plugin/lib/trace/state")
 local Validate = require("../../../plugin/lib/config/validate")
 local View = require("../../../plugin/lib/trace/view")
 local json = require("../../lib/json")
+local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -25,36 +25,16 @@ local function env(trace: string?): any
 	end
 	local cfg, problems = Validate.parseFile(text .. "}", json.decode)
 	assert(cfg, problems[1] and Validate.format(problems[1]))
-	local kv: { [string]: any } = {}
-	return {
-		now_ms = NOW,
-		decode = json.decode,
-		encode = json.encode,
-		null = json.null,
-		config = cfg,
-		kv = kv,
-		kv_get = function(k: string): any
-			return kv[k]
-		end,
-	}
+	return Support.env({ now_ms = NOW, config = cfg })
 end
 
-local function response(path: string): any
-	return { status = 200, headers = {}, body = Fixtures.read(path), timed_out = false }
-end
+local response = Support.response
 
 local function key(text: string): any
 	return { name = text, text = text, ctrl = false, alt = false, shift = false, meta = false }
 end
 
-local function find(effects: { any }, kind: string): any
-	for _, e in effects do
-		if e.kind == kind then
-			return e
-		end
-	end
-	return nil
-end
+local find = Support.find
 
 local function searches(effects: { any }): { any }
 	local out = {}
@@ -123,25 +103,18 @@ describe("shared time in search", function()
 		return s
 	end
 
-	it("publishes range keys only while synced", function()
+	-- The scenarios every synced block shares are in time/sync_blocks.spec.
+	it("shows one sync chip in the search header while synced", function()
 		local e = env()
 		local s = searching(e)
-		expect(find(press(s, e, "3"), "kv_set")).toBeNil()
-		local effects = press(s, e, "S")
-		e.kv[Shared.KEY] = find(effects, "kv_set").value
-		expect(find(effects, "timer").tag).toBe(Shared.TAG .. s.sync.gen)
-		local view: any = View.view(s, e)
+		press(s, e, "S")
 		local chips = 0
-		for _, n in view.main.c[1].c do
+		for _, n in (View.view(s, e) :: any).main.c[1].c do
 			if n.p and n.p.key == "sync" then
 				chips += 1
 			end
 		end
 		expect(chips).toBe(1)
-		effects = press(s, e, "5")
-		expect(find(effects, "kv_set").value.from).toBe("now-6h")
-		expect(#searches(effects)).toBe(1)
-		expect(State.save(s).sync).toBe(true)
 	end)
 
 	it("searches a range another block shares, and on the trace tab waits for the next visit", function()

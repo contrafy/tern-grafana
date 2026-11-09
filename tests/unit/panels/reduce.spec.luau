@@ -174,4 +174,85 @@ describe("reduce non-standard reducers", function()
 	end)
 end)
 
+-- A stat or legend reducing one id must read what the full calcs read; the
+-- single-reducer paths skip doStandardCalcs, so they are checked against it.
+describe("reduce one reducer", function()
+	local NAN = 0 / 0
+	local COLUMNS: { { any } } = {
+		{},
+		{ NULL },
+		{ NULL, NULL },
+		{ 1, 2, 3 },
+		{ NULL, 4, NAN, NULL, 2, NULL },
+		{ NAN, NAN },
+		{ 3, NULL, NAN },
+		{ math.huge, -math.huge, 0 },
+		{ "a", NULL, "b", "a" },
+		{ true, false, NULL },
+		{ 0, 0, NULL, 0 },
+	}
+	local IDS = {
+		"lastNotNull",
+		"last",
+		"firstNotNull",
+		"first",
+		"countAll",
+		"min",
+		"max",
+		"mean",
+		"sum",
+		"count",
+		"delta",
+		"diffperc",
+		"allIsNull",
+		"allIsZero",
+		"median",
+		"changeCount",
+		"distinctCount",
+		"p50",
+	}
+	local function same(a: any, b: any): boolean
+		return a == b or (a ~= a and b ~= b)
+	end
+
+	it("matches calcs for every mode, field type and column", function()
+		for _, mode in { "connected", "null", "null as zero" } do
+			for _, kind in { "number", "string" } do
+				for ci, column in COLUMNS do
+					for _, id in IDS do
+						-- distinctCount cannot key NaN (as before this path existed).
+						local okAll, all = pcall(Reduce.calcs, column, { id }, kind, mode :: any)
+						local okOne, one = pcall(Reduce.reduce, column, id, kind, mode :: any)
+						expect(okOne).toBe(okAll)
+						all = if okAll then all else {}
+						one = if okOne then one else nil
+						if not same(one, all[id]) then
+							error(
+								string.format(
+									"%s on column %d (%s, %s): %s vs %s",
+									id,
+									ci,
+									kind,
+									mode,
+									tostring(one),
+									tostring(all[id])
+								)
+							)
+						end
+					end
+				end
+			end
+		end
+	end)
+
+	it("reads a number column's min and max like the standard calcs", function()
+		for _, column in COLUMNS do
+			local c = Reduce.calcs(column, {}, "number")
+			local lo, hi = Reduce.minMax(column)
+			expect(lo).toBe(c.min)
+			expect(hi).toBe(c.max)
+		end
+	end)
+end)
+
 return nil

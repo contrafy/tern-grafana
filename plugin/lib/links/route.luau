@@ -18,7 +18,8 @@ local M = {}
 
 M.PLUGIN = "tern-grafana"
 
--- Which actions have a native block. Later milestones flip entries.
+-- Which actions have a native block (Grafana URLs for any other open in the
+-- browser pane).
 M.CAPABILITIES = table.freeze({
 	query = true,
 	dashboard = true,

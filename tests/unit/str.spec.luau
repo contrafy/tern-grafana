@@ -4,10 +4,17 @@
 -- and Effect's callers gain only the trailing-whitespace strip Keychain had.
 -- Str.trim replaces a dozen local copies of the same pattern.
 local Effect = require("../../plugin/lib/effect")
-local Keychain = require("../../plugin/lib/auth/keychain")
 local Str = require("../../plugin/lib/str")
 local t = require("../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
+
+-- Keychain.firstLine as it was before the migration (removed from keychain.luau).
+local function keychainFirstLine(text: string?): string
+	local line = string.match(text or "", "^%s*([^\r\n]*)") or ""
+	line = string.gsub(line, "^runtime error: ", "")
+	line = string.gsub(line, "%s+$", "")
+	return if line == "" then "unknown error" else line
+end
 
 local ERRORS = {
 	"runtime error: boom\nstack traceback:\n  [C]: in ?",
@@ -22,10 +29,10 @@ local ERRORS = {
 describe("Str.firstLine", function()
 	it("says what Keychain.firstLine says", function()
 		for _, e in ERRORS do
-			expect(Str.firstLine(e)).toBe(Keychain.firstLine(e))
-			expect(Str.firstLine(e .. "  \t")).toBe(Keychain.firstLine(e .. "  \t"))
+			expect(Str.firstLine(e)).toBe(keychainFirstLine(e))
+			expect(Str.firstLine(e .. "  \t")).toBe(keychainFirstLine(e .. "  \t"))
 		end
-		expect(Str.firstLine(nil)).toBe(Keychain.firstLine(nil))
+		expect(Str.firstLine(nil)).toBe(keychainFirstLine(nil))
 	end)
 
 	it("says what Effect.firstLine says for errors without trailing blanks", function()

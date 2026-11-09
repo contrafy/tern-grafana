@@ -73,9 +73,7 @@ export type XYSeries = {
 	class: string,
 }
 
-local function num(v: any): number?
-	return if type(v) == "number" and v == v then v else nil
-end
+local num = Json.number
 
 -- findCommonPrefixSuffixLengths over word lists.
 local function commonAffixes(names: { { string } }): (number, number)

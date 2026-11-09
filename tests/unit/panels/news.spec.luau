@@ -25,49 +25,50 @@ local function response(body: string, status: number?): any
 	return { status = status or 200, headers = {}, body = body, timed_out = false }
 end
 
-for _, version in S.VERSIONS do
-	describe("news " .. version, function()
-		local body = Fixtures.read("grafana/" .. version .. "/news_feed.xml")
+-- The inputs (panel JSON and frames) are byte-identical across the pinned
+-- Grafana versions, so one version covers them.
+local version = S.VERSIONS[#S.VERSIONS]
+describe("news " .. version, function()
+	local body = Fixtures.read("grafana/" .. version .. "/news_feed.xml")
 
-		it("reads a relative feed URL from the dashboard's Grafana", function()
-			local p = panel(version)
-			expect((Registry.supports(p, S.env))).toBe(true)
-			expect(Registry.queries(p, S.env)).toBe(false)
-			local reqs = Registry.requests(p, CTX, S.env)
-			expect(#reqs).toBe(1)
-			expect(reqs[1].signal).toBe("dashboards")
-			expect(reqs[1].request.path).toBe("/public/tern-news/feed.xml")
-		end)
-
-		it("takes title, link, text content and date from each RSS item", function()
-			local items = (News.parse(nil, "feed", response(body), S.env) :: any).items
-			expect(#items).toBe(3)
-			expect(items[1].title).toBe("Checkout latency back to normal")
-			expect(items[1].link).toBe("https://example.com/status/checkout-latency")
-			-- CDATA HTML loses its tags, as feedToDataFrame strips them.
-			expect(items[1].content).toBe("p95 latency for checkout dropped below 400 ms after the cache rollout.")
-			expect(items[3].content).toBe("Organization-wide maintenance finished on schedule.")
-		end)
-
-		it("shows MMM DD, the title as a browser link and the text", function()
-			local node = Registry.view(panel(version), {}, S.env, {
-				key = "p",
-				local_offset_min = 0,
-				extra = { feed = News.parse(nil, "feed", response(body), S.env) },
-			})
-			local text = S.text(node)
-			expect(text).toContain("Jul 07Checkout latency back to normalp95 latency")
-			expect(text).toContain("Jul 06Payments error budget at 80 percent")
-			expect(text).toContain("Jul 03Maintenance window completed")
-			local title = S.find(node, function(x: any): boolean
-				return x.k == "text" and x.p.key == "t"
-			end)
-			local l = Scheme.decode(title.p.spans[1].href) :: any
-			expect(l.action).toBe("browse")
-			expect(l.params.url).toBe("https://example.com/status/checkout-latency")
-		end)
+	it("reads a relative feed URL from the dashboard's Grafana", function()
+		local p = panel(version)
+		expect((Registry.supports(p, S.env))).toBe(true)
+		expect(Registry.queries(p, S.env)).toBe(false)
+		local reqs = Registry.requests(p, CTX, S.env)
+		expect(#reqs).toBe(1)
+		expect(reqs[1].signal).toBe("dashboards")
+		expect(reqs[1].request.path).toBe("/public/tern-news/feed.xml")
 	end)
-end
+
+	it("takes title, link, text content and date from each RSS item", function()
+		local items = (News.parse(nil, "feed", response(body), S.env) :: any).items
+		expect(#items).toBe(3)
+		expect(items[1].title).toBe("Checkout latency back to normal")
+		expect(items[1].link).toBe("https://example.com/status/checkout-latency")
+		-- CDATA HTML loses its tags, as feedToDataFrame strips them.
+		expect(items[1].content).toBe("p95 latency for checkout dropped below 400 ms after the cache rollout.")
+		expect(items[3].content).toBe("Organization-wide maintenance finished on schedule.")
+	end)
+
+	it("shows MMM DD, the title as a browser link and the text", function()
+		local node = Registry.view(panel(version), {}, S.env, {
+			key = "p",
+			local_offset_min = 0,
+			extra = { feed = News.parse(nil, "feed", response(body), S.env) },
+		})
+		local text = S.text(node)
+		expect(text).toContain("Jul 07Checkout latency back to normalp95 latency")
+		expect(text).toContain("Jul 06Payments error budget at 80 percent")
+		expect(text).toContain("Jul 03Maintenance window completed")
+		local title = S.find(node, function(x: any): boolean
+			return x.k == "text" and x.p.key == "t"
+		end)
+		local l = Scheme.decode(title.p.spans[1].href) :: any
+		expect(l.action).toBe("browse")
+		expect(l.params.url).toBe("https://example.com/status/checkout-latency")
+	end)
+end)
 
 describe("news", function()
 	it("fetches an absolute feed as an external GET and Grafana's blog by default", function()
