@@ -1,0 +1,240 @@
+{
+  "uid": "tern-s4-dynamictext",
+  "title": "Tern S4 Dynamictext",
+  "description": "marcusolsson-dynamictext-panel 6.3.1 (Grafana 12.3+ only): three template-only panels and one afterRender panel for the ladder.",
+  "tags": [
+    "tern",
+    "s4"
+  ],
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Site status (html, if/else, triple-stash, data-URI img)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div style=\"font-family:Inter,Arial,sans-serif;color:#e5e7eb;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:linear-gradient(90deg,#1f2937,#111827);margin-bottom:8px;position:relative\">\n  {{#if outage}}\n  <img src=\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='7' cy='7' r='6' fill='%23ef4444'/%3E%3C/svg%3E\" width=\"14\" height=\"14\" alt=\"down\">\n  {{else}}\n  <img src=\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='7' cy='7' r='6' fill='%2322c55e'/%3E%3C/svg%3E\" width=\"14\" height=\"14\" alt=\"up\">\n  {{/if}}\n  <span style=\"font-weight:600;min-width:80px\">{{site}}</span>\n  <span style=\"flex:1\">{{status}}</span>\n  <span>Affected: {{{affected_display}}}</span>\n  <span style=\"position:absolute;right:14px;bottom:2px;font-size:10px;opacity:0.6\">updated {{updated}}</span>\n</div>",
+        "contentPartials": [],
+        "defaultContent": "The query didn't return any results.",
+        "editor": {
+          "format": "none",
+          "language": "html"
+        },
+        "editors": [],
+        "externalStyles": [],
+        "helpers": "",
+        "renderMode": "everyRow",
+        "styles": "",
+        "wrap": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "site,status,outage,affected,affected_display,updated\nDFW-01,Operational,false,0,<b>none</b>,2026-11-09 08:15\nORD-02,Major outage,true,412,\"<b style=\"\"color:#f87171\"\">412 subscribers</b> in 3 buildings\",2026-11-09 08:41\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Reviews (markdown, HTML rows from the query)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div style=\"\n  width:100%;\n  border:1px solid #2f333a;\n  border-radius:10px;\n  overflow:hidden;\n  margin-bottom:10px;\n\">\n\n**{{reviewer}}** reviewed at {{time}}\n\n<table style=\"width:100%;border-collapse:collapse\">\n<tr><th style=\"text-align:left\">Incident</th><th style=\"text-align:left\">Result</th></tr>\n{{{review_rows}}}\n</table>\n</div>",
+        "contentPartials": [],
+        "defaultContent": "The query didn't return any results.",
+        "editor": {
+          "format": "auto",
+          "language": "markdown"
+        },
+        "editors": [],
+        "externalStyles": [],
+        "helpers": "",
+        "renderMode": "everyRow",
+        "styles": "",
+        "wrap": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "reviewer,time,review_rows\nAvery,1794211200000,\"<tr><td>INC-101</td><td style=\"\"color:#4ade80\"\">approved</td></tr><tr><td>INC-102</td><td style=\"\"color:#facc15\"\">changes</td></tr>\"\nBlake,1794214800000,\"<tr><td>INC-103</td><td style=\"\"color:#4ade80\"\">approved</td></tr>\"\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "time",
+                "destinationType": "time"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "formatTime",
+          "options": {
+            "timeField": "time",
+            "outputFormat": "YYYY-MM-DD HH:mm",
+            "useTimezone": true
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Case cards (three stat cards with bars)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 6
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div style=\"\n  width:100%;\n  display:flex;\n  gap:14px;\n\">\n\n  <!-- ============== cards ============== -->\n  <div style=\"flex:1;background:#181b1f;border-radius:8px;padding:12px\">\n    <div style=\"font-size:12px;opacity:0.7\">Open</div>\n    <div style=\"font-size:28px;font-weight:700;color:#f59e0b\">{{open}}</div>\n    <div style=\"height:6px;background:#2a2d33;border-radius:3px\"><div style=\"width:{{open_pct}}%;height:6px;background:#f59e0b;border-radius:3px\"></div></div>\n    <div style=\"font-size:11px;margin-top:4px\">{{open_trend}} vs previous {{window}}</div>\n  </div>\n  <div style=\"flex:1;background:#181b1f;border-radius:8px;padding:12px\">\n    <div style=\"font-size:12px;opacity:0.7\">Pending</div>\n    <div style=\"font-size:28px;font-weight:700;color:#60a5fa\">{{pending}}</div>\n    <div style=\"height:6px;background:#2a2d33;border-radius:3px\"><div style=\"width:{{pending_pct}}%;height:6px;background:#60a5fa;border-radius:3px\"></div></div>\n    <div style=\"font-size:11px;margin-top:4px\">{{pending_trend}} vs previous {{window}}</div>\n  </div>\n  <div style=\"flex:1;background:#181b1f;border-radius:8px;padding:12px\">\n    <div style=\"font-size:12px;opacity:0.7\">Closed</div>\n    <div style=\"font-size:28px;font-weight:700;color:#22c55e\">{{closed}}</div>\n    <div style=\"height:6px;background:#2a2d33;border-radius:3px\"><div style=\"width:{{closed_pct}}%;height:6px;background:#22c55e;border-radius:3px\"></div></div>\n    <div style=\"font-size:11px;margin-top:4px\">{{closed_trend}} vs previous {{window}}</div>\n  </div>\n</div>\n<div style=\"font-size:11px;opacity:0.6;margin-top:6px\">{{team}}: {{total}} cases, SLA ok {{sla_ok}}, breached {{sla_breached}}, oldest open {{oldest_open}}, updated {{updated}}</div>",
+        "contentPartials": [],
+        "defaultContent": "The query didn't return any results.",
+        "editor": {
+          "format": "none",
+          "language": "markdown"
+        },
+        "editors": [],
+        "externalStyles": [],
+        "helpers": "",
+        "renderMode": "everyRow",
+        "styles": "",
+        "wrap": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "open,open_pct,open_trend,pending,pending_pct,pending_trend,closed,closed_pct,closed_trend,total,sla_ok,sla_breached,oldest_open,team,window,updated\n42,35,+4,18,15,-2,60,50,+11,120,111,9,3d 4h,NOC,24h,08:45\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Site map (afterRender JavaScript, external styles)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 8
+      },
+      "options": {
+        "afterRender": "// Draws one dot per row into the container; the real panel loads Leaflet from unpkg here.\nconst root = context.element.querySelector('.ws-site-map');\nconst rows = context.data[0] || [];\nroot.innerHTML = rows.map((r) => `<span class=\"ws-dot ws-${r.status}\" title=\"${r.site}\"></span>`).join('');\n",
+        "content": "<div class=\"ws-site-map\"></div>",
+        "contentPartials": [],
+        "defaultContent": "No sites returned by the status query.",
+        "editor": {
+          "format": "auto",
+          "language": "html"
+        },
+        "editors": [
+          "afterRender",
+          "styles"
+        ],
+        "externalStyles": [
+          {
+            "id": "leaflet-css",
+            "url": "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          }
+        ],
+        "helpers": "",
+        "renderMode": "data",
+        "styles": ".ws-site-map { width: 100%; min-height: 200px; }\n.ws-dot { display: inline-block; width: 16px; height: 16px; border-radius: 50%; margin: 4px; }\n.ws-up { background: #22c55e; }\n.ws-down { background: #ef4444; }",
+        "wrap": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "site,lat,lon,status\nDFW-01,32.78,-96.80,up\nORD-02,41.88,-87.63,down\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

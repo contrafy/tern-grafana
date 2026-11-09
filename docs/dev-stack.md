@@ -16,6 +16,7 @@ Needs Docker with the compose v2 plugin, `curl` and `jq`. Nothing is installed o
 | `sh scripts/stack.sh status` | Container state, endpoint readiness, firing alert counts per server, log and trace presence. |
 | `sh scripts/stack.sh smoke` | Fail unless every Prometheus, Alertmanager and Grafana has a firing alert, dashboards are provisioned, exemplars, logs and traces are queryable and the renderer answers (retries up to `STACK_WAIT_SECS`, default 240). Used by CI after `up`. |
 | `make fixtures-capture` / `sh scripts/stack.sh capture` | Record fixtures (see below). |
+| `sh scripts/stack.sh zabbix` | Start the opt-in Zabbix 7.0 profile and seed it with `dev/zabbix/bootstrap.sh` (idempotent; `down` removes it too). |
 | `sh scripts/stack.sh token-path grafana12` | Print the token file path (never the token). |
 | `make fixtures` / `sh scripts/fixtures/embed.sh` | Embed `tests/fixtures/**` into the gitignored `tests/fixtures/generated.luau` for specs. |
 | `python3 scripts/fake-irm/server.py [PORT] [UPSTREAM]` | A fake Grafana IRM (default `127.0.0.1:13900`) serving the scrubbed `tests/fixtures/irm/` captures, dates moved to today, on the IRM paths (settings, OnCall `/oncall/api/v1/*`, Incident RPCs); every other request is proxied to UPSTREAM (default Grafana 12). |
@@ -41,12 +42,50 @@ All published ports bind to `127.0.0.1`.
 | loggen | `quay.io/curl/curl:8.23.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s, plus one line per recent Tempo trace every 10 s. |
 | tracegen-frontend, tracegen-payments | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.163.0` | none | OTLP traces; payments spans carry error status. |
 | logcli | `grafana/logcli:3.7.8` | none | Profile `tools`; only used by `capture` via `docker compose run`. |
+| jsonapi | `busybox:1.37.0-musl` (digest pinned) | internal 8080 | Static OpenWeatherMap-like documents from `dev/json/` for the JSON API datasources. |
+| zabbix-server, zabbix-web, zabbix-agent | `zabbix/zabbix-{server-pgsql,web-nginx-pgsql,agent2}:alpine-7.0.32` (digests pinned) | web 18080 | Profile `zabbix`, opt-in: `sh scripts/stack.sh zabbix`. Database `zabbix` in the postgres service (created by the server image on first start). Admin / `zabbix`. |
 
 promtool and amtool run from the prometheus and alertmanager images (`docker compose run --entrypoint`).
 
-All three Grafanas install `grafana-clock-panel` 2.1.8 at container start (`GF_INSTALL_PLUGINS`, so the
-first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
-`/public/tern-news/feed.xml` for the news panel (no extra container, no CORS).
+All three Grafanas install these pinned plugins at container start (`GF_INSTALL_PLUGINS`, so the first
+start needs network): `grafana-clock-panel` 2.1.8, `marcusolsson-json-datasource` 1.3.23,
+`marcusolsson-treemap-panel` 2.1.1 and `alexanderzobnin-zabbix-app` 6.10.2 (enabled by
+`dev/grafana/provisioning/plugins/apps.yml`; bundles the Zabbix datasource and triggers panel).
+`marcusolsson-dynamictext-panel` 6.3.1 is installed on Grafana 12 and 13 only: it requires Grafana
+>= 12.3.0, so on Grafana 11 the dynamictext panels show "panel plugin not found". They also serve
+`dev/grafana/news/feed.xml` same-origin at `/public/tern-news/feed.xml` for the news panel (no extra
+container, no CORS).
+
+Changing `GF_INSTALL_PLUGINS` recreates the Grafana containers, which wipes their databases: run
+`sh scripts/stack.sh up` afterwards to re-mint the tokens and reseed.
+
+### Section 4 datasources and dashboards
+
+- JSON API: datasources `json-dallas`, `json-chicago`, `json-seattle` (`marcusolsson-json-datasource`,
+  url `http://jsonapi:8080/data/2.5/weather-<city>.json`). Each carries `lat`, `lon`, `units` and a fake
+  `appid=tern-fake-appid-0123456789abcdef` in non-secure `jsonData.queryParams`, the way the real API
+  key sits there, so redaction of proxy URLs, errors and fixtures is exercised (httpd ignores the query
+  string). Dashboard `tern-s4-json`: three temperature gauges (`$.main.temp`, GET, empty urlPath) and a
+  humidity gauge with a named field.
+- Dashboard `tern-s4-dynamictext` (TestData CSV): 1 HTML editor, everyRow, `{{#if}}`/`{{else}}`,
+  `{{{triple}}}` and data-URI SVG `<img>`; 2 markdown editor with `{{{review_rows}}}` HTML from the
+  query and a `formatTime` transformation; 3 three stat cards with bars from 16 fields; 4 renderMode
+  data with `afterRender` JavaScript, `externalStyles` and `styles` (stays on the ladder).
+- Dashboard `tern-s4-treemap`: 1 TestData label cardinality (squarify, percentage thresholds, data
+  links like the cardinality details treemap); 2 Prometheus instant table `count by (__name__)`;
+  3 binary tiling grouped by a field.
+- Zabbix: datasource `zabbix` (`alexanderzobnin-zabbix-datasource`, user login Admin) errors until the
+  `zabbix` profile runs. `sh scripts/stack.sh zabbix` starts it and runs `dev/zabbix/bootstrap.sh`
+  (idempotent, API at 127.0.0.1:18080): disables the image's own "Zabbix server" host, creates host
+  group "Netbox Hosts", hosts `nni-edge-dfw` and `nni-edge-ord` polling the agent container with items
+  `Interface eth0(NNI-ACME-<site>: ...): Bits received|sent` (bps, tag `description: NNI-ACME-...`),
+  `CPU utilization` (%) and `Memory used` (B), four always-true triggers (severities 2..5, the two
+  highest tagged `Priority: 1`) and acknowledges the warning problem. Dashboard `tern-s4-zabbix`
+  (variable `DS_ZABBIX`): two transit timeseries (received, sent with `scale(-1)`, stacked, legend
+  p95/max), CPU and memory panels for unit conversion, stat "Unacknowledged Problems" (triggers count,
+  minSeverity 2, unacknowledged), piechart of six per-severity triggers counts, and the triggers
+  (problems) panel with a `Priority:1` tag filter.
+- Cardinality (`grafanacloud-cardinality-datasource`) is Grafana Cloud only; it has no dev install.
 
 ### What the data looks like
 
@@ -65,7 +104,9 @@ first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
   dashboards `tern-panels` (every panel type, open and collapsed rows, a library panel, a Prometheus
   annotation query), `tern-variables` (datasource, chained `label_values` queries, `metrics()`,
   `query_result()`, custom multi-value with All, constant, interval, textbox, a repeated panel and a
-  repeated row) and `tern-observability` (exemplars, Loki logs and metrics, Tempo search and trace).
+  repeated row), `tern-observability` (exemplars, Loki logs and metrics, Tempo search and trace) and
+  `tern-text-html` (text panels with inline HTML, HTML blocks in Markdown and HTML mode, as real dashboards
+  write them).
   Datasource `testdata` (TestData) gives deterministic frames.
   Folder `Tern Alerts` holds Grafana-managed rules: `TernGrafanaAlwaysFiring` (firing, linked to
   `tern-panels` panel 2), `TernGrafanaTargetDown` (firing), `TernGrafanaPending` (pending),
@@ -114,6 +155,17 @@ first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
   Adding it to a running stack without recreating the Grafanas: `docker compose -f dev/compose.yml up
   -d --wait --no-deps postgres`, then `POST /api/admin/provisioning/datasources/reload` and
   `.../dashboards/reload` on each Grafana.
+- Dashboard `tern-cells` (`dev/grafana/dashboards/tern-cells.json`), TestData CSV tables for the table
+  cell types: 1 battery status (the user dashboards' pattern: percentunit 0..1 gradient and basic gauge
+  overrides, color-background by mapping), 2 gauge modes (gradient with valueDisplayMode color by default,
+  lcd, hidden, continuous-GrYlRd), 3 pill, markdown, json-view, color-text and an applyToRow
+  color-background. Fixtures `ds_query_cells_<panel>` (`capture_cells`).
+- Dashboard `tern-stat-fidelity` (`dev/grafana/dashboards/tern-stat-fidelity.json`), stat panels over
+  constant PromQL (`vector(...)`) reproducing the user dashboards' patterns: untitled stats with fixed
+  colors (green, dark-blue, blue, purple, dark-purple) in `background`/`background_solid`, explicit text
+  sizes, two long-named values side by side, "40239" and "$0" in narrow cards, a light fixed color (dark
+  text), a hex color, a fixed color in `colorMode` value and three threshold-colored values with long
+  names. Fixtures `ds_query_stat_fidelity_<panel>` (`capture_stat_fidelity`).
 
 ### Server behavior the fixtures pin down
 

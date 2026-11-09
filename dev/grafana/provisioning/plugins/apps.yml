@@ -1,0 +1,7 @@
+# The Zabbix app bundles alexanderzobnin-zabbix-datasource and the triggers panel; both need the app enabled.
+apiVersion: 1
+
+apps:
+  - type: alexanderzobnin-zabbix-app
+    org_id: 1
+    disabled: false

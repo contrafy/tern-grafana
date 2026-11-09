@@ -11,6 +11,7 @@
 #   scripts/stack.sh capture [--refresh [PATTERN]]
 #                                   record new fixtures into tests/fixtures (scripts/fixtures/capture.sh);
 #                                   existing ones are only overwritten with --refresh matching PATTERN
+#   scripts/stack.sh zabbix         start the opt-in Zabbix 7.0 profile and seed it (dev/zabbix/bootstrap.sh)
 #   scripts/stack.sh token-path G   print the token file path for G (grafana12|grafana11|grafana13), never the token
 #
 # Tokens live only in .sandbox/stack/<grafana>.token (mode 0600) and are never printed. Every
@@ -38,7 +39,7 @@ log() {
 }
 
 usage() {
-	printf 'usage: %s up|down|reset|status|smoke|capture|token-path <grafana12|grafana11|grafana13>\n' "$0" >&2
+	printf 'usage: %s up|down|reset|status|smoke|capture|zabbix|token-path <grafana12|grafana11|grafana13>\n' "$0" >&2
 	exit 2
 }
 
@@ -206,7 +207,7 @@ cmd_up() {
 
 cmd_down() {
 	require_tools
-	dc down --volumes --remove-orphans
+	dc --profile zabbix down --volumes --remove-orphans
 	rm -f "$STATE"/*.token "$STATE"/*.token.tmp
 }
 
@@ -325,6 +326,11 @@ smoke) cmd_smoke ;;
 capture)
 	shift
 	exec sh "$ROOT/scripts/fixtures/capture.sh" "$@"
+	;;
+zabbix)
+	require_tools
+	dc --profile zabbix up -d zabbix-server zabbix-web zabbix-agent
+	exec sh "$ROOT/dev/zabbix/bootstrap.sh"
 	;;
 token-path)
 	[ $# -eq 2 ] || usage

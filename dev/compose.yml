@@ -13,9 +13,11 @@ x-grafana-env: &grafana-env
   GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
   GF_NEWS_NEWS_FEED_ENABLED: "false"
   GF_PLUGINS_PREINSTALL_DISABLED: "true"
-  # grafana-clock-panel, pinned, installed by the image's run.sh at container start (needs network on
+  # Community plugins, pinned, installed by the image's run.sh at container start (needs network on
   # first start). Grafana 12's run.sh only honors GF_INSTALL_PLUGINS with _FORCE; 11 ignores _FORCE.
-  GF_INSTALL_PLUGINS: grafana-clock-panel 2.1.8
+  # grafana11 overrides this list: dynamictext 6.3.1 requires Grafana >= 12.3.0.
+  GF_INSTALL_PLUGINS: >-
+    grafana-clock-panel 2.1.8,marcusolsson-json-datasource 1.3.23,marcusolsson-dynamictext-panel 6.3.1,marcusolsson-treemap-panel 2.1.1,alexanderzobnin-zabbix-app 6.10.2
   GF_INSTALL_PLUGINS_FORCE: "true"
   GF_LOG_LEVEL: warn
   GF_UNIFIED_ALERTING_ENABLED: "true"
@@ -51,6 +53,9 @@ services:
     environment:
       <<: *grafana-env
       GF_SERVER_ROOT_URL: http://127.0.0.1:3011/
+      # Same list without marcusolsson-dynamictext-panel (6.3.1 needs Grafana >= 12.3.0).
+      GF_INSTALL_PLUGINS: >-
+        grafana-clock-panel 2.1.8,marcusolsson-json-datasource 1.3.23,marcusolsson-treemap-panel 2.1.1,alexanderzobnin-zabbix-app 6.10.2
     volumes: *grafana-volumes
     healthcheck: *grafana-health
 
@@ -196,6 +201,52 @@ services:
       - --span-duration=120ms
       - --service=payments
       - --status-code=Error
+
+  # OpenWeatherMap-like documents (dev/json) for the JSON API datasources. busybox httpd ignores the
+  # query string, so the fake appid in jsonData.queryParams only exercises redaction.
+  jsonapi:
+    image: busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www", "-c", "/www/httpd.conf"]
+    volumes:
+      - ./json:/www:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/data/2.5/weather-dallas.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Opt-in Zabbix 7.0 (`sh scripts/stack.sh zabbix`): server and web share database `zabbix` in the
+  # postgres service (the server image creates it on first start), agent2 is polled by every host
+  # dev/zabbix/bootstrap.sh creates. Web UI and API on 127.0.0.1:18080 (Admin / zabbix).
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-7.0.32@sha256:401dc90cff398aaf6a0fa72625f4b9b57407e61231f94e13e7f4e68aeff0c42c
+    profiles: [zabbix]
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment: &zabbix-db
+      DB_SERVER_HOST: postgres
+      POSTGRES_USER: tern
+      POSTGRES_PASSWORD: tern-dev
+      POSTGRES_DB: zabbix
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0.32@sha256:a54ce2e19aaf0a61609e4bbc7ec01c16bef504e6e1c51e3854120ac76d2dbaeb
+    profiles: [zabbix]
+    depends_on: [zabbix-server]
+    ports: ["127.0.0.1:18080:8080"]
+    environment:
+      <<: *zabbix-db
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: UTC
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent2:alpine-7.0.32@sha256:aa8fa07dbd41e148b6156555bf10ba6d928efa40f9a4632d6787fb90d4756679
+    profiles: [zabbix]
+    depends_on: [zabbix-server]
+    environment:
+      ZBX_HOSTNAME: zabbix-agent
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_PASSIVESERVERS: 0.0.0.0/0
 
   # CLI-only image for fixture capture (`docker compose run --rm logcli ...`); never started by `up`.
   logcli:

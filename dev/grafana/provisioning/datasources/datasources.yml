@@ -91,3 +91,46 @@ datasources:
       timescaledb: false
     secureJsonData:
       password: tern-dev
+
+  # JSON API (dashboard tern-s4-json), OpenWeatherMap-like documents from dev/json. The appid is fake: it
+  # sits in non-secure jsonData.queryParams exactly like the real API key would, to exercise redaction.
+  - name: Weather Dallas
+    uid: json-dallas
+    type: marcusolsson-json-datasource
+    access: proxy
+    url: http://jsonapi:8080/data/2.5/weather-dallas.json
+    jsonData:
+      queryParams: lat=32.78&lon=-96.8&units=imperial&appid=tern-fake-appid-0123456789abcdef
+
+  - name: Weather Chicago
+    uid: json-chicago
+    type: marcusolsson-json-datasource
+    access: proxy
+    url: http://jsonapi:8080/data/2.5/weather-chicago.json
+    jsonData:
+      queryParams: lat=41.88&lon=-87.63&units=imperial&appid=tern-fake-appid-0123456789abcdef
+
+  - name: Weather Seattle
+    uid: json-seattle
+    type: marcusolsson-json-datasource
+    access: proxy
+    url: http://jsonapi:8080/data/2.5/weather-seattle.json
+    jsonData:
+      queryParams: lat=47.61&lon=-122.33&units=imperial&appid=tern-fake-appid-0123456789abcdef
+
+  # Zabbix 7.0 (profile zabbix, dashboard tern-s4-zabbix). Errors until `sh scripts/stack.sh zabbix` ran.
+  - name: Zabbix
+    uid: zabbix
+    type: alexanderzobnin-zabbix-datasource
+    access: proxy
+    url: http://zabbix-web:8080/api_jsonrpc.php
+    jsonData:
+      authType: userLogin
+      username: Admin
+      trends: true
+      trendsFrom: 7d
+      trendsRange: 4d
+      cacheTTL: 1h
+      timeout: 30
+    secureJsonData:
+      password: zabbix
