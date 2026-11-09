@@ -629,6 +629,10 @@ build = function(e: Element, ctx: Ctx): Node?
 		end
 	elseif name == "u" or name == "ins" then
 		table.insert(classes, "tgx-u")
+	elseif ctx.opts.style and string.match(name, "^h[1-6]$") then
+		-- Grafana's heading variant (dynamictext.css dt-hd<n>); h5 and h6
+		-- draw as Tern h4 elements.
+		table.insert(classes, "dt-hd" .. string.sub(name, 2))
 	end
 	styleClasses(e, classes, ctx.opts.style)
 	local pre = ctx.pre or name == "pre"

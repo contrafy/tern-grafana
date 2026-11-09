@@ -9,6 +9,7 @@ local t = require("../../lib/test")
 local S = require("./support")
 local Frame = require("../../../plugin/lib/frame/types")
 local Handlebars = require("../../../plugin/lib/panels/handlebars")
+local Html = require("../../../plugin/lib/panels/html")
 local HtmlStyle = require("../../../plugin/lib/panels/html_style")
 local Dyn = require("../../../plugin/lib/panels/dynamictext")
 local Registry = require("../../../plugin/lib/panels/registry")
@@ -125,6 +126,41 @@ describe("inline styles", function()
 		local r = HtmlStyle.compile("text-indent:2em; word-spacing:4px; table-layout:fixed")
 		expect(r.dropped).toEqual({ "text-indent", "word-spacing", "table-layout" })
 	end)
+	it("draws unitless line heights with literal classes, since Tern reads a calc() line height as px", function()
+		-- `font-size:54px;line-height:1` counts drew as a 1px line box over
+		-- their labels when spelled by a slot.
+		local css = HtmlStyle.stylesheet()
+		expect(HtmlStyle.compile("line-height:1").class).toBe("dt-lhn100")
+		expect(HtmlStyle.compile("line-height:.9").class).toBe("dt-lhn90")
+		expect(HtmlStyle.compile("line-height:1.02").class).toBe("dt-lhn102")
+		for _, rule in { ".dt-lhn100{line-height:1}", ".dt-lhn90{line-height:0.9}", ".dt-lhn102{line-height:1.02}" } do
+			expect({ rule = rule, found = string.find(css, rule, 1, true) ~= nil }).toEqual({
+				rule = rule,
+				found = true,
+			})
+		end
+		-- Past the classes and for %, the element's em gives the same height.
+		expect(HtmlStyle.compile("line-height:150%").class).toBe(HtmlStyle.compile("line-height:1.5em").class)
+		expect(HtmlStyle.compile("line-height:4").class).toBe(HtmlStyle.compile("line-height:4em").class)
+		expect(HtmlStyle.compile("line-height:-1").dropped).toEqual({ "line-height" })
+	end)
+	it("gives styled HTML Grafana's body text and headings, under its inline styles", function()
+		local css = HtmlStyle.stylesheet()
+		-- A ratio, not Tern's inherited fixed line height that 28px text overflows.
+		expect(string.find(css, "%.tgd{[^}]*font%-size:14px;line%-height:1%.5714") ~= nil).toBe(true)
+		local node = Html.view('<h1 style="font-size:1.5em">View Invoices</h1>', {
+			style = function(s: string): string?
+				return HtmlStyle.compile(s).class
+			end,
+		})
+		local h1 = (node.c :: { any })[1]
+		expect(string.find(h1.p.class, "dt-hd1", 1, true) ~= nil).toBe(true)
+		-- The h1 variant (weight 400, line height 32/28) comes first, so the
+		-- inline font-size class wins over its 28px.
+		local hd, fs = string.find(css, ".dt-hd1{", 1, true), string.find(css, ".dt-fs1{", 1, true)
+		expect(hd ~= nil and fs ~= nil and hd < fs).toBe(true)
+		expect(string.find(css, "%.dt%-hd1{[^}]*line%-height:1%.1429;font%-weight:400") ~= nil).toBe(true)
+	end)
 	it("only declares properties and values Tern 0.9.13's stylesheet parser accepts", function()
 		-- Each loads without a parse error in Tern 0.9.13; a rejected
 		-- declaration does nothing, so its class would silently not draw.
@@ -240,6 +276,42 @@ describe("dynamictext panel", function()
 		expect(string.find(plain.p.class, "dt-pt1", 1, true) ~= nil).toBe(true)
 		local rules = view(panel({ content = "x", styles = ".x { color: red }" }), { frame({}) })
 		expect(string.find(S.text(rules), "panel styles with selectors", 1, true) ~= nil).toBe(true)
+	end)
+	it("sizes the root to the panel's content box, so a card's height:100% fills its row", function()
+		-- TextPanel gives the plugin root the panel's size; with an indefinite
+		-- root, a `height:100%` card under a `min-height` one stayed at its
+		-- content height and its absolute footer rose into the content.
+		local p = panel({ content = "x", styles = "padding:4px" })
+		local capped = Registry.view(
+			p,
+			{ frame({}) },
+			env,
+			{ key = "k", card_height = 300, size = { w = 400, h = 714 } }
+		)
+		expect((capped :: any).p.class).toBe(
+			"tgd dt-root " .. HtmlStyle.compile("height:300px;overflow:auto;padding:4px").class
+		)
+		-- Expanded (no card cap): Grafana's panel height less padding and the
+		-- title header.
+		p.title = "Alerts"
+		local expanded = Registry.view(p, { frame({}) }, env, { key = "k", size = { w = 400, h = 714 } })
+		expect((expanded :: any).p.class).toBe(
+			"tgd dt-root " .. HtmlStyle.compile("height:666px;overflow:auto;padding:4px").class
+		)
+	end)
+	it("fits a data: image into the box its CSS width and height give it", function()
+		local svg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'/>"
+		local function wrapper(style: string): string
+			local node = view(panel({ wrap = false, content = '<img src="' .. svg .. '" style="' .. style .. '">' }), {
+				frame({ Frame.field("n", "number", { 1 }) }),
+			})
+			return S.find(node, function(n: any): boolean
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "dt-img", 1, true) == 1
+			end).p.class
+		end
+		local both = wrapper("width:100%;height:100%;object-fit:contain")
+		expect(string.find(both, "dt-img dt-img-w dt-img-h ", 1, true) == 1).toBe(true)
+		expect((string.find(wrapper("width:40px"), "dt-img-h", 1, true))).toBeNil()
 	end)
 end)
 

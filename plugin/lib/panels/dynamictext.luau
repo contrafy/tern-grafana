@@ -55,6 +55,11 @@ M.types = { "marcusolsson-dynamictext-panel" }
 -- Tern blob limit.
 local MAX_IMAGE_BYTES = 256 * 1024
 
+-- PanelChrome: content padding on each side (theme.components.panel.padding)
+-- and the title header's height (panel.headerHeight grid units).
+local PANEL_PADDING_PX = 8
+local PANEL_HEADER_PX = 32
+
 local IMAGE_MIME: { [string]: boolean } = {
 	["image/svg+xml"] = true,
 	["image/png"] = true,
@@ -434,6 +439,13 @@ local function imageHook(d: Draw, style: (string) -> string?): (Html.Element, st
 		local classes = { "dt-img" }
 		local sc = if e.attrs.style then style(e.attrs.style) else nil
 		if sc and sc ~= "" then
+			-- A CSS width or height sizes the box; the picture fills it on
+			-- that axis (object-fit inside), as an img element does.
+			for _, axis in { "w", "h" } do
+				if string.find(" " .. sc, " dt%-" .. axis .. "%d") then
+					table.insert(classes, "dt-img-" .. axis)
+				end
+			end
 			table.insert(classes, sc)
 		end
 		return { k = "el", p = { tag = "span", class = table.concat(classes, " ") }, c = { img } }
@@ -522,18 +534,30 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		table.insert(rows, draw(html, wrap, d, "r" .. i))
 	end
 
-	local rootClass = { "tgd" }
+	-- TextPanel sizes the plugin's root to the panel's content box and
+	-- scrolls inside it, so a row is a flex item of a column with a definite
+	-- height and a template's `height: 100%` resolves against the row. Tern's
+	-- capped card body stands for that box; an expanded panel takes Grafana's
+	-- (gridPos height less PanelChrome's padding and title header).
+	local box = opts.card_height
+	if box == nil and opts.size then
+		local header = if (Json.str(env, panel.title) or "") ~= "" then PANEL_HEADER_PX else 0
+		box = opts.size.h - 2 * PANEL_PADDING_PX - header
+	end
+	local css = if box then string.format("height:%dpx;overflow:auto", math.max(0, math.floor(box))) else ""
 	local styles = Json.str(env, o.styles)
 	if styles and Str.trim(styles) ~= "" then
-		local css = if opts.interpolate then opts.interpolate(styles) else styles
-		if string.find(css, "{", 1, true) then
+		local own = if opts.interpolate then opts.interpolate(styles) else styles
+		if string.find(own, "{", 1, true) then
 			table.insert(d.dropped, "panel styles with selectors")
 		else
-			local c = compileStyle(d)(css)
-			if c and c ~= "" then
-				table.insert(rootClass, c)
-			end
+			css ..= ";" .. own
 		end
+	end
+	local rootClass = { "tgd dt-root" }
+	local c = if css ~= "" then compileStyle(d)(css) else nil
+	if c and c ~= "" then
+		table.insert(rootClass, c)
 	end
 	local kids: { Node } = rows
 	if #d.dropped > 0 then
