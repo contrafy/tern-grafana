@@ -139,6 +139,26 @@ describe("treemap panel", function()
 		expect(bare > 0).toBe(true)
 	end)
 
+	-- TreemapTile measures with a `14px sans-serif` canvas (Arial metrics),
+	-- narrower than Inter or Geist: "service" (44.3 px) plus its 20 px
+	-- margins fits a 66 px tile, as in Grafana's render, and not a 64 px one.
+	it("measures labels with the sans-serif canvas font", function()
+		local panel = S.json(LABELS_PANEL)
+		local function label(tileWidth: number): string?
+			local frames = {
+				{
+					refId = "A",
+					fields = { Frame.field("label", "string", { "service" }), Frame.field("count", "number", { 3 }) },
+				},
+			}
+			local tiles =
+				Treemap.tiles(panel, Treemap.views(panel, frames, env), frames, env, opts(), tileWidth + 8, 100)
+			return leaves(tiles)[1].label
+		end
+		expect(label(66)).toBe("service")
+		expect(label(64)).toBe(nil)
+	end)
+
 	-- Grafana's click menu lists the size field's data links with the row's
 	-- values URI-encoded; "d/..." is relative to Grafana's root.
 	it("links each leaf to its interpolated data link", function()

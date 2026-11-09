@@ -42,7 +42,6 @@ local Interpolate = require("../dashboard/interpolate")
 local Json = require("./json")
 local Url = require("../url")
 local Layout = require("./treemap_layout")
-local Stat = require("./stat")
 local SvgTreemap = require("../render/svg_treemap")
 local Thresholds = require("../units/thresholds")
 local TsGradient = require("../render/ts_gradient")
@@ -464,8 +463,121 @@ function M.size(panel: any, env: Env, opts: Common.Options): (number, number)
 	return math.max(1, math.floor(W)), math.max(1, math.floor(H))
 end
 
+-- TreemapTile measures the label with a canvas font of `14px sans-serif`
+-- (not the theme's Inter): Helvetica/Arial (Liberation Sans in the image
+-- renderer), whose advance widths in em of ASCII 32..126 these are.
+local SANS: { number } = table.freeze({
+	0.278,
+	0.278,
+	0.355,
+	0.556,
+	0.556,
+	0.889,
+	0.667,
+	0.191,
+	0.333,
+	0.333,
+	0.389,
+	0.584,
+	0.278,
+	0.333,
+	0.278,
+	0.278,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.278,
+	0.278,
+	0.584,
+	0.584,
+	0.584,
+	0.556,
+	1.015,
+	0.667,
+	0.667,
+	0.722,
+	0.722,
+	0.667,
+	0.611,
+	0.778,
+	0.722,
+	0.278,
+	0.5,
+	0.667,
+	0.556,
+	0.833,
+	0.722,
+	0.778,
+	0.667,
+	0.778,
+	0.722,
+	0.667,
+	0.611,
+	0.722,
+	0.667,
+	0.944,
+	0.667,
+	0.667,
+	0.611,
+	0.278,
+	0.278,
+	0.278,
+	0.469,
+	0.556,
+	0.333,
+	0.556,
+	0.556,
+	0.5,
+	0.556,
+	0.556,
+	0.278,
+	0.556,
+	0.556,
+	0.222,
+	0.222,
+	0.5,
+	0.222,
+	0.833,
+	0.556,
+	0.556,
+	0.556,
+	0.556,
+	0.333,
+	0.5,
+	0.278,
+	0.556,
+	0.5,
+	0.722,
+	0.5,
+	0.5,
+	0.5,
+	0.334,
+	0.26,
+	0.334,
+	0.584,
+})
+
+-- Any other character: a full em, so a wide glyph never counts as fitting.
+local function sansEm(text: string): number
+	if utf8.len(text) == nil then
+		return #text
+	end
+	local em = 0
+	for _, c in utf8.codes(text) do
+		em += if c >= 32 and c <= 126 then SANS[c - 31] else 1
+	end
+	return em
+end
+
 local function fits(label: string, w: number, h: number): boolean
-	return Stat.textEm(label) * SvgTreemap.FONT + M.LABEL_MARGIN_X < w and M.LABEL_MARGIN_Y < h
+	return sansEm(label) * SvgTreemap.FONT + M.LABEL_MARGIN_X < w and M.LABEL_MARGIN_Y < h
 end
 
 -- The class of the color Grafana fills a leaf with: a fixed color keeps a
