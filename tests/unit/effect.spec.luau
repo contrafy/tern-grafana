@@ -18,6 +18,17 @@ describe("regions", function()
 	end)
 end)
 
+describe("toastLevel", function()
+	-- Tern raises on a level it does not know, which would lose the toast.
+	it("keeps Tern's levels and shows anything else as info", function()
+		expect(Effect.toastLevel("success")).toBe("success")
+		expect(Effect.toastLevel("error")).toBe("error")
+		expect(Effect.toastLevel("info")).toBe("info")
+		expect(Effect.toastLevel("warn")).toBe("info")
+		expect(Effect.toastLevel(nil)).toBe("info")
+	end)
+end)
+
 describe("errorView", function()
 	it("names the block, the failing step and the error", function()
 		local view = Effect.errorView("tern-grafana.query", "update(http_done)", "boom")

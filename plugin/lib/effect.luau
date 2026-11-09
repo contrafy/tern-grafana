@@ -78,6 +78,15 @@ function M.regions(view: View): Regions
 	return { main = view :: Node }
 end
 
+-- `level` as a level Tern accepts: Tern raises on an unknown level, which
+-- would lose the message, so anything else shows as info.
+function M.toastLevel(level: any): ToastLevel
+	if level == "success" or level == "error" then
+		return level
+	end
+	return "info"
+end
+
 -- The first line of a raised error without a "runtime error: " prefix: Tern's
 -- errors may carry a Lua stack traceback, which belongs in the log, not in a
 -- block.

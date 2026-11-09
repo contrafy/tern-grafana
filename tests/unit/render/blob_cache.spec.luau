@@ -79,6 +79,47 @@ describe("BlobCache.get", function()
 	end)
 end)
 
+describe("BlobCache.digest", function()
+	-- Only the in-memory LRU key: content differing in any byte, in the tail
+	-- past the last whole word, or only in length must not share an id.
+	it("tells apart single-byte edits, tails and lengths", function()
+		local base = string.rep("abcdefgh", 16) .. "xyz"
+		local seen: { [string]: string } = {}
+		local function add(s: string)
+			local d = BlobCache.digest(s)
+			expect(seen[d] == nil or seen[d] == s).toBe(true)
+			seen[d] = s
+		end
+		for i = 1, #base do
+			for c = 0, 255, 5 do
+				add(string.sub(base, 1, i - 1) .. string.char(c) .. string.sub(base, i + 1))
+			end
+			add(string.sub(base, 1, i))
+		end
+		add("")
+		add("\0")
+		add("\0\0\0\0")
+	end)
+end)
+
+describe("BlobCache.sweep", function()
+	-- The per-key memo holds whole chart bytes: keys a view no longer shows
+	-- are dropped at the end of its pass, while their ids stay reusable.
+	it("forgets keys the last pass did not use, keeping their ids", function()
+		local cache = BlobCache.new()
+		local mint, count = minter()
+		local a = BlobCache.get(cache, "p1", "A", Assets.SVG, mint)
+		BlobCache.get(cache, "p2", "B", Assets.SVG, mint)
+		BlobCache.sweep(cache)
+		BlobCache.get(cache, "p1", "A", Assets.SVG, mint)
+		BlobCache.sweep(cache)
+		expect(cache.last.p1 ~= nil).toBe(true)
+		expect(cache.last.p2).toBeNil()
+		expect(BlobCache.get(cache, "p3", "A", Assets.SVG, mint)).toBe(a)
+		expect(count()).toBe(2)
+	end)
+end)
+
 describe("Assets.materialize", function()
 	it("swaps asset keys for blob ids throughout the tree", function()
 		local image: any = { k = "image", p = { asset = "chart", alt = "x" } }

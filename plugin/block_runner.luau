@@ -5,18 +5,18 @@
 -- decides nothing.
 --
 -- Every tern call and every machine call is pcalled: a raising machine shows
--- an error view and the block stays open. Blocks get no close callback, so a
--- liveness timer polls tern.pane.list; once the pane is gone (or the machine
--- asked to exit) timers are cancelled and late callbacks are ignored. Late
--- http answers to a live block are delivered: the machine drops stale ones
--- by tag.
+-- an error view and the block stays open. Blocks get no close callback, so one
+-- host-wide liveness timer polls tern.pane.list; once a block's pane is gone
+-- (or the machine asked to exit) its timers are cancelled and late callbacks
+-- are ignored. Late http answers to a live block are delivered: the machine
+-- drops stale ones by tag.
 
 local BlobHost = require("./blob_host")
 local ConfigHost = require("./config_host")
 local Effect = require("./lib/effect")
 local EnvHost = require("./env_host")
 local TransportHost = require("./transport_host")
-local ui = require("./lib/ui")
+local Env = require("./lib/env")
 
 type Effect = Effect.Effect
 type Msg = Effect.Msg
@@ -24,6 +24,9 @@ type Machine = Effect.Machine<any>
 
 export type Handler = (effect: any, send: (msg: any) -> ()) -> ()
 export type Handlers = { [string]: Handler }
+-- A machine, or a function returning it: the latter defers requiring the
+-- machine's modules until a block of this kind first opens.
+export type MachineSource = Machine | () -> Machine
 
 type Run = {
 	id: string,
@@ -35,13 +38,22 @@ type Run = {
 	failure: Effect.Regions?,
 	stopped: boolean,
 	timers: { [TimerHandle]: true },
-	liveness: TimerHandle?,
+	-- The liveness sweep generation the block started in.
+	born: number,
+	-- The Env of the message being delivered (an Env.Env), reused by the
+	-- render it causes.
+	env: any,
 }
 
 local M = {}
 
--- How often a block checks that its pane still exists.
+-- How often the host checks that block panes still exist.
 M.LIVENESS_MS = 5000
+
+-- Live blocks, swept by one host-wide timer while any exist.
+local live: { [Run]: true } = {}
+local sweepGen = 0
+local sweepTimer: TimerHandle? = nil
 
 local function warn(run: Run, what: string, err: any)
 	pcall(tern.log.warn, string.format("tern-grafana %s %s failed", run.id, what), tostring(err))
@@ -57,19 +69,51 @@ local function stop(run: Run)
 		return
 	end
 	run.stopped = true
+	live[run] = nil
 	for handle in run.timers do
 		pcall(function()
 			handle:cancel()
 		end)
 	end
 	table.clear(run.timers)
-	if run.liveness then
-		local handle = run.liveness :: TimerHandle
-		pcall(function()
-			handle:cancel()
-		end)
-		run.liveness = nil
+end
+
+local arm: () -> ()
+
+-- A block is checked once it has existed for a full interval, as when each
+-- block had its own timer: a pane just opened may not be listed yet.
+local function sweep()
+	sweepTimer = nil
+	sweepGen += 1
+	local ok, panes = pcall(tern.pane.list)
+	if ok then
+		local alive: { [any]: true } = {}
+		for _, p in panes do
+			alive[p.pane] = true
+		end
+		for run in live do
+			if run.born <= sweepGen - 2 and not alive[run.cx.pane] then
+				stop(run)
+			end
+		end
 	end
+	arm()
+end
+
+function arm()
+	if sweepTimer ~= nil or next(live) == nil then
+		return
+	end
+	local ok, handle = pcall(tern.timer, M.LIVENESS_MS, sweep)
+	if ok then
+		sweepTimer = handle
+	end
+end
+
+local function watch(run: Run)
+	run.born = sweepGen
+	live[run] = true
+	arm()
 end
 
 local function call(run: Run, what: string, fn: () -> ()): boolean
@@ -80,21 +124,37 @@ local function call(run: Run, what: string, fn: () -> ()): boolean
 	return ok
 end
 
+-- Executes an open, copy or toast effect on `cx` (blocks and lenses share
+-- these); nil when `e` is another kind, else whether the call succeeded and
+-- its error.
+function M.execUi(cx: EffectCx, e: any): (boolean?, any)
+	local kind = e.kind
+	if kind == "toast" then
+		return pcall(cx.toast, cx, Effect.toastLevel(e.level), e.text or "", e.sub)
+	elseif kind == "open" then
+		return pcall(cx.open, cx, e.target)
+	elseif kind == "copy" then
+		return pcall(cx.copy, cx, e.text or "")
+	end
+	return nil, nil
+end
+
 local exec: (run: Run, effects: { Effect }) -> ()
 
--- Applies a message and executes its effects; true when it ran.
-local function apply(run: Run, msg: Msg): boolean
+-- Applies a message and executes its effects. Returns whether it ran, and
+-- the machine's `changed` (false: render and save may be skipped).
+local function apply(run: Run, msg: Msg, env: Env.Env): (boolean, boolean?)
 	if run.stopped or run.failure then
-		return false
+		return false, nil
 	end
-	local ok, state, effects = pcall(run.machine.update, run.state, msg, EnvHost.make(run.cx))
+	local ok, state, effects, changed = pcall(run.machine.update, run.state, msg, env)
 	if not ok then
 		fail(run, "update(" .. tostring(msg.kind) .. ")", state)
-		return true
+		return true, nil
 	end
 	run.state = state
 	exec(run, effects or {})
-	return true
+	return true, changed
 end
 
 local function refresh(run: Run)
@@ -109,10 +169,15 @@ local function refresh(run: Run)
 	end)
 end
 
--- Delivers an asynchronous message, then renders and saves.
+-- Delivers an asynchronous message, then renders and saves unless the
+-- machine said nothing changed.
 local function deliver(run: Run, msg: Msg)
-	if apply(run, msg) then
+	local env = EnvHost.make(run.cx)
+	local ran, changed = apply(run, msg, env)
+	if ran and changed ~= false then
+		run.env = env
 		refresh(run)
+		run.env = nil
 	end
 end
 
@@ -190,23 +255,11 @@ function exec(run: Run, effects: { Effect })
 			call(run, "kv_set", function()
 				tern.kv.set(e.key, e.value)
 			end)
-		elseif kind == "toast" then
-			-- Tern raises on an unknown level, which would lose the message.
-			local level = e.level
-			if level ~= "success" and level ~= "error" then
-				level = "info"
+		elseif kind == "toast" or kind == "open" or kind == "copy" then
+			local _, err = M.execUi(run.cx, e)
+			if err ~= nil then
+				warn(run, kind, err)
 			end
-			call(run, "toast", function()
-				run.cx:toast(level, e.text or "", e.sub)
-			end)
-		elseif kind == "open" then
-			call(run, "open", function()
-				run.cx:open(e.target)
-			end)
-		elseif kind == "copy" then
-			call(run, "copy", function()
-				run.cx:copy(e.text or "")
-			end)
 		elseif kind == "reveal" then
 			call(run, "reveal", function()
 				run.cx:frame({ { "reveal", e.id, e.at or "nearest" } })
@@ -226,42 +279,11 @@ function exec(run: Run, effects: { Effect })
 	end
 end
 
-local function watch(run: Run)
-	local function tick()
-		run.liveness = nil
-		if run.stopped then
-			return
-		end
-		local ok, panes = pcall(tern.pane.list)
-		if ok then
-			local alive = false
-			for _, p in panes do
-				if p.pane == run.cx.pane then
-					alive = true
-					break
-				end
-			end
-			if not alive then
-				stop(run)
-				return
-			end
-		end
-		local okTimer, handle = pcall(tern.timer, M.LIVENESS_MS, tick)
-		if okTimer then
-			run.liveness = handle
-		end
-	end
-	local ok, handle = pcall(tern.timer, M.LIVENESS_MS, tick)
-	if ok then
-		run.liveness = handle
-	end
-end
-
 local function view(run: Run): BlockView
 	if run.failure then
 		return run.failure :: any
 	end
-	local env = EnvHost.make(run.cx)
+	local env = run.env or EnvHost.make(run.cx)
 	local ok, node, assets = pcall(run.machine.view, run.state, env)
 	if not ok then
 		fail(run, "view", node)
@@ -269,11 +291,7 @@ local function view(run: Run): BlockView
 	end
 	local regions = Effect.regions(node)
 	local okBlob, err = pcall(function()
-		for _, region in { regions.main, regions.dock, regions.layer } do
-			if region then
-				BlobHost.materialize(region :: ui.Node, assets or {}, run.cx)
-			end
-		end
+		BlobHost.materialize(regions, assets, run.cx)
 	end)
 	if not okBlob then
 		warn(run, "materialize", err)
@@ -281,22 +299,36 @@ local function view(run: Run): BlockView
 	return regions :: any
 end
 
-function M.define(id: string, machine: Machine, handlers: Handlers?)
+function M.define(id: string, source: MachineSource, handlers: Handlers?)
+	local machine: Machine? = if type(source) == "table" then source else nil
+	local function load(): Machine
+		if machine == nil then
+			machine = (source :: () -> Machine)()
+		end
+		return machine :: Machine
+	end
 	tern.block.define(id, {
 		init = function(cx: BlockCx, args: { string }, saved: any): Run
 			pcall(ConfigHost.load)
 			local run: Run = {
 				id = id,
-				machine = machine,
+				machine = nil :: any,
 				handlers = handlers or {},
 				cx = cx,
 				state = nil,
 				failure = nil,
 				stopped = false,
 				timers = {},
-				liveness = nil,
+				born = 0,
+				env = nil,
 			}
-			local ok, state, effects = pcall(machine.init, args or {}, saved, EnvHost.make(cx))
+			local okLoad, loaded = pcall(load)
+			if not okLoad then
+				fail(run, "load", loaded)
+				return run
+			end
+			run.machine = loaded
+			local ok, state, effects = pcall(loaded.init, args or {}, saved, EnvHost.make(cx))
 			if not ok then
 				fail(run, "init", state)
 				return run
@@ -322,12 +354,13 @@ function M.define(id: string, machine: Machine, handlers: Handlers?)
 			if run.stopped or run.failure then
 				return false
 			end
+			local env = EnvHost.make(cx)
 			local fast = run.machine.key
 			if fast == nil then
-				apply(run, { kind = "key", key = key })
+				apply(run, { kind = "key", key = key }, env)
 				return true
 			end
-			local ok, state, effects, changed = pcall(fast, run.state, key, EnvHost.make(cx))
+			local ok, state, effects, changed = pcall(fast, run.state, key, env)
 			if not ok then
 				fail(run, "key", state)
 				return true
@@ -342,7 +375,7 @@ function M.define(id: string, machine: Machine, handlers: Handlers?)
 		end,
 		event = function(run: Run, ev: UiEvent, cx: BlockCx)
 			run.cx = cx
-			apply(run, { kind = "event", ev = ev })
+			apply(run, { kind = "event", ev = ev }, EnvHost.make(cx))
 		end,
 		save = function(run: Run): any
 			if run.failure or run.machine.save == nil then

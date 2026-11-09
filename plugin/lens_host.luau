@@ -9,6 +9,7 @@
 -- rehydrates a lens after a reload, so nothing below runs effects or reads
 -- config in them.
 
+local BlockRunner = require("./block_runner")
 local EnvHost = require("./env_host")
 local LensTypes = require("./lib/lens/types")
 local ui = require("./lib/ui")
@@ -21,6 +22,7 @@ type HostState = {
 	-- The lens raised: show raw from now on.
 	broken: boolean,
 	warned: boolean,
+	lens: LensTypes.Lens<any>,
 }
 
 local M = {}
@@ -42,14 +44,8 @@ local function guard(state: HostState, what: string, ok: boolean, err: any): boo
 end
 
 local function execute(state: HostState, effect: Effect, cx: EffectCx)
-	local ok, err
-	if effect.kind == "open" then
-		ok, err = pcall(cx.open, cx, effect.target)
-	elseif effect.kind == "copy" then
-		ok, err = pcall(cx.copy, cx, effect.text)
-	elseif effect.kind == "toast" then
-		ok, err = pcall(cx.toast, cx, effect.level, effect.text, effect.sub)
-	else
+	local ok, err = BlockRunner.execUi(cx, effect)
+	if ok == nil then
 		ok, err = false, "unknown effect"
 	end
 	if not ok then
@@ -57,10 +53,22 @@ local function execute(state: HostState, effect: Effect, cx: EffectCx)
 	end
 end
 
-function M.define<S>(id: string, lens: LensTypes.Lens<S>)
+-- `source` is the lens, or a function returning it: the latter defers
+-- requiring the lens's modules until it first opens.
+function M.define<S>(id: string, source: LensTypes.Lens<S> | () -> LensTypes.Lens<S>)
+	local loaded: LensTypes.Lens<any>? = if type(source) == "table" then source :: any else nil
 	local def: LensDef<HostState> = {
 		open = function(run: LensRun, _cx: EffectCx): HostState
-			local state: HostState = { id = id, inner = nil, broken = false, warned = false }
+			local state: HostState = { id = id, inner = nil, broken = false, warned = false, lens = nil :: any }
+			if loaded == nil then
+				local okLoad, lens = pcall(source :: () -> LensTypes.Lens<S>)
+				if not guard(state, "load", okLoad, lens) then
+					return state
+				end
+				loaded = lens :: any
+			end
+			local lens = loaded :: LensTypes.Lens<any>
+			state.lens = lens
 			local ok, inner = pcall(lens.open, {
 				line = run.line,
 				typed = run.typed,
@@ -76,7 +84,7 @@ function M.define<S>(id: string, lens: LensTypes.Lens<S>)
 		line = function(state: HostState, l: LensLine)
 			if not state.broken then
 				local ok, err = pcall(function(): any
-					lens.line(state.inner, l.text)
+					state.lens.line(state.inner, l.text)
 					return nil
 				end)
 				guard(state, "line", ok, err)
@@ -85,7 +93,7 @@ function M.define<S>(id: string, lens: LensTypes.Lens<S>)
 		finish = function(state: HostState, status: number)
 			if not state.broken then
 				local ok, err = pcall(function(): any
-					lens.finish(state.inner, status)
+					state.lens.finish(state.inner, status)
 					return nil
 				end)
 				guard(state, "finish", ok, err)
@@ -96,7 +104,7 @@ function M.define<S>(id: string, lens: LensTypes.Lens<S>)
 				return nil
 			end
 			local ok, node = pcall(function(): ui.Node?
-				return lens.view(state.inner, EnvHost.make())
+				return state.lens.view(state.inner, EnvHost.make())
 			end)
 			if not guard(state, "view", ok, node) then
 				return nil
@@ -104,8 +112,11 @@ function M.define<S>(id: string, lens: LensTypes.Lens<S>)
 			return node :: any
 		end,
 		event = function(state: HostState, ev: UiEvent, cx: EffectCx)
-			local handler = lens.event
-			if state.broken or handler == nil then
+			if state.broken then
+				return
+			end
+			local handler = state.lens.event
+			if handler == nil then
 				return
 			end
 			local ok, effects = pcall(function(): { Effect }
