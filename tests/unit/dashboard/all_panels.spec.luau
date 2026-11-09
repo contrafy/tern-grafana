@@ -237,7 +237,8 @@ for _, version in S.VERSIONS do
 				local px = assert(tonumber(string.match(assets[image.p.asset].bytes, 'font%-size="(%d+)"')))
 				return image, px
 			end
-			local body = View.cardHeight(8, false)
+			-- p5 has a title and a description: head and chip lines.
+			local body = View.cardHeight(8, true, true)
 			local up, upPx = stat("p5")
 			local none, nonePx = stat("p6")
 			expect(up.p.alt).toBe("5")

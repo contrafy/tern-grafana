@@ -140,6 +140,9 @@
 .tgp-table .tg-cols-15 { grid-template-columns: repeat(15, minmax(auto, max-content)); }
 .tgp-table .tg-cols-16 { grid-template-columns: repeat(16, minmax(auto, max-content)); }
 
+/* EmptyTablePlaceholder: centered under the header in text.secondary. */
+.tgp-table-empty { padding: 2em 0; text-align: center; color: var(--sf-c-muted); }
+
 /* color-background cells (and applyToRow rows): Grafana's solid color, or
    a 120deg gradient from a darker copy of it, with contrasting text; the
    fill covers the whole cell (tg-c padding: 2px 14px 2px 6px). */

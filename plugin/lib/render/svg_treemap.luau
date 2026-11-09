@@ -16,7 +16,7 @@ export type Tile = {
 	y0: number,
 	x1: number,
 	y1: number,
-	-- Color classes of a leaf (tg-s3, "tgp-fx tgp-info"); nil for a group.
+	-- Color classes of a leaf (tg-gc8, tg-s3); nil for a group.
 	class: string?,
 	-- Drawn label, nil when it does not fit.
 	label: string?,

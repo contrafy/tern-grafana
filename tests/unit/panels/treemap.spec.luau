@@ -88,14 +88,36 @@ describe("treemap panel", function()
 	end)
 
 	-- Percentage thresholds scale between the frames' smallest and largest
-	-- numbers: the largest is red, the upper half yellow, the rest blue.
+	-- numbers: the largest is red, the upper half yellow, the rest blue, each
+	-- the saturated color Grafana fills the tile with (tern-grafana.css:
+	-- tg-gc8 #F2495C, tg-gc56 #FADE2A, tg-gc103 #5794F2, switched to
+	-- Grafana's light shades under Tern's light theme), not Tern's muted
+	-- status tones.
 	it("fills each leaf with its color field's threshold color", function()
 		local panel = S.json(LABELS_PANEL)
 		local tiles =
 			Treemap.tiles(panel, Treemap.views(panel, labelFrames(), env), labelFrames(), env, opts(), 997, 344)
-		expect(tiles[1].class).toBe("tgp-fx tgp-error")
-		expect(tiles[2].class).toBe("tgp-fx tgp-warning")
-		expect(tiles[8].class).toBe("tgp-fx tgp-info")
+		expect(tiles[1].class).toBe("tg-gc8")
+		expect(tiles[2].class).toBe("tg-gc56")
+		expect(tiles[8].class).toBe("tg-gc103")
+	end)
+
+	-- A fixed color fills every leaf with it (a literal hex as its nearest
+	-- class, kept in both themes); a continuous scheme fills by the value's
+	-- position in it.
+	it("fills leaves with a fixed color or a continuous scheme's color", function()
+		local function classes(color: string): { string? }
+			local panel = S.json([[{"type": "marcusolsson-treemap-panel",
+				"fieldConfig": {"defaults": {"color": ]] .. color .. [[}, "overrides": []}}]])
+			local tiles =
+				Treemap.tiles(panel, Treemap.views(panel, labelFrames(), env), labelFrames(), env, opts(), 997, 344)
+			return { tiles[1].class, tiles[8].class }
+		end
+		-- purple #B877D9 (tg-gc127).
+		expect(classes([[{"mode": "fixed", "fixedColor": "purple"}]])).toEqual({ "tg-gc127", "tg-gc127" })
+		expect(classes([[{"mode": "fixed", "fixedColor": "#123456"}]])[1]).toBe("tg-gc178 tg-hex")
+		-- GrYlRd ends at red #F2495C (tg-gc8) for the largest value.
+		expect(classes([[{"mode": "continuous-GrYlRd"}]])[1]).toBe("tg-gc8")
 	end)
 
 	it("labels a tile only when the name fits", function()

@@ -646,6 +646,225 @@
           "csvContent": "device_id,Device,Site,Charge,Device 2,AC lost\n604b9061c6972a0c81f5e2d7,Caldwell Heights MDF,Caldwell Heights Apartments,1,Caldwell Heights MDF,0\n640ba8f10a577e585468a1c2,Red Caboose MDF,The Andre Apartments,0.83,Red Caboose MDF,0\n62a0fbd57a39aac77b4a9e10,Life Tower MDF,Life Tower,0.52,Life Tower MDF,1\n62df00429682a1ef1618a3b4,Venue MDF UPS,Villas on Guadalupe,0.21,Venue MDF UPS,1\n63ed16ae7b09c871c99c0d4e,Villas Outdoor Hut MDF,Villas on Guadalupe,0.05,Villas Outdoor Hut MDF,0"
         }
       ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Labels over 100 series (none)",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "Label,Count\njob,12\ninstance,9\nmode,4"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "include",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "Count",
+                "config": {
+                  "id": "greater",
+                  "options": {
+                    "value": 100
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Labels over 100 series (noValue)",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No label over 100"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "scenarioId": "csv_content",
+          "csvContent": "Label,Count\njob,12\ninstance,9\nmode,4"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "include",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "Count",
+                "config": {
+                  "id": "greater",
+                  "options": {
+                    "value": 100
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Load, 5 minutes in 10 (gaps at the query interval)",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "node_load1 and on() (minute() % 10 < 5)",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "load1"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Load, 5 minutes in 10 (insertNulls 15m joins the gaps)",
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prom3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "insertNulls": 900000
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prom3"
+          },
+          "expr": "node_load1 and on() (minute() % 10 < 5)",
+          "range": true,
+          "instant": false,
+          "editorMode": "code",
+          "legendFormat": "load1"
+        }
+      ]
     }
   ]
 }

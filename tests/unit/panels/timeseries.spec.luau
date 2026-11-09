@@ -551,4 +551,52 @@ describe("timeseries palette positions (setClassicPaletteIdxs)", function()
 	end)
 end)
 
+local function cellsPanel(version: string, id: number): any
+	for _, p in S.decode("grafana/" .. version .. "/dashboard_tern_cells.json").dashboard.panels do
+		if p.id == id then
+			return p
+		end
+	end
+	error("no panel " .. id)
+end
+
+for _, version in S.VERSIONS do
+	-- tern-cells panels 7 and 8 query node_load1 for 5 minutes in every 10:
+	-- Grafana's Prometheus answer has no samples in the gaps, and the time
+	-- field carries the step as its interval. Grafana inserts nulls where
+	-- samples are further apart than the interval, so panel 7's line breaks
+	-- at every gap; panel 8's insertNulls (15m) is longer than the gaps and
+	-- its line runs through. Tern joined every gap.
+	describe("timeseries null insertion on tern-cells, Grafana " .. version, function()
+		local req = S.decode("grafana/" .. version .. "/ds_query_cells_7.request.json")
+		local function runs(id: number): number
+			local _, assets = Timeseries.view(cellsPanel(version, id), S.frames(version, "cells_" .. id), env, {
+				key = "p",
+				from_ms = tonumber(req.from),
+				to_ms = tonumber(req.to),
+			})
+			local d = string.match(pathTag(assets.p.bytes, "tg-line") :: string, ' d="([^"]*)"') :: string
+			return count(d, "M")
+		end
+
+		it("breaks the line where samples are further apart than the interval", function()
+			local time = S.frames(version, "cells_7")[1].fields[1]
+			local interval = (time.config :: any).interval
+			expect(interval).toBe(10000)
+			local gaps = 0
+			for i = 2, #time.values do
+				if time.values[i] - time.values[i - 1] > interval then
+					gaps += 1
+				end
+			end
+			expect(gaps > 0).toBe(true)
+			expect(runs(7)).toBe(gaps + 1)
+		end)
+
+		it("joins gaps up to the insertNulls threshold", function()
+			expect(runs(8)).toBe(1)
+		end)
+	end)
+end
+
 return nil

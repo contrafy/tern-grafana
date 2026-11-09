@@ -618,10 +618,13 @@ local function cellNode(cell: Cell, width: number): Node
 	return { k = "el", p = { tag = "div", class = class }, c = { content } }
 end
 
+-- No frame with fields is PanelDataErrorView; a frame with fields and no
+-- rows (say after filterByValue) keeps its header over Grafana 13's
+-- EmptyTablePlaceholder: the field defaults' noValue, else "No rows".
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): Node
 	local t = M.build(panel, frames, env, opts)
-	if #t.columns == 0 or #t.rows == 0 then
-		return ui.muted("No data", { key = opts.key })
+	if #t.columns == 0 then
+		return Common.noData(panel, env, opts.key)
 	end
 	local showHeader = Json.bool(env, Json.path(env, panel, "options", "showHeader")) ~= false
 	local columns: { Grid.Column } = table.create(#t.columns)
@@ -655,6 +658,10 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 			c = { Grid.grid(opts.key .. ".grid", columns, gridRows, "tern-grafana.table") },
 		},
 	}
+	if #t.rows == 0 then
+		local text = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "noValue")) or "No rows"
+		table.insert(children, { k = "el", p = { tag = "div", key = "empty", class = "tgp-table-empty", text = text } })
+	end
 	local notes: { string } = {}
 	if t.more_rows > 0 then
 		table.insert(notes, string.format("%d more rows", t.more_rows))

@@ -14,11 +14,13 @@
 -- - d3's layout (lib/panels/treemap_layout) with the panel's tiling, round,
 --   paddingInner 4, paddingOuter 4, paddingTop 27, values summed and
 --   sorted descending, over the panel's content box;
--- - a leaf (a row) is filled with its color field's display color (as a
---   class: thresholds, including percentage ones, palette and fixed
---   colors); other nodes are groups at 5% of the text color; a tile shows
---   its name when it fits (measured text + 20 px wide, more than 30 px
---   tall);
+-- - a leaf (a row) is filled with its color field's display color, the hex
+--   Grafana fills it with (display(value).color) as its Grafana color class
+--   (lib/render/ts_gradient: thresholds, including percentage ones,
+--   mappings, fixed colors, continuous schemes; a named color takes its
+--   light shade under the light theme) or its palette class; other nodes
+--   are groups at 5% of the text color; a tile shows its name when it fits
+--   (measured text + 20 px wide, more than 30 px tall);
 -- - Grafana's tooltip (name, formatted size, label badges) and the click
 --   menu of the size field's data links are an overlay over the image: one
 --   element per leaf with the tooltip as its title whose click opens the
@@ -42,6 +44,8 @@ local Url = require("../url")
 local Layout = require("./treemap_layout")
 local Stat = require("./stat")
 local SvgTreemap = require("../render/svg_treemap")
+local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -464,6 +468,29 @@ local function fits(label: string, w: number, h: number): boolean
 	return Stat.textEm(label) * SvgTreemap.FONT + M.LABEL_MARGIN_X < w and M.LABEL_MARGIN_Y < h
 end
 
+-- The class of the color Grafana fills a leaf with: a fixed color keeps a
+-- literal hex in both themes, a continuous scheme interpolates its colors.
+local function leafClass(item: FieldConfig.Item, d: FieldConfig.Display, opts: Common.Options): string
+	if d.class then
+		return d.class
+	end
+	local cfg = item.config
+	local mode = cfg.color_mode
+	local fixed = cfg.fixed_color
+	if (mode == "fixed" or mode == "shades") and fixed and d.color == Thresholds.color(fixed, opts.theme) then
+		return TsGradient.fixedClass(fixed, opts.theme)
+	elseif string.sub(mode, 1, 11) == "continuous-" and d.color == "" then
+		local c = TsGradient.schemeColor(mode, d.percent, opts.theme)
+		if c then
+			return TsGradient.stopClass(c, opts.theme)
+		end
+	end
+	if d.color ~= "" then
+		return TsGradient.stopClass(d.color, opts.theme)
+	end
+	return Charts.toneClass(d.tone)
+end
+
 -- The drawn tiles and the leaves' hits for a W x H content box.
 function M.tiles(
 	panel: any,
@@ -505,7 +532,7 @@ function M.tiles(
 			y0 = t.y0,
 			x1 = t.x1,
 			y1 = t.y1,
-			class = Charts.displayClass(color),
+			class = leafClass(v.color, color, opts),
 			label = label,
 		})
 		if w <= 0 or h <= 0 then

@@ -321,6 +321,29 @@ for _, version in S.VERSIONS do
 			end)
 			expect(errors.p.spans[1].s).toBe("error")
 		end)
+
+		-- Panels 5 and 6: filterByValue leaves the frame its fields and no
+		-- rows. Grafana 13 keeps the header and centers its
+		-- EmptyTablePlaceholder under it, the field defaults' noValue when
+		-- set; Tern said "No data" with no header, which reads as a broken
+		-- query. Without any frame it is still PanelDataErrorView.
+		it("keeps the header over 'No rows' when a filter leaves no rows", function()
+			for id, text in { [5] = "No rows", [6] = "No label over 100" } do
+				local panel, frames = cells(version, id)
+				expect(#frames[1].fields).toBe(2)
+				local node = Table.view(panel, frames, env, OPTS)
+				local heads = S.findAll(node, function(n)
+					return n.p and (n.p.class == "tg-h" or n.p.class == "tg-h tg-num")
+				end)
+				expect(#heads).toBe(2)
+				expect(heads[1].p.text).toBe("Label")
+				local empty = S.find(node, function(n)
+					return n.p and n.p.key == "empty"
+				end)
+				expect(empty.p.text).toBe(text)
+			end
+			expect(S.text(Table.view(cellsPanel(version, 5), {}, env, OPTS))).toBe("No data")
+		end)
 	end)
 end
 

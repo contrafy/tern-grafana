@@ -9,8 +9,10 @@
 --   axis, as Grafana's buildScaleKey groups them (a per-series unit
 --   override draws a second axis on the right); custom.axisCenteredZero,
 --   custom.axisGridShow;
--- - custom.drawStyle line|bars|points, fillOpacity, spanNulls (true
---   connects; false or a gap threshold keeps gaps), stacking.mode
+-- - custom.drawStyle line|bars|points, fillOpacity, insertNulls (a gap
+--   longer than it, else than the time field's interval, gets nulls: the
+--   line breaks), spanNulls (true connects; false or a gap threshold keeps
+--   gaps), stacking.mode
 --   none|normal|percent and stacking.group per series (stacks per scale),
 --   custom.transform negative-Y|constant, thresholdsStyle.mode (off, line,
 --   dashed, area, line+area, dashed+area; "series" colors by value, drawn
@@ -38,6 +40,8 @@ local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgTimeseries = require("../render/svg_timeseries")
+local Tbl = require("../tbl")
+local TsData = require("../render/ts_data")
 local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
@@ -354,6 +358,72 @@ local function fillBelowIndex(name: string, visible: { FieldConfig.Item }): numb
 	return nil
 end
 
+-- applyNullInsertThreshold's threshold for one frame: each field's
+-- custom.insertNulls (ms; 0, false or absent fall back), else the time
+-- field's interval (the datasource's step). Grafana inserts only when every
+-- field agrees (an override on some fields of a frame inserts nothing) and
+-- the threshold is positive. `true`, which the editor never writes, falls
+-- back to the interval too.
+local function nullThreshold(fields: { FieldConfig.Item }, interval: number?, env: Env): number?
+	local threshold: number? = nil
+	for _, item in fields do
+		local own = Json.num(env, item.config.custom.insertNulls)
+		local t = if own and own ~= 0 and own == own then own else interval
+		if t == nil then
+			continue
+		elseif threshold ~= nil and threshold ~= t then
+			return nil
+		end
+		threshold = t
+	end
+	return if threshold and threshold > 0 then threshold else nil
+end
+
+-- Inserted nulls by time column: a cursor move redraws with the same
+-- frames, and the render memo compares value columns by identity.
+type Nulled = {
+	threshold: number,
+	from: number?,
+	to: number?,
+	columns: { { any } },
+	times: { number },
+	filled: { { any } },
+}
+local nulled: { [{ number }]: Nulled } = setmetatable({} :: any, { __mode = "k" })
+
+local function insertNulls(frame: Frame, threshold: number, from: number?, to: number?)
+	local fields = frame.fields
+	local times = fields[1].values :: { number }
+	local columns: { { any } } = table.create(#fields - 1)
+	for i = 2, #fields do
+		columns[i - 1] = fields[i].values
+	end
+	local hit = nulled[times]
+	local fresh = hit ~= nil and hit.threshold == threshold and hit.from == from and hit.to == to
+	if hit and fresh then
+		for i, c in columns do
+			if hit.columns[i] ~= c then
+				fresh = false
+				break
+			end
+		end
+	end
+	if hit == nil or not fresh then
+		local t, filled = TsData.insertNulls(times, columns, threshold, from, to)
+		hit = { threshold = threshold, from = from, to = to, columns = columns, times = t, filled = filled }
+		nulled[times] = hit
+	end
+	local h = hit :: Nulled
+	if h.times == times then
+		return
+	end
+	for i, f in fields do
+		local copy = Tbl.copy(f)
+		copy.values = if i == 1 then h.times else h.filled[i - 1]
+		fields[i] = copy
+	end
+end
+
 -- The last renders by panel key. A cursor move in an expanded panel redraws
 -- the same chart with only the overlay changed; SvgTimeseries.render is a
 -- pure function of (frames, options), so equal arguments reuse its result.
@@ -409,6 +479,15 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	local baked: { Frame } = {}
 	local visible: { FieldConfig.Item } = {}
 	local byFrame: { [Frame]: Frame } = {}
+	local frameItems: { [Frame]: { FieldConfig.Item } } = {}
+	for _, item in items do
+		local list = frameItems[item.frame]
+		if list == nil then
+			list = {}
+			frameItems[item.frame] = list
+		end
+		table.insert(list :: { FieldConfig.Item }, item)
+	end
 	for _, item in items do
 		local tf = Frame.timeField(item.frame)
 		if tf == nil or item.field.type ~= "number" or FieldConfig.hidden(item) then
@@ -422,6 +501,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		end
 		table.insert((out :: Frame).fields, FieldConfig.bake(item))
 		table.insert(visible, item)
+	end
+	for src, out in byFrame do
+		local tf = out.fields[1]
+		local threshold = nullThreshold(frameItems[src], if tf.config then tf.config.interval else nil, env)
+		if threshold then
+			insertNulls(out, threshold, opts.from_ms, opts.to_ms)
+		end
 	end
 	if #visible == 0 then
 		-- TimeSeriesPanel without graphable fields: PanelDataErrorView.
