@@ -164,8 +164,8 @@ Time series are SVG documents built in `lib/render/svg_timeseries.luau` and show
 resolve `var()` in SVG attributes or inline styles, so every stroke and fill is a class (`tg-s1` ... `tg-s10`,
 `tg-grid`, `tg-axis`, `tg-th-<tone>`) that `plugin/tern-grafana.css` binds to theme variables; a theme switch
 recolors without a re-render. An SVG blob is capped at 256 KiB, so the renderer downsamples (LTTB) to a point
-budget and drops series beyond a cap with a legend note. Tern strips SVG `<title>`, and plugin blocks always report
-80x24 cells with no resize callback, so:
+budget and drops series beyond a cap with a legend note. Tern strips SVG `<title>`, and a plugin block knows its pane
+size only in terminal cells (`cx.cols`/`cx.rows`, which track the pane since Tern 0.9; 80x24 on 0.7), never in px, so:
 
 - `maxDataPoints` is a config default (not derived from the pane), and the image scales to the pane width.
 - Point read-out is a keyboard cursor drawn as an overlay child of the `image` node (a flex spacer plus a 1-px
@@ -216,7 +216,10 @@ the host pairs it with the `cwd` from `command_started` per pane.
 ## Window load budget
 
 Tern runs `plugin/window.luau` under the window's 50 ms budget, and a trip disables the whole window half: link
-routes, palette commands, status segments and Carly all disappear until the next reload. Every module required at
+routes, palette commands, status segments and Carly all disappear until the next reload. Since Tern 0.9 a hook that
+runs over its budget at any later time (a host handler over 2 s, a window callback over 50 ms, a formatter over 4 ms)
+is also paused: 5 s, doubling for each trip within 10 minutes, up to 5 minutes, with its due timers waiting; a paused
+status formatter shows no segments (docs/sdk-capability-matrix.md, Tern 0.9.13 re-verification). Every module required at
 load is read, compiled and JIT-compiled inside that budget, so load cost grows with the bytes loaded (about 0.11 ms
 per KiB on an M-series Mac): when the window modules required their lib stacks at the top, the entry loaded
 243 KiB in 48 modules and took 26-28 ms warm, 40 ms on the first load after a file change, with a sandbox

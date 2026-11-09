@@ -138,8 +138,8 @@ end
 -- (getDisplayValueAlignmentFactors). The px come from the panel's Grafana
 -- size (opts.size) with the height bounded by the Tern card's height cap.
 -- The value is drawn as an SVG of that size that shrinks to a narrower tile
--- (valueSvg): Tern's style sheets have no container units and the plugin
--- has no reliable pane width. Title and percent change snap to size classes
+-- (valueSvg): Tern's style sheets have no container units and a block knows
+-- its pane width only in cells, not px. Title and percent change snap to size classes
 -- (panels2.css tgp-stat-fs<N>).
 
 local LINE_HEIGHT = 1.2
@@ -343,8 +343,8 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 	-- Grafana's panel content box, its height bounded by what the Tern card
 	-- body has under the card's height cap (less the tile's padding and
 	-- Tern's sparkline row). The width needs no bound: the value is an SVG
-	-- that scales down to the tile (tileNode); Tern's cx.cols is not a
-	-- reliable pane width (it is not updated when the pane resizes).
+	-- that scales down to the tile (tileNode); Tern's cx.cols counts cells,
+	-- not px.
 	local w = size.w - PANEL_PADDING_PX * 2
 	local h = size.h - (if hasTitle then HEADER_PX else 0) - PANEL_PADDING_PX * 2
 	if opts.card_height then

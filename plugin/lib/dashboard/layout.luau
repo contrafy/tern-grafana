@@ -1,6 +1,6 @@
 --!strict
--- Grafana's 24-column grid as nested flex rows and columns. Tern blocks have
--- no usable pane size (always 80x24 cells), so panels are laid out by
+-- Grafana's 24-column grid as nested flex rows and columns. A Tern block knows
+-- its pane size only in cells, not px, so panels are laid out by
 -- fractions: a guillotine split of the gridPos rectangles into vertical
 -- bands (panels whose y ranges overlap) and, inside a band, columns (panels
 -- whose x ranges overlap), recursively. A stat stacked over a bar gauge next

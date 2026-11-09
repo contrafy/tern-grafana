@@ -18,8 +18,8 @@ OXIPNG_VERSION=10.2.1
 # pngquant.org publishes prebuilt binaries only under unversioned URLs; the
 # pinned checksum makes bootstrap fail closed if upstream replaces them.
 PNGQUANT_VERSION=3.0.3
-TERN_SDK_COMMIT=3fe91247617744635cabb93f4561bd17ac26ca61
-TERN_TYPES_SHA256=fe56ffbe90cb74f1df59e82d58e81203b3dbb803a17c10fb1b25849363783fb2
+TERN_SDK_COMMIT=0479f7048274aedc9f3496ca60675b754953e5a4
+TERN_TYPES_SHA256=50ac8b5dcc41f6e853730d05db5525566992d765e5d3a249ce5e0a5ec4f7749e
 
 die() {
 	printf 'bootstrap: %s\n' "$*" >&2
