@@ -69,11 +69,36 @@ queries change.
 | Interval | the listed values and `auto` (computed from the range with the variable's step count and minimum) |
 | Datasource | the datasources of that type your Grafana user can query, filtered by the regex |
 | Textbox | type a value and press `enter` |
+| Ad hoc filters | see [Ad hoc filters](#ad-hoc-filters) |
 
 Variables are resolved in dependency order: a variable that references another (`label_values(up{job=~"$job"},
 instance)`, a query on datasource `${ds}`) waits for it and is refreshed when it changes. Query variables of other
-datasource types (Loki, Tempo, SQL, ...) and ad hoc filters show as not supported, and panels referencing them keep
-the reference as written.
+datasource types (Loki, Tempo, SQL, ...) show as not supported, and panels referencing them keep the reference as
+written.
+
+### Ad hoc filters
+
+An ad hoc filter variable's chip lists its filters (`job = prometheus, env =~ prod.*`, or "+ Add filter"). Its
+picker lists the filters: `enter` on one edits it (key, operator, value; "Remove this filter" at the key step),
+"+ Add filter" adds one and "Remove all filters" clears them; `escape` goes back a step. Keys and values come from
+the variable's datasource as Grafana lists them: Prometheus `/api/v1/labels` and `/api/v1/label/<key>/values` over
+the dashboard range, narrowed by the other filters and the metrics the dashboard's queries on that datasource
+select (keys used by other filters are left out); Loki's labels narrowed by a stream selector of the other filters;
+the variable's `defaultKeys` replace the key list. A typed key or value is offered when the variable allows custom
+values (the default; without them the regex operators are not offered either). The one-of operators (`=|`, `!=|`)
+are offered where the datasource plugin declares them (Prometheus); `space` toggles values and `enter` applies.
+Every finished filter applies at once, refreshes the variables that reference it and re-runs the panels.
+
+Applied as Grafana's dashboards apply them: a panel whose datasource (its own, else its first query's; never
+`-- Mixed --`) is the variable's gets its filters. Prometheus adds each to every selector of the expression
+(`rate(x[5m])` becomes `rate(x{job="prometheus"}[5m])`; an existing matcher with that label and value only gets the
+operator replaced; regex values escaped as the datasource does; from Grafana 13 the one-of operators become regex
+matchers). Loki adds them to the stream selectors, or, when every selector has a matcher and the query parses
+labels, as label filters after the last parser, label filter or `label_format` of each expression; Grafana 12.1+
+with Loki query splitting applies them twice to the range queries it splits, so a label filter shows twice, as in
+Grafana's request. `${filter}` in a query or text reads the filter expression (`job="prometheus",env=~"prod\\.\\*"`),
+which Grafana Cloud's cardinality datasource takes as its selector. Links carry the filters as
+`var-filter=job|=|prometheus` (repeat it for several; `var-filter=` for none), and the block remembers them.
 
 Grafana Incident query strings are interpolated as the plugin's frontend does: "All" with the custom all value
 `$__all` goes in as `$__all` (the plugin's backend accepts it); picked values become filters, `label:'<v>'`,
@@ -224,9 +249,9 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   show each field's name above the value (`textMode` auto), as Grafana does. Values are drawn at the width of
   Tern's font, so they shrink to a narrow tile instead of being cut, and field names wrap in full; in a
   height-capped card a long name keeps to the lines left above the value. A short card (a 6x3 stat with a
-  description) still draws its value at least a line tall within the room under its head and chip lines; the
-  description and link chips keep to one line, and a sparkline that would leave the value less than a line is
-  left out, as Grafana drops the chart from a short stat.
+  description, a 2-row stat) still draws its value at least a line tall within the room under its head line (a
+  2-row tile drops its padding for it); a sparkline that would leave the value less than a line is left out, as
+  Grafana drops the chart from a short stat. A `fixedColor` of `text` is Tern's own text color in both themes.
 - **Gauge.** Grafana 12 with the `newGauge` feature toggle (read from Grafana's frontend settings; on in Grafana
   Cloud) draws the radial gauge: `shape` gauge (a 220 degree arc) or circle, `barWidthFactor`, `barShape`
   rounded, `segmentCount`/`segmentSpacing`, `neutral` (the bar runs between the neutral value and the value,
@@ -241,9 +266,10 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   panel queries, as Grafana's panel time range does (a relative time only applies when the dashboard range is
   relative), and the panel header shows Grafana's info ("Last 1 hour", "timeshift -1h") unless "Hide time info"
   (`hideTimeOverride`) is set. `maxDataPoints` and the minimum `interval` set the query resolution.
-- **Metadata.** A panel description shows as an `i` marker (hover shows the text; the expanded panel shows it in
-  full), panel links as chips that open in the browser pane (variables and `${__url_time_range}` filled in; a
-  path-only link opens on your Grafana), and transparent panels have no card background or border.
+- **Metadata.** A panel description shows as an `i` marker and panel links as chips at the right end of the card's
+  head line, as in Grafana's panel header (hover shows the description; the expanded panel shows it in full). Links
+  open in the browser pane (variables and `${__url_time_range}` filled in; a path-only link opens on your Grafana).
+  Panel titles keep to one line, cut short. Transparent panels have no card background or border.
 - **Panels without queries.** Text, dashboard list, annotation list, alert list, news and clock panels in input
   mode never query a datasource. Panel types that read Grafana's API fetch it from the dashboard's Grafana with
   your credentials (the news panel's relative feed URL included); feeds on other hosts are fetched from their own
@@ -255,8 +281,8 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   and rooted paths, which open on your Grafana. In markdown mode, HTML blocks (a `<div>` wrapper, a lone tag line)
   draw the same way between the Markdown parts and inline tags become Markdown links and emphasis. Images load
   when Tern can fetch them (http(s) or rooted on the Grafana, shown at their natural size) and show their alt text
-  otherwise; iframes, videos and audio show as a link to their source. Inline styles only carry bold, italic and
-  text alignment; colors, boxes and sizes follow the Tern theme.
+  otherwise; iframes, videos and audio show as a link to their source. Inline styles keep the declarations
+  Grafana's sanitizer allows and draw like dynamic text's (below), over Grafana's body text and headings.
 - **Live panels.** Clocks redraw every second on one shared timer, only while they are shown (not inside a
   collapsed row, and only the expanded panel when one is expanded); a redraw never re-runs a query.
 - **Transformations.** Tern applies a panel's transformations in order, as Grafana 13 does (disabled ones
@@ -318,10 +344,16 @@ Tern draws `grafana-clock-panel` itself, following the plugin's 2.1.8 behavior, 
   absolute; `fit-content` draws as `max-content` and font-size keywords (`small`, `x-large`, `smaller`, ...) as
   their browser-default px or em ratio, since Tern's stylesheet parser rejects those values. An element holds up
   to 10 lengths and 4 colors. What is not drawn (transforms, filters, `var()`, `calc()`, background images, and
-  `text-indent`, `word-spacing` and `table-layout`, which Tern cannot style) is listed under the panel. data:
-  images (SVG, PNG, JPEG, GIF, WebP up to 256 KiB) are drawn as images.
+  `text-indent`, `word-spacing` and `table-layout`, which Tern cannot style) is listed under the panel. Text starts
+  from Grafana's body (Inter 14px, line height 22/14 as a ratio) and headings from its h1-h6 (size, weight 400,
+  line height, 0.45em bottom margin), with inline styles over them; unitless line heights up to 3 are exact, larger
+  ones and percentages draw as the element's em. data: images (SVG, PNG, JPEG, GIF, WebP up to 256 KiB) are drawn
+  as images; a CSS width or height makes the picture fill that axis of its box (object-fit applies).
 - **Panel `styles`.** Plain declarations style the panel; CSS with selectors is skipped and named under the panel
   (its selectors target Grafana's DOM).
+- **Panel box.** As in the plugin, the content is a column as tall as the panel body (the card's height cap, or the
+  panel's Grafana height when expanded) and scrolls inside it, so a template's `height: 100%` resolves against its
+  row.
 - **Not native.** `helpers` or `afterRender` JavaScript ("the panel runs its own JavaScript (...)"),
   `contentPartials` and `externalStyles` (templates or stylesheets from URLs) fall back to the Grafana render.
 

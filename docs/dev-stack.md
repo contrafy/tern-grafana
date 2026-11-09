@@ -76,7 +76,9 @@ Changing `GF_INSTALL_PLUGINS` recreates the Grafana containers, which wipes thei
 - Dashboard `tern-s4-dynamictext` (TestData CSV): 1 HTML editor, everyRow, `{{#if}}`/`{{else}}`,
   `{{{triple}}}` and data-URI SVG `<img>`; 2 markdown editor with `{{{review_rows}}}` HTML from the
   query and a `formatTime` transformation; 3 three stat cards with bars from 16 fields; 4 renderMode
-  data with `afterRender` JavaScript, `externalStyles` and `styles` (stays on the ladder).
+  data with `afterRender` JavaScript, `externalStyles` and `styles` (stays on the ladder); 5 a count card
+  (54px counts with `line-height:1`, a pill) and a rating trend row; 6 an alert card with 42px and 28px
+  titles at `line-height` .9 and 1.02.
 - Dashboard `tern-s4-treemap`: 1 TestData label cardinality (squarify, percentage thresholds, data
   links like the cardinality details treemap); 2 Prometheus instant table `count by (__name__)`;
   3 binary tiling grouped by a field.
