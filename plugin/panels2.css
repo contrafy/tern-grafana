@@ -318,7 +318,7 @@
    tiles fill VizRepeater's grid, its rows sharing the grid's height alike,
    value, title and percent change take the font size BigValue computes for
    the panel's Grafana size. */
-.tgp-stat-grid { display: grid; gap: 3px; grid-auto-rows: minmax(0, 1fr); }
+.tgp-stat-grid { display: grid; gap: 3px; }
 .tgp-stat-g1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
 .tgp-stat-g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tgp-stat-g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
