@@ -19,7 +19,8 @@
 --   reducer, or per-field custom.footer.reducers) adds a reduced row;
 -- - columns are sized as TableNG does: custom.width exactly, the others to
 --   their content (at least custom.minWidth, at most 400px) without
---   shrinking, so a wide table scrolls sideways instead of squeezing;
+--   shrinking, so a wide table scrolls sideways instead of squeezing; with
+--   no custom.width column the columns share the leftover width;
 -- - field data links (links, from the frame or fieldConfig) draw the cell
 --   as a link that opens the first one in the browser pane;
 -- - options.enablePagination (footer.enablePagination before Grafana 12.2)
@@ -1002,7 +1003,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	end
 	local showHeader = Json.bool(env, Json.path(env, panel, "options", "showHeader")) ~= false
 	local columns: { Grid.Column } = table.create(#t.columns)
+	-- TableNG grows the auto columns into the leftover width; panels.css
+	-- does so only when no column has a fixed width (tgp-grow).
+	local grow = true
 	for i, c in t.columns do
+		if c.width then
+			grow = false
+		end
 		local classes: { string } = {}
 		-- Gauge columns do not shrink below the bar's minimum and the value.
 		if c.value_width then
@@ -1037,7 +1044,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	local children: { Node } = {
 		{
 			k = "el",
-			p = { tag = "div", class = "tgp-table" },
+			p = { tag = "div", class = if grow then "tgp-table tgp-fit tgp-grow" else "tgp-table tgp-fit" },
 			c = { Grid.grid(opts.key .. ".grid", columns, gridRows, "tern-grafana.table") },
 		},
 	}

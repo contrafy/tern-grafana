@@ -140,6 +140,36 @@ describe("piechart", function()
 		expect(ok).toBe(false)
 		expect(why).toBe("reducer nope is not supported")
 	end)
+
+	-- The Zabbix "Problems by Severity" donut, reproduced as dev dashboard
+	-- tern-v08-pietable panel 1 (recorded on Grafana 13): byName overrides
+	-- give each severity a fixed color, no legend. getGradientColorFrom/To
+	-- lighten a color by 14 and 7 in the light theme and darken it by 20 and
+	-- 10 in the dark one; 'Not Classified' #97aab3 stays a blue-gray in both,
+	-- as Grafana draws it, where the nearest color stop came out pale green
+	-- with a purple rim.
+	it("draws a fixed color's slice in Grafana's gradient of that exact color per theme", function()
+		local panel
+		for _, p in S.decode("grafana/13.3.0/dashboard_tern_v08_pietable.json").dashboard.panels do
+			if p.id == 1 then
+				panel = p
+			end
+		end
+		local zabbix = S.frames("13.3.0", "v08_pietable_1")
+		local node, assets = Piechart.view(panel, zabbix, env, { key = "p", size = { w = 480, h = 300 } })
+		local svg = (assets :: any).p.bytes
+		-- Innermost and outermost bands: from (192,203,209) to (172,188,194)
+		-- light, from (96,118,132) to (122,148,157) dark.
+		expect(string.find(svg, 'class="tg-bar tgv-light" fill="#bfcad0"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, 'class="tg-bar tgv-light" fill="#adbdc3"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, 'class="tg-bar tgv-dark" fill="#627886"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, 'class="tg-bar tgv-dark" fill="#78929b"', 1, true) ~= nil).toBe(true)
+		expect(string.find(svg, ">Count Not Classified<", 1, true) ~= nil).toBe(true)
+		-- showLegend false: no legend, as in Grafana.
+		expect(S.find(node, function(n)
+			return n.p and n.p.role == "tern-grafana.legend"
+		end)).toBeNil()
+	end)
 end)
 
 return nil

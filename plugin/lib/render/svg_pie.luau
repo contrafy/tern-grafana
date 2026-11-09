@@ -6,11 +6,13 @@
 -- radial gradient (getGradientColorFrom at the inner radius to
 -- getGradientColorTo at the outer one, per theme: Tern's SVG has no
 -- radialGradient, so RINGS concentric bands sample it, the dark and light
--- theme's bands each shown only in their theme), and labels (name, value,
--- percent lines) at the middle of the ring on slices of at least 0.3 rad.
+-- theme's bands each shown only in their theme, filled with the exact
+-- sampled colors), and labels (name, value, percent lines) at the middle of
+-- the ring on slices of at least 0.3 rad.
 -- The SVG is as wide as the panel gives it, the pie centered, so labels
 -- running past the pie stay visible as in Grafana (overflow: visible).
--- Colors are classes (palette tg-s<n>, exact tg-gc<n> or tone classes).
+-- A slice without a color is flat in its classes (palette tg-s<n>, exact
+-- tg-gc<n> or tone classes).
 
 local Kit = require("./svg_kit")
 local TsGradient = require("./ts_gradient")
@@ -162,13 +164,13 @@ function M.render(slices: { Slice }, opts: Options): string
 			-- Outermost band first, each next one inside it, so the bands
 			-- overlap without seams.
 			for _, theme in { "dark", "light" } do
-				local classes = if theme == "dark" then bands.dark else bands.light
+				local fills = if theme == "dark" then bands.dark else bands.light
 				for i = M.RINGS, 1, -1 do
 					local ring: Layout =
 						{ cx = l.cx, cy = l.cy, inner = l.inner, outer = l.inner + (l.outer - l.inner) * i / M.RINGS }
 					table.insert(
 						out,
-						fmt('<path class="%s tg-bar tgv-%s" d="%s"/>', classes[i], theme, arcPath(ring, p0, p1))
+						fmt('<path class="tg-bar tgv-%s" fill="%s" d="%s"/>', theme, fills[i], arcPath(ring, p0, p1))
 					)
 				end
 			end

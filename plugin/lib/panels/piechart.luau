@@ -216,8 +216,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		shown = { "percent" }
 	end
 	local W, H = Charts.size(opts, M.WIDTH, M.HEIGHT)
-	-- The panel header row above the visualization.
-	H = math.max(H - M.HEADER_PX, 40)
+	-- The panel header row above the visualization (a capped card's body
+	-- height has none).
+	if opts.card_height == nil then
+		H = math.max(H - M.HEADER_PX, 40)
+	end
 	local legendNode: Node? = nil
 	local side = math.min(W, H)
 	-- The width the pie's labels may run into (the panel less a right legend).

@@ -410,13 +410,16 @@ end
 
 -- PieChart's radial slice gradient (getGradientColorFrom at the inner
 -- radius to getGradientColorTo at the outer one) in `theme`, sampled as the
--- stop classes of `n` concentric rings (Tern's SVG drops radialGradient);
--- kept exact in both themes.
+-- exact colors of `n` concentric rings (Tern's SVG drops radialGradient).
+-- They are literal fills, not stop classes: the light theme's lightened
+-- colors (a pale blue-gray, a pale orange) have no near stop, and the
+-- nearest one came out a different hue.
 function M.pieRings(color: string, theme: Theme?, n: number): { string }
 	local c = parse(Thresholds.color(color, theme)) or { 128, 128, 128 }
 	local k = if theme == "light" then -0.7 else 1
-	local from = spin(lighten(c, -20 * k), 4)
-	local to = spin(lighten(c, -10 * k), -4)
+	-- toRgbString: the gradient's ends are whole rgb values.
+	local from = parse(hexOf(spin(lighten(c, -20 * k), 4))) :: Rgb
+	local to = parse(hexOf(spin(lighten(c, -10 * k), -4))) :: Rgb
 	local out: { string } = table.create(n)
 	for i = 1, n do
 		local t = (i - 0.5) / n
@@ -424,7 +427,7 @@ function M.pieRings(color: string, theme: Theme?, n: number): { string }
 		for j = 1, 3 do
 			mix[j] = from[j] + (to[j] - from[j]) * t
 		end
-		out[i] = classOfRgb(mix) .. " tg-hex"
+		out[i] = hexOf(mix)
 	end
 	return out
 end

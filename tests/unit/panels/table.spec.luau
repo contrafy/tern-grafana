@@ -416,6 +416,40 @@ describe("table cell options", function()
 		expect(tbl.rows[1][col(tbl, "Device")].kind).toBe("pill")
 		expect(tbl.rows[1][col(tbl, "Remaining")].kind).toBe("auto")
 	end)
+
+	-- TableNG sizes every column to its content and scrolls a table wider
+	-- than the panel (panels.css tgp-fit: max-content tracks); the incident
+	-- list (custom.width 300 Title, 170 dates, dev dashboard tern-v08-pietable
+	-- panel 2) squeezed its auto columns to 'Resol...' and 'Criti...'
+	-- instead. Only a table without a custom.width column (panel 3) grows its
+	-- columns into the leftover width (tgp-grow): a stretched fixed track
+	-- would leave a gap beside its cells.
+	it("sizes columns to content and grows them only without a fixed width", function()
+		local panels: { [number]: any } = {}
+		for _, p in S.decode("grafana/13.3.0/dashboard_tern_v08_pietable.json").dashboard.panels do
+			panels[p.id] = p
+		end
+		local function view(id: number): any
+			local frames = Transform.prepare(panels[id], S.frames("13.3.0", "v08_pietable_" .. id), env)
+			return Table.view(panels[id], frames, env, OPTS)
+		end
+		local function wrapper(node: any): string
+			return S.find(node, function(n)
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-fit", 1, true) ~= nil
+			end).p.class
+		end
+		local function headClass(node: any, text: string): string
+			return S.find(node, function(n)
+				return n.p and n.p.text == text
+			end).p.class
+		end
+		local list = view(2)
+		expect(wrapper(list)).toBe("tgp-table tgp-fit")
+		expect(headClass(list, "Title")).toBe("tg-h tgp-cw-30")
+		expect(headClass(list, "Start date")).toBe("tg-h tgp-cw-17")
+		expect(headClass(list, "Status")).toBe("tg-h")
+		expect(wrapper(view(3))).toBe("tgp-table tgp-fit tgp-grow")
+	end)
 end)
 
 return nil

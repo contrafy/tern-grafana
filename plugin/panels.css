@@ -93,36 +93,11 @@
 .tgp-gw-23 { min-width: 13.8em; }
 .tgp-gw-24 { min-width: 14.4em; }
 
-/* The table panel's grid: tracks may shrink to their cells' minimum, which is
-   0 for text (tg-c min-width: 0, headers clip) but, for gauge cells, the
-   padding, the bar's 3em minimum, the gap and tgp-gw-N: 5.5em + 0.6em a value
-   character. A narrow pane squeezes text, never gauge values. */
+/* Panel grids (the Zabbix problems list): tracks may shrink to their cells'
+   minimum, which is 0 for text (tg-c min-width: 0, headers clip) but, for
+   gauge cells, the padding, the bar's 3em minimum, the gap and tgp-gw-N:
+   5.5em + 0.6em a value character. */
 .tgp-table .tg-h { min-width: 0; }
-.tg-table .tg-c.tgp-gcw-0 { min-width: 5.5em; }
-.tg-table .tg-c.tgp-gcw-1 { min-width: 6.1em; }
-.tg-table .tg-c.tgp-gcw-2 { min-width: 6.7em; }
-.tg-table .tg-c.tgp-gcw-3 { min-width: 7.3em; }
-.tg-table .tg-c.tgp-gcw-4 { min-width: 7.9em; }
-.tg-table .tg-c.tgp-gcw-5 { min-width: 8.5em; }
-.tg-table .tg-c.tgp-gcw-6 { min-width: 9.1em; }
-.tg-table .tg-c.tgp-gcw-7 { min-width: 9.7em; }
-.tg-table .tg-c.tgp-gcw-8 { min-width: 10.3em; }
-.tg-table .tg-c.tgp-gcw-9 { min-width: 10.9em; }
-.tg-table .tg-c.tgp-gcw-10 { min-width: 11.5em; }
-.tg-table .tg-c.tgp-gcw-11 { min-width: 12.1em; }
-.tg-table .tg-c.tgp-gcw-12 { min-width: 12.7em; }
-.tg-table .tg-c.tgp-gcw-13 { min-width: 13.3em; }
-.tg-table .tg-c.tgp-gcw-14 { min-width: 13.9em; }
-.tg-table .tg-c.tgp-gcw-15 { min-width: 14.5em; }
-.tg-table .tg-c.tgp-gcw-16 { min-width: 15.1em; }
-.tg-table .tg-c.tgp-gcw-17 { min-width: 15.7em; }
-.tg-table .tg-c.tgp-gcw-18 { min-width: 16.3em; }
-.tg-table .tg-c.tgp-gcw-19 { min-width: 16.9em; }
-.tg-table .tg-c.tgp-gcw-20 { min-width: 17.5em; }
-.tg-table .tg-c.tgp-gcw-21 { min-width: 18.1em; }
-.tg-table .tg-c.tgp-gcw-22 { min-width: 18.7em; }
-.tg-table .tg-c.tgp-gcw-23 { min-width: 19.3em; }
-.tg-table .tg-c.tgp-gcw-24 { min-width: 19.9em; }
 .tgp-table .tg-cols-1 { grid-template-columns: repeat(1, minmax(auto, max-content)); }
 .tgp-table .tg-cols-2 { grid-template-columns: repeat(2, minmax(auto, max-content)); }
 .tgp-table .tg-cols-3 { grid-template-columns: repeat(3, minmax(auto, max-content)); }
@@ -139,6 +114,52 @@
 .tgp-table .tg-cols-14 { grid-template-columns: repeat(14, minmax(auto, max-content)); }
 .tgp-table .tg-cols-15 { grid-template-columns: repeat(15, minmax(auto, max-content)); }
 .tgp-table .tg-cols-16 { grid-template-columns: repeat(16, minmax(auto, max-content)); }
+
+/* The table panel's grid (tgp-fit) as TableNG sizes it
+   (computeContentAwareColWidths): every column is as wide as its content and
+   header (max-content: an auto column's text is capped at 400px by tgp-cv,
+   custom.width and custom.minWidth are set on its cells below, a gauge cell
+   keeps the bar's minimum and its tgp-gcw value room), never squeezed into
+   the card: a table wider than the card scrolls sideways in tg-wrap. Tern's
+   grid shrinks a minmax(auto, max-content) track to 0 whatever min-width
+   its cells ask for, so the tracks are plain max-content. Without
+   fixed-width columns (tgp-grow) the columns also share the leftover width,
+   as TableNG grows its auto columns to fill the panel; a stretched
+   custom.width track would leave a gap beside its fixed cells, so tables
+   with one stay packed left. */
+.tgp-fit .tg-cols-1 { grid-template-columns: repeat(1, max-content); }
+.tgp-fit .tg-cols-2 { grid-template-columns: repeat(2, max-content); }
+.tgp-fit .tg-cols-3 { grid-template-columns: repeat(3, max-content); }
+.tgp-fit .tg-cols-4 { grid-template-columns: repeat(4, max-content); }
+.tgp-fit .tg-cols-5 { grid-template-columns: repeat(5, max-content); }
+.tgp-fit .tg-cols-6 { grid-template-columns: repeat(6, max-content); }
+.tgp-fit .tg-cols-7 { grid-template-columns: repeat(7, max-content); }
+.tgp-fit .tg-cols-8 { grid-template-columns: repeat(8, max-content); }
+.tgp-fit .tg-cols-9 { grid-template-columns: repeat(9, max-content); }
+.tgp-fit .tg-cols-10 { grid-template-columns: repeat(10, max-content); }
+.tgp-fit .tg-cols-11 { grid-template-columns: repeat(11, max-content); }
+.tgp-fit .tg-cols-12 { grid-template-columns: repeat(12, max-content); }
+.tgp-fit .tg-cols-13 { grid-template-columns: repeat(13, max-content); }
+.tgp-fit .tg-cols-14 { grid-template-columns: repeat(14, max-content); }
+.tgp-fit .tg-cols-15 { grid-template-columns: repeat(15, max-content); }
+.tgp-fit .tg-cols-16 { grid-template-columns: repeat(16, max-content); }
+.tgp-fit.tgp-grow .tg-table { justify-content: normal; }
+.tgp-fit.tgp-grow .tg-cols-1 { grid-template-columns: repeat(1, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-2 { grid-template-columns: repeat(2, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-3 { grid-template-columns: repeat(3, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-4 { grid-template-columns: repeat(4, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-5 { grid-template-columns: repeat(5, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-6 { grid-template-columns: repeat(6, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-7 { grid-template-columns: repeat(7, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-8 { grid-template-columns: repeat(8, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-9 { grid-template-columns: repeat(9, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-10 { grid-template-columns: repeat(10, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-11 { grid-template-columns: repeat(11, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-12 { grid-template-columns: repeat(12, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-13 { grid-template-columns: repeat(13, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-14 { grid-template-columns: repeat(14, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-15 { grid-template-columns: repeat(15, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-16 { grid-template-columns: repeat(16, minmax(max-content, auto)); }
 
 /* EmptyTablePlaceholder: centered under the header in text.secondary. */
 .tgp-table-empty { padding: 2em 0; text-align: center; color: var(--sf-c-muted); }
@@ -261,15 +282,11 @@
 .tgx-right { text-align: right; }
 .tgx-alt { color: var(--sf-c-muted); }
 
-/* Table columns (lib/panels/table.luau) as TableNG sizes them: an auto column
-   fits its content (tgp-cv, at most 400px) and never shrinks below it, so a
-   table wider than the card scrolls sideways (tg-wrap); custom.width fixes a
-   column (tgp-cw-N, N x 10px), custom.minWidth floors it (tgp-cmin-N). */
-.tgp-table .tg-c,
-.tgp-table .tg-h { min-width: min-content; }
+/* Table cells (lib/panels/table.luau): an auto column's text is at most
+   400px (TableNG MAX_AUTO_WIDTH); custom.width fixes a column (tgp-cw-N,
+   N x 10px), custom.minWidth floors it (tgp-cmin-N). */
 .tgp-cv { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tgp-table .tg-c[class*="tgp-cw-"] .tgp-cv { max-width: 100%; }
-.tgp-table .tg-h[class*="tgp-cw-"] { min-width: 0; }
 
 /* Data links: the cell reads as a link. */
 .tgp-dlink { color: var(--sf-c-link); cursor: pointer; }
