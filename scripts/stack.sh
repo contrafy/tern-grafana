@@ -162,6 +162,18 @@ seed() {
 		token_api "$g" POST /api/annotations \
 			"{\"dashboardUID\":\"tern-all-panels\",\"panelId\":1,\"time\":$t2,\"tags\":[\"tern-seed\",\"incident\"],\"text\":\"CPU spike on checkout\"}" >/dev/null
 	fi
+	# tern-alert-states: a dashboard-wide region (panel 0: every panel draws it) and a point on panel 3.
+	seeded=$(token_api "$g" GET '/api/annotations?dashboardUID=tern-alert-states&tags=tern-seed&limit=10' | jq 'length')
+	if [ "$seeded" = 0 ]; then
+		now=$(date +%s)
+		r0=$(((now - 30 * 60) * 1000))
+		r1=$(((now - 25 * 60) * 1000))
+		t3=$(((now - 15 * 60) * 1000))
+		token_api "$g" POST /api/annotations \
+			"{\"dashboardUID\":\"tern-alert-states\",\"panelId\":0,\"time\":$r0,\"timeEnd\":$r1,\"tags\":[\"tern-seed\",\"maintenance\"],\"text\":\"Rollout window (dashboard-wide region)\"}" >/dev/null
+		token_api "$g" POST /api/annotations \
+			"{\"dashboardUID\":\"tern-alert-states\",\"panelId\":3,\"time\":$t3,\"tags\":[\"tern-seed\",\"deploy\"],\"text\":\"kubectl rollout restart deploy/api\"}" >/dev/null
+	fi
 	token_api "$g" POST /api/user/stars/dashboard/uid/tern-all-panels >/dev/null 2>&1 || true
 	# Grafanas that store schema v2 dashboards (13+) get dev/grafana/dashboards-v2 through the
 	# dashboard API; file provisioning would hand the same files to 11 and 12.

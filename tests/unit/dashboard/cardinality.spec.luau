@@ -44,6 +44,9 @@ local function load(selectors: { string }, held: { on: boolean }): S.Harness
 			return S.response("cardinality/frontend_settings.json")
 		elseif string.match(e.tag, "^user/") then
 			return S.response(S.grafana("13.3.0", "user.json"))
+		elseif string.match(e.tag, "^layer/") then
+			-- No annotations, no alert rules linked to the dashboard.
+			return S.body(200, "[]")
 		elseif path == "/api/datasources/proxy/uid/prom/api/v1/labels" then
 			return S.response("cardinality/list_labels.json")
 		elseif path == LABEL_VALUES and param(e, "selector") == "{}" then

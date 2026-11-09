@@ -52,6 +52,7 @@ function M.startLoad(s: State, effects: { Effect })
 	s.png_wait = false
 	s.live_gen += 1
 	s.live_ms = nil
+	s.layers = Types.newLayers()
 	table.insert(effects, http(tag("dash", s.gen), route, Model.request(uid)))
 	if s.settings.status ~= "ready" then
 		s.settings = { status = "loading", renderer = nil, datasources = {}, features = {} }

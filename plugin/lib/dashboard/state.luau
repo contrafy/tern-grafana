@@ -28,7 +28,8 @@
 -- The machine is split by concern: types.luau (state shape), core.luau
 -- (tags, routes, scopes, instance index), png.luau (render cache),
 -- advance.luau (queries and refresh), answers.luau (loading and answers),
--- links.luau, picker.luau and keys.luau. This module keeps init, update,
+-- layers.luau (annotation layers and alert states), links.luau, picker.luau
+-- and keys.luau. This module keeps init, update,
 -- title and save, and re-exports what the view and specs read.
 
 local Advance = require("./advance")
@@ -39,6 +40,7 @@ local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Keys = require("./keys")
 local Links = require("./links")
+local Layers = require("./layers")
 local Model = require("./model")
 local Picker = require("./picker")
 local Png = require("./png")
@@ -310,6 +312,8 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		return Answers.onPng(s, msg.tag, msg.response, env, effects)
 	elseif kind == "adhoc" then
 		return Picker.onList(s, parts, msg.response, env)
+	elseif kind == "layer" then
+		return Layers.answer(s, parts, msg.response, env)
 	else
 		return false
 	end

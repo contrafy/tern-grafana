@@ -2,6 +2,8 @@
 -- State types of the dashboard and panel blocks (lib/dashboard/state.luau)
 -- and the fresh state `init` starts from.
 
+local AlertStates = require("./alert_states")
+local Annotations = require("./annotations")
 local DashConfig = require("./config")
 local DsRegistry = require("../datasources/registry")
 local Env = require("../env")
@@ -16,6 +18,7 @@ local Repeat = require("./repeat")
 local Route = require("../config/route")
 local Search = require("./search")
 local Shared = require("../time/shared")
+local SvgAnnotations = require("../render/svg_annotations")
 local Variables = require("./variables")
 
 type Env = Env.Env
@@ -234,7 +237,43 @@ export type State = {
 	live_gen: number,
 	live_ms: number?,
 	live_tick: number,
+	-- Dashboard data layers: annotations and alert states.
+	layers: Layers,
 }
+
+-- An annotation layer of the dashboard (lib/dashboard/annotations.luau):
+-- a Prometheus layer's query (its answer is parsed against it), the
+-- events of its last answer (nil until one arrived) and why it failed.
+export type AnnotationLayer = {
+	def: Annotations.Def,
+	pq: Queries.PanelQuery?,
+	events: { Annotations.Event }?,
+	error: string?,
+}
+
+-- lib/dashboard/layers.luau.
+export type Layers = {
+	-- Bumped by every batch of layer requests; older answers are dropped.
+	gen: number,
+	-- Identity of the last batch (its requests).
+	sig: string?,
+	annotations: { AnnotationLayer },
+	-- Alert state per panel id; nil while unknown or when the range does
+	-- not end now.
+	alert_states: { [number]: AlertStates.State }?,
+	-- The dashboard has no rules linked to its panels: not asked again
+	-- until it loads anew (AlertStatesDataLayer hasAlertRules).
+	no_rules: boolean,
+	-- Marks by panel id from the answered layers, built on demand and kept
+	-- (same table) while they stay equal: the view memo keys on their
+	-- identity. `stamp` is bumped by every change to the events.
+	marks: { [number]: { stamp: number, list: { SvgAnnotations.Mark } } },
+	stamp: number,
+}
+
+function M.newLayers(): Layers
+	return { gen = 0, sig = nil, annotations = {}, alert_states = nil, no_rules = false, marks = {}, stamp = 0 }
+end
 
 function M.new(env: Env): State
 	local queryOptions = QueryOptions.read(if env.config then env.config.query else nil)
@@ -302,6 +341,7 @@ function M.new(env: Env): State
 		live_gen = 0,
 		live_ms = nil,
 		live_tick = 0,
+		layers = M.newLayers(),
 	}
 end
 

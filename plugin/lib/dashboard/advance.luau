@@ -12,6 +12,7 @@ local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Ladder = require("./ladder")
 local Layout = require("./layout")
+local Layers = require("./layers")
 local Model = require("./model")
 local PanelTime = require("./panel_time")
 local Png = require("./png")
@@ -585,6 +586,7 @@ local function advancePanels(s: State, env: Env, force: boolean, effects: { Effe
 	end
 	M.syncShared(s, env)
 	armLive(s, env, effects)
+	Layers.advance(s, env, force, effects)
 end
 
 function M.advance(s: State, env: Env, force: boolean, effects: { Effect })

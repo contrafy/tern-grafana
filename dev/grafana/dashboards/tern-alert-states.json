@@ -1,0 +1,106 @@
+{
+  "uid": "tern-alert-states",
+  "title": "Tern Alert States",
+  "description": "Panels linked to Grafana-managed rules (rules.yml __dashboardUid__/__panelId__: TernGrafanaNormal on panel 1, TernGrafanaPending on panel 2) and the annotation layers Grafana draws for them: the built-in Annotations & Alerts layer and a Prometheus layer with a panel filter.",
+  "schemaVersion": 39,
+  "editable": false,
+  "tags": ["tern", "fixtures", "alerts"],
+  "timezone": "utc",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "prom3" },
+        "enable": true,
+        "hide": false,
+        "iconColor": "orange",
+        "name": "Target down",
+        "expr": "ALERTS{alertname=\"TernTargetDown\", alertstate=\"firing\"}",
+        "step": "60s",
+        "titleFormat": "{{alertname}}",
+        "filter": { "exclude": true, "ids": [1] }
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "prom3" },
+        "enable": false,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "Disabled layer",
+        "expr": "up"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Linked normal rule",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prom3" },
+          "expr": "sum by (code) (rate(prometheus_http_requests_total[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{code}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Linked pending rule",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prom3" },
+          "expr": "sum by (mode) (rate(node_cpu_seconds_total{mode!=\"idle\"}[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{mode}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Unlinked panel",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" } }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "annotations": { "regions": { "opacity": 0.25 } }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prom3" },
+          "expr": "up",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{job}}"
+        }
+      ]
+    }
+  ]
+}
