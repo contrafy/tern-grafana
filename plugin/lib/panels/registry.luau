@@ -93,25 +93,59 @@ local function supportsWith(check: ((any, Env) -> string?)?): (any, Env) -> (boo
 	end
 end
 
+-- The module `load` requires, required on the first call only (a require
+-- per supports()/view() call is not free).
+local function once(load: () -> any): () -> any
+	local m: any = nil
+	return function(): any
+		if m == nil then
+			m = load()
+		end
+		return m
+	end
+end
+
+local timeseries = once(function(): any
+	return require("./timeseries")
+end)
+local values = once(function(): any
+	return require("./values")
+end)
+local stat = once(function(): any
+	return require("./stat")
+end)
+local gauge = once(function(): any
+	return require("./gauge")
+end)
+local tablePanel = once(function(): any
+	return require("./table")
+end)
+local logs = once(function(): any
+	return require("./logs")
+end)
+local text = once(function(): any
+	return require("./text")
+end)
+
 local TIMESERIES: PanelModule = {
 	types = { "timeseries" },
 	supports = supportsWith(function(panel: any, env: Env): string?
-		return require("./timeseries").unsupported(panel, env)
+		return timeseries().unsupported(panel, env)
 	end),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return require("./timeseries").view(panel, frames, env, opts)
+		return timeseries().view(panel, frames, env, opts)
 	end,
 }
 
 local function valuesWhy(panel: any, env: Env): string?
-	return require("./values").unsupported(panel, env)
+	return values().unsupported(panel, env)
 end
 
 local STAT: PanelModule = {
 	types = { "stat" },
 	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return require("./stat").view(panel, frames, env, opts)
+		return stat().view(panel, frames, env, opts)
 	end,
 }
 
@@ -119,7 +153,7 @@ local GAUGE: PanelModule = {
 	types = { "gauge" },
 	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return require("./gauge").view(panel, frames, env, opts)
+		return gauge().view(panel, frames, env, opts)
 	end,
 }
 
@@ -127,7 +161,7 @@ local BARGAUGE: PanelModule = {
 	types = { "bargauge" },
 	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return require("./gauge").barView(panel, frames, env, opts), nil
+		return gauge().barView(panel, frames, env, opts), nil
 	end,
 }
 
@@ -146,7 +180,7 @@ local TABLE: PanelModule = {
 		if #frames == 0 then
 			return Common.noData(panel, env, opts.key), nil
 		end
-		return require("./table").view(panel, frames, env, opts), nil
+		return tablePanel().view(panel, frames, env, opts), nil
 	end,
 }
 
@@ -157,7 +191,7 @@ local LOGS: PanelModule = {
 		if not Common.hasData(frames) then
 			return Common.noData(panel, env, opts.key), nil
 		end
-		return require("./logs").view(panel, frames, env, opts), nil
+		return logs().view(panel, frames, env, opts), nil
 	end,
 }
 
@@ -167,7 +201,7 @@ local TEXT: PanelModule = {
 		return true, nil
 	end,
 	view = function(panel: any, _: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
-		return require("./text").view(panel, env, opts), nil
+		return text().view(panel, env, opts), nil
 	end,
 	queries = function(_: any): boolean
 		return false

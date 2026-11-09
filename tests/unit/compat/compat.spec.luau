@@ -389,10 +389,10 @@ describe("compat block", function()
 		expect(#effects).toBe(2)
 	end)
 
-	-- Rows grow per answer without rescanning every dashboard; they must stay
-	-- what a full derive gives, whatever order answers arrive in and with the
+	-- Rows and the summary grow per answer without rescanning every
+	-- dashboard; they must stay what a full derive and summary give, whatever order answers arrive in and with the
 	-- row cap biting.
-	it("keeps the rows of out-of-order answers equal to a full derive", function()
+	it("keeps the rows and summary of out-of-order answers equal to a full pass", function()
 		local savedMax = CompatState.MAX_ROWS
 		CompatState.MAX_ROWS = 7
 		for _, filter in { "", "d2", "acme" } do
@@ -402,11 +402,12 @@ describe("compat block", function()
 			answer(h, "c/1/fs", S.response(S.grafana(VERSION, "frontend_settings.json")))
 			answer(h, "c/1/s/1", S.body(200, hits(6)))
 			for _, i in { 3, 1, 4, 2, 6, 5 } do
-				answer(h, "c/1/d/" .. i, S.body(200, SYNTH.a))
+				answer(h, "c/1/d/" .. i, S.body(200, if i % 2 == 0 then SYNTH.a else SYNTH.b))
 				local rows, matched = h.s.rows, h.s.matched
 				CompatState.derive(h.s)
 				expect(rows).toEqual(h.s.rows)
 				expect(matched).toBe(h.s.matched)
+				expect(Analyze.finish(h.s.tally)).toEqual(Analyze.summarize(CompatState.ordered(h.s)))
 			end
 		end
 		CompatState.MAX_ROWS = savedMax

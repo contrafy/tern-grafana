@@ -81,6 +81,8 @@ export type State = {
 	derived_q: string,
 	derived_native: boolean,
 	lowered: { [number]: Lowered },
+	-- The summary counts of every result so far.
+	tally: Analyze.Tally,
 	sel: number,
 	note: string?,
 }
@@ -244,7 +246,9 @@ end
 
 local function record(s: State, index: number, panels: { Analyze.PanelResult }, err: string?)
 	local hit = s.hits[index]
-	s.results[index] = Analyze.result(hit.uid, hit.title, hit.folder, panels, err)
+	local r = Analyze.result(hit.uid, hit.title, hit.folder, panels, err)
+	s.results[index] = r
+	Analyze.add(s.tally, index, r)
 	s.finished += 1
 	s.inflight -= 1
 	deriveOne(s, index)
@@ -411,6 +415,7 @@ local function reset(s: State)
 	s.pending = {}
 	s.libraries = {}
 	s.lowered = {}
+	s.tally = Analyze.tally()
 	s.started_ms, s.finished_ms = nil, nil
 	s.sel = 1
 	s.note = nil
@@ -464,6 +469,7 @@ function M.init(args: { string }, saved: any, env: Env): (State, { Effect })
 		derived_q = "",
 		derived_native = false,
 		lowered = {},
+		tally = Analyze.tally(),
 		sel = 1,
 		note = nil,
 	}
