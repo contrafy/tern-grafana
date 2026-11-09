@@ -116,6 +116,8 @@ local function bandParts(item: FieldConfig.Item, fill: number, valueTone: Thresh
 	return parts
 end
 
+M.bandParts = bandParts
+
 function M.meters(panel: any, frames: { Frame }, env: Env, opts: Common.Options, bar: boolean): { Meter }
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "thresholds" })
 	local values = Values.values(panel, items, env, { theme = opts.theme, offset_min = opts.offset_min })

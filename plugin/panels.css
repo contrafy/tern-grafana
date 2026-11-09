@@ -33,7 +33,7 @@
 	line-height: 1.2;
 }
 
-/* Tinted backgrounds: stat colorMode background, table color-background. */
+/* Tinted backgrounds: stat colorMode background. */
 .tgp-bg { border-radius: 4px; padding: 0 4px; }
 .tgp-stat.tgp-bg { padding: 6px 8px; }
 .tgp-bg.tgp-success { background: color-mix(in oklab, var(--ok) 22%, transparent); }
@@ -55,3 +55,131 @@
 .tgp-bgs.tgp-pending { background: var(--live); }
 .tgp-bgs.tgp-neutral,
 .tgp-bgs.tgp-muted { background: var(--l3); color: var(--t1); }
+
+/* Table cells (lib/panels/table.luau). */
+
+/* Gauge cells (BarGaugeCell): the bar needs a width in a content-sized
+   column; the value sits after it. */
+.tgp-gc { display: flex; align-items: center; gap: 8px; width: 16em; max-width: 100%; }
+.tgp-gc .sf-meter { flex: 1 1 0; min-width: 2em; }
+.tgp-gc .sf-meter,
+.tgp-gc .sf-mt-track { height: 14px; border-radius: 3px; }
+.tgp-gc-v { flex: none; min-width: 4.5em; text-align: right; }
+
+/* color-background cells (and applyToRow rows): Grafana's solid color, or
+   a 120deg gradient from a darker copy of it, with contrasting text; the
+   fill covers the whole cell (tg-c padding: 2px 14px 2px 6px). */
+.tgp-cbg {
+	margin: -2px -14px -2px -6px;
+	padding: 2px 14px 2px 6px;
+	color: rgb(247, 248, 250);
+	--tgp-cbg: var(--t3);
+	background: var(--tgp-cbg);
+}
+.tgp-cbg .sf-text,
+.tgp-cbg .tgp-cmd .sf-md .md,
+.tgp-cbg .tgp-cmd .sf-md .md * { color: inherit; }
+.tgp-cbg.tgp-success { --tgp-cbg: var(--ok); }
+.tgp-cbg.tgp-error { --tgp-cbg: var(--bad); }
+.tgp-cbg.tgp-warning { --tgp-cbg: var(--warn); color: rgb(32, 34, 38); }
+.tgp-cbg.tgp-info { --tgp-cbg: var(--accent); }
+.tgp-cbg.tgp-accent,
+.tgp-cbg.tgp-pending { --tgp-cbg: var(--live); }
+.tgp-cbg.tgp-neutral,
+.tgp-cbg.tgp-muted { --tgp-cbg: var(--l3); color: var(--t1); }
+.tgp-cbg.tg-s1 { --tgp-cbg: #73bf69; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s2 { --tgp-cbg: #f2cc0c; color: rgb(32, 34, 38); }
+.tgp-cbg.tg-s3 { --tgp-cbg: #5794f2; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s4 { --tgp-cbg: #ff9830; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s5 { --tgp-cbg: #f2495c; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s6 { --tgp-cbg: #b877d9; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s7 { --tgp-cbg: #37872d; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s8 { --tgp-cbg: #e0b400; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s9 { --tgp-cbg: #1f60c4; color: rgb(247, 248, 250); }
+.tgp-cbg.tg-s10 { --tgp-cbg: #fa6400; color: rgb(247, 248, 250); }
+.tgp-cbg-grad { background: linear-gradient(120deg, color-mix(in oklab, var(--tgp-cbg) 80%, black), var(--tgp-cbg)); }
+
+/* Markdown cells wrap like Grafana's markdown-container. */
+.tgp-cmd { white-space: normal; }
+
+/* Pill cells (PillCell): tags colored by mapping, fixed color, or a string
+   hash over classicColors (namedColorsPalette.ts) with
+   getTextColorForBackground text. */
+.tgp-pills { display: inline-flex; gap: 4px; flex-wrap: nowrap; }
+.tgp-pill {
+	padding: 1px 6px;
+	border-radius: 2px;
+	font-size: 0.86em;
+	white-space: nowrap;
+}
+.tgp-pill.tgp-cbg { margin: 0; }
+.tgp-pill-0 { background: #7EB26D; color: rgb(247, 248, 250); }
+.tgp-pill-1 { background: #EAB839; color: rgb(32, 34, 38); }
+.tgp-pill-2 { background: #6ED0E0; color: rgb(32, 34, 38); }
+.tgp-pill-3 { background: #EF843C; color: rgb(247, 248, 250); }
+.tgp-pill-4 { background: #E24D42; color: rgb(247, 248, 250); }
+.tgp-pill-5 { background: #1F78C1; color: rgb(247, 248, 250); }
+.tgp-pill-6 { background: #BA43A9; color: rgb(247, 248, 250); }
+.tgp-pill-7 { background: #705DA0; color: rgb(247, 248, 250); }
+.tgp-pill-8 { background: #508642; color: rgb(247, 248, 250); }
+.tgp-pill-9 { background: #CCA300; color: rgb(247, 248, 250); }
+.tgp-pill-10 { background: #447EBC; color: rgb(247, 248, 250); }
+.tgp-pill-11 { background: #C15C17; color: rgb(247, 248, 250); }
+.tgp-pill-12 { background: #890F02; color: rgb(247, 248, 250); }
+.tgp-pill-13 { background: #0A437C; color: rgb(247, 248, 250); }
+.tgp-pill-14 { background: #6D1F62; color: rgb(247, 248, 250); }
+.tgp-pill-15 { background: #584477; color: rgb(247, 248, 250); }
+.tgp-pill-16 { background: #B7DBAB; color: rgb(32, 34, 38); }
+.tgp-pill-17 { background: #F4D598; color: rgb(32, 34, 38); }
+.tgp-pill-18 { background: #70DBED; color: rgb(32, 34, 38); }
+.tgp-pill-19 { background: #F9BA8F; color: rgb(32, 34, 38); }
+.tgp-pill-20 { background: #F29191; color: rgb(247, 248, 250); }
+.tgp-pill-21 { background: #82B5D8; color: rgb(247, 248, 250); }
+.tgp-pill-22 { background: #E5A8E2; color: rgb(32, 34, 38); }
+.tgp-pill-23 { background: #AEA2E0; color: rgb(247, 248, 250); }
+.tgp-pill-24 { background: #629E51; color: rgb(247, 248, 250); }
+.tgp-pill-25 { background: #E5AC0E; color: rgb(247, 248, 250); }
+.tgp-pill-26 { background: #64B0C8; color: rgb(247, 248, 250); }
+.tgp-pill-27 { background: #E0752D; color: rgb(247, 248, 250); }
+.tgp-pill-28 { background: #BF1B00; color: rgb(247, 248, 250); }
+.tgp-pill-29 { background: #0A50A1; color: rgb(247, 248, 250); }
+.tgp-pill-30 { background: #962D82; color: rgb(247, 248, 250); }
+.tgp-pill-31 { background: #614D93; color: rgb(247, 248, 250); }
+.tgp-pill-32 { background: #9AC48A; color: rgb(247, 248, 250); }
+.tgp-pill-33 { background: #F2C96D; color: rgb(32, 34, 38); }
+.tgp-pill-34 { background: #65C5DB; color: rgb(247, 248, 250); }
+.tgp-pill-35 { background: #F9934E; color: rgb(247, 248, 250); }
+.tgp-pill-36 { background: #EA6460; color: rgb(247, 248, 250); }
+.tgp-pill-37 { background: #5195CE; color: rgb(247, 248, 250); }
+.tgp-pill-38 { background: #D683CE; color: rgb(247, 248, 250); }
+.tgp-pill-39 { background: #806EB7; color: rgb(247, 248, 250); }
+.tgp-pill-40 { background: #3F6833; color: rgb(247, 248, 250); }
+.tgp-pill-41 { background: #967302; color: rgb(247, 248, 250); }
+.tgp-pill-42 { background: #2F575E; color: rgb(247, 248, 250); }
+.tgp-pill-43 { background: #99440A; color: rgb(247, 248, 250); }
+.tgp-pill-44 { background: #58140C; color: rgb(247, 248, 250); }
+.tgp-pill-45 { background: #052B51; color: rgb(247, 248, 250); }
+.tgp-pill-46 { background: #511749; color: rgb(247, 248, 250); }
+.tgp-pill-47 { background: #3F2B5B; color: rgb(247, 248, 250); }
+.tgp-pill-48 { background: #E0F9D7; color: rgb(32, 34, 38); }
+.tgp-pill-49 { background: #FCEACA; color: rgb(32, 34, 38); }
+.tgp-pill-50 { background: #CFFAFF; color: rgb(32, 34, 38); }
+.tgp-pill-51 { background: #F9E2D2; color: rgb(32, 34, 38); }
+.tgp-pill-52 { background: #FCE2DE; color: rgb(32, 34, 38); }
+.tgp-pill-53 { background: #BADFF4; color: rgb(32, 34, 38); }
+.tgp-pill-54 { background: #F9D9F9; color: rgb(32, 34, 38); }
+.tgp-pill-55 { background: #DEDAF7; color: rgb(32, 34, 38); }
+/* Text panel HTML (lib/panels/html.luau): links, line breaks and the inline
+   styles kept from sanitized HTML; the rest is the el tags' own look. */
+.tgx { min-width: 0; overflow-wrap: anywhere; }
+.tgx > :first-child { margin-top: 0; }
+.tgx > :last-child { margin-bottom: 0; }
+.tgx [data-href] { color: var(--sf-c-link); cursor: pointer; }
+.tgx [data-href]:hover { text-decoration: underline; }
+.tgx-br { white-space: pre; }
+.tgx-b { font-weight: 600; }
+.tgx-i { font-style: italic; }
+.tgx-u { text-decoration: underline; }
+.tgx-center { text-align: center; }
+.tgx-right { text-align: right; }
+.tgx-alt { color: var(--sf-c-muted); }
