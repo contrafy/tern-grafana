@@ -110,10 +110,6 @@ M.KNOWN_BACKEND = table.freeze({
 -- Backend plugins whose frontends query or post-process in the browser in
 -- ways /api/ds/query cannot reproduce.
 M.CLIENT_SIDE = table.freeze({
-	-- alexanderzobnin-zabbix-app datasource module: only metric targets go to
-	-- the backend, then Alias functions run in the browser; problems, text,
-	-- IT service and direct DB queries run in the browser.
-	["alexanderzobnin-zabbix-datasource"] = "Zabbix queries are post-processed in the browser",
 	-- graphite/datasource.ts query: the /render API through the datasource proxy.
 	graphite = "Graphite queries are sent by the browser through the datasource proxy",
 	-- influxdb/datasource.ts: InfluxQL runs classicQuery in the browser unless
@@ -718,6 +714,11 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 		local mod = DsRegistry.module(ref.type)
 		local ds = if mod then findDs(ctx.datasources, ref.uid) else nil
 		if mod and ds and mod.start then
+			-- Hidden targets never reach start(): nothing reads them without
+			-- expressions, which a job's targets cannot feed.
+			if hidden then
+				continue
+			end
 			local gi = groupOf[ref.uid]
 			if gi == nil then
 				table.insert(groups, {
@@ -732,9 +733,7 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 			end
 			local g = groups[gi :: number]
 			table.insert(g.targets, t)
-			if not hidden then
-				table.insert(g.ref_ids, refId)
-			end
+			table.insert(g.ref_ids, refId)
 			continue
 		end
 		local q: { [string]: any }

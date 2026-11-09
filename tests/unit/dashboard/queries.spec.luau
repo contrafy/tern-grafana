@@ -315,7 +315,9 @@ describe("queries for other datasource plugins", function()
 		)
 		-- Ported (lib/datasources/cardinality): only a direct-access target stays off.
 		expect(reason("card", { cardinalityType = "labels", targetDatasource = "Metrics" })).toBeNil()
-		expect(reason("zbx", { queryType = "0" })).toBe("Zabbix queries are post-processed in the browser")
+		-- Ported (lib/datasources/zabbix): metrics run; browser-only query modes keep a reason.
+		expect(reason("zbx", { queryType = "0" })).toBeNil()
+		expect(reason("zbx", { queryType = "1" })).toBe("Zabbix IT services queries are not reproduced")
 		expect(reason("gr", { target = "a.b" })).toBe(
 			"Graphite queries are sent by the browser through the datasource proxy"
 		)
@@ -422,6 +424,17 @@ describe("queries for other datasource plugins", function()
 			maxDataPoints = 720,
 		})
 		expect(Interpolate.replace("one = $one", scope, { format = Interpolate.postgres })).toBe("one = x")
+	end)
+
+	it("never queries a hidden target of a frontend datasource job, as Grafana's filterQuery does not", function()
+		local panel = panelOf("zbx", { refId = "B", queryType = "4", countTriggersBy = "problems" }, "stat")
+		table.insert(panel.targets, 1, { refId = "A", queryType = "0", hide = true })
+		local pq = assert(Queries.build(panel, c(), env))
+		local jobs = assert(pq.jobs, "jobs")
+		expect(jobs[1].ref_ids).toEqual({ "B" })
+		-- Only the triggers chain starts (apiinfo.version); no /api/ds/query for the hidden metrics target.
+		expect(#jobs[1].first).toBe(1)
+		expect(jobs[1].first[1].request.path).toBe("/api/datasources/uid/zbx/resources/zabbix-api")
 	end)
 end)
 

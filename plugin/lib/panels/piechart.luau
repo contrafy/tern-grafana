@@ -222,9 +222,9 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		legendNode = Charts.legend(opts.key .. ".legend", rows, heads, legend.mode)
 		-- Room the legend takes from the pie (VizLayout).
 		if legend.placement == "right" then
-			-- VizLayout gives a right legend its natural width; keep at least
-			-- half the panel for the pie.
-			side = math.min(H, math.max(W * 0.5, W - (widest + 12 * #shown + 4) * 7))
+			-- VizLayout gives a right legend its natural width up to its
+			-- maxWidth of 60%: the pie keeps at least 40% of the panel.
+			side = math.min(H, math.max(W * 0.4, W - (widest + 12 * #shown + 4) * 7))
 		elseif legend.mode == "table" then
 			side = math.min(W, H - (#rows + 1) * 22)
 		else

@@ -199,6 +199,9 @@ local function fromNow(ms: number, now: number, offsetMin: number): string
 	return if ms > now then "in " .. text else text .. " ago"
 end
 
+-- moment's fromNow at a display offset ("2 hours ago", "in a day").
+M.fromNow = fromNow
+
 -- A date unit's text (dateTimeFormatters.ts) at the display offset: a
 -- "time:" moment pattern, the unit's pattern (its today pattern on the
 -- current day), moment's fromNow, or the system format with milliseconds

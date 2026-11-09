@@ -15,7 +15,8 @@
 --   there is no `shape`), and `postprocess` rewrites the answer's frames of
 --   the module's targets as the plugin's frontend does after the query.
 -- - Frontend datasources and browser request chains: `start` makes a job for
---   the targets of one datasource instance, and `step` advances it. The first
+--   the visible targets of one datasource instance (hidden ones are dropped
+--   before), and `step` advances it. The first
 --   `step` gets no answers; each later one gets the answers of every request
 --   the previous step asked for, by request tag. A step returns the job, the
 --   next requests, and the outcome once there is one (requests are then

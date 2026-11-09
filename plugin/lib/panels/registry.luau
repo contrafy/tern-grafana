@@ -329,6 +329,12 @@ local LAZY: { { types: { string }, load: () -> any } } = {
 			return require("./dynamictext")
 		end,
 	},
+	{
+		types = { "alexanderzobnin-zabbix-triggers-panel" },
+		load = function(): any
+			return require("./zabbix_problems")
+		end,
+	},
 }
 M.LAZY = LAZY
 

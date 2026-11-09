@@ -39,6 +39,7 @@ end
 M.register(require("./incident"))
 M.register(require("./json_api"))
 M.register(require("./cardinality"))
+M.register(require("./zabbix"))
 
 function M.module(dsType: string): DsModule?
 	return byType[dsType]

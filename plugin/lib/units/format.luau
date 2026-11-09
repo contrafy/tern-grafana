@@ -946,4 +946,9 @@ function M.text(value: number?, unit: string?, decimals: number?): string
 	return M.join(M.format(value, unit, decimals))
 end
 
+-- Whether `unit` is one of Grafana's unit ids (getValueFormats).
+function M.known(unit: string): boolean
+	return FORMATS[unit] ~= nil
+end
+
 return M
