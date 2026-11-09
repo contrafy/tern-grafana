@@ -21,7 +21,13 @@ export type Distribution = { type: Axis.Distr, log: number?, linear_threshold: n
 
 export type Interpolation = "linear" | "smooth" | "stepBefore" | "stepAfter"
 export type ShowPoints = "auto" | "always" | "never"
-export type Gradient = "none" | "opacity"
+export type Gradient = "none" | "opacity" | "hue" | "scheme"
+-- gradientMode scheme stops: `at` is a value on the series' scale, or with
+-- `relative` a fraction of the gradient range (hard min/max, soft min/max,
+-- else the data range: gradientFills.ts getGradientRange). `discrete`
+-- makes hard edges between stops (threshold steps).
+export type SchemeStop = { at: number, class: string }
+export type Scheme = { stops: { SchemeStop }, relative: boolean, discrete: boolean }
 
 -- One series' GraphFieldConfig: its scale, stacking and how it is drawn
 -- (packages/grafana-ui/src/components/uPlot/config/UPlotSeriesBuilder.ts).
@@ -64,9 +70,14 @@ export type SeriesStyle = {
 	dash: { number }?,
 	dot: boolean?,
 	interpolation: Interpolation?,
-	-- custom.fillOpacity 0..100 and custom.gradientMode.
+	-- custom.fillOpacity 0..100 and custom.gradientMode. Hue and scheme
+	-- also color the line: `hue` holds the top and bottom stop classes,
+	-- `scheme` the value stops (lib/render/ts_gradient); without them the
+	-- mode draws plainly.
 	fill_opacity: number?,
 	gradient: Gradient?,
+	hue: { string }?,
+	scheme: Scheme?,
 	-- custom.showPoints and custom.pointSize (diameter px, default 5).
 	show_points: ShowPoints?,
 	point_size: number?,

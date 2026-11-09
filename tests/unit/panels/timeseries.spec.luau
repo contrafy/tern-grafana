@@ -358,39 +358,131 @@ for _, version in S.VERSIONS do
 	end)
 end
 
--- Ladder reasons for what the class-colored SVG cannot draw.
-describe("timeseries gradient modes (UPlotSeriesBuilder.ts getFill)", function()
-	local function panel(mode: string, colorMode: string?): any
+-- gradientMode hue and scheme (UPlotSeriesBuilder getLineColor/getFill,
+-- gradientFills.ts): line and fill share one gradient whose stops are
+-- classes; Grafana's colors come from tinycolor and the named palette.
+describe("timeseries gradient modes", function()
+	local Frame = require("../../../plugin/lib/frame/types")
+	local TsGradient = require("../../../plugin/lib/render/ts_gradient")
+	-- 0..10 over a minute: thresholds at 4 and 8 fall inside the plot.
+	local times, values = {}, {}
+	for i = 1, 11 do
+		times[i] = (i - 1) * 6000
+		values[i] = i - 1
+	end
+	local frames = { Frame.timeSeries({ s = "a" }, times, values) }
+	local function panel(mode: string, color: any, thresholds: any?): any
 		return {
 			type = "timeseries",
 			fieldConfig = {
-				defaults = { color = { mode = colorMode or "palette-classic" }, custom = { gradientMode = mode } },
+				defaults = {
+					color = color,
+					thresholds = thresholds,
+					custom = { gradientMode = mode, fillOpacity = 30 },
+				},
 				overrides = {},
 			},
 		}
 	end
+	-- The stop colors of the gradient a path's `attr` references: hex for
+	-- tg-gc classes, the class otherwise.
+	local function stops(svg: string, tag: string, attr: string): { string }
+		local id = string.match(tag, attr .. '="url%(#([^)]+)%)"') :: string
+		local body = string.match(svg, '<linearGradient id="' .. id .. '"[^>]*>(.-)</linearGradient>') :: string
+		local out: { string } = {}
+		for class in string.gmatch(body, 'class="([^"]+)"') do
+			local n = tonumber(string.match(class, "^tg%-gc(%d+)$"))
+			table.insert(out, if n then TsGradient.STOPS[n] else class)
+		end
+		return out
+	end
 
-	it("draws none and opacity, refuses hue and by-value scheme", function()
-		expect(Timeseries.unsupported(panel("none"), env)).toBeNil()
-		expect(Timeseries.unsupported(panel("opacity"), env)).toBeNil()
-		expect(Timeseries.unsupported(panel("hue"), env)).toBe(
-			"custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
+	it("draws hue and scheme natively", function()
+		for _, mode in { "hue", "scheme" } do
+			expect(Timeseries.unsupported(panel(mode, { mode = "palette-classic" }), env)).toBeNil()
+		end
+	end)
+
+	-- getHueGradientFn on green #73bf69: tinycolor's saturate/spin/brighten/
+	-- lighten top and spin/darken bottom (darkened again in the dark theme).
+	it("hue-shifts the series color down the plot, per theme", function()
+		local p = panel("hue", { mode = "palette-classic" })
+		for theme, want in { light = { "#9af3ae", "#8ab757" }, dark = { "#9af3ae", "#719a42" } } do
+			local _, assets = Timeseries.view(p, frames, env, { key = "p", theme = theme :: any })
+			local svg = assets.p.bytes
+			local line = pathTag(svg, "tg-line") :: string
+			expect(stops(svg, line, "stroke")).toEqual(want)
+			-- The class color would beat the gradient attribute.
+			expect(pathTag(svg, "tg-s1", "tg-line")).toBeNil()
+			local area = pathTag(svg, "tg-area") :: string
+			expect(stops(svg, area, "fill")).toEqual(want)
+			expect(area).toContain('fill-opacity="0.30"')
+		end
+	end)
+
+	it("hue-shifts a fixed color", function()
+		local _, assets = Timeseries.view(
+			panel("hue", { mode = "fixed", fixedColor = "#f2495c" }),
+			frames,
+			env,
+			{ key = "p", theme = "light" }
 		)
-		expect(Timeseries.unsupported(panel("scheme"), env)).toBe(
-			"custom.gradientMode scheme (series colored by value) is not drawn natively"
-		)
-		-- Scheme with a fixed color falls through to a plain fill.
-		expect(Timeseries.unsupported(panel("scheme", "fixed"), env)).toBeNil()
-		local over = panel("none")
-		over.fieldConfig.overrides = {
-			{
-				matcher = { id = "byName", options = "a" },
-				properties = { { id = "custom.gradientMode", value = "hue" } },
+		local svg = assets.p.bytes
+		expect(stops(svg, pathTag(svg, "tg-line") :: string, "stroke")).toEqual({ "#ffa688", "#f03196" })
+	end)
+
+	-- Absolute thresholds: hard edges at the steps' values in their tones,
+	-- from the scale's min (0) to the last step below its max (8, the
+	-- scale reaching 10).
+	it("draws threshold steps as hard stops at their values", function()
+		local th = {
+			mode = "absolute",
+			steps = {
+				{ value = Frame.NULL, color = "green" },
+				{ value = 4, color = "orange" },
+				{ value = 8, color = "red" },
 			},
 		}
-		expect(Timeseries.unsupported(over, env)).toBe(
-			"override custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
+		local _, assets = Timeseries.view(panel("scheme", { mode = "thresholds" }, th), frames, env, { key = "p" })
+		local svg = assets.p.bytes
+		local line = pathTag(svg, "tg-line") :: string
+		expect(stops(svg, line, "stroke")).toEqual({
+			"tg-gt-success",
+			"tg-gt-success",
+			"tg-gt-warning",
+			"tg-gt-warning",
+			"tg-gt-error",
+		})
+		local id = string.match(line, 'stroke="url%(#([^)]+)%)"') :: string
+		local def = string.match(svg, '<linearGradient id="' .. id .. '"[^>]*>.-</linearGradient>') :: string
+		local offsets: { number } = {}
+		for o in string.gmatch(def, 'offset="([^"]+)"') do
+			-- Stops sit on whole pixels (scaleGradient rounds valToPos).
+			table.insert(offsets, math.floor((tonumber(o) :: number) * 20 + 0.5) / 20)
+		end
+		expect(offsets).toEqual({ 0, 0.5, 0.5, 1, 1 })
+	end)
+
+	-- Continuous schemes spread their colors evenly over the data range.
+	it("runs a continuous scheme through its colors", function()
+		local _, assets = Timeseries.view(
+			panel("scheme", { mode = "continuous-GrYlRd" }),
+			frames,
+			env,
+			{ key = "p", theme = "light" }
 		)
+		local svg = assets.p.bytes
+		local area = pathTag(svg, "tg-area") :: string
+		expect(stops(svg, area, "fill")).toEqual({ "#56a64b", "#f2cc0c", "#e02f44" })
+	end)
+
+	-- Scheme with a fixed color falls through to a plain fill.
+	it("draws scheme with a fixed color plainly", function()
+		local _, assets =
+			Timeseries.view(panel("scheme", { mode = "fixed", fixedColor = "red" }), frames, env, { key = "p" })
+		local svg = assets.p.bytes
+		expect((string.find(svg, "linearGradient", 1, true))).toBeNil()
+		expect(pathTag(svg, "tgp-error", "tg-line") ~= nil).toBe(true)
 	end)
 end)
 

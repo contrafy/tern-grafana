@@ -1025,6 +1025,74 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		expect(has(render({ a }, { series = { { fill_opacity = 50 } } }).svg, "<mask")).toBe(false)
 	end)
 
+	-- scaleGradient (gradientFills.ts): the stops between the one at or
+	-- below the scale's min and the first at or above its max, placed at
+	-- their values; relative stops spread over the soft range when set.
+	describe("scheme gradients", function()
+		local five = series(5, function(i)
+			return i
+		end)
+		local function gradient(r: any): (string, { number }, { string })
+			local line = tag(r.svg, "tg-line") :: string
+			local id = string.match(line, 'stroke="url%(#([^)]+)%)"') :: string
+			local def = string.match(r.svg, '<linearGradient id="' .. id .. '"[^>]*>.-</linearGradient>') :: string
+			local offsets: { number }, classes: { string } = {}, {}
+			for o, c in string.gmatch(def, '<stop offset="([^"]+)" class="([^"]+)"') do
+				table.insert(offsets, tonumber(o) :: number)
+				table.insert(classes, c :: string)
+			end
+			return line, offsets, classes
+		end
+
+		it("paints a series wholly in the step at or below the scale's min", function()
+			local r = render({ five }, {
+				series = {
+					{
+						gradient = "scheme",
+						scheme = {
+							stops = {
+								{ at = -math.huge, class = "tg-gt-success" },
+								{ at = -10, class = "tg-gt-error" },
+							},
+							relative = false,
+							discrete = true,
+						},
+					},
+				},
+			})
+			assertTernSafe(r.svg)
+			local line, offsets, classes = gradient(r)
+			expect(classes).toEqual({ "tg-gt-error" })
+			expect(offsets).toEqual({ 0 })
+			-- The gradient, not the palette class, colors the line.
+			expect((string.find(line, "tg-s1", 1, true))).toBeNil()
+		end)
+
+		it("spreads relative stops over the soft range", function()
+			local r = render({ five }, {
+				series = {
+					{
+						soft_min = 0,
+						soft_max = 10,
+						gradient = "scheme",
+						scheme = {
+							stops = {
+								{ at = 0, class = "tg-gc1" },
+								{ at = 0.5, class = "tg-gc2" },
+								{ at = 1, class = "tg-gc3" },
+							},
+							relative = true,
+							discrete = false,
+						},
+					},
+				},
+			})
+			local _, offsets, classes = gradient(r)
+			expect(classes).toEqual({ "tg-gc1", "tg-gc2", "tg-gc3" })
+			expect(offsets).toEqual({ 0, 0.5, 1 })
+		end)
+	end)
+
 	-- Bars: barWidthFactor of the slot, barAlignment -1/0/1 around the time,
 	-- outlined with the line width, filled by fillOpacity; bars at the plot
 	-- edges are cut to it (uPlot clips the plot).

@@ -128,6 +128,9 @@ local BYTES_BAR = 30
 local FIXED_BYTES = 8 * 1024
 -- "M123.4 56.7l4 4l-4 4l-4 -4Z" per exemplar marker.
 local BYTES_EXEMPLAR = 32
+-- A gradient definition without its stops, and one `<stop>`.
+local BYTES_GRADIENT = 140
+local BYTES_STOP = 40
 
 function M.seriesClass(i: number): string
 	return "tg-s" .. tostring((i - 1) % M.PALETTE + 1)
@@ -314,6 +317,8 @@ type Look = {
 	-- 0..1.
 	fill: number,
 	gradient: Gradient,
+	hue: { string }?,
+	scheme: Data.Scheme?,
 	line_width: number,
 	dash: { number }?,
 	dot: boolean,
@@ -354,6 +359,8 @@ local function lookOf(i: number, st: SeriesStyle, opts: Options, count: number):
 		draw = draw,
 		fill = math.clamp(fillPct :: number, 0, 100) / 100,
 		gradient = st.gradient or "none",
+		hue = if st.gradient == "hue" then st.hue else nil,
+		scheme = if st.gradient == "scheme" then st.scheme else nil,
 		line_width = if plainBars then 0 else math.max(0, st.line_width or 1),
 		dash = st.dash,
 		dot = st.dot == true,
@@ -388,6 +395,129 @@ local function axisLabel(out: { string }, a: YAxis, cy: number)
 	end
 	local x = if a.side == "left" then a.x0 + 14 else a.x1 - 14
 	table.insert(out, Kit.text(x, cy, label, { rotate = if a.side == "left" then -90 else 90 }))
+end
+
+-- The class list of a stroked series shape: its color class, or none when
+-- a gradient paints it through the stroke attribute (a class color would
+-- win over the attribute).
+local function strokeClass(class: string, role: string, gradient: string?): string
+	if gradient then
+		return fmt('%s" stroke="url(#%s)', role, gradient)
+	end
+	return class .. " " .. role
+end
+
+-- Gradient ids from their content (a 32-bit polynomial hash).
+local function hash(s: string): number
+	local h = 0
+	for k = 1, #s do
+		h = (h * 31 + string.byte(s, k)) % 4294967296
+	end
+	return h
+end
+
+local function stopTag(offset: number, class: string): string
+	return fmt('<stop offset="%.4g" class="%s"/>', math.clamp(offset, 0, 1), class)
+end
+
+local function verticalGradient(y1: number, y2: number, stops: string): string
+	return fmt(' gradientUnits="userSpaceOnUse" x1="0" y1="%.1f" x2="0" y2="%.1f">%s', y1, y2, stops)
+end
+
+-- getGradientRange: hard min/max, else soft min/max, else the range of the
+-- data drawn on the series' scale (its scale's range when flat).
+local function gradientRange(ctx: Ctx, i: number, scale: Axis.Scale): (number, number)
+	local st = ctx.styles[i]
+	local lo, hi = st.min or st.soft_min, st.max or st.soft_max
+	if lo == nil or hi == nil then
+		local dlo, dhi = math.huge, -math.huge
+		for _, j in ctx.specs[ctx.scaleOf[i]].members do
+			for _, v in ctx.plot.tops[j] do
+				local n = finite(v)
+				if n then
+					dlo, dhi = math.min(dlo, n), math.max(dhi, n)
+				end
+			end
+		end
+		if dlo >= dhi then
+			dlo, dhi = scale.min, scale.max
+		end
+		lo, hi = lo or dlo, hi or dhi
+	end
+	return lo :: number, hi :: number
+end
+
+-- The attributes and stops (after the id) of series i's hue or scheme
+-- gradient, or nil when it has none. Hue runs down the plot
+-- (getHueGradientFn); scheme follows scaleGradient: the stops between the
+-- one at or below the scale's min and the first at or above its max, placed
+-- at their values' pixels.
+local function gradientDef(ctx: Ctx, i: number, geo: { Geometry }, top: number, bottom: number): string?
+	local look = ctx.looks[i]
+	local hue = look.hue
+	if hue then
+		return verticalGradient(top, bottom, stopTag(0, hue[1]) .. stopTag(1, hue[2]))
+	end
+	local scheme = look.scheme
+	if scheme == nil or #scheme.stops == 0 then
+		return nil
+	end
+	local k = ctx.scaleOf[i]
+	local scale, g = ctx.scales[k], geo[k]
+	local stops = scheme.stops
+	local values: { number } = table.create(#stops)
+	local lo, span = 0, 1
+	if scheme.relative then
+		local a, b = gradientRange(ctx, i, scale)
+		lo, span = a, b - a
+	end
+	for n, s in stops do
+		values[n] = if math.abs(s.at) == math.huge or not scheme.relative then s.at else lo + span * s.at
+	end
+	local minIdx, maxIdx = 1, 1
+	for n, v in values do
+		if v <= scale.min or n == 1 then
+			minIdx = n
+		end
+		maxIdx = n
+		if v >= scale.max then
+			break
+		end
+	end
+	local function solid(class: string): string
+		return verticalGradient(top, bottom, stopTag(0, class))
+	end
+	if minIdx == maxIdx then
+		return solid(stops[minIdx].class)
+	end
+	local minV, maxV = values[minIdx], values[maxIdx]
+	if minV == -math.huge then
+		minV = scale.min
+	end
+	if maxV == math.huge then
+		maxV = scale.max
+	end
+	local minPos = math.floor(Paths.y(g, minV) + 0.5)
+	local maxPos = math.floor(Paths.y(g, maxV) + 0.5)
+	local range = minPos - maxPos
+	if range == 0 then
+		return solid(stops[maxIdx].class)
+	end
+	local buf: { string } = {}
+	local prev = ""
+	for n = minIdx, maxIdx do
+		local pos = if n == minIdx
+			then minPos
+			elseif n == maxIdx then maxPos
+			else math.floor(Paths.y(g, values[n]) + 0.5)
+		local pct = (minPos - pos) / range
+		if scheme.discrete and n > minIdx then
+			table.insert(buf, stopTag(pct, prev))
+		end
+		prev = stops[n].class
+		table.insert(buf, stopTag(pct, prev))
+	end
+	return verticalGradient(minPos, maxPos, table.concat(buf))
 end
 
 -- The document, and how many bytes longer it would be with absolute "%.1f"
@@ -554,6 +684,23 @@ local function build(ctx: Ctx): (string, number)
 			break
 		end
 	end
+	-- gradientMode hue and scheme: one userSpaceOnUse gradient per series
+	-- strokes its line and points and fills its area at the fill opacity
+	-- (UPlotSeriesBuilder getLineColor/getFill). Ids hash the gradient, so
+	-- equal gradients share one.
+	local paint: { [number]: string } = {}
+	local defined: { [string]: boolean } = {}
+	for i = 1, #list do
+		local def = gradientDef(ctx, i, geo, top, bottom)
+		if def then
+			local id = fmt("tgg%08x", hash(def))
+			if not defined[id] then
+				defined[id] = true
+				table.insert(out, fmt('<defs><linearGradient id="%s"%s</linearGradient></defs>', id, def))
+			end
+			paint[i] = id
+		end
+	end
 	for i = 1, #list do
 		local look = looks[i]
 		if look.fill <= 0 or look.draw == "points" then
@@ -591,10 +738,9 @@ local function build(ctx: Ctx): (string, number)
 		end
 		if d ~= "" then
 			local mask = if fade and look.gradient == "opacity" then fmt(' mask="url(#%s)"', fade) else ""
-			table.insert(
-				out,
-				fmt('<path class="%s %s" fill-opacity="%.2f"%s d="%s"/>', look.class, role, look.fill, mask, d)
-			)
+			local id = paint[i]
+			local color = if id then fmt('%s" fill="url(#%s)', role, id) else look.class .. " " .. role
+			table.insert(out, fmt('<path class="%s" fill-opacity="%.2f"%s d="%s"/>', color, look.fill, mask, d))
 		end
 	end
 	for i = 1, #list do
@@ -620,8 +766,8 @@ local function build(ctx: Ctx): (string, number)
 				table.insert(
 					out,
 					fmt(
-						'<path class="%s tg-line" fill="none" stroke-width="%s" stroke-linecap="%s" stroke-linejoin="round"%s d="%s"/>',
-						look.class,
+						'<path class="%s" fill="none" stroke-width="%s" stroke-linecap="%s" stroke-linejoin="round"%s d="%s"/>',
+						strokeClass(look.class, "tg-line", paint[i]),
 						fmt("%g", stroke),
 						cap,
 						dash,
@@ -655,8 +801,8 @@ local function build(ctx: Ctx): (string, number)
 			table.insert(
 				out,
 				fmt(
-					'<path class="%s tg-dots" fill="none" stroke-width="%s" stroke-linecap="round" d="%s"/>',
-					look.class,
+					'<path class="%s" fill="none" stroke-width="%s" stroke-linecap="round" d="%s"/>',
+					strokeClass(look.class, "tg-dots", paint[i]),
 					fmt("%g", look.point_size * M.LINE_SCALE),
 					d
 				)
@@ -807,6 +953,14 @@ function M.render(frames: { Frame }, options: Options?): Result
 		marks, marksDropped = M.drawnExemplars(opts.exemplars, tFrom_, tTo_)
 	end
 	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
+	-- Gradient definitions: their stops, doubled for discrete edges.
+	for _, look in looks do
+		if look.hue then
+			fixed += BYTES_GRADIENT + 2 * BYTES_STOP
+		elseif look.scheme then
+			fixed += BYTES_GRADIENT + 2 * #look.scheme.stops * BYTES_STOP
+		end
+	end
 
 	local perSeries = opts.point_budget or math.floor(W - PAD_RIGHT)
 	if #list > 0 then

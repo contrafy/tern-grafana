@@ -19,7 +19,9 @@
 --   hidden series (custom.hideFrom.viz, .legend, .tooltip);
 -- - series colors: palette-classic keeps the chart palette; fixed and
 --   by-value modes (thresholds, continuous) paint the whole series in the
---   tone of its `seriesBy` value (getFieldSeriesColor);
+--   tone of its `seriesBy` value (getFieldSeriesColor); gradientMode hue
+--   and scheme paint line and fill through a gradient (lib/render/
+--   ts_gradient);
 -- - options.legend: showLegend, displayMode list|table|hidden, calcs (any
 --   lib/panels/reduce reducer, formatted with the series' own config);
 -- - exemplars (opts.exemplars) as markers, the selected one (opts.exemplar)
@@ -36,6 +38,7 @@ local Legend = require("../render/legend")
 local Json = require("./json")
 local Reduce = require("./reduce")
 local SvgTimeseries = require("../render/svg_timeseries")
+local TsGradient = require("../render/ts_gradient")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -66,39 +69,7 @@ local function legendWhy(panel: any, env: Env): string?
 	return nil
 end
 
--- gradientMode hue (a hue shift along the fill) and scheme (line and fill
--- colored by value along the color scheme; drawn plainly with a fixed
--- color, UPlotSeriesBuilder getLineColor/getFill) need colors the
--- class-only SVG cannot express.
-local function gradientWhy(mode: string?, fixedColor: boolean): string?
-	if mode == "hue" then
-		return "custom.gradientMode hue (a hue-shifted fill) is not drawn natively"
-	elseif mode == "scheme" and not fixedColor then
-		return "custom.gradientMode scheme (series colored by value) is not drawn natively"
-	end
-	return nil
-end
-
 function M.unsupported(panel: any, env: Env): string?
-	local defaults = Json.obj(env, Json.path(env, panel, "fieldConfig", "defaults"))
-	local fixed = Json.str(env, Json.path(env, defaults.color, "mode")) == "fixed"
-	local why = gradientWhy(Json.str(env, Json.path(env, defaults.custom, "gradientMode")), fixed)
-	if why then
-		return why
-	end
-	for _, o in Json.list(env, Json.path(env, panel, "fieldConfig", "overrides")) do
-		for _, p in Json.list(env, Json.path(env, o, "properties")) do
-			local id = Json.str(env, Json.path(env, p, "id"))
-			if id == "custom.gradientMode" then
-				why = gradientWhy(Json.str(env, Json.path(env, p, "value")), fixed)
-			elseif id == "custom" then
-				why = gradientWhy(Json.str(env, Json.path(env, p, "value", "gradientMode")), fixed)
-			end
-			if why then
-				return "override " .. why
-			end
-		end
-	end
 	return legendWhy(panel, env)
 end
 
@@ -215,12 +186,14 @@ local DRAWS: { [string]: SvgTimeseries.Draw } = { line = "line", bars = "bars", 
 local INTERPOLATIONS: { [string]: SvgTimeseries.Interpolation } =
 	{ linear = "linear", smooth = "smooth", stepBefore = "stepBefore", stepAfter = "stepAfter" }
 local SHOW_POINTS: { [string]: SvgTimeseries.ShowPoints } = { auto = "auto", always = "always", never = "never" }
+local GRADIENTS: { [string]: SvgTimeseries.Gradient } = { opacity = "opacity", hue = "hue", scheme = "scheme" }
 
 -- One series' resolved GraphFieldConfig as the renderer's scale, stacking,
 -- transform and draw settings (TimeSeries/utils.ts preparePlotConfigBuilder
 -- and UPlotSeriesBuilder.ts): drawStyle, lineWidth, lineStyle (dash/dot),
--- lineInterpolation, fillOpacity, gradientMode opacity, showPoints,
--- pointSize, spanNulls (true or a gap in ms) and the bar options.
+-- lineInterpolation, fillOpacity, gradientMode (hue and scheme get their
+-- stops in M.view), showPoints, pointSize, spanNulls (true or a gap in ms)
+-- and the bar options.
 function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesStyle
 	local cfg = item.config
 	local custom = cfg.custom
@@ -251,7 +224,7 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 	if span == nil then
 		span = Json.num(env, custom.spanNulls)
 	end
-	local gradient = Json.str(env, custom.gradientMode)
+	local gradient: SvgTimeseries.Gradient = GRADIENTS[Json.str(env, custom.gradientMode) or ""] or "none"
 	return {
 		unit = cfg.unit,
 		decimals = cfg.decimals,
@@ -283,7 +256,7 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 		dot = lineFill == "dot",
 		interpolation = INTERPOLATIONS[Json.str(env, custom.lineInterpolation) or ""],
 		fill_opacity = Json.num(env, custom.fillOpacity) or 0,
-		gradient = if gradient == "opacity" then "opacity" else "none",
+		gradient = gradient,
 		show_points = SHOW_POINTS[Json.str(env, custom.showPoints) or ""],
 		point_size = Json.num(env, custom.pointSize),
 		span_nulls = span or false,
@@ -291,6 +264,33 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 		bar_width_factor = Json.num(env, custom.barWidthFactor),
 		bar_max_width = Json.num(env, custom.barMaxWidth),
 	}
+end
+
+-- gradientMode hue and scheme stops for one series (UPlotSeriesBuilder
+-- getLineColor/getFill). Hue shifts the series color; scheme runs through
+-- the color mode's thresholds or scheme colors, and with a fixed color (or
+-- shades, or another palette) draws plainly.
+local function gradientStops(
+	st: SvgTimeseries.SeriesStyle,
+	item: FieldConfig.Item,
+	color: FieldConfig.Scale,
+	opts: Common.Options
+)
+	local cfg = item.config
+	local mode = cfg.color_mode
+	if st.gradient == "hue" then
+		local base: string
+		if mode == "palette-classic" or mode == "palette-classic-by-name" then
+			base = TsGradient.PALETTE_HEX[(item.series_index - 1) % #TsGradient.PALETTE_HEX + 1]
+		elseif mode == "fixed" or mode == "shades" then
+			base = cfg.fixed_color or ""
+		else
+			base = TsGradient.schemeColor(mode, color.percent, opts.theme) or color.color
+		end
+		st.hue = TsGradient.hue(base, opts.theme)
+	elseif st.gradient == "scheme" then
+		st.scheme = TsGradient.scheme(mode, cfg.thresholds, opts.theme)
+	end
 end
 
 -- setClassicPaletteIdxs (public/app/plugins/panel/timeseries/utils.ts,
@@ -434,6 +434,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		local color = FieldConfig.seriesColor(item, { theme = opts.theme })
 		st.class = color.class
 			or (FieldConfig.paletteClass(item.series_index) .. " tgp-fx " .. Common.toneClass(color.tone))
+		gradientStops(st, item, color, opts)
 		local below = Json.str(env, item.config.custom.fillBelowTo)
 		if below and below ~= "" then
 			st.fill_below = fillBelowIndex(below, visible)

@@ -138,7 +138,7 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 
 | Panel type | Native | Limits (otherwise the ladder, with the reason) |
 | --- | --- | --- |
-| timeseries, legacy graph | yes | `scaleDistribution` ordinal; `gradientMode` hue, and scheme unless the color is fixed; graph `xaxis.mode` series/histogram (Grafana migrates those to other panel types); see Time series axes below |
+| timeseries, legacy graph | yes | `scaleDistribution` ordinal; graph `xaxis.mode` series/histogram (Grafana migrates those to other panel types); see Time series axes below |
 | stat, legacy singlestat | yes | reducers Tern cannot compute |
 | gauge | yes | see Gauge below |
 | bargauge | yes | `showUnfilled`, `sizing`/`minViz*`/`maxVizHeight` and the legend are not drawn |
@@ -168,13 +168,22 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   `neq`), in every panel type.
 - **Time series drawing.** Every series is drawn with its own field config, from the defaults and overrides:
   `drawStyle` (line, bars, points), `lineWidth` (0 hides the line), `lineStyle` dash and dot, `lineInterpolation`
-  (linear, smooth, step before/after), `fillOpacity` with `gradientMode` none or opacity, `showPoints` and
+  (linear, smooth, step before/after), `fillOpacity` with `gradientMode` (see below), `showPoints` and
   `pointSize` (auto shows points when the samples are at least two point sizes apart), `spanNulls` (true, or a gap
   in ms up to which the line is joined), `fillBelowTo` (the fill runs down to the named series, 35% by default)
   and the bar options (`barAlignment`, `barWidthFactor`, `barMaxWidth`). Value axes are ranged as Grafana ranges
   them (uPlot's padded range: headroom above the data, a flat zero series on the floor of 0..100, soft bounds
   and whole numbers with decimals 0). Series colors follow Grafana's classic palette in Grafana's order: the
   position counts every number field of the graphable frames, hidden series included.
+- **Time series gradients.** `gradientMode` opacity fades the fill to nothing at the bottom of the plot. `hue`
+  colors line and fill from a lighter, hue-shifted top to a darker bottom of the series color (palette, fixed or
+  by-value), as Grafana computes them per light and dark theme. `scheme` colors line and fill by value: threshold
+  steps (absolute, or percentages of the data range or of the min/max and soft min/max when set) as hard color
+  edges in their threshold tones (a transparent step leaves its band unpainted), and the continuous schemes and
+  the classic palette spread over that range. With a fixed color or shades, `scheme` draws the plain color, as in
+  Grafana. Gradient colors come from a fixed set of classes: Grafana's named colors, their hue variants, the
+  classic palette and the continuous schemes match exactly, other colors take the nearest one; other palettes
+  (color blind, categorical) draw the plain series color under `scheme`.
 - **No data.** A panel whose queries return nothing (or that has no query at all) shows Grafana's no-data text:
   the field defaults' `noValue`, else "No data". Stat, gauge and bar gauge show one placeholder value
   (Grafana's `createNoValuesFieldDisplay`): its text is `noValue`, its color the base threshold step and its
