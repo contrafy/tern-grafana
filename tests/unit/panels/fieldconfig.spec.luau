@@ -23,6 +23,18 @@ local function itemNamed(items: { FieldConfig.Item }, name: string): FieldConfig
 	error("no item " .. name)
 end
 
+-- Prometheus returns instant series in no fixed order (13.3.0 differs from
+-- 11/12), so series are picked by their job label.
+local function itemOfJob(items: { FieldConfig.Item }, job: string): FieldConfig.Item
+	for _, item in items do
+		local labels = item.field.labels :: any
+		if labels and labels.job == job then
+			return item
+		end
+	end
+	error("no item for job " .. job)
+end
+
 local function text(item: FieldConfig.Item, v: any): string
 	return FieldConfig.joined(FieldConfig.display(item, v))
 end
@@ -148,13 +160,13 @@ for _, version in S.VERSIONS do
 				return Interpolate.replace(s, scope)
 			end)
 			local items = FieldConfig.resolve(replaced, S.frames(version, "prom_instant"), env)
-			expect(items[2].name).toBe("alertmanager on prod (up)")
-			expect(items[4].name).toBe(
+			expect(itemOfJob(items, "alertmanager").name).toBe("alertmanager on prod (up)")
+			expect(itemOfJob(items, "node").name).toBe(
 				'__name__="up", env="dev", instance="node-exporter:9100", job="node"|'
 					.. '|dev, node, node-exporter:9100, up|up{env="dev", instance="node-exporter:9100", job="node"}'
 			)
 			-- A name that reads "" is no displayName: the series keeps its own.
-			expect(items[6].name).toBe('up{instance="node-exporter:9999", job="down"}')
+			expect(itemOfJob(items, "down").name).toBe('up{instance="node-exporter:9999", job="down"}')
 			-- The dashboard JSON itself is left as written.
 			expect(panel.fieldConfig.defaults.displayName).toBe("${__field.labels.job} on $env (${__field.name})")
 		end)

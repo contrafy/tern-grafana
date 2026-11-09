@@ -7,6 +7,24 @@ versions may break).
 
 ## [Unreleased]
 
+### Added
+
+- Grafana 13 is supported and verified: the dev stack runs Grafana 13.3 next to
+  11.6 and 12.4, with recorded fixtures every per-version spec reads.
+  Dashboards saved with 13's new layouts (schema v2: tabs, auto grid, rows)
+  open natively through the same API. Tempo 3.x is verified next to 2.10.
+- Verified on Tern 0.9.13: the end-to-end suite passes and every Tern fact the
+  plugin relies on was re-checked (docs/sdk-capability-matrix.md); the dev
+  typings are pinned to the matching tern-sdk. docs/performance.md and the
+  blob-cache issue draft are re-measured on 0.9.13, which trims its image
+  cache to 1 GiB at daemon start but still never while running.
+
+### Fixed
+
+- Gauges on Grafana 13 draw as its radial gauge (shape, segments, sparkline,
+  effects): 13 dropped the `newGauge` toggle and always draws the new gauge,
+  so the plugin no longer falls back to the old gauge there.
+
 ## [0.4.0] - 2026-10-20
 
 ### Added

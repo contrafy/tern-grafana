@@ -620,14 +620,19 @@ describe("Query block exemplars", function()
 
 	for _, version in S.GRAFANA do
 		it("asks Grafana " .. version .. " for exemplars in the same query and splits them from the series", function()
-			local s, effects, env = open({ context = "graf", expr = "histogram_quantile(0.95, x)", from = S.WINDOW })
+			local env = S.env(CFG)
+			-- The 13.3.0 fixtures were recorded a month after the others (2026-11-09T15:56:03Z).
+			if version == "13.3.0" then
+				env.now_ms = 1794239763000
+			end
+			local s, effects = open({ context = "graf", expr = "histogram_quantile(0.95, x)", from = S.WINDOW }, env)
 			local reqs = S.all(effects, "http")
 			expect(#reqs).toBe(1)
 			expect(reqs[1].request.body).toContain('"exemplar":true')
 			done(s, env, "q:1", "grafana/" .. version .. "/ds_query_prom_exemplars.json")
 			expect(#s.chart.layout.series).toBe(2)
-			-- 120 recorded; the few just before the window are not drawn.
-			expect(#s.chart.layout.exemplars > 100).toBe(true)
+			-- 120 recorded on 11 and 12, 58 on 13; the few just before the window are not drawn.
+			expect(#s.chart.layout.exemplars > (if version == "13.3.0" then 45 else 100)).toBe(true)
 		end)
 	end
 

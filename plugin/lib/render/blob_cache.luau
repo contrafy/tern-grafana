@@ -7,25 +7,14 @@
 -- - a bounded LRU of ids by content hash (FNV-1a 64, length, mime), so the
 --   same bytes under another key, or returning to earlier bytes, reuse ids.
 
+local Hash = require("../hash")
+
 local M = {}
 
 M.DEFAULT_CAPACITY = 64
 
-local TWO32 = 0x100000000
-
--- FNV-1a 64-bit as 16 hex digits, on two 32-bit halves (Luau numbers are
--- doubles). The prime is 2^40 + 0x1b3, so h * prime = h * 0x1b3 + (h << 40).
-function M.fnv1a64(s: string): string
-	local hi, lo = 0xcbf29ce4, 0x84222325
-	local b = buffer.fromstring(s)
-	for i = 0, #s - 1 do
-		lo = bit32.bxor(lo, buffer.readu8(b, i))
-		local l = lo * 0x1b3
-		hi = (hi * 0x1b3 + l // TWO32 + bit32.lshift(lo, 8)) % TWO32
-		lo = l % TWO32
-	end
-	return string.format("%08x%08x", hi, lo)
-end
+-- FNV-1a 64-bit as 16 hex digits (lib/hash; watch default names persist it).
+M.fnv1a64 = Hash.fnv1a64
 
 type Memo = { bytes: string, mime: string, id: string }
 

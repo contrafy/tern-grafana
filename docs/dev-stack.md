@@ -10,7 +10,7 @@ Needs Docker with the compose v2 plugin, `curl` and `jq`. Nothing is installed o
 
 | Command | What it does |
 | --- | --- |
-| `make stack-up` / `sh scripts/stack.sh up` | Start everything, wait until healthy, mint one Grafana service-account token per Grafana, seed a library panel and two annotations. Idempotent. |
+| `make stack-up` / `sh scripts/stack.sh up` | Start everything, wait until healthy, mint one Grafana service-account token per Grafana, seed a library panel and two annotations, and on Grafana 13 the schema v2 dashboard. Idempotent. |
 | `make stack-down` / `sh scripts/stack.sh down` | Remove containers, their volumes and the tokens. |
 | `sh scripts/stack.sh reset` | `down` then `up`: fresh Grafana databases and TSDBs. |
 | `sh scripts/stack.sh status` | Container state, endpoint readiness, firing alert counts per server, log and trace presence. |
@@ -18,6 +18,8 @@ Needs Docker with the compose v2 plugin, `curl` and `jq`. Nothing is installed o
 | `make fixtures-capture` / `sh scripts/stack.sh capture` | Record fixtures (see below). |
 | `sh scripts/stack.sh token-path grafana12` | Print the token file path (never the token). |
 | `make fixtures` / `sh scripts/fixtures/embed.sh` | Embed `tests/fixtures/**` into the gitignored `tests/fixtures/generated.luau` for specs. |
+| `python3 scripts/fake-irm/server.py [PORT] [UPSTREAM]` | A fake Grafana IRM (default `127.0.0.1:13900`) serving the scrubbed `tests/fixtures/irm/` captures, dates moved to today, on the IRM paths (settings, OnCall `/oncall/api/v1/*`, Incident RPCs); every other request is proxied to UPSTREAM (default Grafana 12). |
+| | Point a context's `grafana.url` at it with the grafana12 token for IRM screenshots and manual checks; it refuses writes. |
 
 ## Services
 
@@ -27,21 +29,22 @@ All published ports bind to `127.0.0.1`.
 | --- | --- | --- | --- |
 | grafana12 | `grafana/grafana:12.4.12` | 3000 | Uses the image renderer. Feature toggle `newGauge` on (the 12.4 gauge: shape, segments, sparkline, effects). |
 | grafana11 | `grafana/grafana:11.6.16` | 3011 | Deliberately without a renderer, so the "no renderer" path is real. |
-| renderer | `grafana/grafana-image-renderer:v5.12.6` | internal 8081 | Grafana 12 only. |
+| grafana13 | `grafana/grafana:13.3.0` | 3013 | Uses the image renderer (with a local renderer token: 13 refuses the default one). New gauge and new dashboard layouts are on by default. |
+| renderer | `grafana/grafana-image-renderer:v5.12.7` | internal 8081 | Grafana 12 and 13; accepts the default token (12) and `tern-dev-renderer` (13). |
 | prometheus3 | `quay.io/prometheus/prometheus:v3.15.0` | 9090 | Exemplar storage, remote-write receiver. |
 | prometheus2 | `quay.io/prometheus/prometheus:v2.53.5` | 9091 | 2.53 LTS, same config and rules as prometheus3. |
-| alertmanager | `quay.io/prometheus/alertmanager:v0.34.1` | 9093 | Receives from both Prometheus servers and both Grafanas. |
+| alertmanager | `quay.io/prometheus/alertmanager:v0.34.1` | 9093 | Receives from both Prometheus servers and every Grafana. |
 | loki | `grafana/loki:3.7.8` | 3100 | Volume API enabled. |
-| tempo | `grafana/tempo:2.10.8` | 3200 | OTLP gRPC/HTTP internal (4317/4318); metrics generator on. |
+| tempo | `grafana/tempo:3.1.1` | 3200 | Single binary (live store, backend worker; no ingester or compactor in 3.x); OTLP gRPC/HTTP internal (4317/4318); metrics generator on. |
 | node-exporter | `quay.io/prometheus/node-exporter:v1.12.1` | internal | Scrape target. |
-| postgres | `postgres:17.6-alpine` | internal 5432 | Seeded once from `dev/postgres/init.sql`; datasource `postgres` in both Grafanas. |
-| loggen | `quay.io/curl/curl:8.22.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s, plus one line per recent Tempo trace every 10 s. |
-| tracegen-frontend, tracegen-payments | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.162.0` | none | OTLP traces; payments spans carry error status. |
+| postgres | `postgres:17.6-alpine` | internal 5432 | Seeded once from `dev/postgres/init.sql`; datasource `postgres` in every Grafana. |
+| loggen | `quay.io/curl/curl:8.23.0` | none | `dev/generators/loggen.sh`: labeled logs every 2 s, plus one line per recent Tempo trace every 10 s. |
+| tracegen-frontend, tracegen-payments | `ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.163.0` | none | OTLP traces; payments spans carry error status. |
 | logcli | `grafana/logcli:3.7.8` | none | Profile `tools`; only used by `capture` via `docker compose run`. |
 
 promtool and amtool run from the prometheus and alertmanager images (`docker compose run --entrypoint`).
 
-Both Grafanas install `grafana-clock-panel` 2.1.8 at container start (`GF_INSTALL_PLUGINS`, so the
+All three Grafanas install `grafana-clock-panel` 2.1.8 at container start (`GF_INSTALL_PLUGINS`, so the
 first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
 `/public/tern-news/feed.xml` for the news panel (no extra container, no CORS).
 
@@ -56,7 +59,7 @@ first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
 - Exemplars: Tempo's metrics generator turns the generated traces into `traces_spanmetrics_*` and
   `traces_service_graph_*` series and remote-writes them with exemplars (label `traceID`, real trace ids)
   to both Prometheus servers.
-- Grafana (both, provisioned identically from `dev/grafana/provisioning`): datasources with fixed uids
+- Grafana (all three, provisioned identically from `dev/grafana/provisioning`): datasources with fixed uids
   `prom3`, `prom2`, `alertmanager`, `loki`, `tempo` (exemplars link to Tempo, Loki derived field
   `trace_id`, Tempo traces-to-logs/metrics). Folder `Tern Fixtures` (uid `tern-fixtures`) with
   dashboards `tern-panels` (every panel type, open and collapsed rows, a library panel, a Prometheus
@@ -70,7 +73,9 @@ first start needs network) and serve `dev/grafana/news/feed.xml` same-origin at
   external Alertmanager, with a 1 m repeat interval: Grafana only re-sends on repeat, and the external
   Alertmanager resolves alerts whose `endsAt` passed. `up` seeds library panel `tern-lib-up`, two
   annotations tagged `tern-seed`, a third on `tern-all-panels` panel 1, and stars `tern-all-panels`
-  for the service account.
+  for the service account. On Grafanas that store schema v2 dashboards (13), `up` also creates
+  `dev/grafana/dashboards-v2/tern-v2-layouts.json` through `/apis/dashboard.grafana.app/v2`: tabs, an
+  auto grid, an open and a collapsed row (file provisioning would hand it to 11 and 12 too).
 - Dashboard `tern-all-panels` (`dev/grafana/dashboards/tern-all-panels.json`): one panel per core panel
   type plus the clock panel, with the configuration variants the native renderers must honor. Panel ids:
 
@@ -116,10 +121,19 @@ Observed on the pinned versions; the plugin must handle these, and the fixtures 
 
 - Grafana 11 without a renderer answers `/render/d-solo/...` with HTTP 200 and a PNG that says "No
   image renderer available/installed". Detect the renderer with `rendererAvailable` in
-  `/api/frontend/settings` (false on 11 here, true on 12), never from the render status.
+  `/api/frontend/settings` (false on 11 here, true on 12 and 13), never from the render status.
 - Grafana trace by id through `/api/ds/query` needs `queryType: "traceId"`. TraceQL search through
-  `/api/ds/query` works on Grafana 12 and fails with 500 on Grafana 11; the datasource proxy
-  (`/api/datasources/proxy/uid/tempo/api/search`) works on both.
+  `/api/ds/query` works on Grafana 12 and 13 and fails with 500 on Grafana 11; the datasource proxy
+  (`/api/datasources/proxy/uid/tempo/api/search`) works on all three.
+- Grafana 13 stores dashboards saved with its new layouts as schema v2, and `/api/dashboards/uid/<uid>`
+  still answers schema v1 for them: tabs and rows become rows in reading order, auto-grid panels get
+  a `gridPos`, a collapsed row keeps its panels (`dashboard_tern_v2_layouts` next to the stored
+  `dashboard_v2_tern_v2_layouts`). `meta.apiVersion` says `v0alpha1` either way.
+- Grafana 13 drops the `newGauge` toggle from `featureToggles`: its gauge panel always draws the
+  radial gauge, with the same options, defaults and migration as 12.4's toggled one.
+- Tempo 3.1 answers the HTTP API like 2.10 (search, tags v1 and v2, trace v1 and v2 envelopes,
+  TraceQL metrics, the empty-bodied 404 for a missing trace); only the order of scopes in
+  `/api/v2/search/tags` differs.
 - Tempo search may return trace ids without leading zeros (fewer than 32 hex digits); Tempo accepts
   them as given.
 - Tempo exemplars carry the trace id in label `traceID`.
@@ -140,7 +154,7 @@ Observed on the pinned versions; the plugin must handle these, and the fixtures 
 - Grafana admin: `admin` / `tern-dev` (in `dev/compose.yml`). This is a throwaway password for a
   stack bound to localhost; never reuse it.
 - `up` creates service account `tern-dev` (role Admin) in each Grafana and stores one token per Grafana
-  in `.sandbox/stack/grafana12.token` / `grafana11.token` (mode 0600, directory 0700, gitignored).
+  in `.sandbox/stack/grafana12.token`, `grafana11.token` and `grafana13.token` (mode 0600, directory 0700, gitignored).
   Tokens are never printed; scripts hand them to curl on stdin (`curl -K -`), never as arguments.
   A lost or stale token file is replaced on the next `up`; `down` deletes them.
 - Prometheus, Alertmanager, Loki and Tempo run without auth.
@@ -180,7 +194,7 @@ Specs read fixtures through `tests/lib/fixtures.luau` (`Fixtures.read(path)`, `F
 ### tern-all-panels fixtures
 
 Per Grafana version, next to the generic ones: `dashboard_tern_all_panels.json`,
-`frontend_settings_all_panels.json` (TestData, clock panel, and `newGauge` on 12),
+`frontend_settings_all_panels.json` (TestData, clock panel, and `newGauge` on 12; 13 has it built in),
 `plugin_clock_panel.json`, `ds_query_all_panels_<panelId>.json` with its `.request.json` for every
 panel that queries, `search_starred`, `search_recent`, `search_tag`, `search_query_tag`,
 `annotations_annolist`, `annotations_annolist_dashboard`, `annotations_annolist_range`,

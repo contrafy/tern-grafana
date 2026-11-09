@@ -134,4 +134,54 @@ describe("Shared between two blocks", function()
 	end)
 end)
 
+describe("Shared.shareInto and toggleInto", function()
+	-- They replace the share/toggle/join glue four blocks repeat: same effects,
+	-- same order, same adopted range as the calls they wrap.
+	local function twin(): (Shared.Sync, Shared.Sync)
+		return { on = true, origin = "q-1", seq = 0, gen = 1 }, { on = true, origin = "q-1", seq = 0, gen = 1 }
+	end
+	local R = { from = "now-1h", to = "now" }
+
+	it("shareInto appends what share returns", function()
+		local a, b = twin()
+		local ea, eb = env(), env()
+		local effects = {}
+		Shared.shareInto(effects, a, R, 5, ea)
+		expect(effects).toEqual({ Shared.share(b, R, 5, eb) })
+		b.on, a.on = false, false
+		Shared.shareInto(effects, a, R, nil, ea)
+		expect(#effects).toBe(1)
+	end)
+
+	it("toggleInto equals toggle then join, with and without another block's record", function()
+		for _, other in { false, true } do
+			local a, b = twin()
+			a.on, b.on = false, false
+			local ea, eb = env(), env()
+			if other then
+				local rec = Shared.publish({ from = "now-6h", to = "now" }, 7, "dash-9", nil)
+				ea.kv[Shared.KEY], eb.kv[Shared.KEY] = rec, rec
+			end
+			local effects = {}
+			local r, c = Shared.toggleInto(effects, a, R, 3, ea)
+			local want: { any } = { Shared.toggle(b) }
+			local wr, wc, we = Shared.join(b, R, 3, eb)
+			if we then
+				table.insert(want, we)
+			end
+			expect(effects).toEqual(want)
+			expect(r).toEqual(wr)
+			expect(c).toBe(wc)
+			expect(a).toEqual(b)
+			-- Turning off: no effects, nothing to adopt.
+			local off = {}
+			local r2, c2 = Shared.toggleInto(off, a, R, 3, ea)
+			expect(#off).toBe(0)
+			expect(r2).toBeNil()
+			expect(c2).toBeNil()
+			expect(a.on).toBe(false)
+		end
+	end)
+end)
+
 return nil

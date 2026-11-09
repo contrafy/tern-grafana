@@ -3,7 +3,7 @@
 -- the panels Grafana shows under them (an open row owns the panels after it,
 -- a collapsed row hides its own), library panels must render as the element
 -- they reference, and repeat options must survive for the repeat expansion.
--- Grafana 11 and 12 serve the same provisioned dashboards; both are checked.
+-- Grafana 11, 12 and 13 serve the same provisioned dashboards; all are checked.
 local Model = require("../../../plugin/lib/dashboard/model")
 local S = require("./support")
 local t = require("../../lib/test")
@@ -112,6 +112,53 @@ for _, version in S.VERSIONS do
 		end)
 	end)
 end
+
+-- Dashboards saved with Grafana 13's new layouts are stored as schema v2
+-- (elements plus a tabs/rows/auto-grid layout tree), yet /api/dashboards/uid
+-- still answers schema v1: tabs and rows become rows in reading order, auto
+-- grids get a gridPos, and a collapsed row keeps its panels. The plugin reads
+-- that answer, so a v2 dashboard needs no second model.
+describe("dashboard model of a schema v2 dashboard on Grafana 13.3.0", function()
+	local env = S.env()
+	local d = assert(Model.parseResponse(S.response(S.grafana("13.3.0", "dashboard_tern_v2_layouts.json")), env))
+
+	it("reads the v1 view Grafana derives from the v2 spec", function()
+		expect(d.uid).toBe("tern-v2-layouts")
+		expect(d.title).toBe("Tern V2 Layouts")
+		expect(d.folder_title).toBe("Tern Fixtures")
+		expect(d.time).toEqual({ from = "now-1h", to = "now" })
+		expect(d.timezone).toBe("utc")
+		expect(#d.templating).toBe(1)
+		expect(d.templating[1].name).toBe("job")
+		expect(d.templating[1].type).toBe("custom")
+	end)
+
+	it("turns tabs and rows into rows and keeps the collapsed row's panel", function()
+		local rows: { any } = {}
+		for _, s in d.sections do
+			table.insert(rows, {
+				title = if s.row then s.row.title else nil,
+				collapsed = if s.row then s.row.collapsed else nil,
+				panels = ids(s.panels),
+			})
+		end
+		local expected: { any } = {
+			{ title = "Overview", collapsed = false, panels = { 1, 2 } },
+			{ title = "Details", collapsed = false, panels = {} },
+			{ title = "Notes", collapsed = false, panels = { 3 } },
+			{ title = "TSDB", collapsed = true, panels = { 4 } },
+		}
+		expect(rows).toEqual(expected)
+	end)
+
+	it("places auto-grid panels on the 24-column grid with v1 targets", function()
+		local p = assert(Model.findPanel(d, 2))
+		expect(p.type).toBe("timeseries")
+		expect(p.grid).toEqual({ x = 8, y = 1, w = 8, h = 9 })
+		expect(p.json.datasource).toEqual({ type = "prometheus", uid = "prom3" })
+		expect(p.json.targets[1].expr).toBe('scrape_duration_seconds{job="$job"}')
+	end)
+end)
 
 describe("dashboard model slug", function()
 	it("slugifies titles like Grafana", function()

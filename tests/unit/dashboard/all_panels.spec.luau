@@ -64,7 +64,8 @@ local function query(h: Harness, id: number): any
 end
 
 for _, version in S.VERSIONS do
-	local newGauge = version == "12.4.12"
+	-- 12.4 draws the new gauge behind its feature toggle (on in the dev stack); 13 always does.
+	local newGauge = version ~= "11.6.16"
 
 	describe("tern-all-panels on Grafana " .. version, function()
 		it("queries over the panel's timeFrom/timeShift range as Grafana's frontend did", function()

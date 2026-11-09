@@ -203,7 +203,7 @@ describe("range zoom and shift", function()
 	local r = { from_ms = 1000, to_ms = 3000 }
 
 	it("zooms out around the center", function()
-		expect(range.zoomOut(r)).toEqual({ from_ms = 0, to_ms = 4000 })
+		expect(range.zoom(r, 2)).toEqual({ from_ms = 0, to_ms = 4000 })
 		expect(range.zoom(r, 0.5)).toEqual({ from_ms = 1500, to_ms = 2500 })
 	end)
 
@@ -213,8 +213,30 @@ describe("range zoom and shift", function()
 	end)
 
 	it("keeps whole milliseconds for odd spans", function()
-		expect(range.zoomOut({ from_ms = 10, to_ms = 13 })).toEqual({ from_ms = 8, to_ms = 14 })
+		expect(range.zoom({ from_ms = 10, to_ms = 13 }, 2)).toEqual({ from_ms = 8, to_ms = 14 })
 		expect(range.shift({ from_ms = 10, to_ms = 13 }, 1)).toEqual({ from_ms = 11, to_ms = 14 })
+	end)
+end)
+
+describe("range.age", function()
+	-- Replaces four copies (alerts, ops, rules, Carly) whose text users read.
+	local function copy(ms: number): string
+		local sec = math.max(0, math.floor(ms / 1000))
+		if sec < 60 then
+			return sec .. "s"
+		elseif sec < 3600 then
+			return (sec // 60) .. "m"
+		elseif sec < 86400 then
+			return (sec // 3600) .. "h"
+		end
+		return (sec // 86400) .. "d"
+	end
+
+	it("reads like the copies it replaces", function()
+		for _, ms in { -5000, 0, 999, 1000, 59999, 60000, 3599999, 3600000, 86399999, 86400000, 9e9, 1.5e3 } do
+			expect(range.age(ms)).toBe(copy(ms))
+		end
+		expect(range.age(90 * 60000)).toBe("1h")
 	end)
 end)
 

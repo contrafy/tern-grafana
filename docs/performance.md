@@ -1,11 +1,13 @@
 # Performance: Tern's image cache
 
 Charts reach Tern as SVG (or PNG) bytes sent with `cx:blob`; Tern writes every distinct image to
-`~/Library/Caches/Tern/blobs/<sha256>` and, as measured below, never removes one during a session, on a plugin
-reload, when a block closes or when the window restarts. So every redraw that produces new bytes costs disk for good.
-This page records how fast the cache grew in a long session, what the plugin does about it, and what it cannot do
-(an upstream issue draft is in [upstream/stencil-blob-cache.md](upstream/stencil-blob-cache.md)). The plugin never
-deletes or edits files in Tern's cache.
+`~/Library/Caches/Tern/blobs/<sha256>`. Tern 0.9.13 trims that directory to 1 GiB, least recently used first, when
+its daemon starts; while the daemon runs it removes nothing, also not when an image is replaced or a block closes
+(measured below; Tern 0.8.3 never removed a file at all). So every redraw that produces new bytes
+costs disk until the next daemon start. This page records how fast the cache grew in a long session, what the plugin
+does about it, and what it cannot do (an upstream issue draft is in
+[upstream/stencil-blob-cache.md](upstream/stencil-blob-cache.md)). The plugin never deletes or edits files in Tern's
+cache.
 
 ## How it was measured
 
@@ -25,7 +27,7 @@ deletes or edits files in Tern's cache.
 
 ## Long session, before and after
 
-24 minutes each, same layout, 60 s samples:
+24 minutes each on Tern 0.8.3, same layout, 60 s samples:
 
 | | Before | After |
 | --- | --- | --- |
@@ -55,6 +57,24 @@ The shown Query block does not improve: a direct Prometheus range query ends at 
 answer has new timestamps and is a new picture. Through Grafana, which aligns a range to its step, an answer inside
 one step is byte-identical and keeps the drawn chart.
 
+## Re-measured on Tern 0.9.13
+
+Tern 0.9.13 (8c6dfbd), same sandbox setup, same layout and plugin (0.4.0, with the measurement-only `cx:blob` log),
+on a dev stack started about 25 minutes earlier. The per-minute rates were identical in every sample, so 11 minutes
+(main layout), 5 minutes (Query block) and 3 minutes (background) were enough:
+
+| | Tern 0.8.3 (after) | Tern 0.9.13 |
+| --- | --- | --- |
+| Main layout, files per minute | 11.8 | 12.0 (12 in each of 11 samples; 132 added, 34 to 166) |
+| Tern Panels, shown, 1 h: blobs per 30 s refresh | 6.1 | 6 (the same six panels every refresh: 140 blobs, 23 per panel, in 11.5 minutes) |
+| Tern All Panels, background tab | 0 | 0 (25 blobs on its first draw, none in 11 minutes behind another tab) |
+| Query block, 10 s auto-refresh, shown | 6 files per minute | 6 files per minute (30 in 5 minutes, 16.2 KB each) |
+| Every block in a background tab | 0 | 0 files in 3 minutes; all redrawn within 1 s of the tab being shown |
+| Files removed by Tern in any sample | 0 | 0 |
+
+Bytes are not comparable between the runs: the 0.9.13 stack held less than an hour of data, so the 1 h charts were
+sparser (0.18 to 0.27 MB per minute for the main layout, growing as data accumulated, against 0.63 MB on 0.8.3).
+
 ## Blobs per refresh, by panel type
 
 Before the mitigations, per refresh of one panel (Tern All Panels and Tern Panels, 48 refreshes), and bytes per blob:
@@ -74,8 +94,9 @@ Before the mitigations, per refresh of one panel (Tern All Panels and Tern Panel
 | Bar gauge, table, text, logs, clock, alert/annotation/dashboard lists, news | none: native Tern kinds | |
 
 Stat values in a dashboard grid are drawn as a one-line SVG (measured above before this change, when they were
-text) because Tern gives a block no reliable pane width, so CSS text could not be sized to fill its card like
-Grafana's. A value that does not change between refreshes keeps its image.
+text) because Tern gives a block its pane width only in cells, never in px (Tern 0.7 and 0.8 always reported 80x24),
+so CSS text could not be sized to fill its card like Grafana's. A value that does not change between refreshes keeps
+its image.
 
 Time-axis panels made two blobs per refresh: the refresh resolved the new range at once, so the panel was redrawn
 with its old data on the new axis while the query ran, then again when the answer arrived. After the mitigations a
@@ -84,7 +105,7 @@ and state timeline were redrawn 4 times in 19 refreshes, once per 2-minute step)
 
 ## Eviction
 
-Tern never removed a file:
+Tern 0.8.3 never removed a file:
 
 - 0 files removed in every one-minute sample of every run above (about 90 minutes of sampling in total).
 - Plugin reload (`tern plugin reload`, restored blocks re-run `init`): 1554 files before, 1570 after (the restored
@@ -93,9 +114,22 @@ Tern never removed a file:
 - Window quit and started again (with the blocks closed, so nothing new was drawn): 2257 files before, 2257 a
   minute after the restart.
 
-Earlier (Tern 0.7.0, docs/sdk-capability-matrix.md row "Blob growth"): 200 swaps of one image made 200 files, none
-removed five minutes later. Tern also logs `WARN stencil_term: cannot cache surface blob ... No such file or
-directory` while images are replaced quickly (234 times in the main session); the display is not affected.
+Tern 0.9.13 caps the cache at 1 GiB when the daemon starts (Tern's Limits page: "Blobs kept on disk: 1 GiB; the
+least recently shown go when the daemon starts") and does nothing in between. Measured with a throwaway block in a
+sandbox whose cache was first filled with 1100 content-addressed files of 1 MiB (modification times spread over 30
+days):
+
+- Daemon start: 1103 files (1,153,958,596 bytes) became 1026 (1,073,218,244, under 1 GiB); the 77 oldest went.
+- Running, already at the cap: a block adding a 100 KB image every second took the cache to 1126 files
+  (1,083,234,336 bytes) in 100 s; nothing was removed, nor when the block closed.
+- Quit and start again: 1116 files (1,072,748,576 bytes); the 10 oldest went.
+- 0 files removed in every sample of the 0.9.13 runs above (19 minutes).
+
+So on 0.9.13 the cache no longer grows without bound across restarts, but within one daemon lifetime (often days or
+weeks) it grows at the rates above with no ceiling. Earlier (Tern 0.7.0, docs/sdk-capability-matrix.md row "Blob
+growth"): 200 swaps of one image made 200 files, none removed five minutes later. Tern 0.8.3 also logged
+`WARN stencil_term: cannot cache surface blob ... No such file or directory` while images were replaced quickly (234
+times in the main session); the display was not affected.
 
 ## What the plugin does
 
@@ -128,11 +162,14 @@ directory` while images are replaced quickly (234 times in the main session); th
 ## What it cannot do
 
 - **Off-screen panels inside a shown dashboard.** Tern exposes no scroll or viewport signal for nodes inside a block
-  (no event; window `PaneInfo` has only `focused`, `floating` and `parked`; `cx.session:view` is per pane), so panels
-  scrolled out of view refresh at the dashboard's rate.
+  (re-checked on Tern 0.9.13: no event; window `PaneInfo` has only `focused`, `floating` and `parked`; the
+  `.sf-paused` state Tern sets on a surface that isn't visible is a style hook, not a Lua signal; `cx.session:view`
+  is per pane), so panels scrolled out of view refresh at the dashboard's rate.
 - **A window in the background or minimized.** No signal either; its active tab counts as shown.
 - **New data.** A chart whose data changed is a new picture; the remaining growth (about 38 MB per hour for the
-  layout above, about 11 MB per hour for one Query block on a 10 s refresh) needs eviction in Tern.
+  layout above on Tern 0.8.3, about 11 MB per hour for one Query block on a 10 s refresh) is only reclaimed by Tern,
+  and Tern 0.9.13 does that only at daemon start, down to 1 GiB. There is no API to release a blob (`BlockCx` has
+  only `blob(bytes, mime)`).
 
 A background block's one-second visibility check is a timer tick and a re-render that hits the view memo; it sends
 no request and no blob.

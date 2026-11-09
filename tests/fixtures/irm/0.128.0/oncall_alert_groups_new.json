@@ -9,17 +9,17 @@
   {
    "acknowledged_at": null,
    "acknowledged_by": null,
-   "alert_group_number": 15326,
+   "alert_group_number": 1094,
    "alerts_count": 41,
    "created_at": "2026-10-19T15:49:11.016086Z",
    "dependent_alert_group_ids": [],
-   "id": "I000000000135",
-   "integration_id": "C000000000107",
+   "id": "I000000000109",
+   "integration_id": "C000000000081",
    "labels": [],
    "last_alert": {
-    "alert_group_id": "I000000000135",
+    "alert_group_id": "I000000000109",
     "created_at": "2026-10-19T20:34:11.098308Z",
-    "id": "A000000000136",
+    "id": "A000000000110",
     "payload": {
      "alerts": [
       {
@@ -28,7 +28,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "d000000000000139",
+       "fingerprint": "d000000000000112",
        "generatorURL": "https://example.invalid/irm/16",
        "labels": {
         "alertname": "value 12",
@@ -57,16 +57,16 @@
         "label 8": "value 8",
         "label 9": "value 10"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "b0000000000138",
+       "ruleUID": "b0000000000111",
        "silenceURL": "https://example.invalid/irm/15",
        "startsAt": "2026-09-28T22:08:10Z",
        "status": "firing",
        "valueString": "valueString 1",
        "values": {
-        "label 22": 100,
-        "label 23": 1
+        "label 22": 1035,
+        "label 23": 1003
        }
       },
       {
@@ -75,7 +75,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "X000000000000140",
+       "fingerprint": "X000000000000113",
        "generatorURL": "https://example.invalid/irm/16",
        "labels": {
         "alertname": "value 12",
@@ -104,16 +104,16 @@
         "label 8": "value 29",
         "label 9": "value 31"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "b0000000000138",
+       "ruleUID": "b0000000000111",
        "silenceURL": "https://example.invalid/irm/17",
        "startsAt": "2026-09-28T22:08:10Z",
        "status": "firing",
        "valueString": "valueString 2",
        "values": {
-        "label 22": 100,
-        "label 23": 1
+        "label 22": 1035,
+        "label 23": 1003
        }
       }
      ],
@@ -130,7 +130,7 @@
       "label 2": "value 3"
      },
      "externalURL": "https://example.invalid/irm/18",
-     "groupKey": "X0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000141",
+     "groupKey": "X0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000114",
      "groupLabels": {
       "alertname": "value 12",
       "grafana_folder": "value 16"
@@ -138,8 +138,8 @@
      "message": "message 1",
      "numFiring": 13,
      "numResolved": 1,
-     "orgId": 1137,
-     "receiver": "I00000000000142",
+     "orgId": 1002,
+     "receiver": "I00000000000115",
      "state": "alerting",
      "status": "firing",
      "title": "title 2",
@@ -153,7 +153,7 @@
    "resolved_at": null,
    "resolved_by": null,
    "root_alert_group_id": null,
-   "route_id": "R000000000109",
+   "route_id": "R000000000083",
    "silenced_at": null,
    "state": "firing",
    "team_id": null,
@@ -162,17 +162,17 @@
   {
    "acknowledged_at": null,
    "acknowledged_by": null,
-   "alert_group_number": 15289,
+   "alert_group_number": 1092,
    "alerts_count": 26,
    "created_at": "2026-10-15T12:02:18.050520Z",
    "dependent_alert_group_ids": [],
-   "id": "I000000000143",
-   "integration_id": "C000000000110",
+   "id": "I000000000116",
+   "integration_id": "C000000000084",
    "labels": [],
    "last_alert": {
-    "alert_group_id": "I000000000143",
+    "alert_group_id": "I000000000116",
     "created_at": "2026-10-19T16:43:03.029283Z",
-    "id": "A000000000144",
+    "id": "A000000000117",
     "payload": {
      "alerts": [
       {
@@ -181,7 +181,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "d000000000000146",
+       "fingerprint": "d000000000000119",
        "generatorURL": "https://example.invalid/irm/21",
        "labels": {
         "alertname": "value 41",
@@ -189,9 +189,9 @@
         "label 26": "value 40",
         "label 27": "value 42"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "e0000000000145",
+       "ruleUID": "e0000000000118",
        "silenceURL": "https://example.invalid/irm/20",
        "startsAt": "2026-10-15T12:01:40Z",
        "status": "firing",
@@ -210,7 +210,7 @@
       "label 27": "value 42"
      },
      "externalURL": "https://example.invalid/irm/18",
-     "groupKey": "X00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000147",
+     "groupKey": "X00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000120",
      "groupLabels": {
       "alertname": "value 41",
       "grafana_folder": "value 43"
@@ -218,8 +218,8 @@
      "message": "message 2",
      "numFiring": 1,
      "numResolved": 0,
-     "orgId": 1137,
-     "receiver": "I000000000148",
+     "orgId": 1002,
+     "receiver": "I000000000121",
      "state": "alerting",
      "status": "firing",
      "title": "title 4",
@@ -233,7 +233,7 @@
    "resolved_at": null,
    "resolved_by": null,
    "root_alert_group_id": null,
-   "route_id": "R000000000111",
+   "route_id": "R000000000085",
    "silenced_at": null,
    "state": "firing",
    "team_id": null,
@@ -242,28 +242,28 @@
   {
    "acknowledged_at": null,
    "acknowledged_by": null,
-   "alert_group_number": 15264,
+   "alert_group_number": 1090,
    "alerts_count": 93,
    "created_at": "2026-10-13T10:37:39.582379Z",
    "dependent_alert_group_ids": [],
-   "id": "I000000000149",
-   "integration_id": "C000000000120",
+   "id": "I000000000122",
+   "integration_id": "C000000000094",
    "labels": [
     {
      "label 28": {
-      "id": "s0000150",
+      "id": "s0000123",
       "name": "name 13"
      },
      "label 29": {
-      "id": "h0151",
+      "id": "h0124",
       "name": "name 21"
      }
     }
    ],
    "last_alert": {
-    "alert_group_id": "I000000000149",
+    "alert_group_id": "I000000000122",
     "created_at": "2026-10-19T19:08:24.010671Z",
-    "id": "A000000000152",
+    "id": "A000000000125",
     "payload": {
      "alerts": [
       {
@@ -274,7 +274,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "X000000000000154",
+       "fingerprint": "X000000000000127",
        "generatorURL": "https://example.invalid/irm/24",
        "labels": {
         "alertname": "value 49",
@@ -287,16 +287,16 @@
         "severity": "value 17",
         "team": "value 45"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "c0000000000153",
+       "ruleUID": "c0000000000126",
        "silenceURL": "https://example.invalid/irm/23",
        "startsAt": "2026-10-08T20:06:30Z",
        "status": "firing",
        "valueString": "valueString 3",
        "values": {
-        "label 22": 2,
-        "label 23": 1
+        "label 22": 1004,
+        "label 23": 1003
        }
       },
       {
@@ -307,7 +307,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "X000000000000155",
+       "fingerprint": "X000000000000128",
        "generatorURL": "https://example.invalid/irm/24",
        "labels": {
         "alertname": "value 49",
@@ -320,16 +320,16 @@
         "severity": "value 17",
         "team": "value 45"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "c0000000000153",
+       "ruleUID": "c0000000000126",
        "silenceURL": "https://example.invalid/irm/25",
        "startsAt": "2026-10-08T20:06:30Z",
        "status": "firing",
        "valueString": "valueString 4",
        "values": {
-        "label 22": 2,
-        "label 23": 1
+        "label 22": 1004,
+        "label 23": 1003
        }
       }
      ],
@@ -346,13 +346,13 @@
       "team": "value 45"
      },
      "externalURL": "https://example.invalid/irm/18",
-     "groupKey": "X0000000000000000000156",
+     "groupKey": "X0000000000000000000129",
      "groupLabels": {},
      "message": "message 3",
      "numFiring": 2,
      "numResolved": 0,
-     "orgId": 1137,
-     "receiver": "I000000000000157",
+     "orgId": 1002,
+     "receiver": "I000000000000130",
      "state": "alerting",
      "status": "firing",
      "title": "title 6",
@@ -366,7 +366,7 @@
    "resolved_at": null,
    "resolved_by": null,
    "root_alert_group_id": null,
-   "route_id": "R000000000121",
+   "route_id": "R000000000095",
    "silenced_at": null,
    "state": "firing",
    "team_id": null,
@@ -375,28 +375,28 @@
   {
    "acknowledged_at": null,
    "acknowledged_by": null,
-   "alert_group_number": 15238,
+   "alert_group_number": 1089,
    "alerts_count": 19,
    "created_at": "2026-10-10T12:56:33.774731Z",
    "dependent_alert_group_ids": [],
-   "id": "I000000000158",
-   "integration_id": "C000000000126",
+   "id": "I000000000131",
+   "integration_id": "C000000000100",
    "labels": [
     {
      "label 28": {
-      "id": "s0000150",
+      "id": "s0000123",
       "name": "name 13"
      },
      "label 29": {
-      "id": "l0159",
+      "id": "l0132",
       "name": "name 22"
      }
     }
    ],
    "last_alert": {
-    "alert_group_id": "I000000000158",
+    "alert_group_id": "I000000000131",
     "created_at": "2026-10-19T13:26:33.840466Z",
-    "id": "A000000000160",
+    "id": "A000000000133",
     "payload": {
      "alerts": [
       {
@@ -407,7 +407,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "c000000000000162",
+       "fingerprint": "c000000000000135",
        "generatorURL": "https://example.invalid/irm/28",
        "labels": {
         "alertname": "value 64",
@@ -419,16 +419,16 @@
         "severity": "value 63",
         "team": "value 45"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "b0000000000161",
+       "ruleUID": "b0000000000134",
        "silenceURL": "https://example.invalid/irm/27",
        "startsAt": "2026-10-10T12:41:30Z",
        "status": "firing",
        "valueString": "valueString 5",
        "values": {
-        "label 22": 4,
-        "label 23": 1
+        "label 22": 1007,
+        "label 23": 1003
        }
       },
       {
@@ -439,7 +439,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "X000000000000163",
+       "fingerprint": "X000000000000136",
        "generatorURL": "https://example.invalid/irm/28",
        "labels": {
         "alertname": "value 64",
@@ -451,16 +451,16 @@
         "severity": "value 63",
         "team": "value 45"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "b0000000000161",
+       "ruleUID": "b0000000000134",
        "silenceURL": "https://example.invalid/irm/29",
        "startsAt": "2026-10-10T12:42:30Z",
        "status": "firing",
        "valueString": "valueString 6",
        "values": {
-        "label 22": 2,
-        "label 23": 1
+        "label 22": 1004,
+        "label 23": 1003
        }
       }
      ],
@@ -478,15 +478,15 @@
       "team": "value 45"
      },
      "externalURL": "https://example.invalid/irm/18",
-     "groupKey": "X0000000000000000000000000000164",
+     "groupKey": "X0000000000000000000000000000137",
      "groupLabels": {
       "label 5": "value 61"
      },
      "message": "message 4",
      "numFiring": 2,
      "numResolved": 0,
-     "orgId": 1137,
-     "receiver": "I00000000000000000165",
+     "orgId": 1002,
+     "receiver": "I00000000000000000138",
      "state": "alerting",
      "status": "firing",
      "title": "title 8",
@@ -500,7 +500,7 @@
    "resolved_at": null,
    "resolved_by": null,
    "root_alert_group_id": null,
-   "route_id": "R000000000127",
+   "route_id": "R000000000101",
    "silenced_at": null,
    "state": "firing",
    "team_id": null,
@@ -509,28 +509,28 @@
   {
    "acknowledged_at": null,
    "acknowledged_by": null,
-   "alert_group_number": 15219,
+   "alert_group_number": 1086,
    "alerts_count": 245,
    "created_at": "2026-10-08T12:52:39.032126Z",
    "dependent_alert_group_ids": [],
-   "id": "I000000000166",
-   "integration_id": "C000000000123",
+   "id": "I000000000139",
+   "integration_id": "C000000000097",
    "labels": [
     {
      "label 28": {
-      "id": "s0000150",
+      "id": "s0000123",
       "name": "name 13"
      },
      "label 29": {
-      "id": "m00167",
+      "id": "m00140",
       "name": "name 23"
      }
     }
    ],
    "last_alert": {
-    "alert_group_id": "I000000000166",
+    "alert_group_id": "I000000000139",
     "created_at": "2026-10-19T18:57:39.022355Z",
-    "id": "A000000000168",
+    "id": "A000000000141",
     "payload": {
      "alerts": [
       {
@@ -544,7 +544,7 @@
        },
        "dashboardURL": "",
        "endsAt": "2026-10-19T18:56:30Z",
-       "fingerprint": "d000000000000170",
+       "fingerprint": "d000000000000143",
        "generatorURL": "https://example.invalid/irm/32",
        "labels": {
         "alertname": "value 79",
@@ -567,16 +567,16 @@
         "severity": "value 78",
         "team": "value 45"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "d0000000000169",
+       "ruleUID": "d0000000000142",
        "silenceURL": "https://example.invalid/irm/31",
        "startsAt": "2026-10-19T18:50:30Z",
        "status": "resolved",
        "valueString": "",
        "values": {
-        "label 22": -1,
-        "label 23": -1
+        "label 22": 1001,
+        "label 23": 1001
        }
       },
       {
@@ -586,7 +586,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "d000000000000172",
+       "fingerprint": "d000000000000145",
        "generatorURL": "https://example.invalid/irm/34",
        "labels": {
         "alertname": "value 90",
@@ -603,16 +603,16 @@
         "severity": "value 78",
         "team": "value 45"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "c0000000000171",
+       "ruleUID": "c0000000000144",
        "silenceURL": "https://example.invalid/irm/33",
        "startsAt": "2026-10-15T20:01:10Z",
        "status": "firing",
        "valueString": "valueString 7",
        "values": {
-        "label 23": 1,
-        "label 51": 11
+        "label 23": 1003,
+        "label 51": 1022
        }
       }
      ],
@@ -623,13 +623,13 @@
       "team": "value 45"
      },
      "externalURL": "https://example.invalid/irm/18",
-     "groupKey": "X000000000000000000000173",
+     "groupKey": "X000000000000000000000146",
      "groupLabels": {},
      "message": "message 5",
      "numFiring": 7,
      "numResolved": 1,
-     "orgId": 1137,
-     "receiver": "I00000000000000000000174",
+     "orgId": 1002,
+     "receiver": "I00000000000000000000147",
      "state": "alerting",
      "status": "firing",
      "title": "title 10",
@@ -643,7 +643,7 @@
    "resolved_at": null,
    "resolved_by": null,
    "root_alert_group_id": null,
-   "route_id": "R000000000124",
+   "route_id": "R000000000098",
    "silenced_at": null,
    "state": "firing",
    "team_id": null,
@@ -652,17 +652,17 @@
   {
    "acknowledged_at": null,
    "acknowledged_by": null,
-   "alert_group_number": 15209,
+   "alert_group_number": 1085,
    "alerts_count": 3151,
    "created_at": "2026-10-07T20:34:24.860095Z",
    "dependent_alert_group_ids": [],
-   "id": "I000000000175",
-   "integration_id": "C000000000110",
+   "id": "I000000000148",
+   "integration_id": "C000000000084",
    "labels": [],
    "last_alert": {
-    "alert_group_id": "I000000000175",
+    "alert_group_id": "I000000000148",
     "created_at": "2026-10-19T20:34:24.826315Z",
-    "id": "A000000000176",
+    "id": "A000000000149",
     "payload": {
      "alerts": [
       {
@@ -672,7 +672,7 @@
        },
        "dashboardURL": "",
        "endsAt": "2026-10-19T20:31:50Z",
-       "fingerprint": "X000000000000178",
+       "fingerprint": "X000000000000151",
        "generatorURL": "https://example.invalid/irm/37",
        "labels": {
         "alertname": "value 108",
@@ -703,17 +703,17 @@
         "label 8": "value 8",
         "label 9": "value 106"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "c0000000000177",
+       "ruleUID": "c0000000000150",
        "silenceURL": "https://example.invalid/irm/36",
        "startsAt": "2026-10-19T20:29:50Z",
        "status": "resolved",
        "valueString": "valueString 8",
        "values": {
-        "label 22": 1,
-        "label 23": 0,
-        "label 51": 1
+        "label 22": 1003,
+        "label 23": 1002,
+        "label 51": 1003
        }
       },
       {
@@ -723,7 +723,7 @@
        },
        "dashboardURL": "",
        "endsAt": "0001-01-01T00:00:00Z",
-       "fingerprint": "a000000000000179",
+       "fingerprint": "a000000000000152",
        "generatorURL": "https://example.invalid/irm/37",
        "labels": {
         "alertname": "value 108",
@@ -751,17 +751,17 @@
         "label 8": "value 8",
         "label 9": "value 10"
        },
-       "orgId": 1137,
+       "orgId": 1002,
        "panelURL": "",
-       "ruleUID": "c0000000000177",
+       "ruleUID": "c0000000000150",
        "silenceURL": "https://example.invalid/irm/38",
        "startsAt": "2026-10-08T20:03:50Z",
        "status": "firing",
        "valueString": "valueString 9",
        "values": {
-        "label 22": 0,
-        "label 23": 1,
-        "label 51": 0
+        "label 22": 1002,
+        "label 23": 1003,
+        "label 51": 1002
        }
       }
      ],
@@ -777,7 +777,7 @@
       "label 14": "value 115"
      },
      "externalURL": "https://example.invalid/irm/18",
-     "groupKey": "X000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000180",
+     "groupKey": "X000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000153",
      "groupLabels": {
       "alertname": "value 108",
       "grafana_folder": "value 52"
@@ -785,8 +785,8 @@
      "message": "message 6",
      "numFiring": 10,
      "numResolved": 5,
-     "orgId": 1137,
-     "receiver": "I000000000148",
+     "orgId": 1002,
+     "receiver": "I000000000121",
      "state": "alerting",
      "status": "firing",
      "title": "title 11",
@@ -800,7 +800,7 @@
    "resolved_at": null,
    "resolved_by": null,
    "root_alert_group_id": null,
-   "route_id": "R000000000111",
+   "route_id": "R000000000085",
    "silenced_at": null,
    "state": "firing",
    "team_id": null,

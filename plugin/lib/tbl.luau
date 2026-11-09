@@ -16,4 +16,15 @@ function M.copy<T>(t: T): T
 	return out :: any
 end
 
+-- The keys of `t`, sorted. Keys must be mutually comparable (all strings or
+-- all numbers).
+function M.sortedKeys<K>(t: { [K]: any }): { K }
+	local keys: { K } = {}
+	for k in t :: any do
+		table.insert(keys, k)
+	end
+	table.sort(keys :: any)
+	return keys
+end
+
 return M

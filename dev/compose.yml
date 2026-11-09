@@ -54,10 +54,27 @@ services:
     volumes: *grafana-volumes
     healthcheck: *grafana-health
 
+  # Shares the image renderer with grafana12, so the render ladder step is capturable on 13 too.
+  grafana13:
+    image: grafana/grafana:13.3.0
+    depends_on: [renderer]
+    ports: ["127.0.0.1:3013:3000"]
+    environment:
+      <<: *grafana-env
+      GF_SERVER_ROOT_URL: http://127.0.0.1:3013/
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana13:3000/
+      # Grafana 13 refuses to start with the default renderer token "-" (12.4 still uses it).
+      GF_RENDERING_RENDERER_TOKEN: tern-dev-renderer
+    volumes: *grafana-volumes
+    healthcheck: *grafana-health
+
   renderer:
     image: grafana/grafana-image-renderer:v5.12.7
     environment:
       GOMEMLIMIT: 1GiB
+      # The default token for grafana12, a local-only one for grafana13.
+      AUTH_TOKEN: "-,tern-dev-renderer"
 
   prometheus3:
     image: quay.io/prometheus/prometheus:v3.15.0
@@ -100,7 +117,7 @@ services:
       timeout: 3s
       retries: 30
 
-  # SQL datasource panels (dashboard tern-sql): seeded by dev/postgres/init.sql, reached by both
+  # SQL datasource panels (dashboard tern-sql): seeded by dev/postgres/init.sql, reached by the
   # Grafanas on the stack network only.
   postgres:
     image: postgres:17.6-alpine
@@ -125,7 +142,7 @@ services:
       - ./loki:/etc/loki:ro
 
   tempo:
-    image: grafana/tempo:2.10.8
+    image: grafana/tempo:3.1.1
     ports: ["127.0.0.1:3200:3200"]
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:

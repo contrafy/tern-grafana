@@ -14,7 +14,7 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
 
 local function list(...: any): { any }
 	return { ... }
@@ -37,6 +37,9 @@ local function sortedKeys(t_: { [string]: any }): { string }
 	table.sort(out)
 	return out
 end
+
+-- Ids are whatever each stack's annotation table had reached at capture time.
+local CREATED_ID = { ["11.6.16"] = 9, ["12.4.12"] = 9, ["13.3.0"] = 8 }
 
 describe("annotations api body", function()
 	for _, v in VERSIONS do
@@ -67,7 +70,8 @@ describe("annotations api body", function()
 		end)
 
 		it("reads the created id from Grafana " .. v, function()
-			expect(Api.parseCreated(env(), Fixtures.read("grafana/" .. v .. "/annotation_create.json"))).toBe(9)
+			local body = Fixtures.read("grafana/" .. v .. "/annotation_create.json")
+			expect(Api.parseCreated(env(), body)).toBe(CREATED_ID[v])
 		end)
 	end
 

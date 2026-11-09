@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"histogram_quantile(0.95, sum by (le, service) (rate(traces_spanmetrics_latency_bucket[1m])))","legendFormat":"{{service}}","range":true,"instant":false,"exemplar":true,"intervalMs":15000,"maxDataPoints":200}],"from":"now-15m","to":"now"}

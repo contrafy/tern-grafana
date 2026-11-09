@@ -15,12 +15,17 @@ local Scheme = require("../../../plugin/lib/links/scheme")
 local Queries = require("../../../plugin/lib/dashboard/queries")
 local describe, it, expect = t.describe, t.it, t.expect
 
--- 6m 12s after the firing rules' activeAt (2026-10-12T22:13:30Z).
-local NOW = 1791843582000
+-- 6m 12s after the firing rules' activeAt (2026-10-12T22:13:30Z; Grafana 13's
+-- fresh stack: 2026-11-09T15:52:20Z).
+local NOW = {
+	["11.6.16"] = 1791843582000,
+	["12.4.12"] = 1791843582000,
+	["13.3.0"] = 1794239912000,
+}
 
-local function env(): any
+local function env(version: string): any
 	local e = table.clone(S.env :: any)
-	e.now_ms = NOW
+	e.now_ms = NOW[version]
 	return e
 end
 
@@ -43,12 +48,17 @@ end
 
 local function answer(version: string): any
 	local body = Fixtures.read("grafana/" .. version .. "/alertlist_rules.json")
-	return Alertlist.parse(nil, "rules:", { status = 200, headers = {}, body = body, timed_out = false }, env())
+	return Alertlist.parse(nil, "rules:", { status = 200, headers = {}, body = body, timed_out = false }, env(version))
 end
 
 local function dsAnswer(version: string, uid: string): any
 	local body = Fixtures.read("grafana/" .. version .. "/alerting_ds_prom_rules.json")
-	return Alertlist.parse(nil, "ds:" .. uid, { status = 200, headers = {}, body = body, timed_out = false }, env())
+	return Alertlist.parse(
+		nil,
+		"ds:" .. uid,
+		{ status = 200, headers = {}, body = body, timed_out = false },
+		env(version)
+	)
 end
 
 -- The data sources of the frontend settings, as the dashboard block reads them.
@@ -59,7 +69,7 @@ end
 
 local function view(version: string, p: any, uid: string?): any
 	local extra = { ["rules:0:" .. (uid or "tern-all-panels")] = answer(version) }
-	return Registry.view(p, {}, env(), { key = "p", extra = extra })
+	return Registry.view(p, {}, env(version), { key = "p", extra = extra })
 end
 
 local function ruleNames(node: any): { string }
@@ -201,7 +211,7 @@ for _, version in S.VERSIONS do
 				["ds:prom3"] = dsAnswer(version, "prom3"),
 				["ds:loki"] = { error = "404 from rule state endpoint" },
 			}
-			local node = Registry.view(p, {}, env(), { key = "p", extra = extra })
+			local node = Registry.view(p, {}, env(version), { key = "p", extra = extra })
 			-- TernInactive has no instance and showInactiveAlerts is off; the
 			-- failed Loki source is left out as Grafana leaves it out.
 			expect(ruleNames(node)).toEqual({
@@ -214,7 +224,7 @@ for _, version in S.VERSIONS do
 				"TernTargetDown",
 			})
 			local folder = withOptions(version, { datasource = S.json("null"), folder = { uid = "nope" } })
-			expect(S.text((Registry.view(folder, {}, env(), { key = "p", extra = extra })))).toBe(
+			expect(S.text((Registry.view(folder, {}, env(version), { key = "p", extra = extra })))).toBe(
 				"No alerts matching filters"
 			)
 		end)
@@ -229,7 +239,7 @@ for _, version in S.VERSIONS do
 			local node = Registry.view(
 				p,
 				{},
-				env(),
+				env(version),
 				{ key = "p", extra = { ["ds:prom3"] = dsAnswer(version, "prom3") } }
 			)
 			expect(ruleNames(node)).toEqual({ "TernAlwaysFiring", "TernPending", "TernTargetDown" })

@@ -40,7 +40,7 @@
 -- the Dashboard block feeds the source panel's frames (lib/dashboard/state).
 --
 -- Interval: maxDataPoints is the panel's, else config `dashboard.max_points`
--- (Tern blocks have no pane width to derive it from); the interval is
+-- (Tern gives a block its pane width in cells, not px); the interval is
 -- Grafana's calculateInterval with the target's or panel's min interval, and
 -- becomes `$__interval`/`$__interval_ms`. `$__rate_interval` is left to
 -- Grafana's backend, which knows the datasource's scrape interval.
@@ -721,14 +721,32 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 	return out
 end
 
--- Grafana's frontend feature toggles (`featureToggles`), the ones on.
+-- Toggles Grafana made default and dropped from `featureToggles`, by the
+-- major version that did: 13's gauge panel always draws gauge/v2.
+local GA_FEATURES: { [string]: number } = { newGauge = 13 }
+
+-- Grafana's frontend feature toggles (`featureToggles`), the ones on, plus
+-- the GA ones for the server's version (`buildInfo.version`).
 function M.frontendFeatures(response: TransportTypes.Response, env: Env): { [string]: boolean }
 	local doc = Response.json(response, env, "frontend settings")
 	local out: { [string]: boolean } = {}
-	local map = if type(doc) == "table" then Env.value(env, doc.featureToggles) else nil
+	if type(doc) ~= "table" then
+		return out
+	end
+	local map = Env.value(env, doc.featureToggles)
 	if type(map) == "table" then
 		for name, on in map do
 			if type(name) == "string" and Env.value(env, on) == true then
+				out[name] = true
+			end
+		end
+	end
+	local build = Env.value(env, doc.buildInfo)
+	local version = if type(build) == "table" then Env.value(env, build.version) else nil
+	local major = tonumber(if type(version) == "string" then string.match(version, "^(%d+)%.") else nil)
+	if major then
+		for name, since in GA_FEATURES do
+			if major >= since then
 				out[name] = true
 			end
 		end

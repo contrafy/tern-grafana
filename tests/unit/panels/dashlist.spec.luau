@@ -13,6 +13,21 @@ local describe, it, expect = t.describe, t.it, t.expect
 
 local CTX = { time = { from_ms = 1791840751000, to_ms = 1791844351000 }, dashboard_uid = "tern-all-panels" }
 
+-- The fixtures-tagged dashboards each stack held at capture time: Grafana 13's
+-- later stack also had the SQL dashboard and the v2-schema layouts one.
+local SEARCH_TITLES = {
+	["11.6.16"] = { "Tern All Panels", "Tern Logs and Traces", "Tern Panels", "Tern Variables" },
+	["12.4.12"] = { "Tern All Panels", "Tern Logs and Traces", "Tern Panels", "Tern Variables" },
+	["13.3.0"] = {
+		"Tern All Panels",
+		"Tern Logs and Traces",
+		"Tern Panels",
+		"Tern SQL",
+		"Tern V2 Layouts",
+		"Tern Variables",
+	},
+}
+
 local function panel(version: string): any
 	for _, p in S.decode("grafana/" .. version .. "/dashboard_tern_all_panels.json").dashboard.panels do
 		if p.id == 31 then
@@ -79,15 +94,9 @@ for _, version in S.VERSIONS do
 			expect(text).toContain("Tern has no Grafana view history")
 			expect(text).toContain("Search")
 			-- The recent capture asked for two uids; the panel asks for its own.
-			expect(titles(node)).toEqual({
-				"Tern All Panels",
-				"Tern All Panels",
-				"Tern Panels",
-				"Tern All Panels",
-				"Tern Logs and Traces",
-				"Tern Panels",
-				"Tern Variables",
-			})
+			local expected = { "Tern All Panels", "Tern All Panels", "Tern Panels" }
+			table.move(SEARCH_TITLES[version], 1, #SEARCH_TITLES[version], #expected + 1, expected)
+			expect(titles(node)).toEqual(expected)
 			expect(text).toContain("Tern Fixtures")
 			expect(text).toContain("★")
 			expect(text).toContain("☆")

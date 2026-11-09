@@ -54,7 +54,7 @@ window_log="${STENCIL_LOG:-warn,stencil=info,tern::plugin=debug}"
 export STENCIL_LOG=warn
 # Inherited from a surrounding Tern pane; they describe the user's Tern.
 unset TERN_WINDOW_KEY TERN_WINDOW_SOCKET TERN_PANE TERN_PANE_SOCKET TERN_BLOB_DIR \
-	TERN_COMPLETE TERN_IDENTITY TERN_LENSES TERM_PROGRAM TERM_PROGRAM_VERSION
+	TERN_COMPLETE TERN_IDENTITY TERN_LENSES TERN_EXE TERN_ACP TERM_PROGRAM TERM_PROGRAM_VERSION
 ctl_sock="$sb/ctl.sock"
 zdot="$sb/zsh"
 home="$sb/home"

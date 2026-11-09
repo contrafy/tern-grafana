@@ -11,7 +11,7 @@
 #   scripts/stack.sh capture [--refresh [PATTERN]]
 #                                   record new fixtures into tests/fixtures (scripts/fixtures/capture.sh);
 #                                   existing ones are only overwritten with --refresh matching PATTERN
-#   scripts/stack.sh token-path G   print the token file path for G (grafana12|grafana11), never the token
+#   scripts/stack.sh token-path G   print the token file path for G (grafana12|grafana11|grafana13), never the token
 #
 # Tokens live only in .sandbox/stack/<grafana>.token (mode 0600) and are never printed. Every
 # request that carries a credential passes it to curl on stdin (-K -), never on the command line.
@@ -26,7 +26,7 @@ ADMIN_USER='admin'
 ADMIN_PASSWORD='tern-dev'
 WAIT_SECS=${STACK_WAIT_SECS:-240}
 
-GRAFANAS="grafana12 grafana11"
+GRAFANAS="grafana12 grafana11 grafana13"
 
 die() {
 	printf 'stack: %s\n' "$*" >&2
@@ -38,7 +38,7 @@ log() {
 }
 
 usage() {
-	printf 'usage: %s up|down|reset|status|smoke|capture|token-path <grafana12|grafana11>\n' "$0" >&2
+	printf 'usage: %s up|down|reset|status|smoke|capture|token-path <grafana12|grafana11|grafana13>\n' "$0" >&2
 	exit 2
 }
 
@@ -58,7 +58,8 @@ grafana_url() {
 	case $1 in
 	grafana12) printf 'http://127.0.0.1:3000' ;;
 	grafana11) printf 'http://127.0.0.1:3011' ;;
-	*) die "unknown grafana '$1' (grafana12|grafana11)" ;;
+	grafana13) printf 'http://127.0.0.1:3013' ;;
+	*) die "unknown grafana '$1' (grafana12|grafana11|grafana13)" ;;
 	esac
 }
 
@@ -161,6 +162,16 @@ seed() {
 			"{\"dashboardUID\":\"tern-all-panels\",\"panelId\":1,\"time\":$t2,\"tags\":[\"tern-seed\",\"incident\"],\"text\":\"CPU spike on checkout\"}" >/dev/null
 	fi
 	token_api "$g" POST /api/user/stars/dashboard/uid/tern-all-panels >/dev/null 2>&1 || true
+	# Grafanas that store schema v2 dashboards (13+) get dev/grafana/dashboards-v2 through the
+	# dashboard API; file provisioning would hand the same files to 11 and 12.
+	if token_api "$g" GET /apis/dashboard.grafana.app | jq -e '[.versions[].version] | index("v2")' >/dev/null 2>&1; then
+		for f in "$ROOT"/dev/grafana/dashboards-v2/*.json; do
+			name=$(jq -r '.metadata.name' "$f")
+			if ! token_api "$g" GET "/apis/dashboard.grafana.app/v2/namespaces/default/dashboards/$name" >/dev/null 2>&1; then
+				token_api "$g" POST /apis/dashboard.grafana.app/v2/namespaces/default/dashboards "$(cat "$f")" >/dev/null
+			fi
+		done
+	fi
 }
 
 cmd_up() {
@@ -172,6 +183,7 @@ cmd_up() {
 	log "waiting for endpoints"
 	wait_url grafana12 http://127.0.0.1:3000/api/health
 	wait_url grafana11 http://127.0.0.1:3011/api/health
+	wait_url grafana13 http://127.0.0.1:3013/api/health
 	wait_url prometheus3 http://127.0.0.1:9090/-/ready
 	wait_url prometheus2 http://127.0.0.1:9091/-/ready
 	wait_url alertmanager http://127.0.0.1:9093/-/ready
@@ -217,6 +229,7 @@ cmd_status() {
 	printf '\nendpoints:\n'
 	probe grafana12 http://127.0.0.1:3000/api/health
 	probe grafana11 http://127.0.0.1:3011/api/health
+	probe grafana13 http://127.0.0.1:3013/api/health
 	probe prometheus3 http://127.0.0.1:9090/-/ready
 	probe prometheus2 http://127.0.0.1:9091/-/ready
 	probe alertmanager http://127.0.0.1:9093/-/ready

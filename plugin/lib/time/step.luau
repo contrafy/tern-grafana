@@ -38,9 +38,6 @@ local DEFAULT_SCRAPE_MS = 15 * SECOND
 local DEFAULT_RESOLUTION = 1500
 local SAFE_RESOLUTION = 11000
 
--- A terminal cell is roughly 8 px wide at 1x; Grafana asks for one point per px.
-local DEFAULT_PX_PER_CELL = 8
-
 -- { exclusive upper edge, rounded value }
 local FRONTEND_TABLE: { { number } } = {
 	{ 10, 1 },
@@ -289,9 +286,12 @@ function M.formatDuration(ms: number): string
 	return table.concat(parts)
 end
 
--- Grafana's maxDataPoints is the panel width in px; a pane is `cols` cells.
-function M.maxPoints(cols: number, px_per_cell: number?): number
-	return math.max(1, math.floor(cols * (px_per_cell or DEFAULT_PX_PER_CELL)))
+-- Expands Grafana's step macros in `expr` for a query over `span_ms` asking for
+-- `points` points: the text to send and the Prometheus step it assumes.
+function M.expand(expr: string, span_ms: number, points: number): (string, number)
+	local step = M.promStep(span_ms, points)
+	local interval = M.interval(span_ms, points).interval_ms
+	return M.interpolate(expr, M.macros(span_ms, step, interval)), step
 end
 
 return M

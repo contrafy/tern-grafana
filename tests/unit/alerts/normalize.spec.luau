@@ -10,10 +10,21 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local GRAFANA = { "11.6.16", "12.4.12" }
+local GRAFANA = { "11.6.16", "12.4.12", "13.3.0" }
 local PROMETHEUS = { "2.53.5", "3.15.0" }
 -- Shortly after the alerting fixtures were captured (2026-10-09T20:31Z).
 local NOW = 1791577860000
+-- Grafana 13's alerting fixtures come from a later, fresh stack (2026-11-09T15:56Z).
+local ALWAYS_FIRING_ACTIVE_AT = {
+	["11.6.16"] = 1791576960000,
+	["12.4.12"] = 1791576960000,
+	["13.3.0"] = 1794239540000,
+}
+local ALWAYS_FIRING_LAST_EVAL = {
+	["11.6.16"] = 1791577900000,
+	["12.4.12"] = 1791577900000,
+	["13.3.0"] = 1794239760000,
+}
 
 local env: any = { now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null }
 
@@ -159,7 +170,7 @@ describe("Grafana-managed alerts", function()
 			expect(a.TernGrafanaPending.value).toBe("1e+00")
 			expect(a.TernGrafanaAlwaysFiring.state).toBe("firing")
 			expect(a.TernGrafanaAlwaysFiring.panel_id).toBe(2)
-			expect(a.TernGrafanaAlwaysFiring.starts_at_ms).toBe(1791576960000)
+			expect(a.TernGrafanaAlwaysFiring.starts_at_ms).toBe(ALWAYS_FIRING_ACTIVE_AT[v])
 		end)
 
 		it(v .. ": merging adds pending alerts to the Alertmanager view without duplicating firing ones", function()
@@ -208,6 +219,7 @@ describe("Prometheus alerts", function()
 				"alertmanager/0.34.1/alerts.json",
 				"grafana/11.6.16/alerting_am_alerts.json",
 				"grafana/12.4.12/alerting_am_alerts.json",
+				"grafana/13.3.0/alerting_am_alerts.json",
 			}
 		do
 			for _, raw in json.decode(Fixtures.read(path)) do
@@ -274,7 +286,7 @@ describe("rules", function()
 			expect(r.TernGrafanaAlwaysFiring.alerts[1].state).toBe("firing")
 			expect(r.TernGrafanaPending.alerts[1].state).toBe("pending")
 			expect(#r.TernGrafanaNormal.alerts).toBe(0)
-			expect(r.TernGrafanaAlwaysFiring.last_evaluation_ms).toBe(1791577900000)
+			expect(r.TernGrafanaAlwaysFiring.last_evaluation_ms).toBe(ALWAYS_FIRING_LAST_EVAL[v])
 		end)
 	end
 end)

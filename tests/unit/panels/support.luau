@@ -11,7 +11,7 @@ local Json = require("../../lib/json")
 
 local M = {}
 
-M.VERSIONS = { "11.6.16", "12.4.12" }
+M.VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
 
 M.env = {
 	now_ms = 1791577908000,

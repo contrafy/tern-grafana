@@ -63,7 +63,7 @@ export type Config = {
 	version: number,
 	default_context: string?,
 	contexts: { [string]: Context },
-	-- Feature sections owned by later milestones, kept exactly as decoded.
+	-- Feature sections, kept exactly as decoded; each feature's settings.luau gives them meaning.
 	query: any,
 	dashboard: any,
 	alerts: any,

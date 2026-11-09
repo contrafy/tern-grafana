@@ -25,8 +25,8 @@ See [docs/architecture.md](docs/architecture.md) before changing structure.
 ## Dev stack
 
 `make stack-up` starts local servers from `dev/` with admin credentials that are
-only for this stack: Grafana 12 (:3000), Grafana 11 (:3011), Prometheus 3
-(:9090), Prometheus 2.53 (:9091), Alertmanager (:9093), Loki (:3100), Tempo
+only for this stack: Grafana 12 (:3000), Grafana 11 (:3011), Grafana 13 (:3013),
+Prometheus 3 (:9090), Prometheus 2.53 (:9091), Alertmanager (:9093), Loki (:3100), Tempo
 (:3200), plus the image renderer and node-exporter on the internal network.
 Throwaway containers for experiments use other ports (13000+, 19090+).
 

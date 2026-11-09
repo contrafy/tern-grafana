@@ -48,6 +48,7 @@ MIN_AGE=${CAPTURE_MIN_AGE:-300}
 
 G12=http://127.0.0.1:3000
 G11=http://127.0.0.1:3011
+G13=http://127.0.0.1:3013
 P3=http://127.0.0.1:9090
 P2=http://127.0.0.1:9091
 AM=http://127.0.0.1:9093
@@ -233,7 +234,8 @@ jtest() {
 
 TOK12=$(sh "$STACK" token-path grafana12)
 TOK11=$(sh "$STACK" token-path grafana11)
-[ -s "$TOK12" ] && [ -s "$TOK11" ] || die "missing Grafana tokens; run 'sh scripts/stack.sh up'"
+TOK13=$(sh "$STACK" token-path grafana13)
+[ -s "$TOK12" ] && [ -s "$TOK11" ] && [ -s "$TOK13" ] || die "missing Grafana tokens; run 'sh scripts/stack.sh up'"
 
 log "waiting for the stack to reach fixture state"
 for p in $P3 $P2; do
@@ -251,6 +253,7 @@ wait_for "alertmanager alerts" jtest "$AM/api/v2/alerts" 'length >= 3'
 GRAFANA_RULES_READY='([.data.groups[].rules[] | select(.state == "firing")] | length >= 2) and ([.data.groups[].rules[] | select(.state == "pending")] | length >= 1)'
 wait_for "$G12 firing + pending rules" jtest "$G12/api/prometheus/grafana/api/v1/rules" "$GRAFANA_RULES_READY" "$TOK12"
 wait_for "$G11 firing + pending rules" jtest "$G11/api/prometheus/grafana/api/v1/rules" "$GRAFANA_RULES_READY" "$TOK11"
+wait_for "$G13 firing + pending rules" jtest "$G13/api/prometheus/grafana/api/v1/rules" "$GRAFANA_RULES_READY" "$TOK13"
 wait_for "loki streams" jtest "$LOKI/loki/api/v1/query?query=$(enc 'count(count_over_time({job="loggen"}[5m]))')" \
 	'(.data.result[0].value[1] | tonumber) >= 5'
 wait_for "tempo traces" jtest "$TEMPO/api/search?q=$(enc '{resource.service.name="payments"}')&limit=5" '.traces | length >= 1'
@@ -328,7 +331,7 @@ capture_prometheus "$P3"
 capture_prometheus "$P2"
 
 # ---------------------------------------------------------------------------------------------
-# Grafana (12 with image renderer, 11 without)
+# Grafana (12 and 13 with image renderer, 11 without)
 
 ds_query() {
 	# ds_query NAME QUERIES_JSON [FROM [TO]]
@@ -359,6 +362,16 @@ capture_grafana() {
 	for f in "$ROOT"/dev/grafana/dashboards/*.json; do
 		uid=$(jq -r '.uid' "$f")
 		get "dashboard_$(printf '%s' "$uid" | tr '-' '_')" "/api/dashboards/uid/$uid"
+	done
+	# Schema v2 dashboards (seeded on 13+ by scripts/stack.sh): the v1 view /api/dashboards/uid serves,
+	# and the stored v2 resource.
+	for f in "$ROOT"/dev/grafana/dashboards-v2/*.json; do
+		name=$(jq -r '.metadata.name' "$f")
+		v2path=/apis/dashboard.grafana.app/v2/namespaces/default/dashboards/$name
+		auth_conf | curl -fsS -K - -o /dev/null --max-time 10 "$BASE$v2path" 2>/dev/null || continue
+		id=$(printf '%s' "$name" | tr '-' '_')
+		get "dashboard_$id" "/api/dashboards/uid/$name"
+		get "dashboard_v2_$id" "$v2path"
 	done
 	get dashboard_missing /api/dashboards/uid/tern-no-such-dashboard
 	get library_element /api/library-elements/tern-lib-up
@@ -507,6 +520,9 @@ capture_grafana "$G12" "$TOK12"
 capture_all_panels
 capture_sql
 capture_grafana "$G11" "$TOK11"
+capture_all_panels
+capture_sql
+capture_grafana "$G13" "$TOK13"
 capture_all_panels
 capture_sql
 
@@ -665,7 +681,7 @@ find "$TMP/out" -type f ! -name '*.png' | while IFS= read -r f; do
 	sed -E 's/glsa_[A-Za-z0-9_]+/<redacted>/g' "$f" >"$f.scrub" && mv "$f.scrub" "$f"
 done
 leaks=$(grep -rIil -e 'glsa_' -e 'authorization' -e 'bearer ' -e 'set-cookie' -e 'grafana_session' "$TMP/out" || true)
-for tf in "$TOK12" "$TOK11"; do
+for tf in "$TOK12" "$TOK11" "$TOK13"; do
 	more=$(grep -rlF -f "$tf" "$TMP/out" || true)
 	leaks="$leaks $more"
 done

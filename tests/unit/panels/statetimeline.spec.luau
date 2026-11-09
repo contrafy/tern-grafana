@@ -39,6 +39,18 @@ local function count(s: string, needle: string): number
 	end
 end
 
+-- Panel 25's capture per version: how many samples at least, how many
+-- columns lie off the plot, and the down job's column text. 11/12: 31
+-- samples over the hour, the first before the panel range and the second
+-- straddling its start, columns 26 px wide, so "dow". 13.3.0: the stack had
+-- run ~7m, 3 samples inside the range, so the x range shrinks to them
+-- (wide columns) and "down" prints in full.
+local STATUS = {
+	["11.6.16"] = { min_samples = 21, off_plot = 2, cut = "dow" },
+	["12.4.12"] = { min_samples = 21, off_plot = 2, cut = "dow" },
+	["13.3.0"] = { min_samples = 3, off_plot = 0, cut = "down" },
+}
+
 for _, version in S.VERSIONS do
 	describe("state timeline " .. version, function()
 		-- One lane per job, named by legendFormat (displayNameFromDS).
@@ -91,16 +103,21 @@ for _, version in S.VERSIONS do
 				time = range(version, 25),
 			})
 			local svg = (assets :: any).sh.bytes
-			expect(samples > 20).toBe(true)
-			-- The first sample lies before the panel range and the second
-			-- straddles its start: the columns on the plot print, the down
-			-- job's as much of "down" as fits a 26 px column.
+			local s = STATUS[version]
+			expect(samples >= s.min_samples).toBe(true)
+			-- The columns on the plot print, the down job's as much of
+			-- "down" as fits its column.
 			local ups = count(svg, ">up</text>")
 			expect(ups % 5).toBe(0)
-			expect(ups // 5 >= samples - 2).toBe(true)
-			expect(count(svg, ">dow</text>")).toBe(ups // 5)
-			-- Only the lane label reads "down" in full.
-			expect(count(svg, ">down</text>")).toBe(1)
+			expect(ups // 5 >= samples - s.off_plot).toBe(true)
+			-- The lane label always reads "down" in full.
+			local downs = count(svg, ">down</text>") - 1
+			if s.cut == "down" then
+				expect(downs).toBe(ups // 5)
+			else
+				expect(count(svg, ">" .. s.cut .. "</text>")).toBe(ups // 5)
+				expect(downs).toBe(0)
+			end
 			-- lineWidth 1: outlines at full color.
 			expect(string.find(svg, 'class="tgp-fx tgp-success tg-line" stroke-width="1"', 1, true) ~= nil).toBe(true)
 		end)

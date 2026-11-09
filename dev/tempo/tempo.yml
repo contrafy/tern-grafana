@@ -13,10 +13,9 @@ distributor:
         http:
           endpoint: 0.0.0.0:4318
 
-ingester:
-  max_block_duration: 5m
-
-compactor:
+# Tempo 3 has no ingester or compactor: in single-binary mode the live store serves recent traces and
+# TraceQL metrics, and the backend worker compacts and applies retention.
+backend_worker:
   compaction:
     block_retention: 24h
 
@@ -31,8 +30,6 @@ metrics_generator:
         send_exemplars: true
       - url: http://prometheus2:9090/api/v1/write
         send_exemplars: true
-  traces_storage:
-    path: /tmp/tempo/generator/traces
 
 storage:
   trace:
@@ -45,7 +42,7 @@ storage:
 overrides:
   defaults:
     metrics_generator:
-      processors: [service-graphs, span-metrics, local-blocks]
+      processors: [service-graphs, span-metrics]
       generate_native_histograms: classic
 
 usage_report:

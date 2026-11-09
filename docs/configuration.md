@@ -248,7 +248,7 @@ Defaults for the [Query block](query.md), in the `query` section:
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `default_range` | string | `"now-1h"` | Start of the range for a query opened without one (the end is `now`). Any Grafana time. |
-| `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern reports every block as 80x24, so this cannot be derived from the pane size. |
+| `max_points` | number | `600` | Points per series a range query asks for, a whole number from 10 to 11000; sets the step. Tern gives a block its pane size in cells, not px, so this is not derived from the pane size. |
 | `refresh` | string | `"30s"` | Auto-refresh interval used by the `a` toggle, a duration of at least `5s`. |
 | `exemplars` | boolean | `true` | Fetch and draw exemplars with range queries, in the Query block and in dashboard time series panels. |
 | `exemplar_trace_label` | string | none | Exemplar label holding the trace id, tried before `trace_id`, `traceID` and `traceId`. A label name (letters, digits, `_`; not starting with a digit). |
@@ -270,7 +270,7 @@ Settings for the [Dashboard and Panel blocks](dashboards.md), in the `dashboard`
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `max_points` | number | `600` | maxDataPoints for panels that set none, from 10 to 11000 (a fraction is rounded down). Tern blocks have no pane width to derive it from. |
+| `max_points` | number | `600` | maxDataPoints for panels that set none, from 10 to 11000 (a fraction is rounded down). Tern gives a block its pane width in cells, not px, so it is not derived from the pane. |
 | `min_refresh` | string or number | `"30s"` | Shortest auto-refresh interval: a duration such as `"1m"`, or a positive number of seconds. A dashboard whose own `refresh` is faster refreshes at this interval instead. |
 | `render_theme` | string | `"dark"` | Theme of panels rendered by Grafana's image renderer: `"dark"` or `"light"`. |
 

@@ -40,13 +40,18 @@ local BACKEND: { [Signal]: "prometheus" | "loki" | "tempo" | "alertmanager" } = 
 	alerts = "alertmanager",
 }
 
-local function contextNames(config: Config): string
+-- Every context name, sorted.
+function M.contextNames(config: Config): { string }
 	local names: { string } = {}
 	for name in config.contexts do
 		table.insert(names, name)
 	end
 	table.sort(names)
-	return table.concat(names, ", ")
+	return names
+end
+
+local function contextNames(config: Config): string
+	return table.concat(M.contextNames(config), ", ")
 end
 
 local function unroutable(message: string): (Route?, RouteError?)

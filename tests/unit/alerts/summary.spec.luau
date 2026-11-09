@@ -54,7 +54,7 @@ local function many(n: number): { any }
 end
 
 describe("summarize", function()
-	for _, v in { "11.6.16", "12.4.12" } do
+	for _, v in { "11.6.16", "12.4.12", "13.3.0" } do
 		it(v .. ": counts Grafana-managed alerts by state, firing ones by severity", function()
 			local s = Summary.summarize(grafanaAlerts(v), NOW)
 			expect(s.firing).toBe(1)

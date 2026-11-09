@@ -240,17 +240,20 @@ describe("step.parseDuration / formatDuration (Prometheus)", function()
 	end)
 end)
 
-describe("step.maxPoints", function()
-	-- Grafana asks for one point per pixel; a terminal cell is about 8 px wide.
-	it("asks for one point per pixel of the pane", function()
-		expect(step.maxPoints(200)).toBe(1600)
-		expect(step.maxPoints(200, 2)).toBe(400)
-		expect(step.maxPoints(80, 1.5)).toBe(120)
-	end)
-
-	it("asks for at least one point", function()
-		expect(step.maxPoints(0)).toBe(1)
-		expect(step.maxPoints(-5)).toBe(1)
+describe("step.expand", function()
+	-- Replaces the promStep/interval/macros/interpolate sequence three callers
+	-- repeat: the sent query text and step must not change.
+	it("sends what the open-coded sequence sends", function()
+		local expr = "rate(x[$__rate_interval]) / $__interval_ms + $__range_s"
+		for _, case in { { HOUR, 60 }, { DAY, 250 }, { 7 * DAY, 11000 }, { 1, 5 } } do
+			local span, points = case[1], case[2]
+			local s = step.promStep(span, points)
+			local i = step.interval(span, points).interval_ms
+			local want = step.interpolate(expr, step.macros(span, s, i))
+			local sent, got = step.expand(expr, span, points)
+			expect(sent).toBe(want)
+			expect(got).toBe(s)
+		end
 	end)
 end)
 

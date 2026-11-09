@@ -13,7 +13,7 @@ local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local PROM = { "2.53.5", "3.15.0" }
-local GRAFANA = { "11.6.16", "12.4.12" }
+local GRAFANA = { "11.6.16", "12.4.12", "13.3.0" }
 
 local START_MS, END_MS = S.START * 1000, S.END * 1000
 

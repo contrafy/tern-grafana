@@ -86,7 +86,7 @@ describe("plan", function()
 end)
 
 describe("combine", function()
-	for _, v in { "11.6.16", "12.4.12" } do
+	for _, v in { "11.6.16", "12.4.12", "13.3.0" } do
 		it(v .. ": Grafana's firing and silenced alerts plus its pending ones", function()
 			local plan = assert(Sources.plan(CFG, "graf"))
 			local r = Sources.combine(env, plan, {
