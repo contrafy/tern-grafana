@@ -74,13 +74,29 @@ first rung of a ladder that works:
    including Grafana 12.4's radial gauge, bar gauge, table, text, logs, pie,
    bar, histogram, trend, XY, candlestick, heatmap, state timeline, status
    history, flame graph, traces, node graph, geomap, canvas, alert list,
-   annotation list, dashboard list, news) plus `grafana-clock-panel`, with the
-   panel's `noValue`, time overrides, description, links, transformations,
-   overrides and multiple y axes honored; panels on SQL, Elasticsearch and
-   other backend datasources, server-side expressions and `-- Dashboard --`
-   reuse run natively too ([details and limits](docs/dashboards.md#native-panels));
+   annotation list, dashboard list, news) plus the community clock, dynamic
+   text, treemap and Zabbix Problems panels, with the panel's `noValue`, time
+   overrides, description, links, transformations, overrides and multiple y
+   axes honored; panels on SQL, Elasticsearch and other backend datasources,
+   server-side expressions and `-- Dashboard --` reuse run natively too
+   ([details and limits](docs/dashboards.md#native-panels));
 2. a PNG from Grafana's image renderer, when the server has one;
 3. the reason, and `o` to open the panel in a Tern browser pane.
+
+Panels show what Grafana shows around the data: a heart after the title for
+linked Grafana alert rules (firing, pending, normal), the dashboard's
+annotation layers on time series, alert state history included, paged tables
+with data links in their cells, and every time in the dashboard's time zone.
+Ad hoc filter variables get a picker that adds, edits and removes filters and
+rewrites Prometheus and Loki queries as Grafana does
+([ad hoc filters](docs/dashboards.md#ad-hoc-filters)).
+
+**Datasource plugins** that do their work in Grafana's frontend are ported, so
+their panels and query variables run natively through Grafana: Zabbix (metrics,
+item ids, trigger counts and problems), JSON API, Grafana Cloud cardinality and
+Grafana Incident. What they cannot reproduce, such as JSONata fields or Zabbix
+direct database connections, takes the ladder with the reason
+([datasource plugins](docs/dashboards.md#datasource-plugins)).
 
 | Logs panel | Grafana-rendered PNG |
 | --- | --- |
@@ -95,6 +111,12 @@ first rung of a ladder that works:
 | Flame graph, node graph and lists | Canvas, legacy graph and clocks |
 | --- | --- |
 | ![Flame graph, node graph, alert list and annotation list](docs/screenshots/panels-flame-nodes-lists.png) | ![Canvas, migrated legacy graph and ticking clock panels](docs/screenshots/panels-canvas-clocks.png) |
+
+| Zabbix: metrics, trigger counts, Problems panel | Dynamic text |
+| --- | --- |
+| ![Zabbix time series, unacknowledged problems stat, problems by severity and the Problems panel](docs/screenshots/panels-zabbix.png) | ![Dynamic text panels with HTML status rows, Markdown tables and stat cards](docs/screenshots/panels-dynamictext.png) |
+
+![Treemap panels with threshold colors and grouping by job](docs/screenshots/panels-treemap.png)
 
 `p` pins the focused panel as its own Panel block with the same range keys
 and cursor.
@@ -459,7 +481,7 @@ problem reported with its JSON path ([configuration](docs/configuration.md),
 
 ![Settings block testing endpoints](docs/screenshots/settings-tests.png)
 
-Tested with Tern 0.9.13 on macOS; Tern on Linux and remote hosts is not
+Tested with Tern 0.9.16 on macOS; Tern on Linux and remote hosts is not
 verified yet (see [Features](#features)).
 
 To remove: `tern plugin remove tern-grafana`.
@@ -520,10 +542,16 @@ v1.0 is when every row reads done. Release history: [CHANGELOG.md](CHANGELOG.md)
 | **Dashboards** | |
 | Search and open; grid layout, rows, repeats, library panels | done |
 | Variables with picker; time range, auto-refresh | done |
+| Ad hoc filter variables with a picker | done |
 | Native rendering of every core panel type and `grafana-clock-panel` | done |
+| Dynamic text, treemap and Zabbix Problems panels | done |
 | Panel `noValue`, time overrides, descriptions, links, transparent | done |
+| Panel alert states and annotation layers, alert state history included | done |
+| Table pagination and data links; dashboard time zones | done |
 | Grafana transformations, field overrides, multiple y axes, log scales | done |
 | Backend datasources (SQL, Elasticsearch, ...), expressions, `-- Dashboard --` | done |
+| Zabbix: metrics, item ids, trigger counts, problems | done |
+| JSON API, Grafana Cloud cardinality and Grafana Incident datasources | done |
 | Grafana image renderer PNG, then browser pane, per panel | done |
 | Pin a panel as its own block | done |
 | Compatibility report across every dashboard | done |
