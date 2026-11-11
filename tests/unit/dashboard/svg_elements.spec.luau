@@ -79,6 +79,11 @@ for _, version in S.VERSIONS do
 					svgs += 1
 					local bad = dropped(asset.bytes)
 					expect(key .. ": " .. table.concat(bad, ",")).toBe(key .. ": ")
+					-- Tern's SVG ignores dominant-baseline (docs/sdk-capability-matrix.md):
+					-- text relying on it sits about a third of an em too high.
+					expect(key .. ": " .. tostring(string.find(asset.bytes, "dominant-baseline", 1, true) ~= nil)).toBe(
+						key .. ": false"
+					)
 				end
 			end
 			expect(svgs > 10).toBe(true)
@@ -110,6 +115,18 @@ describe("canvas shapes", function()
 		expect(string.find(svg, 'd="M11.0 40.0A59.0 29.0 0 1 0 129.0 40.0A59.0 29.0 0 1 0 11.0 40.0Z"', 1, true) ~= nil).toBe(
 			true
 		)
+	end)
+
+	it("centers a shape's text by its baseline, not dominant-baseline", function()
+		local svg = SvgCanvas.render({
+			width = 200,
+			height = 100,
+			shapes = { { kind = "rect", x = 0, y = 0, w = 100, h = 50, text = "Hi", text_size = 20 } },
+			lines = {},
+		})
+		expect((string.find(svg, "dominant-baseline", 1, true))).toBeNil()
+		-- Middle 25 plus 0.36 em puts the cap height across the middle.
+		expect(string.find(svg, 'y="32.2" font-size="20"', 1, true) ~= nil).toBe(true)
 	end)
 end)
 

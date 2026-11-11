@@ -17,6 +17,12 @@ versions may break).
 
 ### Fixed
 
+- Text in canvas, flame graph, geomap, heatmap, node graph and state timeline
+  panels sits where Grafana draws it: Tern's SVG ignores dominant-baseline,
+  so the labels were about a third of an em too high; their baseline is now
+  placed by hand.
+- List legends label each value with its calc, as Grafana does
+  ("CPU Cores Last *: 10"), and leave that room when sizing the chart.
 - Dashboards saved by older Grafanas open as Grafana shows them: Grafana's
   schema migration runs on load. Pre-Grafana 5 dashboards (top-level `rows`:
   Prometheus 2.0 overview, Docker, Kubernetes cluster, Grafana internals, the

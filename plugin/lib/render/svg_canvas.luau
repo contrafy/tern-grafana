@@ -142,7 +142,8 @@ function M.render(opts: Options): string
 					anchor = if align == "left" then "start" elseif align == "right" then "end" else "middle",
 					size = size,
 					class = "tgv-text",
-					attrs = fmt('dominant-baseline="central" fill="%s"', paint(s.text_color or "#000000")),
+					baseline = "middle",
+					attrs = fmt('fill="%s"', paint(s.text_color or "#000000")),
 				})
 			)
 		end

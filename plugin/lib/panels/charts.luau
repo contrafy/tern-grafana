@@ -52,7 +52,7 @@ function M.chartHeight(opts: Common.Options, h: number, w: number, rows: { Row }
 	if opts.card_height == nil or #rows == 0 or not legend.show or legend.placement ~= "bottom" then
 		return h
 	end
-	local px = Legend.height(rows, legend.mode, w) + M.LEGEND_GAP_PX
+	local px = Legend.height(rows, legend.mode, w, M.calcHeads(legend.calcs)) + M.LEGEND_GAP_PX
 	return math.max(math.floor(h - math.min(px, h * M.LEGEND_MAX)), 1)
 end
 
@@ -184,14 +184,18 @@ function M.calcRow(item: Item, class: string, calcs: { string }, opts: Common.Op
 	return { class = class, name = item.name, values = out }
 end
 
--- The legend of calc rows: one column (or value) per reducer, named as
--- Grafana names them.
-function M.calcLegend(key: string, rows: { Row }, legend: Legend): Node
-	local heads: { string } = table.create(#legend.calcs)
-	for i, c in legend.calcs do
+-- The legend's value headings: each reducer named as Grafana names it.
+function M.calcHeads(calcs: { string }): { string }
+	local heads: { string } = table.create(#calcs)
+	for i, c in calcs do
 		heads[i] = Reduce.name(c)
 	end
-	return M.legend(key, rows, heads, legend.mode)
+	return heads
+end
+
+-- The legend of calc rows: one column (or labeled value) per reducer.
+function M.calcLegend(key: string, rows: { Row }, legend: Legend): Node
+	return M.legend(key, rows, M.calcHeads(legend.calcs), legend.mode)
 end
 
 -- VizLegend: a wrapping list (name, then the values in bold) or a table

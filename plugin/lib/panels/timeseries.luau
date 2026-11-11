@@ -135,14 +135,11 @@ local function legendView(
 		table.insert(rows, { class = d.class, name = item.name, values = values })
 	end
 	local children: { Node } = {}
+	local heads = Charts.calcHeads(calcs)
 	if mode == "table" then
-		local heads: { string } = table.create(#calcs)
-		for i, c in calcs do
-			heads[i] = Reduce.name(c)
-		end
 		table.insert(children, Legend.rowsNode(key .. ".t", rows, heads, "table"))
 	else
-		table.insert(children, Legend.rowsNode(key .. ".l", rows, {}, "list"))
+		table.insert(children, Legend.rowsNode(key .. ".l", rows, heads, "list"))
 	end
 	if dropped > 0 then
 		table.insert(
@@ -183,7 +180,7 @@ function M.grafanaPlotHeight(w: number, h: number, titled: boolean, rows: { Lege
 			legendPx = g.table_head + #rows * g.table_row
 		else
 			local width = w - 2 * g.border - 2 * g.padding
-			local px = Legend.height(rows, "list", width)
+			local px = Legend.height(rows, "list", width, Charts.calcHeads(legend.calcs))
 			local lines = math.floor((px + Legend.LINE_GAP_PX) / (Legend.LINE_PX + Legend.LINE_GAP_PX) + 0.5)
 			legendPx = lines * g.legend_line + g.legend_pad
 		end
@@ -679,8 +676,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 			assets
 	end
 	if opts.card_height then
-		local cap =
-			Legend.capClass(legendRows, legendLook.mode, rw, math.floor(rh * Charts.LEGEND_MAX) - Charts.LEGEND_GAP_PX)
+		local cap = Legend.capClass(
+			legendRows,
+			legendLook.mode,
+			rw,
+			math.floor(rh * Charts.LEGEND_MAX) - Charts.LEGEND_GAP_PX,
+			Charts.calcHeads(legendLook.calcs)
+		)
 		if cap then
 			legend = { k = "el", p = { tag = "div", key = opts.key .. ".lgcap", class = cap }, c = { legend } }
 		end

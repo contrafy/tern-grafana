@@ -168,6 +168,21 @@ describe("Legend.view", function()
 		expect(all).toContain("Mean")
 		expect(all).toContain('req{code="500"}')
 	end)
+
+	-- VizLegendStatsList titles every stat ("Last *: 3"); 11074's list
+	-- legends read that way in Grafana.
+	it("labels list values with their calc, as Grafana", function()
+		local rows = { { class = "", name = "eth0", values = { "3 Mb/s", "1 Mb/s" } } }
+		local all = texts(Legend.rowsNode("l", rows, { "Last *", "Max" }, "list"))
+		expect(all[1]).toBe("eth0 Last *: 3 Mb/s Max: 1 Mb/s")
+		-- The labels take room: two entries fit 250 px bare, not labeled.
+		local two = {
+			{ class = "", name = "eth0", values = { "3 Mb/s" } },
+			{ class = "", name = "eth1", values = { "1 Mb/s" } },
+		}
+		expect(Legend.height(two, "list", 250)).toBe(16)
+		expect(Legend.height(two, "list", 250, { "Last *" })).toBe(16 + 10 + 16)
+	end)
 end)
 
 return nil
