@@ -33,6 +33,13 @@ under 40 KiB, see [architecture.md](architecture.md#window-load-budget)), `test-
 - Specs: `tests/unit/**/*.spec.luau`, run by `tests/run.luau` under the pinned standalone `luau` (no filesystem:
   `make test` passes the spec list). `make test FILTER=<substring>` runs only tests whose
   `<file> :: <describe> > <it>` contains the substring.
+- `make test` runs every spec twice: interpreted, as Tern on iOS and development builds run plugins, then with
+  `luau --codegen`, as release Tern compiles every chunk to native code. The pinned `luau` (`scripts/bootstrap.sh`)
+  is the Luau release Tern embeds (0.740 in Tern 0.9.16), so the specs meet Tern's native-code compiler bugs: 0.740
+  compiles `for j = 0, n - 1 do table.insert(t, { a = j * 2, b = (j + 1) * 2, p = p }) end` into a loop that never
+  ends (fixed in Luau 0.742). The gauge's gradient loop had that shape and filled the plugin's 256 MiB VM, so every
+  dashboard block failed with `not enough memory`; interpreted, the same specs passed. A miscompiled endless loop
+  hangs the native run instead of failing it.
 - They cover `plugin/lib/**` only; that is why the library must not touch the `tern` global
   ([architecture.md](architecture.md)). Host and window adapters are covered by e2e.
 - `tests/selfcheck/check.sh` proves failing, crashing and unloadable specs turn the run red.
