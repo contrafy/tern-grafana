@@ -273,6 +273,45 @@ local function grow(b: Box, x: number, y: number)
 	b.x1, b.y1 = math.max(b.x1, x), math.max(b.y1, y)
 end
 
+-- The lowest and highest label positions on the scale.
+local function labelEnds(labels: { Label }): (number, number)
+	local lo, hi = math.huge, -math.huge
+	for _, l in labels do
+		lo, hi = math.min(lo, l.at), math.max(hi, l.at)
+	end
+	return lo, hi
+end
+
+-- A label's angle in degrees (RadialScaleLabels getStartOffset): on a full
+-- circle the lowest label moves clockwise and the highest back by 0.65 of
+-- its width, so min and max at twelve o'clock stand side by side; on an arc
+-- an end label that would cross the arc's end moves half its width inside.
+-- The labels follow a path a line of text inside their radius.
+local function labelAngle(s: Spec, d: Dimensions, l: Label, lo: number, hi: number): number
+	local at = clamp01(l.at)
+	local length = d.range / 360 * 2 * math.pi * (d.labels_radius - d.labels_size * 1.2)
+	if s.style == "v1" or length <= 0 then
+		return d.start + at * d.range
+	end
+	local offset = at * length
+	local width = Stat.textEm(l.text) * d.labels_size
+	if d.range >= 360 then
+		if l.at == lo then
+			offset += width * 0.65
+		elseif l.at == hi then
+			offset -= width * 0.65
+		end
+	else
+		if l.at == lo and offset - width / 2 < 0 then
+			offset += width / 2
+		end
+		if l.at == hi and offset + width / 2 > length then
+			offset -= width / 2
+		end
+	end
+	return d.start + offset / length * d.range
+end
+
 -- The box around what the arc part draws: the bar (its rounded caps), the
 -- threshold ring and labels over the arc's sweep, and the center the text
 -- sits on. Grafana draws a gauge at min(width, height) of its panel; a
@@ -289,8 +328,9 @@ function M.arcBounds(s: Spec, d: Dimensions): Box
 		grow(b, d.cx + outer * math.cos(a), d.cy + outer * math.sin(a))
 	end
 	local labels: { Label } = s.labels or {}
+	local lo, hi = labelEnds(labels)
 	for _, l in labels do
-		local a = rad(d.start + clamp01(l.at) * d.range)
+		local a = rad(labelAngle(s, d, l, lo, hi))
 		local r = d.labels_radius - d.labels_size * 0.6
 		local x, y = d.cx + r * math.cos(a), d.cy + r * math.sin(a)
 		local half = 0.3 * d.labels_size * (utf8.len(l.text) or #l.text)
@@ -476,8 +516,9 @@ function M.render(s: Spec): (string, number, number)
 		end
 	end
 	if s.labels and #s.labels > 0 then
+		local lo, hi = labelEnds(s.labels)
 		for _, l in s.labels do
-			local a = rad(d.start + clamp01(l.at) * d.range)
+			local a = rad(labelAngle(s, d, l, lo, hi))
 			local r = d.labels_radius - d.labels_size * 0.6
 			push(
 				'<text class="tgg-label" x="%s" y="%s" font-size="%s" text-anchor="middle">%s</text>',

@@ -150,9 +150,6 @@ for _, version in S.VERSIONS do
 					return n.p and n.p.key == "meta"
 				end) ~= nil
 				expect(chips).toBe(v.meta ~= "none")
-				local spark = find(c, function(n)
-					return n.k == "chart" and n.p.kind == "spark"
-				end) ~= nil
 				-- Grafana's panel header holds the info icon and links: the chips
 				-- sit at the card head's end, never on a line of their own.
 				local endId = c.p["end"]
@@ -166,7 +163,6 @@ for _, version in S.VERSIONS do
 				-- is the card less the border and the head only.
 				local room = View.cardHeight(v.h, false, #c.p.head > 0 or chips, false, true)
 					- (if tight then 0 else Stat.TILE_PAD_Y)
-					- (if spark then Stat.SPARK_PX else 0)
 				local image = find(c, function(n)
 					return n.k == "image"
 				end)

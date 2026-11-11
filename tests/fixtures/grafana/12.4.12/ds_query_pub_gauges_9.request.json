@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"vector(4) and on() (vector(time() % 3600) >= 2700) or vector(3) and on() (vector(time() % 600) < 1)","editorMode":"code","intervalMs":15000,"maxDataPoints":240}],"from":"1794416283000","to":"1794419883000"}

@@ -15,7 +15,6 @@ local JOBS = { "alertmanager", "down", "loki", "node", "prometheus", "tempo" }
 
 -- Samples of prom_range refId B (sum(up) over 15m at 15 s).
 local B_SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.1"] = 61 }
-local SPARK_POINTS = 60
 
 for _, version in S.VERSIONS do
 	describe("stat on tern-panels, Grafana " .. version, function()
@@ -31,14 +30,23 @@ for _, version in S.VERSIONS do
 			expect(tiles[1].title).toBeNil()
 		end)
 
-		it("draws the field as a sparkline in graphMode area", function()
-			local tiles = Stat.tiles(S.panel(version, 5), S.refFrames(version, "prom_range", "B"), env, OPTS)
-			local spark: any = tiles[1].spark
-			assert(spark, "spark")
-			expect(spark.k).toBe("chart")
-			expect(spark.p.kind).toBe("spark")
-			expect(spark.p.token).toBe("success")
-			expect(#spark.p.series).toBe(math.min(B_SAMPLES[version], SPARK_POINTS))
+		-- BigValueLayout renderChart: on a filled tile the sparkline is a
+		-- white fill at 40% under a line in the value's color brightened.
+		it("plots the field as BigValue's sparkline in graphMode area", function()
+			local panel, frames = S.panel(version, 5), S.refFrames(version, "prom_range", "B")
+			local tiles = Stat.tiles(panel, frames, env, OPTS)
+			local spark = assert(tiles[1].spark, "spark")
+			expect(#spark.x).toBe(B_SAMPLES[version])
+			expect({ spark.x[1], spark.x[#spark.x] }).toEqual({ 0, 1 })
+			local _, assets = Stat.view(panel, frames, env, OPTS)
+			local svg = assets["s.v1k"].bytes
+			expect(string.find(svg, '<path class="tgp-stat-spark-on tg-area" fill-opacity="0.4"', 1, true) ~= nil).toBe(
+				true
+			)
+			local line = (tiles[1].color_class :: string) .. " tgp-stat-spark-hi tg-line"
+			expect(string.find(svg, '<path class="' .. line .. '" fill="none" stroke-width="1"', 1, true) ~= nil).toBe(
+				true
+			)
 		end)
 
 		-- Panel 6 "Down targets": graphMode none, colorMode value; fed the
@@ -278,10 +286,11 @@ for _, version in S.VERSIONS do
 
 		-- The tile's padding stands in for BigValue's inside a capped card, so
 		-- the value gets the whole room (6x3 with a description: card body
-		-- 32 px, 20 px in the tile, a 16 px value); a sparkline that would
-		-- leave the value less than a line is left out, as BigValue drops its
-		-- chart from a short box.
-		it("fills a short capped card's room with the value, without a sparkline that leaves none", function()
+		-- 32 px, 20 px in the tile, a 16 px value). BigValue draws its chart
+		-- where its own box has room (buildLayout: a wide box over 50 px, a
+		-- stacked one over 100 px), behind the value, so a capped card keeps
+		-- it and its value's room; a 3x3 stat (public 17781 Panics) has none.
+		it("fills a short capped card's room with the value, the sparkline behind it where Grafana has one", function()
 			local series, sframes = fidelity(12)
 			local node, assets =
 				Stat.view(series, sframes, env, { key = "s", size = { w = 400, h = 106 }, card_height = 32 })
@@ -291,19 +300,13 @@ for _, version in S.VERSIONS do
 				return n.k == "image"
 			end).p.h).toBe(20)
 			local requests, rframes = fidelity(13)
-			local function sparks(cardHeight: number): boolean
-				local n = Stat.view(
-					requests,
-					rframes,
-					env,
-					{ key = "s", size = { w = 400, h = 144 }, card_height = cardHeight }
-				)
-				return S.find(n, function(x)
-					return x.k == "chart"
-				end) ~= nil
+			local function chart(size: { w: number, h: number }, cardHeight: number): boolean
+				local _, a = Stat.view(requests, rframes, env, { key = "s", size = size, card_height = cardHeight })
+				return a["s.v1k"] ~= nil
 			end
-			expect(sparks(80)).toBe(true)
-			expect(sparks(32)).toBe(false)
+			expect(chart({ w = 400, h = 144 }, 80)).toBe(true)
+			expect(chart({ w = 400, h = 144 }, 32)).toBe(true)
+			expect(chart({ w = 154, h = 106 }, 64)).toBe(false)
 		end)
 	end)
 end

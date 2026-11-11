@@ -3,6 +3,7 @@
 -- draws a gauge at min(width, height) of its panel, so an image scaled to a
 -- narrow pane must not keep the panel's empty sides (or it shrinks to a
 -- sliver). The box must still hold the whole arc, ring, labels and text.
+local Stat = require("../../../plugin/lib/panels/stat")
 local SvgGauge = require("../../../plugin/lib/render/svg_gauge")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
@@ -190,6 +191,48 @@ describe("radial gauge sparkline", function()
 				true
 			) ~= nil
 		).toBe(true)
+	end)
+end)
+
+-- RadialScaleLabels: a full circle's min and max both sit at twelve
+-- o'clock, so Grafana moves the lowest label clockwise and the highest
+-- back by 0.65 of their width: "1" and "0" stand side by side (it reads
+-- "10" on tern-all-panels' neutral gauge) instead of one over the other.
+-- On an arc, an end label that would cross the arc's end moves half its
+-- width inside it.
+describe("radial gauge scale labels", function()
+	local function labels(svg: string): { [string]: { x: number, y: number } }
+		local out: { [string]: { x: number, y: number } } = {}
+		for x, y, s in string.gmatch(svg, '<text class="tgg%-label" x="([%d.%-]+)" y="([%d.%-]+)"[^>]*>([^<]*)</text>') do
+			out[s :: string] = { x = tonumber(x) :: number, y = tonumber(y) :: number }
+		end
+		return out
+	end
+
+	it("sets a full circle's min and max apart at twelve o'clock", function()
+		local s = spec("circle", 300, 300)
+		s.labels = { { at = 0, text = "0" }, { at = 1, text = "1" } }
+		local d = SvgGauge.dimensions(s)
+		local l = labels((SvgGauge.render(s)))
+		expect(l["1"].x < d.cx).toBe(true)
+		expect(l["0"].x > d.cx).toBe(true)
+		expect(l["0"].x - l["1"].x >= Stat.textEm("0") * d.labels_size).toBe(true)
+	end)
+
+	it("keeps an arc's end labels inside its ends and the others where they fall", function()
+		local s = spec("gauge", 300, 300)
+		local d = SvgGauge.dimensions(s)
+		local l = labels((SvgGauge.render(s)))
+		local r = d.labels_radius - d.labels_size * 0.6
+		local function at(deg: number): { x: number, y: number }
+			local a = (deg - 90) * math.pi / 180
+			return { x = d.cx + r * math.cos(a), y = d.cy + r * math.sin(a) + d.labels_size * 0.36 }
+		end
+		local mid = at(d.start + d.range / 2)
+		expect(math.abs(l["50"].x - mid.x) < 0.01 and math.abs(l["50"].y - mid.y) < 0.01).toBe(true)
+		-- Both ends lie below the center: moved inside the arc, each rises.
+		expect(l["0"].y < at(d.start).y - 1).toBe(true)
+		expect(l["100"].y < at(d.start + d.range).y - 1).toBe(true)
 	end)
 end)
 

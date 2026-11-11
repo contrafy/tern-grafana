@@ -2,8 +2,8 @@
 -- tern-pub-gauges in the dashboard block (synthetic copies of public
 -- dashboards' small gauges and stats): a bar gauge's names sit whole
 -- inside their column, a gauge saved by Grafana 13 keeps its gradient,
--- sparkline and threshold ring there, and the 2-row stats draw their
--- values at Grafana's size.
+-- sparkline and threshold ring there, the 2-row stats draw their values
+-- at Grafana's size, and stat sparklines are BigValue's charts.
 local S = require("./support")
 local Stat = require("../../../plugin/lib/panels/stat")
 local State = require("../../../plugin/lib/dashboard/state")
@@ -26,8 +26,10 @@ local function fixtureFor(version: string, tag: string): string?
 end
 
 -- Every panel's SVG, by asset key.
-local function render(version: string): { [string]: string }
+local function render(version: string, nowMs: number?, cols: number?): { [string]: string }
 	local env = S.env()
+	env.now_ms = nowMs or env.now_ms
+	env.cols, env.rows = cols, if cols then 50 else nil
 	local s, effects = State.init({ "tern-grafana://dashboard?context=lab&uid=tern-pub-gauges" }, nil, env)
 	local h = S.harness(s, env, function(e: any): any
 		local path = fixtureFor(version, e.tag)
@@ -125,6 +127,76 @@ for _, version in S.VERSIONS do
 				local w = assert(tonumber(string.match(svg, 'viewBox="0 0 (%d+)')))
 				expect(w >= Stat.textEm(text) * px).toBe(true)
 			end
+		end)
+
+		-- Panels 9-11 run on the clock of their capture (a sparkline spans the
+		-- panel's time range) in a Tern pane as wide as Grafana's 1248 px
+		-- render the live check compares with.
+		local function sparkRender(): { [string]: string }
+			local to = S.doc(S.grafana(version, "ds_query_pub_gauges_9.request.json")).to
+			return render(version, assert(tonumber(to)), math.ceil(1248 / View.CELL_PX))
+		end
+		local function linePath(svg: string): string
+			return assert(string.match(svg, 'tg%-line" fill="none" stroke%-width="1" d="([^"]*)"'))
+		end
+
+		-- Panel 9 (public 9578 Number of active alerts): 3s alone every 10
+		-- minutes between gaps, and runs of 4s. uPlot draws no points
+		-- (pointSize 0): Grafana's sparkline is the runs, a 3 drawn only
+		-- where it adjoins one.
+		it("draws a sparkline's runs and nothing for samples alone between gaps", function()
+			local values = S.doc(S.grafana(version, "ds_query_pub_gauges_9.json")).results.A.frames[1].data.values
+			local ts, vs = values[1], values[2]
+			local runs, joined, alone = 0, 0, 0
+			for i, v in vs do
+				local prev = i > 1 and ts[i] - ts[i - 1] <= 15000
+				local nxt = i < #vs and ts[i + 1] - ts[i] <= 15000
+				if nxt and not prev then
+					runs += 1
+				end
+				if v == 3 and (prev or nxt) then
+					joined += 1
+				elseif v == 3 then
+					alone += 1
+				end
+			end
+			expect(alone > 0 and runs > 0).toBe(true)
+			local svg = sparkRender()["p9.v1k"]
+			local h = assert(tonumber(string.match(svg, 'viewBox="0 0 %d+ (%d+)"')))
+			local path = linePath(svg)
+			local _, moves = string.gsub(path, "M", "")
+			expect(moves).toBe(runs)
+			local bottoms = 0
+			for y in string.gmatch(path, "[ML][%d.%-]+ ([%d.%-]+)") do
+				if tonumber(y) == h then
+					bottoms += 1
+				end
+			end
+			expect(bottoms).toBe(joined)
+		end)
+
+		-- Panel 10 (public 17781 Panics): a 3x3 stat's box is under 100 px,
+		-- so BigValue's stacked layout has no chart.
+		it("draws no sparkline where BigValue's box has no room for its chart", function()
+			local svgs = sparkRender()
+			expect(svgs["p10.v1"] ~= nil).toBe(true)
+			expect(svgs["p10.v1k"]).toBeNil()
+		end)
+
+		-- Panel 11 (public 3662 Memory Chunks): colorMode none keeps the value
+		-- in the text color while the chart takes the field's fixed color and
+		-- the height the value leaves (StackedWithChartLayout).
+		it("fills the height the value leaves with the chart in the field's color", function()
+			local svgs = sparkRender()
+			local value, chart = svgs["p11.v1"], svgs["p11.v1k"]
+			expect(string.match(value, '<text class="([^"]*)"')).toBe("tgg-text")
+			expect(string.find(linePath(chart), "M", 1, true) ~= nil).toBe(true)
+			expect(string.find(chart, '<path class="tg-gc107 tg-hex tg-line"', 1, true) ~= nil).toBe(true)
+			local px = assert(tonumber(string.match(value, 'font%-size="([%d.]+)"')))
+			local h = assert(tonumber(string.match(chart, 'viewBox="0 0 %d+ (%d+)"')))
+			-- A 7-row panel: 258 px less the header and border.
+			local box = 258 - (if version == "11.6.16" then 32 else 40) - 2
+			expect(math.abs(h + px * 1.2 - box) <= 1).toBe(true)
 		end)
 	end)
 end

@@ -150,17 +150,22 @@ for _, version in { "12.4.12", "13.3.1" } do
 
 		it("draws a flat singlestat sparkline at the bottom of its range, as getYRange does", function()
 			for _, id in { 1, 2 } do
-				local spark = assert(PS.find(view(id), function(n: any): boolean
-					return n.k == "chart" and n.p.kind == "spark"
+				local p = assert(Model.findPanel(d, id))
+				local node, assets = Registry.view(p.json, PS.frames(version, "tern_legacy_" .. id), env, opts)
+				local image = assert(PS.find(node, function(n: any): boolean
+					return n.k == "image" and n.p.alt == "Sparkline"
 				end))
-				local tops = {}
-				for _, b in spark.p.series do
-					if b.value and b.value > 0.05 then
-						table.insert(tops, b.value)
-					end
+				local svg = (assets :: any)[image.p.asset].bytes
+				local h = tonumber(string.match(svg, 'viewBox="0 0 %d+ (%d+)"'))
+				local path = assert(string.match(svg, 'tg%-line" fill="none" stroke%-width="1" d="([^"]*)"'))
+				local ys = {}
+				for y in string.gmatch(path, "[ML][%d.]+ ([%d.%-]+)") do
+					table.insert(ys, tonumber(y))
 				end
-				expect(#spark.p.series > 1).toBe(true)
-				expect(#tops).toBe(0)
+				expect(#ys > 1).toBe(true)
+				for _, y in ys do
+					expect(y).toBe(h)
+				end
 			end
 		end)
 	end)

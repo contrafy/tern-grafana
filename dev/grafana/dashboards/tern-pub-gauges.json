@@ -283,6 +283,85 @@
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(18.9)", "instant": true, "range": false, "editorMode": "code" }
       ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Number of active alerts",
+      "description": "A stat sparkline over a series with gaps: samples alone between gaps and one dense run (public Alertmanager 9578). Grafana draws only the run.",
+      "gridPos": { "x": 0, "y": 7, "w": 3, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(4) and on() (vector(time() % 3600) >= 2700) or vector(3) and on() (vector(time() % 600) < 1)", "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Panics",
+      "description": "A 3-row stat with graphMode area (public Loki 17781): BigValue's box is too short for its chart.",
+      "gridPos": { "x": 3, "y": 7, "w": 3, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(0)", "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Memory Chunks",
+      "description": "A stat with a blue sparkline and no value color, as a migrated singlestat (public Prometheus 2.0 overview 3662): the chart fills the height the value leaves.",
+      "gridPos": { "x": 6, "y": 7, "w": 6, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "fixed", "fixedColor": "#3274D9" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(48000 + 9000 * (time() % 1200 < bool 300))", "editorMode": "code" }
+      ]
     }
   ]
 }

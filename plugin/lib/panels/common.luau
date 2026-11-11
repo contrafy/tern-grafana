@@ -1,8 +1,8 @@
 --!strict
 -- Shared panel view pieces: the options every panel view takes, the panel
 -- module interface (one file per panel type, registered in registry.luau),
--- Grafana's no-data message, tone -> span token, and the stat sparkline as
--- Tern's native `chart` spark.
+-- Grafana's no-data message, tone -> span token, and the stat sparkline's
+-- plot (Sparkline utils.ts).
 
 local Assets = require("../render/assets")
 local DsTypes = require("../datasources/types")
@@ -151,8 +151,8 @@ function M.noData(panel: any, env: Env, key: string): Node
 	}
 end
 
--- Most bars in a stat sparkline (a spark bar is 4 px wide).
-M.SPARK_POINTS = 60
+-- Most points in a stat sparkline: a few per px of a stat panel's width.
+M.SPARK_POINTS = 400
 
 -- Span style token for a tone ("" for neutral).
 function M.token(tone: Thresholds.Tone): string
@@ -172,8 +172,6 @@ function M.toneClass(tone: Thresholds.Tone): string
 end
 
 export type SparkOptions = {
-	-- The value's tone; nil draws the accent color.
-	tone: Thresholds.Tone?,
 	-- The field's config: min, max, decimals and noValue (getYRange).
 	min: number?,
 	max: number?,
@@ -185,6 +183,11 @@ export type SparkOptions = {
 	to_ms: number?,
 	interval: number?,
 }
+
+-- A sparkline's points as fractions of its plot: x across, y up (NaN for a
+-- gap); base is where the fill ends, value 0 on the y range (uPlot fills to
+-- 0) clamped to it.
+export type Spark = { x: { number }, y: { number }, base: number }
 
 -- guessDecimals: the digits after the point of the number as written.
 local function guessDecimals(n: number): number
@@ -221,12 +224,13 @@ local function sparkRange(lo: number, hi: number, o: SparkOptions): (number, num
 	return rlo, rlo * 2
 end
 
--- A sparkline of `values` (NULL/NaN as gaps) as Grafana's stat draws it:
--- across the panel's time range, with nulls where samples are more than
--- the interval apart (applyNullInsertThreshold), downsampled to
--- SPARK_POINTS and scaled to getYRange (a Tern spark grows bars from zero,
--- which would flatten a series far from 0).
-function M.spark(key: string, values: { any }, times: { any }?, o: SparkOptions): Node?
+-- A sparkline of `values` (NULL/NaN as gaps) as Grafana's stat plots it
+-- (preparePlotFrame, nullToValue, prepareConfig): across the panel's time
+-- range, with nulls where samples are more than the interval apart
+-- (applyNullInsertThreshold) that a numeric noValue fills, scaled to
+-- getYRange; nil for fewer than two points (prepareSeries draws nothing).
+-- Downsampled to SPARK_POINTS.
+function M.spark(values: { any }, times: { any }?, o: SparkOptions): Spark?
 	local ts: { number }, vs: { any }
 	local count = #values
 	local dense = times ~= nil and #times == count
@@ -257,10 +261,22 @@ function M.spark(key: string, values: { any }, times: { any }?, o: SparkOptions)
 		return nil
 	end
 	local interval = o.interval
+	local x0, x1 = ts[1], ts[#ts]
 	if dense and interval and interval > 0 then
 		local filled
 		ts, filled = TsData.insertNulls(ts, { vs }, interval, o.from_ms, o.to_ms)
 		vs = filled[1]
+	end
+	if dense and o.from_ms and o.to_ms and o.to_ms > o.from_ms then
+		x0, x1 = o.from_ms :: number, o.to_ms :: number
+	end
+	local nv = if o.no_value then tonumber(o.no_value) else nil
+	if nv and nv == nv then
+		local out = table.create(#vs)
+		for i, v in vs do
+			out[i] = Frame.finite(v) or nv
+		end
+		vs = out
 	end
 	ts, vs = Lttb.downsample(ts, vs, M.SPARK_POINTS, Frame.NULL)
 	local lo, hi = math.huge, -math.huge
@@ -274,18 +290,15 @@ function M.spark(key: string, values: { any }, times: { any }?, o: SparkOptions)
 		return nil
 	end
 	lo, hi = sparkRange(lo, hi, o)
-	local span = hi - lo
-	local series: { { value: number? } } = table.create(#vs)
-	for i, v in vs do
-		local n = Frame.finite(v)
-		-- 5% floor keeps the minimum visible as a bar, not a stub.
-		series[i] = if n == nil then {} else { value = 0.05 + 0.95 * math.clamp((n - lo) / span, 0, 1) }
+	local span, width = hi - lo, x1 - x0
+	local n = #ts
+	local xs, ys = table.create(n), table.create(n)
+	for i = 1, n do
+		local v = Frame.finite(vs[i])
+		xs[i] = if width > 0 then (ts[i] - x0) / width else 0
+		ys[i] = if v == nil then 0 / 0 else (v - lo) / span
 	end
-	local token = if o.tone then M.token(o.tone) else ""
-	return {
-		k = "chart",
-		p = { key = key, kind = "spark", token = if token ~= "" then token else "accent", series = series },
-	}
+	return { x = xs, y = ys, base = math.clamp(-lo / span, 0, 1) }
 end
 
 return M
