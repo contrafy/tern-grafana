@@ -19,6 +19,7 @@
 -- gradient), so the colors at the sub-arcs' ends are the conic gradient's.
 
 local Hash = require("../hash")
+local SvgPaths = require("./svg_paths")
 local Stat = require("../panels/stat")
 
 local M = {}
@@ -72,6 +73,9 @@ export type Spec = {
 	-- Sparkline values scaled to 0..1 (nil entries are gaps).
 	spark: { number? }?,
 	spark_class: string?,
+	-- 1-based sparkline sample the reducer picked (Sparkline showHighlights,
+	-- Grafana 12.4 and later): drawn as a point.
+	spark_highlight: number?,
 }
 
 -- RadialGauge constants.
@@ -610,21 +614,41 @@ function M.render(s: Spec): (string, number, number)
 			then d.cy + d.radius / (if showName and showValue then 3.3 else 4)
 			else d.bottom - h - 8
 		local left = d.cx - w / 2
-		local line: { string } = {}
-		local first: number? = nil
-		local last: number? = nil
+		local hi = s.spark_highlight
+		if hi then
+			-- Sparkline with showHighlights: the plot keeps HIGHLIGHT_IDX_POINT_SIZE / 2
+			-- (3 px) of padding on every side for the point.
+			left, top, w, h = left + 3, top + 3, math.max(w - 6, 1), math.max(h - 6, 1)
+		end
+		local pts: { number } = {}
 		for i, v in spark do
 			if v then
-				local x = left + (i - 1) / (#spark - 1) * w
-				local y = top + h - clamp01(v) * h
-				table.insert(line, string.format("%s%s %s", if first == nil then "M" else "L", fmt(x), fmt(y)))
-				first = first or x
-				last = x
+				table.insert(pts, left + (i - 1) / (#spark - 1) * w)
+				table.insert(pts, top + h - clamp01(v) * h)
 			end
 		end
-		if first and last and #line > 1 then
+		if #pts >= 4 then
+			local first, last = pts[1], pts[#pts - 1]
 			local class = s.spark_class or "tgp-fx tgp-info"
-			local path = table.concat(line)
+			-- RadialSparkline: lineInterpolation smooth (the time series' monotone
+			-- cubic, which never overshoots a sample).
+			local segs = SvgPaths.smoothSegs(pts)
+			local parts: { string } = { "M" .. fmt(segs[1]) .. " " .. fmt(segs[2]) }
+			for o = 3, #segs, 6 do
+				table.insert(
+					parts,
+					string.format(
+						"C%s %s %s %s %s %s",
+						fmt(segs[o]),
+						fmt(segs[o + 1]),
+						fmt(segs[o + 2]),
+						fmt(segs[o + 3]),
+						fmt(segs[o + 4]),
+						fmt(segs[o + 5])
+					)
+				)
+			end
+			local path = table.concat(parts)
 			-- RadialSparkline: gradientMode opacity at fillOpacity 40, the fill
 			-- fading from 40% at the plot's top to none at its bottom (a mask,
 			-- the color stays the class's).
@@ -642,6 +666,17 @@ function M.render(s: Spec): (string, number, number)
 			)
 			push('<path class="%s tg-area" fill-opacity="0.4" mask="url(#%s)" d="%s"/>', class, mask, area)
 			push('<path class="%s tg-line" fill="none" stroke-width="1" d="%s"/>', class, path)
+		end
+		local hv = if hi then spark[hi] else nil
+		if hi and hv then
+			-- The calc's sample (getSparklineHighlight) as a 6 px point in the
+			-- line's color.
+			push(
+				'<circle class="%s" cx="%s" cy="%s" r="3"/>',
+				s.spark_class or "tgp-fx tgp-info",
+				fmt(left + (hi - 1) / (#spark - 1) * w),
+				fmt(top + h - clamp01(hv) * h)
+			)
 		end
 	end
 	-- Tight viewBox (2 px margin) inside the design box: text and

@@ -625,6 +625,7 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		if look.sparkline and v.spark then
 			spec.spark = sparkOf(v.spark, item.config.min, item.config.max)
 			spec.spark_class = valueClass
+			spec.spark_highlight = v.spark.highlight
 		end
 		table.insert(out, spec)
 	end

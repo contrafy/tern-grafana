@@ -320,6 +320,12 @@ local function smoothSegs(p: { number }, lo: number?, hi: number?): { number }
 	return out
 end
 
+-- A smoothed run of pixel points (x ascending) as its start point and six
+-- numbers per cubic, for other renderers (the gauge's sparkline).
+function M.smoothSegs(p: { number }): { number }
+	return smoothSegs(p)
+end
+
 -- smoothSegs of a run, cut to the plot's width with the samples' heights
 -- clamped to the plot (no cut without `g`).
 local function smoothCut(p: { number }, g: Geometry?): { number }

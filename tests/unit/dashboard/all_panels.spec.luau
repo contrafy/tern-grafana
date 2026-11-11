@@ -6,6 +6,8 @@
 -- the rung its type allows, and the no-query gauges draw Grafana's
 -- placeholder value.
 local Gauge = require("../../../plugin/lib/panels/gauge")
+local SvgGauge = require("../../../plugin/lib/render/svg_gauge")
+local PS = require("../panels/support")
 local S = require("./support")
 local State = require("../../../plugin/lib/dashboard/state")
 local View = require("../../../plugin/lib/dashboard/view")
@@ -140,6 +142,124 @@ for _, version in S.VERSIONS do
 			end
 			local view = View.view(h.s, h.env) :: any
 			expect(view.main ~= nil).toBe(true)
+		end)
+
+		-- Panel 10: 8 segments on 0..100 with neutral 50. RadialBarSegmented
+		-- fills a segment only when its start lies between the value and the
+		-- neutral point (start inclusive, end exclusive): 13.3.1's recorded
+		-- 12% fills the segments starting at 12.5, 25 and 37.5, 12.4's 21%
+		-- two; a value of 46 leaves none to fill and 31 one (as on Grafana
+		-- 13's live render).
+		it("fills the segments whose start lies between the value and the neutral point", function()
+			if not newGauge then
+				return
+			end
+			local h = start(version)
+			local p10: any
+			for _, sec in (h.s.dashboard :: any).sections do
+				for _, p in sec.panels do
+					if p.id == 10 then
+						p10 = p.json
+					end
+				end
+			end
+			local frames = PS.frames(version, "all_panels_10")
+			local opts = { key = "k", features = { newGauge = true }, size = { w = 600, h = 480 } }
+			local g = Gauge.specs(p10, frames, h.env, opts)[1]
+			expect(g.segments).toBe(8)
+			expect(g.fill_to).toBe(0.5)
+			local function filled(value: number): number
+				local spec = table.clone(g)
+				spec.fill_from = value
+				spec.width, spec.height = 300, 280
+				local svg = SvgGauge.render(spec)
+				local _, tracks = string.gsub(svg, "tgg%-track", "")
+				return 8 - tracks
+			end
+			local want = 0
+			for k = 0, 7 do
+				if k / 8 >= g.fill_from and k / 8 < 0.5 then
+					want += 1
+				end
+			end
+			expect(want >= 2).toBe(true)
+			expect(filled(g.fill_from)).toBe(want)
+			expect(filled(0.46)).toBe(0)
+			expect(filled(0.31)).toBe(1)
+		end)
+
+		-- Panel 10 reduces with lastNotNull: from 12.4 on, RadialSparkline
+		-- passes showHighlights, so the Sparkline marks the calc's sample
+		-- (getSparklineHighlight) with a 6 px point in the line's color, the
+		-- plot padded 3 px for it. The old gauge (11.6) has no sparkline.
+		it("marks the reduced sample on the radial gauge's sparkline", function()
+			local h = start(version)
+			local p10: any
+			for _, sec in (h.s.dashboard :: any).sections do
+				for _, p in sec.panels do
+					if p.id == 10 then
+						p10 = p.json
+					end
+				end
+			end
+			local frames = PS.frames(version, "all_panels_10")
+			local features = if newGauge then { newGauge = true } else {}
+			local g = Gauge.specs(p10, frames, h.env, { key = "k", features = features })[1]
+			if not newGauge then
+				expect(g.spark).toBeNil()
+				return
+			end
+			local spark = g.spark :: { number? }
+			expect(g.spark_highlight).toBe(#spark)
+			g.width, g.height = 300, 280
+			local svg = SvgGauge.render(g)
+			local class, cx, cy = string.match(svg, '<circle class="([^"]*)" cx="([%d.]+)" cy="([%d.]+)" r="3"/>')
+			expect(class).toBe(g.spark_class)
+			local path = assert(string.match(svg, 'tg%-line" fill="none" stroke%-width="1" d="([^"]*)"'))
+			local lx, ly = string.match(path, " ([%d.]+) ([%d.]+)$")
+			expect({ cx, cy }).toEqual({ lx, ly })
+		end)
+
+		-- RadialSparkline draws lineInterpolation smooth: one monotone cubic
+		-- between each pair of samples, through every sample and never past
+		-- the higher or lower of the two (no overshoot above a spike).
+		it("smooths the radial gauge's sparkline without overshooting its samples", function()
+			if not newGauge then
+				return
+			end
+			local h = start(version)
+			local p10: any
+			for _, sec in (h.s.dashboard :: any).sections do
+				for _, p in sec.panels do
+					if p.id == 10 then
+						p10 = p.json
+					end
+				end
+			end
+			local g = Gauge.specs(p10, PS.frames(version, "all_panels_10"), h.env, {
+				key = "k",
+				features = { newGauge = true },
+			})[1]
+			g.width, g.height = 300, 280
+			local svg = SvgGauge.render(g)
+			local path = assert(string.match(svg, 'tg%-line" fill="none" stroke%-width="1" d="([^"]*)"'))
+			local present = 0
+			for _, v in g.spark :: { number? } do
+				if v then
+					present += 1
+				end
+			end
+			local _, cubics = string.gsub(path, "C", "")
+			expect(cubics).toBe(present - 1)
+			expect((string.find(path, "L", 1, true))).toBeNil()
+			local y0 = assert(tonumber(string.match(path, "^M[%d.]+ ([%d.]+)")))
+			for c1, c2, y1 in string.gmatch(path, "C[%d.]+ ([%d.]+) [%d.]+ ([%d.]+) [%d.]+ ([%d.]+)") do
+				local lo, hi = math.min(y0, tonumber(y1) :: number), math.max(y0, tonumber(y1) :: number)
+				for _, c in { tonumber(c1) :: number, tonumber(c2) :: number } do
+					expect(c >= lo - 0.01 and c <= hi + 0.01).toBe(true)
+				end
+				y0 = tonumber(y1) :: number
+			end
 		end)
 
 		-- Grafana gives every panel its gridPos height whatever it shows; in

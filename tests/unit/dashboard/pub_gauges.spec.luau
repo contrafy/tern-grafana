@@ -4,6 +4,7 @@
 -- inside their column, a gauge saved by Grafana 13 keeps its gradient,
 -- sparkline and threshold ring there, the 2-row stats draw their values
 -- at Grafana's size, and stat sparklines are BigValue's charts.
+local Core = require("../../../plugin/lib/dashboard/core")
 local S = require("./support")
 local Stat = require("../../../plugin/lib/panels/stat")
 local State = require("../../../plugin/lib/dashboard/state")
@@ -134,7 +135,7 @@ for _, version in S.VERSIONS do
 		-- render the live check compares with.
 		local function sparkRender(): { [string]: string }
 			local to = S.doc(S.grafana(version, "ds_query_pub_gauges_9.request.json")).to
-			return render(version, assert(tonumber(to)), math.ceil(1248 / View.CELL_PX))
+			return render(version, assert(tonumber(to)), math.ceil(1248 / Core.CELL_PX))
 		end
 		local function linePath(svg: string): string
 			return assert(string.match(svg, 'tg%-line" fill="none" stroke%-width="1" d="([^"]*)"'))
