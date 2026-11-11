@@ -255,18 +255,11 @@ local function scaleRange(
 		if bounds then
 			t0, t1 = bounds[1], bounds[2]
 		end
-		if plot.stacked[i] then
-			local times = plot.times[i]
-			for j, v in plot.tops[i] do
-				local t = times[j]
-				if t >= t0 and t <= t1 then
-					see(v)
-				end
-			end
-		elseif bounds then
-			local times = shown[i].times
+		if plot.stacked[i] or bounds then
+			local times: { number } = if plot.stacked[i] then plot.times[i] else shown[i].times
+			local values: { any } = if plot.stacked[i] then plot.tops[i] else shown[i].values
 			local a, b = lo or math.huge, hi or -math.huge
-			for j, v in shown[i].values do
+			for j, v in values do
 				local t = times[j]
 				if t >= t0 and t <= t1 and type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
 					if v < a then

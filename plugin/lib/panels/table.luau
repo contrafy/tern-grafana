@@ -926,7 +926,8 @@ local function gaugeNode(cell: Cell, width: number): Node
 	return { k = "el", p = { tag = "div", class = "tgp-gc" }, c = children }
 end
 
-local function contentNode(cell: Cell, width: number): Node
+-- The cell's content; plain text as a string, written as its box's own text.
+local function contentNode(cell: Cell, width: number): Node | string
 	if cell.kind == "gauge" then
 		return gaugeNode(cell, width)
 	elseif cell.kind == "pill" then
@@ -948,9 +949,20 @@ local function contentNode(cell: Cell, width: number): Node
 			return { k = "el", p = { tag = "span", class = cell.class :: string, text = cell.text } }
 		end
 		local token = Common.token(cell.tone :: any)
-		return Grid.text(cell.text, if token ~= "" then token else nil)
+		if token ~= "" then
+			return Grid.text(cell.text, token)
+		end
 	end
-	return Grid.text(cell.text)
+	return cell.text
+end
+
+-- `content` in the cell box `box` (its props).
+local function boxed(box: { [string]: any }, content: Node | string): Node
+	if type(content) == "string" then
+		box.text = content
+		return { k = "el", p = box }
+	end
+	return { k = "el", p = box, c = { content } }
 end
 
 -- The content in a box at most MAX_AUTO_WIDTH wide (tgp-cv): an auto
@@ -964,15 +976,12 @@ local function cellNode(cell: Cell, width: number): Node
 		box.actions = { click = "dlink=" .. Url.percentEncode(cell.href :: string) }
 	end
 	if cell.bg_tone == nil then
-		return { k = "el", p = box, c = { contentNode(cell, width) } }
+		return boxed(box, contentNode(cell, width))
 	end
 	-- An empty filled cell still fills the row's line (a no-break space keeps
 	-- the text line's height; an empty one collapses to the padding).
-	local content: Node = {
-		k = "el",
-		p = box,
-		c = { if cell.text == "" and cell.kind ~= "gauge" then Grid.text("\194\160") else contentNode(cell, width) },
-	}
+	local content =
+		boxed(box, if cell.text == "" and cell.kind ~= "gauge" then "\194\160" else contentNode(cell, width))
 	-- getCellColorInlineStyles: the color, or a 120deg gradient from a
 	-- darker, hue-rotated copy of it, with contrasting text.
 	local class = "tgp-cbg "

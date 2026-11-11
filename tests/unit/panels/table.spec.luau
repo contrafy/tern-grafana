@@ -455,10 +455,7 @@ describe("table cell options", function()
 			return n.p and n.p.class == "tgp-cbg tgp-error"
 		end)
 		expect(#fills).toBe(1)
-		local spans = S.findAll(fills[1], function(n)
-			return n.k == "text"
-		end)
-		expect(spans[1].p.spans[1].t).toBe("\194\160")
+		expect(S.text(fills[1])).toBe("\194\160")
 	end)
 
 	-- TableNG sizes columns by the server's table.autoColumnWidths flag

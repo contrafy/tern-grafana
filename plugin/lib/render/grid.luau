@@ -10,7 +10,9 @@ type Node = ui.Node
 
 -- `class` is added to the column's header and cells.
 export type Column = { head: string, numeric: boolean?, class: string? }
-export type Row = { key: string, cells: { Node }, action: string? }
+-- A cell is a node, or a string: plain text written as the cell's own text
+-- (one node instead of two).
+export type Row = { key: string, cells: { Node | string }, action: string? }
 
 local M = {}
 
@@ -42,7 +44,9 @@ function M.grid(key: string, columns: { Column }, rows: { Row }, role: string?, 
 		local cells: { Node } = table.create(n)
 		for i = 1, n do
 			local cell = row.cells[i]
-			cells[i] = { k = "el", p = { tag = "div", class = cellClass[i] }, c = if cell then { cell } else nil }
+			cells[i] = if type(cell) == "string"
+				then { k = "el", p = { tag = "div", class = cellClass[i], text = cell } }
+				else { k = "el", p = { tag = "div", class = cellClass[i] }, c = if cell then { cell } else nil }
 		end
 		local p: { [string]: any } = { tag = "div", key = row.key, class = "tg-r" }
 		if row.action then

@@ -251,13 +251,13 @@ two medians, in ms without decode unless noted. A 0.5.0 report taken earlier the
 | alert-states-plain | refresh, same answer | 0.266 | 0.322 | +0.06 ms | |
 | IRM poll | cold / warm | 0.044 / 0.043 | 0.044 / 0.042 | flat | the IRM modules did not change; a +33% in an earlier pair was load |
 | tern-all-panels | first paint / refresh | 13.3 / 9.93 | 15.7 / 11.4 | +18% / +15% | |
-| tern-panels | refresh | 3.03 | 4.57 | +51% | null insertion at gaps and every series drawn (largest SVG 17.8 -> 38.3 KB) |
+| tern-panels | refresh | 3.03 | 4.57 | +51% | every series drawn and null insertion at gaps; see the follow-up round below |
 | tern-sql | refresh | 0.645 | 0.484 | -25% | |
 | timeseries-window-3y | render | 7.29 | 3.63 | -50% | |
-| timezone-table-10k | render, UTC | 0.954 | 1.61 | +69% | not investigated in this round (1.15 in the first round) |
+| timezone-table-10k | render, UTC | 0.954 | 1.61 | +69% | a noisy pair; 0.90-1.0 against 1.08-1.13 in the follow-up round below |
 | Query, 7 d, 20 x 11000 | refresh | 16.4 | 18.6 | +13% | |
 | Logs, 5000 lines | tail poll | 1.43 | 1.41 | flat | |
-| Compat, 100 dashboards | scan / one paint | 15.8 / 6.68 | 20.2 / 8.41 | +28% / +26% | not investigated in this round |
+| Compat, 100 dashboards | scan / one paint | 15.8 / 6.68 | 20.2 / 8.41 | +28% / +26% | Grafana's schema migration and layout compaction; see the follow-up round below |
 | panel cursor | cursor move | 0.074 | 0.108 | +0.03 ms | |
 | Window | all modules | 2.67 MB, 66 ms compile | 3.35 MB, 83 ms | +25% | entry unchanged: 23.4 KB in 9 modules |
 
@@ -272,8 +272,7 @@ copy), the order checks of `sortByTime` and `Data.window` 0.3 -> 2.4 s.
 Legends stay complete, as in Grafana: VizLayout renders every row of a bottom legend in a ScrollContainer capped at
 35% of the viz, which the `tgp-lgcap-*` classes reproduce. Tern does not tell a plugin a view's scroll position, so a
 virtualized legend could not follow the scroll. The 50-row legends cost about 7 MB of the large dashboard's heap and
-the 1.5 ms of its same-answer refresh; writing value cells as their div's text would take a table row from 9 nodes to
-6, a change to check against Grafana's render first.
+the 1.5 ms of its same-answer refresh; the follow-up round writes their value cells as the cell's own text.
 
 ### Fixes in this round
 
@@ -287,3 +286,47 @@ the 1.5 ms of its same-answer refresh; writing value cells as their div's text w
 - `render/svg_timeseries` y range of a windowed series and `render/series` calcs: the finite-number check and the
   min/max are inlined (two function calls per sample before). Large dashboard, same session: refresh 579-580 ->
   509-522 ms, first paint 623-659 -> 555-563 ms.
+
+### Follow-up round
+
+The three left above, measured the same way: v0.5.0, 0.7.0 as committed (`c48c7ad`) and this round's tree,
+interleaved, two rounds of 30 iterations (10 for the large dashboard); "a / b" gives both rounds' medians, a single
+number the lower one. Load average 6-10 from background VMs, so differences under about 10% are noise. Times in ms
+without decode.
+
+| Scenario | Metric | 0.5.0 | 0.7.0 | this round |
+| --- | --- | --- | --- | --- |
+| timezone-table-10k | render, UTC | 0.90 / 1.00 | 1.08 / 1.13 | 1.00 / 1.03 |
+| | render, New York | - | 1.16 / 1.30 | 1.04 / 1.09 |
+| tern-panels | refresh, new data | 3.35 / 3.64 | 4.67 / 5.15 | 4.94 / 5.30 |
+| | painted after each answer | 3.67 / 4.91 | 5.98 / 7.84 | 5.37 / 5.54 |
+| | view nodes | 577 | 698 | 594 |
+| Compat, 100 dashboards | scan / one paint | 18.1 / 7.57 | 20.4 / 10.6 | 21.2 / 11.2 |
+| large, 60 x 50 x 1000 | refresh, same answer (ms) | 1.75 | 3.02 | 2.85 |
+| | view nodes | 6325 | 27928 | 21928 |
+| | retained when open | 96 MB | 103 MB | 101 MB |
+
+- timezone-table-10k: the +69% was a noisy pair; with 400 iterations per tree it is 0.86 / 0.98 ms (0.5.0) against
+  0.98 / 1.02 (0.7.0). The table shows 500 of its rows either way. 0.7.0 formats each time through Grafana's moment
+  pattern (`ClockFormat`; 500 values 0.28 -> 0.34 ms), which is parity, and boxed every cell for Grafana's 400 px
+  auto-width cap (`tgp-cv`), one node more per cell: 2506 -> 3507 nodes. The box now holds plain text as its own
+  text instead of a text node (2507 nodes).
+- Compat: attributed with probes per 100 dashboards (`--codegen`), Grafana's schema migration on load (the fixture
+  dashboards are schema 39, migrated to 42 as Grafana's DashboardMigrator does) 1.6 ms, new, and the repeat
+  expansion 0.56 -> 1.55 ms: react-grid-layout's vertical compaction, which 0.5.0 did not do. The ladder and support
+  checks are flat. Both are parity. Computing the compaction's float-up row per placed item instead of one scan per
+  row matched the old code on 200,000 random layouts but saved nothing (the interpreter profile stayed at 180 ms of
+  samples), so it was not kept; skipping the compaction altogether saves about 0.4 ms per 100 dashboards.
+- tern-panels: 0.7.0 draws 40 series where 0.5.0 drew 26 (10 per chart), which accounts for the SVG rendering
+  (about 37 us per series in both), the series joins and stacking, and the downsampling; null insertion at gaps adds
+  0.2-0.3 ms; all parity. Not parity was the stacked series' own values at the drawn times (`Data.ownValues`): a hash
+  of every source sample per series per render, 0.53-0.72 ms of the refresh. Ascending source times are now walked
+  alongside the drawn times: 0.23-0.37 ms, and equal on 100,000 random series to the hash lookup it replaces. The
+  stacked scale range's per-sample `see` call is inlined as the windowed one was. The refresh medians stay within
+  this session's noise.
+- Legend and table cells (`render/grid`): a grid cell can be a string, written as the cell's own text. Legend value
+  cells take a table legend row from 9 nodes to 7 (two calcs), and plain table cells write their text into the
+  `tgp-cv` box. Checked live in a sandbox Tern (Tern Panels, Tern Pub Time Series, Tern Table Cells): every table
+  cell, header and `tgp-cv` box has the same rect before and after (106 of 106 on Tern Table Cells), legend rows keep
+  21 px and their columns, and the screenshots show the same fonts, colors and alignment; the only rects that moved
+  belong to a legend whose live series changed between the runs.

@@ -592,14 +592,36 @@ function M.ownValues(
 	if plain and not plot.stacked[i] and spans[i] == false then
 		return drawn
 	end
-	local at: { [number]: any } = {}
-	for j, t in source.times do
-		at[t] = source.values[j]
-	end
 	local neg = st.transform == "negative-Y"
+	local stimes, svalues = source.times, source.values
+	local m = #stimes
+	-- Ascending source times (`plain`) are walked alongside the drawn times
+	-- (a drawn time before the previous one restarts the walk); others are
+	-- looked up by time.
+	local at: { [number]: any }? = nil
+	if not plain then
+		local map: { [number]: any } = {}
+		for j, t in stimes do
+			map[t] = svalues[j]
+		end
+		at = map
+	end
 	local out: { any } = table.create(#times)
+	local j, prev = 1, -math.huge
 	for k, t in times do
-		local v = at[t]
+		local v: any
+		if at then
+			v = at[t]
+		else
+			if t < prev then
+				j = 1
+			end
+			prev = t
+			while j <= m and stimes[j] < t do
+				j += 1
+			end
+			v = if j <= m and stimes[j] == t then svalues[j] else nil
+		end
 		if v == nil then
 			v = drawn[k]
 			local n = finite(v)

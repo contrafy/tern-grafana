@@ -171,11 +171,11 @@ function M.rowsNode(key: string, rows: { Row }, heads: { string }, mode: Mode): 
 		end
 		local gridRows: { Grid.Row } = table.create(#rows)
 		for i, r in rows do
-			local cells: { Node } = {
+			local cells: { Node | string } = {
 				{ k = "row", p = { gap = "xs", align = "center" }, c = { M.swatch(r.class), Grid.text(r.name) } },
 			}
 			for _, v in r.values do
-				table.insert(cells, Grid.text(v))
+				table.insert(cells, v)
 			end
 			gridRows[i] = { key = "s" .. i, cells = cells }
 		end

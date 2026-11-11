@@ -268,7 +268,7 @@ end
 -- What Tern holds for the open large dashboard (retained_open_kb plus the
 -- raw answers kept, which this harness shares with its answer cache): the
 -- plugin VM's heap is 256 MiB and a refresh needs room on top. 0.5.0 holds
--- 192 MiB, 0.7.0 195-200 (its legends list all 50 series); keeping a filled
+-- 192 MiB, 0.7.0 193-197 (its legends list all 50 series); keeping a filled
 -- copy of every series held 289.
 local LARGE_HELD_MAX_KB = 224 * 1024
 
