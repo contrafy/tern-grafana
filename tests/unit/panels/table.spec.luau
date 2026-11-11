@@ -7,6 +7,7 @@
 -- the same panels.
 local t = require("../../lib/test")
 local S = require("./support")
+local Frame = require("../../../plugin/lib/frame/types")
 local Table = require("../../../plugin/lib/panels/table")
 local Transform = require("../../../plugin/lib/panels/transform")
 local TsGradient = require("../../../plugin/lib/render/ts_gradient")
@@ -431,6 +432,33 @@ describe("table cell options", function()
 		tbl = Table.build(panel, frames, env, OPTS)
 		expect(tbl.rows[1][col(tbl, "Device")].kind).toBe("pill")
 		expect(tbl.rows[1][col(tbl, "Remaining")].kind).toBe("auto")
+	end)
+
+	-- tern-legacy panel 4: the Up column (colorMode cell, base red) has no
+	-- value on the scrape_duration rows; Grafana still fills the whole cell
+	-- with the base color instead of a padding-high strip.
+	it("fills an empty color-background cell to the row's height", function()
+		local panel = S.json([[{"type": "table", "fieldConfig": {"defaults": {
+			"custom": {"cellOptions": {"type": "color-background", "mode": "basic"}},
+			"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+		}, "overrides": []}}]])
+		local frames = {
+			{
+				refId = "A",
+				fields = { Frame.field("up", "number", { 1, Frame.NULL }) },
+			},
+		}
+		local tbl = Table.build(panel, frames, env, OPTS)
+		expect(tbl.rows[2][1].text).toBe("")
+		expect(tbl.rows[2][1].bg_tone).toBe("error")
+		local fills = S.findAll(Table.view(panel, frames, env, OPTS), function(n)
+			return n.p and n.p.class == "tgp-cbg tgp-error"
+		end)
+		expect(#fills).toBe(1)
+		local spans = S.findAll(fills[1], function(n)
+			return n.k == "text"
+		end)
+		expect(spans[1].p.spans[1].t).toBe("\194\160")
 	end)
 
 	-- TableNG sizes columns by the server's table.autoColumnWidths flag

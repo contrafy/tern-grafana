@@ -963,10 +963,16 @@ local function cellNode(cell: Cell, width: number): Node
 		box.title = cell.href
 		box.actions = { click = "dlink=" .. Url.percentEncode(cell.href :: string) }
 	end
-	local content: Node = { k = "el", p = box, c = { contentNode(cell, width) } }
 	if cell.bg_tone == nil then
-		return content
+		return { k = "el", p = box, c = { contentNode(cell, width) } }
 	end
+	-- An empty filled cell still fills the row's line (a no-break space keeps
+	-- the text line's height; an empty one collapses to the padding).
+	local content: Node = {
+		k = "el",
+		p = box,
+		c = { if cell.text == "" and cell.kind ~= "gauge" then Grid.text("\194\160") else contentNode(cell, width) },
+	}
 	-- getCellColorInlineStyles: the color, or a 120deg gradient from a
 	-- darker, hue-rotated copy of it, with contrasting text.
 	local class = "tgp-cbg "

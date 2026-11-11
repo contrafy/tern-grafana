@@ -682,14 +682,33 @@ for _, version in S.VERSIONS do
 
 		-- Every sample NaN: uPlot leaves the scale unset, so Grafana draws
 		-- no y ticks (9578 and Alertmanager overview Notification durations).
+		-- A capture where the query matched no series is one frame without
+		-- values: prepareGraphableFields finds nothing to graph and Grafana
+		-- shows PanelDataErrorView's "No data".
 		it("draws no y axis when no sample is a number", function()
 			local frames = S.frames(version, "pub_ts_9")
 			expect(#frames > 0).toBe(true)
-			local _, assets = Timeseries.view(graph(9), frames, env, CARD)
+			local node, assets = Timeseries.view(graph(9), frames, env, CARD)
+			local rows = 0
+			for _, f in frames do
+				for _, field in f.fields do
+					rows = math.max(rows, #field.values)
+				end
+			end
+			if rows == 0 then
+				expect((node.p :: { [string]: any }).class).toBe("tg-nodata")
+				return
+			end
 			local svg = assets.p.bytes
 			expect(#ticks(svg, "end")).toBe(0)
 			expect(#ticks(svg, "start")).toBe(0)
 			expect(#ticks(svg, "middle") > 0).toBe(true)
+		end)
+
+		it("shows No data for a lone empty frame", function()
+			local node, assets = Timeseries.view(graph(9), { { refId = "A", fields = {} } }, env, CARD)
+			expect((node.p :: { [string]: any }).class).toBe("tg-nodata")
+			expect((next(assets))).toBeNil()
 		end)
 
 		-- Lone increase samples seven minutes apart, lines without points:
