@@ -205,10 +205,11 @@ Rendering:
    replaces a drawn one. The renderer computes points per series from a byte budget (about 12.7 bytes per point at
    one decimal, minus axes), LTTB-downsamples to it, and falls back down the ladder (B, then A) if a panel still
    cannot fit.
-3. **maxDataPoints is a config default, not pane-driven.** On 0.7.0 `cx.cols`/`cx.rows` were a constant 80 x 24 for
-   plugin blocks and `resize` never fired; since 0.9 they track the pane, but in cells, never px. So maxDataPoints
-   and `$__interval` come from a configured default tied to a fixed design width (viewBox about 1000 px). The image
-   scales down to the pane; layout uses `row`/`col` and fractions, not cell counts.
+3. **maxDataPoints from the pane width in cells.** On 0.7.0 `cx.cols`/`cx.rows` were a constant 80 x 24 for
+   plugin blocks and `resize` never fired; since 0.9 they track the pane, but in cells, never px. Dashboard panels
+   take Grafana's maxDataPoints (the panel's width in px) from the pane width in cells at an assumed 7.9 px per
+   cell, laid out on Grafana's grid; a resize alone does not re-query, as in Grafana. The Query block keeps its
+   configured `query.max_points`.
 4. **Blob cache growth: reuse by content hash, overlay cursor, conservative refresh.** Blobs are never evicted within
    a daemon's lifetime (200 swaps = 200 cache files, 12.8 MB; 0.9.13 trims the cache to 1 GiB only when the daemon
    starts). Blob ids are content hashes: panels hash their frame and call

@@ -262,7 +262,6 @@ Settings for the [Dashboard and Panel blocks](dashboards.md), in the `dashboard`
 
 ```json
 "dashboard": {
-  "max_points": 600,
   "min_refresh": "30s",
   "render_theme": "dark"
 }
@@ -270,7 +269,6 @@ Settings for the [Dashboard and Panel blocks](dashboards.md), in the `dashboard`
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `max_points` | number | `600` | maxDataPoints for panels that set none, from 10 to 11000 (a fraction is rounded down). Tern gives a block its pane width in cells, not px, so it is not derived from the pane. |
 | `min_refresh` | string or number | `"30s"` | Shortest auto-refresh interval: a duration such as `"1m"`, or a positive number of seconds. A dashboard whose own `refresh` is faster refreshes at this interval instead. |
 | `render_theme` | string | `"dark"` | Theme of panels rendered by Grafana's image renderer: `"dark"` or `"light"`. |
 

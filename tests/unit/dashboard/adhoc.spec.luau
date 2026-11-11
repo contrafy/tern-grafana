@@ -349,7 +349,7 @@ describe("ad hoc filters", function()
 			scope = { datasource = { values = { "prom3" } } },
 			from_ms = S.NOW_MS - 3600000,
 			to_ms = S.NOW_MS,
-			max_points = 100,
+			width_px = 100,
 			datasources = datasources,
 			grafana_major = 12,
 			features = { lokiQuerySplitting = true },

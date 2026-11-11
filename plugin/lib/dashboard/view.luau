@@ -42,9 +42,6 @@ M.HINT = "arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh 
 	.. "o browser  p pin  I investigate  / search"
 -- Tern's text line in px: card heights are given in lines.
 M.LINE_PX = 16
--- Grafana's grid keeps its 24 columns down to the md breakpoint (theme.breakpoints.values.md);
--- a narrower dashboard stacks every panel at the full width.
-M.STACK_BELOW_PX = 769
 -- Card chrome in px: the head line with the card's top and bottom padding
 -- (a card without a head, an untitled panel's, has the padding only); a
 -- panel with a description or links has a chip line under the head.
@@ -66,27 +63,6 @@ M.PLAIN_PAD_PX = 4
 function M.heightLines(h: number): number
 	local _, px = RenderPng.size(1, h)
 	return math.max(4, math.floor(px / M.LINE_PX))
-end
-
--- A Tern cell's width in px at the default font (docs/sdk-capability-matrix:
--- a 47-col block was 372.5 px wide).
-M.CELL_PX = 7.9
-
--- The dashboard width native panels are laid out for: the block's width
--- (env.cols cells, updated on every resize), as Grafana lays its grid out
--- over the browser window. Tern images never scale up and card heights
--- are fixed: an SVG designed wider than its card scales down and leaves
--- the card's bottom empty. A block that never got Tern's resize notice
--- still reports the initial 80x24 cells (Tern 0.9.16): unknown or that
--- size designs for Grafana's typical desktop width.
-M.MIN_DESIGN_WIDTH = 320
-
-function M.designWidth(env: Env): number
-	local cols, rows = env.cols, env.rows
-	if cols == nil or cols <= 0 or (cols == 80 and rows == 24) then
-		return RenderPng.DESIGN_WIDTH
-	end
-	return math.max(M.MIN_DESIGN_WIDTH, math.floor(cols * M.CELL_PX))
 end
 
 -- The card body's height in px under the card's height cap (heightLines),
@@ -206,7 +182,7 @@ local function nativeBody(
 	local pr = State.drawRange(s, ps)
 	local live = if ps.live_ms then s.live_tick else nil
 	local annotations = Layers.marks(s, inst.panel.id)
-	local design = M.designWidth(env)
+	local design = Core.designWidth(env)
 	if
 		memo
 		and memo.data == data
@@ -778,7 +754,7 @@ end
 local function grid(s: State, env: Env, assets: Assets.Assets): { Node }
 	table.clear(s.card_ids)
 	local out: { Node } = {}
-	local stacked = M.designWidth(env) < M.STACK_BELOW_PX
+	local stacked = Core.designWidth(env) < Core.STACK_BELOW_PX
 	for _, sec in s.sections do
 		local collapsed = s.collapsed[sec.key]
 		if collapsed == nil then

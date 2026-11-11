@@ -492,13 +492,16 @@ capture_all_panels() {
 # (they are what Tern's query builder is checked against):
 # - SqlDatasource.applyTemplateVariables keeps refId, datasource, rawSql and format; rawSql has the
 #   variables interpolated with the SQL quoting ($service and $team are multi-value: quoted lists;
-#   $region is a textbox: quotes doubled) and $__interval with the panel interval; $__timeFilter and
+#   $region is a textbox: quotes doubled) and $__interval with the request's interval; $__timeFilter and
 #   the other macros are left to the backend. DataSourceWithBackend adds intervalMs and maxDataPoints
 #   (and the deprecated datasourceId, not sent here).
 # - With an expression the expression datasource sends every target, the hidden one too, each through
 #   its datasource's interpolateVariablesInQueries (SQL: the whole target, rawQuery true); expression
 #   targets go as written with Grafana's expression datasource reference.
-# - Range now-1h; maxDataPoints gridPos.w * 80 as in panel_query.jq, so intervalMs is 5000 ("5s").
+# - Range now-1h; maxDataPoints gridPos.w * 80 as in panel_query.jq. intervalMs is calculateInterval's 5s
+#   raised to the panel datasource's interval, SqlDatasource's default 1m (60000); panel 5 runs on
+#   -- Mixed --, which has none: 5000 ("5s"). Checked against the requests Grafana 11.6, 12.4 and 13.3
+#   frontends send for this dashboard.
 # Panel 6 (-- Dashboard --) reuses panel 4's results: the frontend sends no query for it.
 capture_sql() {
 	get frontend_settings_sql /api/frontend/settings
@@ -511,17 +514,17 @@ capture_sql() {
 			'{queries: $q, from: $f, to: $t}')"
 	}
 	sql_req 1 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
-		rawSql: "SELECT $__timeGroupAlias(time, 5s), service AS metric, avg(rps) AS rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nGROUP BY 1, 2\nORDER BY 1",
-		format: "time_series", intervalMs: 5000, maxDataPoints: 960}]')"
+		rawSql: "SELECT $__timeGroupAlias(time, 1m), service AS metric, avg(rps) AS rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nGROUP BY 1, 2\nORDER BY 1",
+		format: "time_series", intervalMs: 60000, maxDataPoints: 960}]')"
 	sql_req 2 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT $__timeGroupAlias(time, '"'"'5m'"'"'),\n  avg(rps) FILTER (WHERE service = '"'"'frontend'"'"') AS frontend,\n  avg(rps) FILTER (WHERE service = '"'"'checkout'"'"') AS checkout\nFROM service_load\nWHERE $__timeFilter(time)\nGROUP BY 1\nORDER BY 1",
-		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 960}]')"
 	sql_req 3 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT team, avg(error_rate) AS error_rate\nFROM services\nWHERE team IN ('"'"'web'"'"','"'"'payments'"'"') AND region <> '"'"'ap'"'"'\nGROUP BY team\nORDER BY team",
-		format: "table", intervalMs: 5000, maxDataPoints: 640}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 640}]')"
 	sql_req 4 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT name, team, region, replicas, error_rate\nFROM services\nORDER BY name",
-		format: "table", intervalMs: 5000, maxDataPoints: 640}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 640}]')"
 	sql_req 5 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds, editorMode: "code", format: "table",
 		hide: true, rawQuery: true, rawSql: "SELECT sum(replicas)::float8 AS replicas\nFROM services",
 		intervalMs: 5000, maxDataPoints: 640},
@@ -529,7 +532,7 @@ capture_sql() {
 		expression: "$A * 2"}]')"
 	sql_req 7 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT time, service, rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nORDER BY 1",
-		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 960}]')"
 }
 
 # capture_cells: fixtures for dashboard tern-cells (table cell types over TestData CSV), each panel's

@@ -300,7 +300,10 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   a continuous scheme's colors, as Grafana's conic gradient; other color modes keep the value's color),
   `showThresholdMarkers` (an outer ring of threshold bands), `showThresholdLabels` (min, each step, max and the
   neutral value around the arc; on a circle min and max stand side by side at twelve o'clock, and on an arc the end
-  labels keep inside its ends, as RadialScaleLabels places them), `sparkline`, `textMode` and the text sizes. A
+  labels keep inside its ends, as RadialScaleLabels places them), `sparkline` (a smoothed line, the time series'
+  monotone cubic, with a 6 px point on the sample the reducer picked, for first, last, min and max and their
+  not-null forms, as Grafana 12.4 and 13 draw it),
+  `textMode` and the text sizes. A
   gauge saved before the new gauge gets no gradient or sparkline, as Grafana's migration decides
   (`parseFloat(pluginVersion)` below 13 without a `shape`: a version such as `v13.0.0` is not migrated). Without
   the toggle (Grafana 11, Grafana 12 default) it is
@@ -315,7 +318,16 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 - **Panel time options.** "Relative time" (`timeFrom`) and "Time shift" (`timeShift`) change the range the
   panel queries, as Grafana's panel time range does (a relative time only applies when the dashboard range is
   relative), and the panel header shows Grafana's info ("Last 1 hour", "timeshift -1h") unless "Hide time info"
-  (`hideTimeOverride`) is set. `maxDataPoints` and the minimum `interval` set the query resolution.
+  (`hideTimeOverride`) is set.
+- **Query resolution.** As Grafana's SceneQueryRunner: `maxDataPoints` is the panel's own, else the panel's width
+  in px (its columns of Grafana's grid over the block's width, a Tern cell taken as 7.9 px; the whole width when
+  expanded, pinned or below Grafana's md breakpoint), else 500. `intervalMs` is Grafana's `calculateInterval` over
+  the range with the panel's minimum `interval`, else its datasource's (Prometheus `timeInterval`, else 15s; SQL
+  `timeInterval`, else 1m; Elasticsearch `timeInterval`; none for `-- Mixed --`), the same for every target.
+  Prometheus and Loki leave `$__interval` and `$__interval_ms` to Grafana's backend, which derives them from the
+  step and the target's own min interval. A resize sends nothing: as in Grafana, the panel's next query (a
+  refresh, a range or variable change) takes the new width. Annotation queries ask for as many points as the
+  dashboard is wide.
 - **Metadata.** As in Grafana's panel header, at the right end of the card's head line: a failed query is a
   warning icon (the message on hover; the focused card and the expanded panel spell it out, and the body says
   "No data"), a description an `i` marker (hover shows it; the expanded panel shows it in full) and panel links a
@@ -631,11 +643,10 @@ share (with an exemplar selected, its labels), kept to `logs.correlate_labels`; 
 Optional `dashboard` section of the config file:
 
 ```json
-"dashboard": { "max_points": 600, "min_refresh": "30s", "render_theme": "dark" }
+"dashboard": { "min_refresh": "30s", "render_theme": "dark" }
 ```
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `max_points` | `600` | maxDataPoints for panels that set none (Tern blocks have no pane width to derive it from). 10 to 11000. |
 | `min_refresh` | `"30s"` | Shortest auto-refresh interval, as a duration (`"1m"`) or seconds. |
 | `render_theme` | `"dark"` | Theme of panels rendered by Grafana's image renderer: `"dark"` or `"light"`. |

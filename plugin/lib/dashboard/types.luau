@@ -37,6 +37,10 @@ export type PanelState = {
 	signature: string?,
 	-- The query sent with `signature`; its answer is parsed against it.
 	pq: Queries.PanelQuery?,
+	-- The width in px the last query was sent for; a resize alone does not
+	-- re-query, the next query takes the new width (SceneQueryRunner
+	-- setContainerWidth).
+	width_px: number?,
 	gen: number,
 	data: Queries.PanelData?,
 	error: string?,
@@ -272,6 +276,10 @@ export type Layers = {
 	gen: number,
 	-- Identity of the last batch (its requests).
 	sig: string?,
+	-- The dashboard width in px the batch was sent for: annotation queries
+	-- ask for at most that many points (executeAnnotationQuery), the width
+	-- kept like a panel's (PanelState.width_px).
+	width_px: number?,
 	annotations: { AnnotationLayer },
 	-- The variable bar's annotation layer switches (Annotations.toggles).
 	toggles: { Annotations.Toggle },

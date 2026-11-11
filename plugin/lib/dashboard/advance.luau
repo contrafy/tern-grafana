@@ -86,7 +86,7 @@ local function startVariableJob(
 		from_ms = r.from_ms,
 		to_ms = r.to_ms,
 		interval_ms = 0,
-		max_points = s.cfg.max_points,
+		max_points = Queries.DEFAULT_MAX_POINTS,
 		now_ms = env.now_ms,
 		datasources = s.settings.datasources,
 		ds = ds,
@@ -315,7 +315,8 @@ local function queryPanel(
 )
 	local route = s.route :: Route
 	local pq, err = nil, nil
-	local qctx = Core.queryContext(s, scope, env, pt.range, resolved)
+	local width = Core.panelWidth(s, inst, env)
+	local qctx = Core.queryContext(s, scope, env, pt.range, resolved, ps.width_px or width)
 	if Registry.queries(inst.panel.json, env) then
 		pq, err = Queries.build(inst.panel.json, qctx, env)
 	end
@@ -334,6 +335,13 @@ local function queryPanel(
 	local p = pq :: Queries.PanelQuery
 	local signature = Queries.identity(p, env) .. "\31" .. pt.from .. "\31" .. pt.to
 	if again or signature ~= ps.signature then
+		-- A query sent anyway takes the panel's width now.
+		if ps.width_px ~= nil and ps.width_px ~= width then
+			qctx = Core.queryContext(s, scope, env, pt.range, resolved, width)
+			p = assert(Queries.build(inst.panel.json, qctx, env))
+			signature = Queries.identity(p, env) .. "\31" .. pt.from .. "\31" .. pt.to
+		end
+		ps.width_px = width
 		-- The answers in flight are read against the query with this
 		-- signature (the same queries and refIds, the same jobs).
 		ps.pq = p

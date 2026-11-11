@@ -322,8 +322,9 @@ panel that queries, `search_starred`, `search_recent`, `search_tag`, `search_que
 `alertlist_rules` and `news_feed.xml`. The request bodies come from `scripts/fixtures/panel_query.jq`,
 which builds what Grafana's frontend sends: dashboard range with the panel's `timeFrom`/`timeShift`
 applied as absolute epoch-ms strings, `maxDataPoints` from the panel or its width (gridPos.w * 80 px),
-`intervalMs` from Grafana's `calculateInterval` with the panel `interval` or the datasource minimum
-as the low limit, and `${trace_id}` set to a real Tempo trace.
+`intervalMs` from Grafana's `calculateInterval` with the panel `interval` or the interval of the panel's
+datasource (Prometheus 10s as provisioned, SQL 1m, none for `-- Mixed --`) as the low limit, and
+`${trace_id}` set to a real Tempo trace.
 
 ### Adding a fixture
 

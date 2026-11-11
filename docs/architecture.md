@@ -206,7 +206,8 @@ recolors without a re-render. An SVG blob is capped at 256 KiB, so the renderer 
 budget and drops series beyond a cap with a legend note. Tern strips SVG `<title>`, and a plugin block knows its pane
 size only in terminal cells (`cx.cols`/`cx.rows`, which track the pane since Tern 0.9; 80x24 on 0.7), never in px, so:
 
-- `maxDataPoints` is a config default (not derived from the pane), and the image scales to the pane width.
+- A dashboard panel's `maxDataPoints` is its width in px on Grafana's grid laid over the block's width (cells x
+  7.9 px), as Grafana takes it from the panel's container; the Query block's is the `query.max_points` config.
 - Point read-out is a keyboard cursor drawn as an overlay child of the `image` node (a flex spacer plus a 1-px
   line), which moves without a new blob; the legend shows values at the cursor.
 

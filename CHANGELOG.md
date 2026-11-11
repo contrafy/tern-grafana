@@ -14,6 +14,14 @@ versions may break).
   plugin reads were checked against Grafana Cloud's 13.4 and answer with the
   same shapes. Fixture capture refuses to record the imported public
   dashboards.
+- Dashboard panels ask for as many points as Grafana asks for them: the
+  panel's `maxDataPoints`, else its width in px (its grid columns over the
+  block's width), else 500, and one `intervalMs` for every target with the
+  panel's min interval, else its datasource's (Prometheus `timeInterval` or
+  15s, SQL 1m), as the low limit. Prometheus and Loki targets leave
+  `$__interval` to Grafana's backend. A resize re-queries nothing; the next
+  query takes the new width. The `dashboard.max_points` setting is gone
+  (a leftover key is ignored).
 
 ### Fixed
 
@@ -26,6 +34,9 @@ versions may break).
 - A circular gauge's threshold labels at twelve o'clock stand side by side
   ("1" and "0" read "10", as in Grafana) instead of one over the other, and
   an arc's end labels keep inside its ends.
+- A radial gauge's sparkline is a smoothed line, as Grafana draws it, and
+  marks the reduced sample (for example the last one) with a point, as
+  Grafana 12.4 and 13 do.
 - Time series match Grafana on old public dashboards: series past the tenth
   take the rest of Grafana's classic palette (11074's transmit series are
   purple, not yellow again); table legends keep series names whole and

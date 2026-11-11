@@ -14,7 +14,9 @@ local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Json = require("../panels/json")
+local Model = require("./model")
 local Queries = require("./queries")
+local Range = require("../time/range")
 local Route = require("../config/route")
 local SvgAnnotations = require("../render/svg_annotations")
 local TransportTypes = require("../transport/types")
@@ -103,16 +105,15 @@ local function typeOf(qctx: Queries.Context, env: Env): Annotations.TypeOf
 	end
 end
 
--- Sends the layer requests when they changed (or `force`, a refresh).
--- Runs once the variables have settled (a Prometheus layer's expression
--- and datasource may use them).
-function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
-	local d, route, r = s.dashboard, s.route, s.range
-	if d == nil or route == nil or r == nil then
-		return
-	end
+-- The layer requests for a dashboard `width` px wide.
+local function batch(
+	s: State,
+	env: Env,
+	width: number
+): ({ Types.AnnotationLayer }, { TransportTypes.Request }, boolean)
+	local d, route, r = s.dashboard :: Model.Dashboard, s.route :: Route, s.range :: Range.Range
 	local ls = s.layers
-	local qctx = Core.queryContext(s, Core.scopeOf(s), env, r, nil)
+	local qctx = Core.queryContext(s, Core.scopeOf(s), env, r, nil, width)
 	local layers: { Types.AnnotationLayer } = {}
 	local requests: { TransportTypes.Request } = {}
 	ls.toggles = Annotations.toggles(d.annotations, env, s.layer_on)
@@ -138,10 +139,30 @@ function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
 	if alerts then
 		table.insert(requests, AlertStates.request(d.uid))
 	end
+	return layers, requests, alerts
+end
+
+-- Sends the layer requests when they changed (or `force`, a refresh).
+-- Runs once the variables have settled (a Prometheus layer's expression
+-- and datasource may use them).
+function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
+	local d, route, r = s.dashboard, s.route, s.range
+	if d == nil or route == nil or r == nil then
+		return
+	end
+	local ls = s.layers
+	local width = Core.designWidth(env)
+	local layers, requests, alerts = batch(s, env, ls.width_px or width)
 	local sig = env.encode(requests)
 	if not force and sig == ls.sig then
 		return
 	end
+	-- A batch sent anyway takes the dashboard's width now.
+	if ls.width_px ~= nil and ls.width_px ~= width then
+		layers, requests, alerts = batch(s, env, width)
+		sig = env.encode(requests)
+	end
+	ls.width_px = width
 	ls.sig = sig
 	ls.gen += 1
 	-- What is shown stays until the new answers replace it.
