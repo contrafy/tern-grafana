@@ -9,8 +9,11 @@ PANEL="Scrape duration symlog heatmap"
 
 open_block dashboard dashboard || return
 bwait dashboard "Open a Grafana dashboard" || return
-# Grafana's search sorts titles case-insensitively.
-want=$(jq -sc 'map(.title) | sort_by(ascii_downcase)' "$E2E_REPO"/dev/grafana/dashboards/*.json)
+# Grafana's search sorts titles case-insensitively. Public dashboards imported
+# by scripts/public-dashboards.py (folder uid public) are listed too.
+public=$(g12_api '/api/search?type=dash-db&folderUIDs=public&limit=5000' 2>/dev/null || echo '[]')
+want=$({ jq -s 'map(.title)' "$E2E_REPO"/dev/grafana/dashboards/*.json; printf '%s' "$public" | jq 'map(.title)'; } |
+	jq -sc 'add | sort_by(ascii_downcase)')
 E2E_WAIT=15 wait_for "the dashboard list" has "$D .pk-row" "$(printf '%s' "$want" | jq length)" || return
 eq "picker lists the provisioned dashboards" "$(texts "$D .pk-row .pk-label")" "$want"
 shot picker
