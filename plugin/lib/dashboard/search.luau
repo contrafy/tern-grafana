@@ -14,10 +14,15 @@ M.LIMIT = 100
 
 export type Hit = { uid: string, title: string, folder: string?, tags: { string } }
 
-function M.request(query: string): TransportTypes.Request
+-- `tags`: only dashboards with every tag (a "dashboards" dashboard link).
+function M.request(query: string, tags: { string }?): TransportTypes.Request
 	local q: { { string } } = { { "type", "dash-db" } }
 	if query ~= "" then
 		table.insert(q, { "query", query })
+	end
+	local wanted: { string } = tags or {}
+	for _, t in wanted do
+		table.insert(q, { "tag", t })
 	end
 	table.insert(q, { "limit", tostring(M.LIMIT) })
 	return { method = "GET", path = "/api/search", query = q }

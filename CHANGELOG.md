@@ -7,6 +7,156 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-11
+
+### Added
+
+- Dashboard links (`dashboard.links`) show after the variables: link
+  buttons open in the browser pane with the variables, time range and
+  variable values Grafana adds, and "dashboards" links list the dashboards
+  with their tags (as a dropdown or one chip each) and open them natively.
+- Verified on Tern 0.9.16; the SDK typings are pinned to its release.
+- `make test` runs every spec twice: interpreted, and compiled to native code
+  with the Luau version Tern embeds, as release Tern runs plugins. Tern
+  0.9.16's Luau 0.740 miscompiled a gauge gradient loop into an endless one
+  (the plugin ran out of memory and every dashboard block failed); the loop
+  is rewritten and the miscompile is recorded in the capability matrix.
+
+### Changed
+
+- Dev stack: the Grafana 13 server runs 13.3.1 (digest pinned, with
+  `table.autoColumnWidths` on) and its fixtures are re-recorded; the APIs the
+  plugin reads were checked against Grafana Cloud's 13.4 and answer with the
+  same shapes. Fixture capture refuses to record the imported public
+  dashboards.
+- Dashboard panels ask for as many points as Grafana asks for them: the
+  panel's `maxDataPoints`, else its width in px (its grid columns over the
+  block's width), else 500, and one `intervalMs` for every target with the
+  panel's min interval, else its datasource's (Prometheus `timeInterval` or
+  15s, SQL 1m), as the low limit. Prometheus and Loki targets leave
+  `$__interval` to Grafana's backend. A resize re-queries nothing; the next
+  query takes the new width. The `dashboard.max_points` setting is gone
+  (a leftover key is ignored).
+
+### Fixed
+
+- Stat sparklines are drawn as Grafana's: a line over a light fill in the
+  value's color behind the value, as tall as the room the text leaves,
+  instead of a strip of bars under it. A sample alone between gaps draws
+  nothing and a flat series lies on the bottom edge (old singlestats on
+  9578 and 3662), and a stat too short for Grafana's chart (a 3-row stat
+  such as 17781's Panics) shows its value alone, at Grafana's size.
+- A value that is NaN prints `NaN`, as Grafana does, instead of `nan`.
+- An empty cell in a color-background table column is filled to the row's
+  height in the column's base color, instead of a thin strip.
+- A circular gauge's threshold labels at twelve o'clock stand side by side
+  ("1" and "0" read "10", as in Grafana) instead of one over the other, and
+  an arc's end labels keep inside its ends.
+- A radial gauge's sparkline is a smoothed line, as Grafana draws it, and
+  marks the reduced sample (for example the last one) with a point, as
+  Grafana 12.4 and 13 do.
+- Time series match Grafana on old public dashboards: series past the tenth
+  take the rest of Grafana's classic palette (11074's transmit series are
+  purple, not yellow again); table legends keep series names whole and
+  scroll sideways; a chart whose samples are all NaN draws no y axis; a lone
+  sample between gaps is not drawn as a dot unless points are on; a graph
+  with both y axes hidden hides its time axis too (13639 log volume).
+- Logs panels saved without `showTime` or `wrapLogMessage` show no time and
+  do not wrap, Grafana's defaults.
+- Dashboard panels keep their gridPos widths: narrow panels (2-column
+  stats) no longer wrap their band onto extra rows, and a repeat's
+  half-empty last row has panels as wide as a full row's. Panels stack at
+  the full width only below Grafana's 769 px breakpoint.
+- Text in canvas, flame graph, geomap, heatmap, node graph and state timeline
+  panels sits where Grafana draws it: Tern's SVG ignores dominant-baseline,
+  so the labels were about a third of an em too high; their baseline is now
+  placed by hand.
+- List legends label each value with its calc, as Grafana does
+  ("CPU Cores Last *: 10"), and leave that room when sizing the chart.
+- Dashboards saved by older Grafanas open as Grafana shows them: Grafana's
+  schema migration runs on load. Pre-Grafana 5 dashboards (top-level `rows`:
+  Prometheus 2.0 overview, Docker, Kubernetes cluster, Grafana internals, the
+  Loki and Tempo mixins) drew nothing and counted as "native 0"; they now get
+  Grafana's rows and grid positions (checked against Grafana 12.4's own
+  migration of 36 public dashboards). Leftover copies of repeated panels are
+  dropped (9578 Alertmanager's collapsed rows held 69), old `table` panels
+  with styles migrate as `table-old`, old panel links, value mappings and
+  variable flags are upgraded. The compatibility scan names a dashboard without
+  panels instead of reporting "native 0".
+- An old table style's hidden column (`custom.hideFrom.viz`) is hidden again:
+  dotted `custom.*` override ids set nested options as in Grafana.
+- A time series whose series are all hidden from the legend (graph
+  `hideZero`/`hideEmpty`) draws no legend, as Grafana's.
+- Stat sparklines follow Grafana's: a flat series lies at the bottom of its
+  range instead of filling it, and the sparkline spans the panel's time range
+  with gaps where samples are missing.
+- Time series draw every series, as Grafana does: they share the 256 KiB
+  byte budget with fewer samples each, and only series that would not fit even
+  at 3 samples are left out ("N more series not shown (chart size limit)").
+  Panels with more than 10 series lost their later ones (1860 Network Traffic
+  Basic dropped every Tx series, along with their negative-Y override).
+- A `custom.stacking` override with `group: false` stacks the series alone, as
+  Grafana keys the group (1860 Memory Basic: Total no longer sits on top).
+- Stacked y axes range over the stack's values, not the base it fills down
+  to (a stacked constant 4 reads 0..8 as in Grafana).
+- Dashboard time series space y ticks for the plot height Grafana gives the
+  panel (15 px under 150 px), so a 7-row panel shows Grafana's tick count.
+- A long bottom legend in a dashboard card is cut at 35% of the panel and
+  scrolls, as Grafana's VizLayout does.
+- Tables with several frames show one at a time with Grafana's frame selector
+  (`options.frameIndex`, previous/next) instead of "N more frames", and draw
+  up to 48 columns (was 16).
+- Time series bars are as wide as Grafana draws them: uPlot's column is the
+  distance between a series' two closest samples, so per-minute counts over
+  hours are hairline bars, and an outline that would take half a bar is
+  dropped.
+- Table columns follow the server's `table.autoColumnWidths` flag, read from
+  Grafana's OpenFeature endpoint as its frontend reads it: on (Grafana Cloud),
+  columns fit their content and a gauge column takes Grafana's 150 px instead
+  of 228; off (the default), the columns share the panel width, at least
+  150 px or their minimum width each.
+- An expanded dynamic text panel takes Grafana's full panel height (the plugin
+  has no panel padding).
+- Pie chart gradients no longer show bands: a slice is drawn with one band per
+  color level of Grafana's radial gradient instead of 8 flat rings, and a pie
+  of hundreds of slices stays under the SVG size cap.
+- Time series render faster when a series has samples outside the range, and
+  re-rendered time columns are no longer kept in memory.
+- A dashboard no longer keeps the null-filled copy of every time series it
+  drew (Grafana inserts nulls at gaps and at the range's ends): only the few
+  panels a redraw reuses keep theirs. A dashboard of 60 panels of 50 series
+  x 1000 points held twice its data, 290 MiB with its raw answers, over the
+  plugin's 256 MiB heap; it holds 195 MiB again, as 0.5.0 did.
+- Prometheus query variables whose query is a series selector or any other
+  expression (`up{job=~"$jobs"}` with a regex picking the instance) resolve
+  as Grafana's classic query does, from the series it matches; they were
+  unsupported and left every panel using them without data.
+  `label_names(metric)` lists the label names of the matching metrics,
+  `metrics(regex)` filters as the Grafana version does, `$__interval` in a
+  variable query is the datasource's scrape interval, and the empty forms
+  (`label_values()`, ...) answer no values instead of an error.
+- Loki query variables resolve: the query editor's label names and label
+  values (with a stream selector) and the legacy `label_values(...)` and
+  `label_names()` strings, as Grafana's Loki datasource lists them.
+- A query variable whose datasource is given by name (`"Loki"`) asks that
+  datasource instead of a uid of the same text.
+- Loki queries keep a plain variable value as written (Grafana 11.6 and later
+  no longer double its backslashes) and no longer escape quotes in
+  multi-value variables.
+- A text panel saved with a datasource that does not resolve draws natively
+  instead of going to the image renderer: panels that run no queries ignore
+  their datasource, as in Grafana.
+- Transformations saved without some options take Grafana's defaults: an
+  empty "Add field from calculation" sums each row into `Total` (was `math`;
+  Loki metrics dashboard 17781), an empty reduce takes Max.
+- A query that returns no series reaches the panel's transformations as
+  Grafana's empty frame, so a stat that adds a calculated field to it shows a
+  blank value, as Grafana does, instead of a large "No data".
+- Queries saved without a refId get A, B, ... on load, as Grafana's panel
+  model gives them: the node-exporter mixin's Disk Space Usage table (two
+  table-format queries grouped by `Value #A` and `Value #B`) showed
+  "No data".
+
 ## [0.6.0] - 2026-11-10
 
 ### Added
@@ -475,7 +625,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/contrafy/tern-grafana/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...v0.4.0

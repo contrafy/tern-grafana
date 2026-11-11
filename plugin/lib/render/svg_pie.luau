@@ -5,10 +5,11 @@
 -- thick, 0.005 rad padding between slices, each slice in its color's
 -- radial gradient (getGradientColorFrom at the inner radius to
 -- getGradientColorTo at the outer one, per theme: Tern's SVG has no
--- radialGradient, so RINGS concentric bands sample it, the dark and light
--- theme's bands each shown only in their theme, filled with the exact
--- sampled colors), and labels (name, value, percent lines) at the middle of
--- the ring on slices of at least 0.3 rad.
+-- radialGradient, so concentric bands sample it, one per 8-bit color step
+-- and at most one per px of ring, the dark and light theme's bands each
+-- shown only in their theme, filled with the exact sampled colors), and
+-- labels (name, value, percent lines) at the middle of the ring on slices of
+-- at least 0.3 rad.
 -- The SVG is as wide as the panel gives it, the pie centered, so labels
 -- running past the pie stay visible as in Grafana (overflow: visible).
 -- A slice without a color is flat in its classes (palette tg-s<n>, exact
@@ -39,7 +40,10 @@ export type Options = {
 	name_label: boolean?,
 }
 
-M.RINGS = 8
+-- Bytes all gradient bands may take (a band is about BAND_BYTES): pies with
+-- many slices get fewer, coarser bands instead of passing the SVG cap.
+M.BAND_BUDGET = 128 * 1024
+M.BAND_BYTES = 132
 
 M.MARGIN = 16
 M.PAD = 0.005
@@ -131,13 +135,20 @@ function M.render(slices: { Slice }, opts: Options): string
 		return Kit.finish(out, "svg_pie")
 	end
 	-- Each color's gradient bands per theme.
+	local colored = 0
+	for _, s in slices do
+		if s.color and s.value > 0 and s.value == s.value then
+			colored += 1
+		end
+	end
+	local maxBands = math.min(math.ceil(l.outer - l.inner), M.BAND_BUDGET / (math.max(colored, 1) * 2 * M.BAND_BYTES))
 	local rings: { [string]: { dark: { string }, light: { string } } } = {}
 	for _, s in slices do
 		local color = s.color
 		if color and rings[color] == nil then
 			rings[color] = {
-				dark = TsGradient.pieRings(color, "dark", M.RINGS),
-				light = TsGradient.pieRings(color, "light", M.RINGS),
+				dark = TsGradient.pieRings(color, "dark", maxBands),
+				light = TsGradient.pieRings(color, "light", maxBands),
 			}
 		end
 	end
@@ -165,9 +176,10 @@ function M.render(slices: { Slice }, opts: Options): string
 			-- overlap without seams.
 			for _, theme in { "dark", "light" } do
 				local fills = if theme == "dark" then bands.dark else bands.light
-				for i = M.RINGS, 1, -1 do
+				local n = #fills
+				for i = n, 1, -1 do
 					local ring: Layout =
-						{ cx = l.cx, cy = l.cy, inner = l.inner, outer = l.inner + (l.outer - l.inner) * i / M.RINGS }
+						{ cx = l.cx, cy = l.cy, inner = l.inner, outer = l.inner + (l.outer - l.inner) * i / n }
 					table.insert(
 						out,
 						fmt('<path class="tg-bar tgv-%s" fill="%s" d="%s"/>', theme, fills[i], arcPath(ring, p0, p1))

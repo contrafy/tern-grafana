@@ -342,15 +342,52 @@ function M.pngSpec(s: State, inst: Repeat.Instance): RenderPng.Spec?
 	}
 end
 
+-- A Tern cell's width in px at the default font (docs/sdk-capability-matrix:
+-- a 47-col block was 372.5 px wide).
+M.CELL_PX = 7.9
+
+-- The dashboard width native panels are laid out for: the block's width
+-- (env.cols cells, updated on every resize), as Grafana lays its grid out
+-- over the browser window. Tern images never scale up and card heights
+-- are fixed: an SVG designed wider than its card scales down and leaves
+-- the card's bottom empty. A block that never got Tern's resize notice
+-- still reports the initial 80x24 cells (Tern 0.9.16): unknown or that
+-- size designs for Grafana's typical desktop width.
+M.MIN_DESIGN_WIDTH = 320
+
+function M.designWidth(env: Env): number
+	local cols, rows = env.cols, env.rows
+	if cols == nil or cols <= 0 or (cols == 80 and rows == 24) then
+		return RenderPng.DESIGN_WIDTH
+	end
+	return math.max(M.MIN_DESIGN_WIDTH, math.floor(cols * M.CELL_PX))
+end
+
+-- Grafana's grid keeps its 24 columns down to the md breakpoint (theme.breakpoints.values.md);
+-- a narrower dashboard stacks every panel at the full width.
+M.STACK_BELOW_PX = 769
+
+-- The panel's width in px as laid out now, the container width Grafana's
+-- SceneQueryRunner takes maxDataPoints from: react-grid-layout gives a
+-- w-column panel w/24 x (W + m) - m of a W px grid with m px margins (as
+-- the view's cards get); shown alone or stacked, the whole width.
+function M.panelWidth(s: State, inst: Repeat.Instance, env: Env): number
+	local design = M.designWidth(env)
+	local full = ((s.solo ~= nil or s.expanded) and s.focus == inst.key) or design < M.STACK_BELOW_PX
+	local w = if full then 24 else inst.panel.grid.w
+	return math.floor(w / 24 * (design + RenderPng.MARGIN_PX) - RenderPng.MARGIN_PX + 0.5)
+end
+
 -- `range`: the panel's own range (panel_time), else the dashboard's.
 -- `resolved`: Queries.resolve answers of this panel instance (see
--- Queries.Context).
+-- Queries.Context). `width_px`: the panel's width (Queries.Context).
 function M.queryContext(
 	s: State,
 	scope: Interpolate.Scope,
 	env: Env,
 	range: Range.Range?,
-	resolved: Queries.Resolved?
+	resolved: Queries.Resolved?,
+	width_px: number?
 ): Queries.Context
 	local r = range or s.range or { from_ms = env.now_ms - 3600000, to_ms = env.now_ms }
 	local d = s.dashboard
@@ -358,7 +395,7 @@ function M.queryContext(
 		scope = scope,
 		from_ms = r.from_ms,
 		to_ms = r.to_ms,
-		max_points = s.cfg.max_points,
+		width_px = width_px,
 		datasources = s.settings.datasources,
 		dashboard_uid = if d then d.uid else nil,
 		dashboard_title = if d then d.title else nil,

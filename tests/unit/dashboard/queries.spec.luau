@@ -29,7 +29,7 @@ for _, version in S.VERSIONS do
 			scope = scope or {},
 			from_ms = S.NOW_MS - (span or HOUR),
 			to_ms = S.NOW_MS,
-			max_points = 600,
+			width_px = 600,
 			datasources = datasources,
 			dashboard_uid = "tern-panels",
 			dashboard_title = "Tern Panels",
@@ -57,9 +57,39 @@ for _, version in S.VERSIONS do
 			expect(q.expr).toBe("sum by (mode) (rate(node_cpu_seconds_total[$__rate_interval]))")
 			expect(q.legendFormat).toBe("{{mode}}")
 			expect(q.range).toBe(true)
-			-- 1 h over 600 points = 6 s, rounded by Grafana's table to 5 s.
-			expect(q.intervalMs).toBe(5000)
+			-- 1 h over a 600 px panel = 6 s, rounded by Grafana's table to 5 s,
+			-- raised to prom3's scrape interval (jsonData.timeInterval 10s).
+			expect(q.intervalMs).toBe(10000)
 			expect(q.maxDataPoints).toBe(600)
+		end)
+
+		-- SceneQueryRunner: the panel's maxDataPoints, else its width in px,
+		-- else 500; the low limit is the panel's min interval, else its
+		-- datasource's (Prometheus: timeInterval, else 15s; -- Mixed --: none).
+		it("asks for as many points as the panel is wide, at least the datasource's interval", function()
+			local raw = Tbl.copy(assert(Model.findPanel(panels, 2)).json)
+			local wide = ctx(nil, 24 * HOUR)
+			wide.width_px = 1199.6
+			local q = assert(Queries.build(raw, wide, env)).queries[1]
+			-- 24 h / 1200 = 72 s, Grafana's 1m.
+			expect(q.maxDataPoints).toBe(1200)
+			expect(q.intervalMs).toBe(60000)
+			local unknown = ctx()
+			unknown.width_px = nil
+			expect(assert(Queries.build(raw, unknown, env)).queries[1].maxDataPoints).toBe(Queries.DEFAULT_MAX_POINTS)
+			raw.maxDataPoints = 50
+			expect(assert(Queries.build(raw, wide, env)).queries[1].maxDataPoints).toBe(50)
+			raw.maxDataPoints = nil
+			raw.interval = "2m"
+			expect(assert(Queries.build(raw, wide, env)).queries[1].intervalMs).toBe(120000)
+			raw.interval = nil
+			raw.datasource = { uid = Queries.MIXED }
+			raw.targets = { Tbl.copy(raw.targets[1]) }
+			raw.targets[1].datasource = { uid = "prom3", type = "prometheus" }
+			local fine = ctx(nil, 5 * 60000)
+			fine.width_px = 600
+			-- 5 m / 600 = 0.5 s: no datasource interval raises it on a mixed panel.
+			expect(assert(Queries.build(raw, fine, env)).queries[1].intervalMs).toBe(500)
 		end)
 
 		it("puts every target of a panel in one body", function()
@@ -130,10 +160,13 @@ for _, version in S.VERSIONS do
 			)
 		end)
 
-		it("uses an interval variable as the target's min interval", function()
+		-- A target's own min interval is not the request's: Grafana sends the
+		-- panel's intervalMs and the target's `interval`, from which its
+		-- backend derives the step and `$__interval`.
+		it("sends the target's min interval beside the panel's intervalMs", function()
 			local pq = assert(Queries.build(assert(Model.findPanel(d, 2)).json, ctx(scope, 1800000), env))
 			expect(pq.queries[1].interval).toBe("1m")
-			expect(pq.queries[1].intervalMs).toBe(60000)
+			expect(pq.queries[1].intervalMs).toBe(10000)
 			expect(pq.queries[1].expr).toBe(
 				'sum by (handler) (rate(prometheus_http_requests_total{handler=~"/api/v1/.*"}[$__rate_interval]))'
 			)
@@ -202,7 +235,7 @@ for _, version in S.VERSIONS do
 		local function sqlCtx(maxPoints: number): Queries.Context
 			local c = ctx(scope, HOUR)
 			c.datasources = sqlDatasources
-			c.max_points = maxPoints
+			c.width_px = maxPoints
 			return c
 		end
 
@@ -296,7 +329,7 @@ describe("queries for other datasource plugins", function()
 		one = { values = { "x" }, multi = true, single = true },
 	}
 	local function c(): Queries.Context
-		return { scope = scope, from_ms = S.NOW_MS - HOUR, to_ms = S.NOW_MS, max_points = 720, datasources = catalog }
+		return { scope = scope, from_ms = S.NOW_MS - HOUR, to_ms = S.NOW_MS, width_px = 720, datasources = catalog }
 	end
 	local function panelOf(uid: string, target: { [string]: any }, typ: string?): { [string]: any }
 		local tg = Tbl.copy(target)
@@ -414,13 +447,14 @@ describe("queries for other datasource plugins", function()
 	it("quotes SQL variables the way each SQL datasource does", function()
 		local sql = "SELECT * FROM t WHERE team = '$team' AND host IN ($hosts) AND one = $one"
 		local pq = assert(Queries.build(panelOf("my", { rawSql = sql, format = "table" }), c(), env))
-		-- MySQL (SqlDatasource): a single value of a multi-value variable is quoted.
+		-- MySQL (SqlDatasource): a single value of a multi-value variable is
+		-- quoted; the interval is at least the datasource's (default 1m).
 		expect(pq.queries[1]).toEqual({
 			refId = "A",
 			datasource = { uid = "my", type = "mysql" },
 			rawSql = "SELECT * FROM t WHERE team = 'o''neil' AND host IN ('a','b') AND one = 'x'",
 			format = "table",
-			intervalMs = 5000,
+			intervalMs = 60000,
 			maxDataPoints = 720,
 		})
 		expect(Interpolate.replace("one = $one", scope, { format = Interpolate.postgres })).toBe("one = x")
@@ -435,6 +469,36 @@ describe("queries for other datasource plugins", function()
 		-- Only the triggers chain starts (apiinfo.version); no /api/ds/query for the hidden metrics target.
 		expect(#jobs[1].first).toBe(1)
 		expect(jobs[1].first[1].request.path).toBe("/api/datasources/uid/zbx/resources/zabbix-api")
+	end)
+end)
+
+-- Grafana's frontend reads its OpenFeature flags (table.autoColumnWidths
+-- sizes table columns to content) from the server's OFREP endpoint, not
+-- from featureToggles: Tern must ask the server the same way and keep a
+-- flag off when the server has no answer, as the frontend's default does.
+describe("OpenFeature flags", function()
+	local env = S.env()
+	local FLAG = "table.autoColumnWidths"
+
+	it("asks Grafana 13 for a flag with the frontend's context", function()
+		local req = Queries.flagRequest(S.response(S.grafana("13.3.1", "frontend_settings.json")), FLAG, env) :: any
+		expect(req.method).toBe("POST")
+		expect(req.path).toBe("/ofrep/v1/evaluate/flags/" .. FLAG)
+		local recorded = json.decode(Fixtures.read("grafana/13.3.1/ofrep_table_auto_column_widths.request.json"))
+		expect(json.decode(req.body)).toEqual(recorded)
+	end)
+
+	it("does not ask Grafana 12 and 11, which have no such flags", function()
+		for _, version in { "12.4.12", "11.6.16" } do
+			expect(Queries.flagRequest(S.response(S.grafana(version, "frontend_settings.json")), FLAG, env)).toBeNil()
+		end
+	end)
+
+	it("reads the evaluation, and an error or a page as off", function()
+		expect(Queries.flagOn(S.response(S.grafana("13.3.1", "ofrep_table_auto_column_widths.json")), env)).toBe(true)
+		expect(Queries.flagOn(S.body(200, '{"key":"table.autoColumnWidths","value":false}'), env)).toBe(false)
+		expect(Queries.flagOn(S.body(500, "failed to evaluate flag"), env)).toBe(false)
+		expect(Queries.flagOn(S.body(200, "<!DOCTYPE html><html></html>"), env)).toBe(false)
 	end)
 end)
 

@@ -10,7 +10,9 @@ BIN="$TOOLS/bin"
 STAMPS="$TOOLS/stamps"
 TYPES="$TOOLS/types"
 
-LUAU_VERSION=0.741
+# Tern's own Luau (0.9.16 embeds luau0-src 0.22.0+luau740): `make test` runs the specs under its native code
+# generator too, so they meet the same compiler bugs Tern does. Move this pin with Tern's.
+LUAU_VERSION=0.740
 LUAU_LSP_VERSION=1.70.1
 STYLUA_VERSION=2.5.2
 SELENE_VERSION=0.32.0
@@ -18,8 +20,8 @@ OXIPNG_VERSION=10.2.1
 # pngquant.org publishes prebuilt binaries only under unversioned URLs; the
 # pinned checksum makes bootstrap fail closed if upstream replaces them.
 PNGQUANT_VERSION=3.0.3
-TERN_SDK_COMMIT=0479f7048274aedc9f3496ca60675b754953e5a4
-TERN_TYPES_SHA256=50ac8b5dcc41f6e853730d05db5525566992d765e5d3a249ce5e0a5ec4f7749e
+TERN_SDK_COMMIT=ba85dce9974c00321eea0bd0b644219c37e21b59
+TERN_TYPES_SHA256=2a4d536563f5fd6670d124dd892f6086db4adf5c46ad1db3bd6b239caade32c7
 
 die() {
 	printf 'bootstrap: %s\n' "$*" >&2
@@ -30,7 +32,7 @@ host="$(uname -s)-$(uname -m)"
 case "$host" in
 Darwin-arm64)
 	LUAU_ASSET=luau-macos.zip
-	LUAU_SHA256=839cc1de39b0f765fbaea8e89421c12acfed6bd3d8d2cc2a2d3fc64bdde32b0f
+	LUAU_SHA256=8414763743116cbc2533ee7c932d41ba66bd25ea7c2353bc7eed2934b60b6715
 	LUAU_LSP_ASSET=luau-lsp-macos.zip
 	LUAU_LSP_SHA256=7d3936e8dec6dc77547abd061d2e950da392562a5f94858b880f23dba50d84cd
 	STYLUA_ASSET=stylua-macos-aarch64.zip
@@ -44,7 +46,7 @@ Darwin-arm64)
 	;;
 Linux-x86_64)
 	LUAU_ASSET=luau-ubuntu.zip
-	LUAU_SHA256=134dc762ad26232af83e43f98dec03ff6030dd3a4452f9408b9d50ccea025503
+	LUAU_SHA256=7d4035db01816f977f6e4c42e3d5e8ef4235d95e9afe63a3c38905b42dde60f2
 	LUAU_LSP_ASSET=luau-lsp-linux-x86_64.zip
 	LUAU_LSP_SHA256=1a2ea1ae4f98f8946cefd970a4b54853e11ab4775e6932faa7f60cf920346567
 	STYLUA_ASSET=stylua-linux-x86_64.zip

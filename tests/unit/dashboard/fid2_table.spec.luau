@@ -27,6 +27,8 @@ local function fixtureFor(version: string, tag: string): string?
 		return S.grafana(version, "dashboard_tern_fid2_table.json")
 	elseif string.match(tag, "^fs/") then
 		return S.grafana(version, "frontend_settings.json")
+	elseif string.match(tag, "^flag/") then
+		return S.grafana(version, "ofrep_table_auto_column_widths.json")
 	elseif string.match(tag, "^user/") then
 		return S.grafana(version, "user.json")
 	end

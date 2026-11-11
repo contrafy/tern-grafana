@@ -414,6 +414,38 @@ local TRANSFORMERS: { [string]: Transformer } = {
 	seriesToRows = SeriesToRows,
 }
 
+-- Each transformer's `defaultOptions`, under the panel's own options
+-- (transformDataFrame.ts getOperator: `{ ...defaultOptions, ...config.options }`).
+-- Empty-collection defaults read the same as absent ones and are left out.
+local DEFAULTS: { [string]: { [string]: any } } = {
+	calculateField = { mode = "reduceRow", reduce = { reducer = "sum" } },
+	reduce = { reducers = { "max" } },
+	extractFields = { delimiter = "," },
+	filterByValue = { type = "include", match = "any" },
+	formatTime = { timeField = "", outputFormat = "", useTimezone = true },
+	groupingToMatrix = { columnField = "Time", rowField = "Time", valueField = "Value" },
+	joinByField = { mode = "outer" },
+	seriesToColumns = { mode = "outer" },
+	limit = { limitField = 10 },
+	renameByRegex = { regex = "(.*)", renamePattern = "$1" },
+	configFromData = { configRefId = "config" },
+}
+
+local function withDefaults(env: Env, id: string, raw: any): any
+	local defaults = DEFAULTS[id]
+	if defaults == nil then
+		return raw
+	end
+	local merged = table.clone(defaults)
+	local own = Json.tbl(env, raw)
+	if own then
+		for k, v in own do
+			merged[k] = v
+		end
+	end
+	return merged
+end
+
 -- The first transformation Tern cannot apply, as a reason, or nil.
 function M.unsupported(panel: any, env: Env): string?
 	local ctx: Ctx = { env = env }
@@ -430,7 +462,7 @@ function M.unsupported(panel: any, env: Env): string?
 		if filter and Json.str(env, filter.id) ~= "byRefId" and Shared.truthy(filter.options) then
 			return string.format("transformation %s with a %s filter is not supported", id, tostring(filter.id))
 		end
-		local why = tr.unsupported(Json.path(env, t, "options"), ctx)
+		local why = tr.unsupported(withDefaults(env, id, Json.path(env, t, "options")), ctx)
 		if why then
 			return string.format("transformation %s %s is not supported", id, why)
 		end
@@ -520,7 +552,7 @@ function M.prepare(panel: any, frames: { Frame }, env: Env, interpolate: ((strin
 			continue
 		end
 		ran = true
-		local raw = Json.path(env, t, "options")
+		local raw = withDefaults(env, id :: string, Json.path(env, t, "options"))
 		local options: any = if interpolate then interpolated(raw, interpolate, env) else raw
 		local staticRef = Json.str(env, Json.path(env, t, "refId"))
 		staticRef = if staticRef then string.match(staticRef, "^%s*(.-)%s*$") else nil

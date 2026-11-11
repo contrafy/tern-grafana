@@ -295,10 +295,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if #rows == 0 then
 		return ui.muted("No logs", { key = opts.key })
 	end
-	local showTime = Json.bool(env, options.showTime) ~= false
+	-- Both default off (logs/module.tsx).
+	local showTime = Json.bool(env, options.showTime) == true
 	local showLabels = if opts.show_labels ~= nil then opts.show_labels else Json.bool(env, options.showLabels) == true
 	local showCommon = Json.bool(env, options.showCommonLabels) == true
-	local wrap = Json.bool(env, options.wrapLogMessage) ~= false
+	local wrap = Json.bool(env, options.wrapLogMessage) == true
 	local common = if showLabels and not showCommon then M.commonLabels(rows) else {}
 	local nodes: { Node } = {}
 	for i = 1, math.min(#rows, M.MAX_ROWS) do

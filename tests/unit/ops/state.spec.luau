@@ -155,7 +155,7 @@ describe("loading tabs", function()
 
 	it("shows targets of both Prometheus versions and through Grafana's proxy", function()
 		for _, dir in
-			{ "prometheus/2.53.5", "prometheus/3.15.0", "grafana/11.6.16", "grafana/12.4.12", "grafana/13.3.0" }
+			{ "prometheus/2.53.5", "prometheus/3.15.0", "grafana/11.6.16", "grafana/12.4.12", "grafana/13.3.1" }
 		do
 			local ctx = if string.find(dir, "^grafana") then "g11" else "lab"
 			local s, effects = State.init({ link({ context = ctx }) }, nil, ENV)

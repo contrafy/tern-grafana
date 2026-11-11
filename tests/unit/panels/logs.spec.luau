@@ -16,7 +16,7 @@ local env = S.env
 local LEVELS = {
 	["11.6.16"] = { info = 26, debug = 11, warning = 11, error = 2 },
 	["12.4.12"] = { info = 27, debug = 10, warning = 10, error = 3 },
-	["13.3.0"] = { info = 27, debug = 10, warning = 10, error = 3 },
+	["13.3.1"] = { info = 26, debug = 11, warning = 11, error = 2 },
 }
 
 -- The same rows read from the lines alone: the access-log lines
@@ -25,7 +25,7 @@ local LEVELS = {
 local FROM_LINES = {
 	["11.6.16"] = { info = 13, unknown = 13, debug = 11, warning = 11, error = 2 },
 	["12.4.12"] = { info = 13, unknown = 14, debug = 10, warning = 10, error = 3 },
-	["13.3.0"] = { info = 13, unknown = 14, debug = 10, warning = 10, error = 3 },
+	["13.3.1"] = { info = 13, unknown = 13, debug = 11, warning = 11, error = 2 },
 }
 
 local function tally(rows: { Logs.Row }): { [string]: number }
@@ -105,6 +105,19 @@ for _, version in S.VERSIONS do
 			panel.options.showCommonLabels = true
 			local all: any = Logs.view(panel, S.frames(version, "loki_logs"), env, { key = "l", show_labels = true })
 			expect(string.find(S.text(all.c[1]), "job=loggen", 1, true) ~= nil).toBe(true)
+		end)
+
+		-- logs/module.tsx: showTime and wrapLogMessage default to false, so a
+		-- logs panel saved without them (tern-pub-vars) shows neither.
+		it("shows no time and truncates lines when the options are unset", function()
+			local panel = S.clone(S.panel(version, 12))
+			panel.options.showTime = nil
+			panel.options.wrapLogMessage = nil
+			local node: any = Logs.view(panel, S.frames(version, "loki_logs"), env, { key = "l" })
+			local first = node.c[1]
+			expect(first.p.wrap).toBeNil()
+			expect(first.p.truncate).toBe("end")
+			expect(string.match(first.p.spans[1].t, "^%d%d%d%d%-") == nil).toBe(true)
 		end)
 	end)
 end

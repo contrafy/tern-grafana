@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"grafana-testdata-datasource","uid":"testdata"},"scenarioId":"csv_content","csvContent":"host,status,count\nnetauth1.wirestar.example,Average,3\nzabbix server,Warning,12\ndhcp2.wirestar.example,Average,7","intervalMs":300000,"maxDataPoints":1440}],"from":"1793809311000","to":"1794414111000"}

@@ -135,22 +135,58 @@ local function legendView(
 		table.insert(rows, { class = d.class, name = item.name, values = values })
 	end
 	local children: { Node } = {}
+	local heads = Charts.calcHeads(calcs)
 	if mode == "table" then
-		local heads: { string } = table.create(#calcs)
-		for i, c in calcs do
-			heads[i] = Reduce.name(c)
-		end
 		table.insert(children, Legend.rowsNode(key .. ".t", rows, heads, "table"))
 	else
-		table.insert(children, Legend.rowsNode(key .. ".l", rows, {}, "list"))
+		table.insert(children, Legend.rowsNode(key .. ".l", rows, heads, "list"))
 	end
 	if dropped > 0 then
 		table.insert(
 			children,
-			ui.muted(string.format("%d more series not shown (chart limit %d)", dropped, #drawn), { key = "dropped" })
+			ui.muted(string.format("%d more series not shown (chart size limit)", dropped), { key = "dropped" })
 		)
 	end
 	return { k = "col", p = { key = key, gap = "xs" }, c = children }
+end
+
+-- Grafana's px around a time series plot: PanelChrome's 1 px border, the
+-- 32 px header of a titled panel and 8 px padding; VizLayout's bottom
+-- legend (list lines 23 px apart plus 7, a table's 26 px head and 23 px
+-- rows) at most 35% of the viz; the x axis (tick 4 + gap 5 + 12 px font)
+-- and uPlot's top padding (a third of its 50 px default axis size).
+-- Measured on Grafana 12.4 renders: a titled 7-row panel with a one-line
+-- legend plots 140 px.
+M.GRAFANA_PX = table.freeze({
+	border = 1,
+	header = 32,
+	padding = 8,
+	legend_line = 23,
+	legend_pad = 7,
+	table_head = 26,
+	table_row = 23,
+	x_axis = 21,
+	top = 17,
+})
+
+-- The plot height Grafana gives a time series panel of w x h px whose
+-- legend shows `rows` (the y tick density follows it).
+function M.grafanaPlotHeight(w: number, h: number, titled: boolean, rows: { Legend.Row }, legend: Charts.Legend): number
+	local g = M.GRAFANA_PX
+	local viz = h - 2 * g.border - (if titled then g.header else 0) - 2 * g.padding
+	local legendPx = 0
+	if legend.show and #rows > 0 and legend.placement == "bottom" then
+		if legend.mode == "table" then
+			legendPx = g.table_head + #rows * g.table_row
+		else
+			local width = w - 2 * g.border - 2 * g.padding
+			local px = Legend.height(rows, "list", width, Charts.calcHeads(legend.calcs))
+			local lines = math.floor((px + Legend.LINE_GAP_PX) / (Legend.LINE_PX + Legend.LINE_GAP_PX) + 0.5)
+			legendPx = lines * g.legend_line + g.legend_pad
+		end
+		legendPx = math.min(legendPx, viz * Charts.LEGEND_MAX)
+	end
+	return math.max(viz - legendPx - g.x_axis - g.top, 1)
 end
 
 -- The SVG render options a panel maps to (exposed for specs and the
@@ -209,6 +245,13 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 	local cfg = item.config
 	local custom = cfg.custom
 	local stackMode = Json.str(env, Json.path(env, custom.stacking, "mode"))
+	-- getStackingGroups keys the group by its template string: an override
+	-- {group: false} stacks the series alone, in group "false".
+	local rawGroup = Json.path(env, custom.stacking, "group")
+	local stackGroup = if type(rawGroup) == "string"
+		then rawGroup
+		elseif type(rawGroup) == "boolean" or type(rawGroup) == "number" then tostring(rawGroup)
+		else nil
 	local style: SvgTimeseries.ThresholdStyle? =
 		THRESHOLD_STYLES[Json.str(env, Json.path(env, custom.thresholdsStyle, "mode")) or "off"]
 	local dist = Json.tbl(env, custom.scaleDistribution)
@@ -256,7 +299,7 @@ function M.seriesStyle(item: FieldConfig.Item, env: Env): SvgTimeseries.SeriesSt
 			else nil,
 		transform = if transform == "negative-Y" or transform == "constant" then transform else nil,
 		stack = if stackMode == "normal" or stackMode == "percent" then stackMode else "none",
-		stack_group = Json.str(env, Json.path(env, custom.stacking, "group")),
+		stack_group = stackGroup,
 		thresholds = if style then cfg.thresholds else nil,
 		threshold_style = style or "off",
 		hide_legend = Json.bool(env, hideFrom.legend) == true,
@@ -310,7 +353,7 @@ local function gradientStops(
 	if st.gradient == "hue" then
 		local base: string
 		if mode == "palette-classic" or mode == "palette-classic-by-name" then
-			base = TsGradient.PALETTE_HEX[(item.series_index - 1) % #TsGradient.PALETTE_HEX + 1]
+			base = TsGradient.paletteHex(item.series_index)
 		elseif mode == "fixed" or mode == "shades" then
 			base = cfg.fixed_color or ""
 		else
@@ -386,26 +429,36 @@ local function nullThreshold(fields: { FieldConfig.Item }, interval: number?, en
 	return if threshold and threshold > 0 then threshold else nil
 end
 
--- Inserted nulls by time column: a cursor move redraws with the same
--- frames, and the render memo compares value columns by identity.
+-- Inserted nulls by time column, kept with the render memo of the panel
+-- (below): a cursor move redraws with the same frames, and the render memo
+-- compares value columns by identity. Only the memo's few panels keep
+-- theirs: a filled copy of every series of every panel would double a
+-- dashboard's data. `times` is nil when nothing was inserted.
 type Nulled = {
 	threshold: number,
 	from: number?,
 	to: number?,
 	columns: { { any } },
-	times: { number },
+	times: { number }?,
 	filled: { { any } },
 }
-local nulled: { [{ number }]: Nulled } = setmetatable({} :: any, { __mode = "k" })
+type NulledMap = { [{ number }]: Nulled }
 
-local function insertNulls(frame: Frame, threshold: number, from: number?, to: number?)
+local function insertNulls(
+	frame: Frame,
+	threshold: number,
+	from: number?,
+	to: number?,
+	prev: NulledMap?,
+	into: NulledMap
+)
 	local fields = frame.fields
 	local times = fields[1].values :: { number }
 	local columns: { { any } } = table.create(#fields - 1)
 	for i = 2, #fields do
 		columns[i - 1] = fields[i].values
 	end
-	local hit = nulled[times]
+	local hit = if prev then prev[times] else nil
 	local fresh = hit ~= nil and hit.threshold == threshold and hit.from == from and hit.to == to
 	if hit and fresh then
 		for i, c in columns do
@@ -417,16 +470,24 @@ local function insertNulls(frame: Frame, threshold: number, from: number?, to: n
 	end
 	if hit == nil or not fresh then
 		local t, filled = TsData.insertNulls(times, columns, threshold, from, to)
-		hit = { threshold = threshold, from = from, to = to, columns = columns, times = t, filled = filled }
-		nulled[times] = hit
+		hit = {
+			threshold = threshold,
+			from = from,
+			to = to,
+			columns = columns,
+			times = if t == times then nil else t,
+			filled = filled,
+		}
 	end
 	local h = hit :: Nulled
-	if h.times == times then
+	into[times] = h
+	local inserted = h.times
+	if inserted == nil then
 		return
 	end
 	for i, f in fields do
 		local copy = Tbl.copy(f)
-		copy.values = if i == 1 then h.times else h.filled[i - 1]
+		copy.values = if i == 1 then inserted else h.filled[i - 1]
 		fields[i] = copy
 	end
 end
@@ -436,7 +497,12 @@ end
 -- pure function of (frames, options), so equal arguments reuse its result.
 -- Value columns compare by identity (frames are never mutated), everything
 -- else structurally. A handful of keys: one expanded panel is the case.
-type RenderMemo = { baked: { Frame }, render: SvgTimeseries.Options, result: SvgTimeseries.Result }
+type RenderMemo = {
+	baked: { Frame },
+	render: SvgTimeseries.Options,
+	result: SvgTimeseries.Result,
+	nulled: NulledMap,
+}
 
 local renders: { [string]: RenderMemo } = {}
 local renderCount = 0
@@ -462,9 +528,15 @@ local function same(a: any, b: any, key: any): boolean
 	return true
 end
 
-local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.Options): SvgTimeseries.Result
+local function renderMemo(
+	key: string,
+	baked: { Frame },
+	render: SvgTimeseries.Options,
+	nulled: NulledMap
+): SvgTimeseries.Result
 	local hit = renders[key]
 	if hit and same(hit.render, render, nil) and same(hit.baked, baked, nil) then
+		hit.nulled = nulled
 		return hit.result
 	end
 	local result = SvgTimeseries.render(baked, render)
@@ -475,7 +547,7 @@ local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.O
 		end
 		renderCount += 1
 	end
-	renders[key] = { baked = baked, render = render, result = result }
+	renders[key] = { baked = baked, render = render, result = result, nulled = nulled }
 	return result
 end
 
@@ -516,11 +588,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		table.insert((out :: Frame).fields, FieldConfig.bake(item))
 		table.insert(visible, item)
 	end
+	local memo = renders[opts.key]
+	local nulled: NulledMap = {}
 	for src, out in byFrame do
 		local tf = out.fields[1]
 		local threshold = nullThreshold(frameItems[src], if tf.config then tf.config.interval else nil, env)
 		if threshold then
-			insertNulls(out, threshold, opts.from_ms, opts.to_ms)
+			insertNulls(out, threshold, opts.from_ms, opts.to_ms, if memo then memo.nulled else nil, nulled)
 		end
 	end
 	if #visible == 0 then
@@ -569,26 +643,50 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	-- In a height-capped card the chart leaves a bottom legend room; calc
 	-- values are estimated at 7 characters.
 	local legendLook = Charts.legendOptions(panel, env)
-	if opts.card_height and legendLook.show then
+	local legendRows: { Legend.Row } = {}
+	if legendLook.show then
 		local guess = table.create(#legendLook.calcs, "0000.00")
-		local rows: { Legend.Row } = {}
 		for _, item in visible do
 			if not Charts.hiddenFromLegend(item) then
-				table.insert(rows, { class = "", name = item.name, values = guess })
+				table.insert(legendRows, { class = "", name = item.name, values = guess })
 			end
 		end
-		local rh, rw = render.height, render.width
-		assert(rh and rw, "timeseries: render size unset")
-		render.height = Charts.chartHeight(opts, rh, rw, rows, legendLook)
 	end
-	local result = renderMemo(opts.key, baked, render)
+	local rh, rw = render.height, render.width
+	assert(rh and rw, "timeseries: render size unset")
+	if opts.card_height and legendLook.show then
+		render.height = Charts.chartHeight(opts, rh, rw, legendRows, legendLook)
+	end
+	-- The x axis follows the time field's own config (TimeSeries/utils.ts
+	-- xField axisPlacement): defaults hiding every axis hide it too.
+	for _, item in items do
+		if item.field.type == "time" then
+			render.x_axis_hidden = Json.str(env, item.config.custom.axisPlacement) == "hidden"
+			break
+		end
+	end
+	if opts.size then
+		local titled = (Json.str(env, Json.path(env, panel, "title")) or "") ~= ""
+		render.tick_height = M.grafanaPlotHeight(opts.size.w, opts.size.h, titled, legendRows, legendLook)
+			+ (if render.x_axis_hidden then M.GRAFANA_PX.x_axis else 0)
+	end
+	local result = renderMemo(opts.key, baked, render, nulled)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
 		drawn[i] = { item = visible[i], class = s.class }
 	end
 	local legendOpts = Json.obj(env, Json.path(env, panel, "options", "legend"))
 	local mode = Json.str(env, legendOpts.displayMode) or "list"
-	local showLegend = Json.bool(env, legendOpts.showLegend) ~= false and mode ~= "hidden"
+	-- TimeSeries.renderLegend: no legend unless a drawn series shows in it
+	-- (hasVisibleLegendSeries), as when hideZero/hideEmpty hide them all.
+	local legendSeries = false
+	for _, d in drawn do
+		if not Charts.hiddenFromLegend(d.item) then
+			legendSeries = true
+			break
+		end
+	end
+	local showLegend = Json.bool(env, legendOpts.showLegend) ~= false and mode ~= "hidden" and legendSeries
 	local title = Json.str(env, Json.path(env, panel, "title"))
 	local chart, assets = ChartView.view(result, {
 		key = opts.key,
@@ -606,6 +704,18 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		-- VizLayout: the legend beside the plot, from its top.
 		return { k = "row", p = { key = opts.key .. ".panel", gap = "sm", align = "start" }, c = { chart, legend } },
 			assets
+	end
+	if opts.card_height then
+		local cap = Legend.capClass(
+			legendRows,
+			legendLook.mode,
+			rw,
+			math.floor(rh * Charts.LEGEND_MAX) - Charts.LEGEND_GAP_PX,
+			Charts.calcHeads(legendLook.calcs)
+		)
+		if cap then
+			legend = { k = "el", p = { tag = "div", key = opts.key .. ".lgcap", class = cap }, c = { legend } }
+		end
 	end
 	return { k = "col", p = { key = opts.key .. ".panel", gap = "xs" }, c = { chart, legend } }, assets
 end

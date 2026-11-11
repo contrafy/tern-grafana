@@ -11,11 +11,17 @@
 -- (whatever the source's own rung: Grafana runs the source's queries for it)
 -- and, with `withTransforms`, Tern applies the source's transformations. A
 -- missing source panel is Grafana's own error, shown natively.
+--
+-- A panel that runs no queries (text, news, dashboard and alert lists: the
+-- plugins Grafana marks skipDataQuery) is never held back by the
+-- datasource or targets saved with it: Grafana creates no query runner
+-- for it (dashboard-scene createPanelDataProvider).
 
 local Env = require("../env")
 local Interpolate = require("./interpolate")
 local Model = require("./model")
 local Queries = require("./queries")
+local Registry = require("../panels/registry")
 local Transform = require("../panels/transform")
 
 type Env = Env.Env
@@ -92,6 +98,9 @@ function M.nativeBlocker(panel: Model.Panel, ctx: Context, env: Env): string?
 	local ok, reason = ctx.supports(panel.json, env)
 	if not ok then
 		return reason or string.format("%s panels are not drawn natively", panel.type)
+	end
+	if not Registry.queries(panel.json, env) then
+		return nil
 	end
 	return queryBlocker(panel, ctx, env, 0)
 end

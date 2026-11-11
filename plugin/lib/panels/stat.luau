@@ -4,7 +4,9 @@
 -- display value (lib/panels/values) with:
 -- - colorMode: value (the number in its color), background /
 --   background_solid (the tile in its color), none;
--- - graphMode area: a sparkline of the field under the value;
+-- - graphMode area: the field's sparkline (BigValueLayout renderChart) as an
+--   SVG line and fill behind the value, at the bottom of the tile, where
+--   Grafana's layout has a chart;
 -- - textMode: auto (value only when it is the panel's single value or
 --   when the panel has a title and no displayName, else value and name),
 --   value, value_and_name, name, none;
@@ -56,7 +58,10 @@ export type Tile = {
 	-- Background modes: the tile's fill classes (panels2.css tgp-stat-solid,
 	-- tgp-stat-grad) with color_class.
 	fill: string?,
-	spark: Node?,
+	spark: Common.Spark?,
+	-- The sparkline's color: BigValue's valueColor, as the value draws it
+	-- (an exact color class, else the tone's).
+	spark_class: string?,
 	-- Formatted percent change and its tone.
 	change: string?,
 	change_tone: string?,
@@ -69,14 +74,18 @@ export type Fit = {
 	change_px: number,
 	-- Title and value side by side (the wide layouts).
 	wide: boolean,
+	-- A wide tile too short for the name on a line of its own: name and
+	-- value stay on one row (panels2.css tgp-stat-row).
+	row: boolean?,
 	-- justifyMode center, or auto without a title.
 	center: boolean,
 	-- Lines a wrapped title may take in the height-capped card
 	-- (panels2.css tgp-stat-clamp<N>), nil when uncapped.
 	title_lines: number?,
-	-- The capped card has no room for the sparkline row under a line of
-	-- value: the tiles leave it out.
-	no_spark: boolean?,
+	-- The chart's design size in px (BigValueLayout chartWidth and
+	-- chartHeight), nil when the layout draws no chart.
+	chart_w: number?,
+	chart_h: number?,
 	-- The capped card is too short for the tile's vertical padding and a
 	-- line of value: the tile drops it (panels2.css tgp-stat-tight), as
 	-- Grafana's 2-row stat still draws its value.
@@ -114,7 +123,7 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 	local mode = textMode(panel, env, #values)
 	local filled = colorMode == "background" or colorMode == "background_solid"
 	local tiles: { Tile } = {}
-	for i, v in values do
+	for _, v in values do
 		local d = v.display
 		local text = FieldConfig.joined(d)
 		local cfg = if v.item then (v.item :: FieldConfig.Item).config else nil
@@ -141,12 +150,19 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			light = Thresholds.lightOf(d.color)
 		end
 		local tile: Tile = {
-			title = if mode == "value_and_name" then v.title else nil,
+			-- The no-values placeholder has no name (createNoValuesFieldDisplay).
+			title = if mode == "value_and_name" and v.title ~= "" then v.title else nil,
 			value = if mode == "name" then v.title elseif mode == "none" then "" else text,
 			tone = d.tone,
 			color_mode = colorMode,
 			color_class = colorClass,
 		}
+		local exactColor = colorClass ~= nil and ((cfg ~= nil and cfg.color_mode ~= "thresholds") or filled)
+		local token = Common.token(d.tone)
+		tile.spark_class = if exactColor
+			then colorClass
+			elseif token ~= "" then "tgp-fx " .. Common.toneClass(d.tone)
+			else colorClass or "tgp-fx tgp-neutral"
 		if filled and colorClass then
 			tile.ink = if d.color ~= "" then Thresholds.textOn(d.color, opts.theme) else "light"
 			if light then
@@ -158,15 +174,17 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			tile.exact = (v.item :: FieldConfig.Item).config.color_mode ~= "thresholds"
 		end
 		if v.spark and v.item then
-			local item = v.item :: FieldConfig.Item
-			tile.spark = Common.spark(
-				opts.key .. ".spark" .. i,
-				v.spark.values,
-				v.spark.times,
-				if colorMode == "none" then nil else d.tone,
-				item.config.min,
-				item.config.max
-			)
+			local field = (v.item :: FieldConfig.Item).config
+			local range = opts.time
+			tile.spark = Common.spark(v.spark.values, v.spark.times, {
+				min = field.min,
+				max = field.max,
+				decimals = field.decimals,
+				no_value = field.no_value,
+				from_ms = if range then range.from_ms else opts.from_ms,
+				to_ms = if range then range.to_ms else opts.to_ms,
+				interval = v.spark.interval,
+			})
 		end
 		if showChange and v.item and not v.placeholder then
 			local item = v.item :: FieldConfig.Item
@@ -199,28 +217,27 @@ end
 -- layout and calculateFontSize (utils/measureText.ts) the largest size that
 -- fits the box's width and height, every value aligned to the longest
 -- (getDisplayValueAlignmentFactors). The px come from the panel's Grafana
--- size (opts.size) with the height bounded by the Tern card's height cap.
--- The value is drawn as an SVG of that size that shrinks to a narrower tile
--- (valueSvg): Tern's style sheets have no container units and a block knows
--- its pane width only in cells, not px. Title and percent change snap to size classes
--- (panels2.css tgp-stat-fs<N>).
+-- size (opts.size): stat is a no-padding panel (PanelPlugin.setNoPadding),
+-- so its box is the panel less the 1 px border and, with a title, the
+-- header (Common.headerPx); the height is bounded by the Tern card's height
+-- cap. The value is drawn as an SVG of that size that shrinks to a narrower
+-- tile (valueSvg): Tern's style sheets have no container units and a block
+-- knows its pane width only in cells, not px. Title and percent change snap
+-- to size classes (panels2.css tgp-stat-fs<N>).
 
 local LINE_HEIGHT = 1.2
 local MAX_TITLE_SIZE = 30
 local ITEM_SPACING = 3
--- PanelChrome: a 32 px header when the panel has a title; 8 px padding.
-local HEADER_PX = 32
-local PANEL_PADDING_PX = 8
--- The Tern tile's padding (panels.css .tgp-stat: 6 px 8 px) and the row
--- Tern's spark chart takes under the value.
+-- PanelChrome's border, above and below and on either side.
+local BORDER_PX = 2
+-- The Tern tile's padding (panels.css .tgp-stat: 6 px 8 px), and the
+-- sparkline's size in a tile without Grafana's size.
 M.TILE_PAD_X = 16
 M.TILE_PAD_Y = 12
 M.SPARK_PX = 34
+local SPARK_W = 240
 -- Tern's text line, px: image max heights are given in lines.
 local LINE_PX = 16
--- The smallest fitted value: one Tern line tall (valueSvg's 13 px text is
--- a 16 px image).
-M.MIN_VALUE_PX = math.floor(LINE_PX / LINE_HEIGHT)
 
 -- Font size classes, px (panels2.css tgp-stat-fs<N>).
 M.FONT_SIZES = table.freeze({
@@ -404,6 +421,7 @@ export type FitInput = {
 	-- The longest value and title text of the panel ("" / nil when not shown).
 	value: string,
 	title: string?,
+	-- The field has a sparkline of two or more points.
 	spark: boolean,
 	change: boolean,
 	-- options.text.valueSize / titleSize / percentSize.
@@ -413,6 +431,9 @@ export type FitInput = {
 	justify: string?,
 	-- options.wideLayout false (BigValue disableWideLayout).
 	no_wide: boolean?,
+	-- The height of the box Grafana picks its layout by (buildLayout), when
+	-- `h` is a Tern tile's shorter one.
+	layout_h: number?,
 }
 
 -- BigValueLayout's font sizes for one box (buildLayout and its four layouts).
@@ -424,6 +445,8 @@ function M.fit(i: FitInput): Fit
 	local alignTitle = if i.title_size then "" else (i.title or "")
 	local alignValue = if i.value_size then "" else i.value
 	local wide = w / h > 2.5 and not i.no_wide
+	local layoutH = i.layout_h or h
+	local chartW, chartH = 0, 0
 	local function value(width: number, height: number)
 		if alignValue ~= "" then
 			valuePx = fontSize(alignValue, width, height)
@@ -434,10 +457,11 @@ function M.fit(i: FitInput): Fit
 			titlePx = fontSize(alignTitle, width, height, MAX_TITLE_SIZE)
 		end
 	end
-	if wide and h > 50 and i.spark then
+	if wide and layoutH > 50 and i.spark then
 		-- WideWithChartLayout.
 		title(maxW * 0.6, maxH * 0.4)
 		value(maxW * 0.4, maxH * 0.5)
+		chartW, chartH = w, h * 0.5
 	elseif wide then
 		-- WideNoChartLayout.
 		value(maxW * (if alignTitle ~= "" then 0.3 else 1), maxH * (if i.change then 0.75 else 1))
@@ -447,7 +471,7 @@ function M.fit(i: FitInput): Fit
 		end
 	else
 		-- StackedWithChartLayout / StackedWithNoChartLayout.
-		local chart = h > 100 and i.spark
+		local chart = layoutH > 100 and i.spark
 		title(maxW, h * 0.15)
 		local titleH = if alignTitle ~= "" then titlePx * LINE_HEIGHT else 0
 		if chart then
@@ -458,13 +482,20 @@ function M.fit(i: FitInput): Fit
 		if alignTitle ~= "" then
 			titlePx = math.min(valuePx * 0.7, titlePx)
 		end
+		if chart then
+			-- The chart takes the height the text leaves.
+			chartW, chartH = w, h - titlePx * LINE_HEIGHT - valuePx * LINE_HEIGHT
+		end
 	end
+	local drawn = chartH >= 1
 	return {
 		value_px = math.max(valuePx, 0),
 		title_px = math.max(titlePx, 0),
 		change_px = i.percent_size or math.max(valuePx / 2.5, 12),
 		wide = wide,
 		center = i.justify == "center" or (i.title or "") == "",
+		chart_w = if drawn then chartW else nil,
+		chart_h = if drawn then chartH else nil,
 	}
 end
 
@@ -520,8 +551,8 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 	-- Grafana's panel content box. The width needs no bound: the value is
 	-- an SVG that scales down to the tile (tileNode); Tern's cx.cols counts
 	-- cells, not px.
-	local w = size.w - PANEL_PADDING_PX * 2
-	local h = size.h - (if hasTitle then HEADER_PX else 0) - PANEL_PADDING_PX * 2
+	local w = size.w - BORDER_PX
+	local h = size.h - (if hasTitle then Common.headerPx(opts) else 0) - BORDER_PX
 	local orientation = Json.str(env, options.orientation) or "auto"
 	local cols, bw, bh = M.grid(#tiles, math.max(w, 1), math.max(h, 1), orientation)
 	local value, title = "", ""
@@ -535,22 +566,17 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		end
 		change = change or t.change ~= nil
 	end
-	local noSpark, tightTile = false, false
+	local tightTile = false
 	local capped = false
+	-- Grafana's box picks the layout, with or without a chart.
+	local layoutH = bh
 	-- The px a tile has for its name, value and percent change in the capped
-	-- card: its share of the card body less its padding and sparkline row.
+	-- card: its share of the card body less its padding. The sparkline lies
+	-- behind the value (BigValue's chart is absolutely placed).
 	local room: number? = nil
 	if opts.card_height then
-		-- Like BigValue dropping its chart from a short box, the sparkline
-		-- goes when it would leave less than a line for the value.
 		local rows = math.ceil(#tiles / cols)
 		local r = (opts.card_height + ITEM_SPACING) / rows - ITEM_SPACING - M.TILE_PAD_Y
-		if spark and r - M.SPARK_PX < LINE_PX then
-			spark, noSpark = false, true
-		end
-		if spark then
-			r -= M.SPARK_PX
-		end
 		local tight = r < LINE_PX
 		if tight then
 			r += M.TILE_PAD_Y
@@ -558,10 +584,10 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		room = r
 		tightTile = tight
 		-- BigValue pads its box (8 px, 12 px above 100 px) where the tile
-		-- already has its own padding: a value without a name gets the room
-		-- plus that padding. Named tiles keep it for the name, which wraps
-		-- more in a Tern tile, often narrower than Grafana's box.
-		local box = if title ~= "" then r else r + (if r + 16 > 100 then 24 else 16)
+		-- already has its own padding: the box is the room plus that padding.
+		-- A name that wraps more in a Tern tile, often narrower than
+		-- Grafana's box, takes its lines from the value below.
+		local box = r + (if r + 16 > 100 then 24 else 16)
 		if box < bh then
 			bh, capped = math.max(box, 1), true
 		end
@@ -579,6 +605,7 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		value = if value ~= "" then value else "1",
 		title = if title ~= "" then title else nil,
 		spark = spark,
+		layout_h = layoutH,
 		change = change,
 		value_size = valueSize,
 		title_size = positive(text.titleSize),
@@ -586,36 +613,37 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		justify = Json.str(env, options.justifyMode),
 		no_wide = Json.bool(env, options.wideLayout) == false,
 	})
-	fit.no_spark = if noSpark then true else nil
 	fit.tight = if tightTile then true else nil
 	local changeH = if change then M.sizeClass(fit.change_px) * LINE_HEIGHT else 0
 	if room and valueSize == nil and fit.wide and title ~= "" then
 		-- A Tern tile is often narrower than Grafana's box: the wide layout
-		-- then wraps the name above the value (panels2.css tgp-stat-wide), so
-		-- the value leaves the tile a line of the name, at most 0.7 of the
-		-- value's size as in the wide layouts.
+		-- then wraps the name above the value (panels2.css tgp-stat-wide).
+		-- A tile too short for the name on a line of its own keeps name and
+		-- value on one row as BigValue does, the name cut (tgp-stat-row), and
+		-- the value at most the room's line.
 		local lines = (room - changeH) / LINE_HEIGHT
-		local px = lines / 1.7
-		if px * 0.7 > fit.title_px then
-			px = lines - fit.title_px
-		end
-		if px < fit.value_px then
-			fit.value_px, capped = px, true
-			fit.title_px = math.min(fit.title_px, px * 0.7)
+		if fit.value_px + fit.title_px > lines then
+			fit.row, capped = true, true
+			if fit.value_px > lines then
+				fit.value_px = lines
+				fit.title_px = math.min(fit.title_px, lines * 0.7)
+			end
 		end
 	end
-	if valueSize == nil then
+	if valueSize == nil and capped then
 		-- Rounded down in a capped box so the drawn value (valueSvg) is not
-		-- taller than the room; never below a line.
-		fit.value_px = math.max(if capped then math.floor(fit.value_px) else fit.value_px, M.MIN_VALUE_PX)
+		-- taller than the room.
+		fit.value_px = math.floor(fit.value_px)
 	end
 	if room and title ~= "" then
 		-- The lines a wrapped name has in the tile above the value and the
 		-- percent change: a Tern tile is often narrower than Grafana's, so
-		-- names wrap more. A tight tile keeps its line of value over the name.
+		-- names wrap more. A tight tile keeps its line of value over the name;
+		-- a row has one line beside it.
 		local rest = room - math.ceil(math.floor(fit.value_px + 0.5) * LINE_HEIGHT) - changeH
-		fit.title_lines =
-			math.max(if tightTile then 0 else 1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
+		fit.title_lines = if fit.row
+			then 1
+			else math.max(if tightTile then 0 else 1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
 	end
 	return fit, cols
 end
@@ -675,6 +703,82 @@ function M.valueSvg(text: string, px: number, fill: string): (string, number, nu
 	return svg, w, h
 end
 
+local function num(n: number): string
+	local s = string.format("%.1f", n)
+	return if string.sub(s, -2) == ".0" then string.sub(s, 1, -3) else s
+end
+
+-- The sparkline as an SVG of the chart's size (Sparkline: uPlot line,
+-- lineWidth 1, no points; its fill to value 0): each run of points between
+-- gaps is a line over its area, so a point between two gaps draws nothing,
+-- as uPlot's pointSize 0 does.
+function M.sparkSvg(
+	s: Common.Spark,
+	width: number,
+	height: number,
+	lineClass: string,
+	fillClass: string,
+	fillOpacity: string
+): (string, number, number)
+	local w, h = math.max(math.floor(width + 0.5), 1), math.max(math.floor(height + 0.5), 1)
+	local base = num(h - s.base * h)
+	local lines: { string } = {}
+	local areas: { string } = {}
+	local run: { string } = {}
+	local first, last = "", ""
+	local function flush()
+		if #run > 1 then
+			local path = table.concat(run)
+			table.insert(lines, path)
+			table.insert(areas, path .. "L" .. last .. " " .. base .. "L" .. first .. " " .. base .. "Z")
+		end
+		table.clear(run)
+	end
+	for i, y in s.y do
+		if y ~= y then
+			flush()
+		else
+			local x = num(s.x[i] * w)
+			if #run == 0 then
+				first = x
+			end
+			last = x
+			table.insert(run, (if #run == 0 then "M" else "L") .. x .. " " .. num(h - y * h))
+		end
+	end
+	flush()
+	local out = {
+		string.format(
+			'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" class="tgg">',
+			w,
+			h,
+			w,
+			h
+		),
+	}
+	if #areas > 0 then
+		table.insert(
+			out,
+			string.format(
+				'<path class="%s tg-area" fill-opacity="%s" d="%s"/>',
+				fillClass,
+				fillOpacity,
+				table.concat(areas)
+			)
+		)
+		table.insert(
+			out,
+			string.format(
+				'<path class="%s tg-line" fill="none" stroke-width="1" d="%s"/>',
+				lineClass,
+				table.concat(lines)
+			)
+		)
+	end
+	table.insert(out, "</svg>")
+	return table.concat(out), w, h
+end
+
 local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, assets: Assets.Assets): Node
 	local token = Common.token(tile.tone :: any)
 	local valueStyle = "strong"
@@ -703,7 +807,7 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 		end
 		changeClass ..= " " .. fsClass(fit.change_px)
 		if fit.wide then
-			lineClass ..= " tgp-stat-wide"
+			lineClass ..= if fit.row then " tgp-stat-wide tgp-stat-row" else " tgp-stat-wide"
 		end
 		if fit.center then
 			lineClass ..= " tgp-stat-center"
@@ -741,8 +845,28 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 		})
 	end
 	local children: { Node } = { { k = "el", p = { tag = "div", key = "l", class = lineClass }, c = line } }
-	if tile.spark and not (fit and fit.no_spark) then
-		table.insert(children, tile.spark :: Node)
+	local spark = tile.spark
+	local chartW: number?, chartH: number? = SPARK_W, M.SPARK_PX
+	if fit then
+		chartW, chartH = fit.chart_w, fit.chart_h
+	end
+	if spark and chartW and chartH then
+		local sparkLine, sparkFill, opacity = tile.spark_class or "tgp-fx tgp-neutral", nil, "0.2"
+		if filled then
+			-- BigValue on a filled tile: a white fill at 40% under the line in
+			-- the value's color brightened (panels2.css).
+			sparkLine, sparkFill, opacity = sparkLine .. " tgp-stat-spark-hi", "tgp-stat-spark-on", "0.4"
+		end
+		local svg, w, h = M.sparkSvg(spark, chartW, chartH, sparkLine, sparkFill or sparkLine, opacity)
+		local sparkKey = assetKey .. "k"
+		assets[sparkKey] = { mime = Assets.SVG, bytes = svg }
+		table.insert(children, {
+			k = "el",
+			-- Without Grafana's size the tile has no height to lie in: the
+			-- sparkline takes a row under the value.
+			p = { tag = "div", key = "k", class = if fit then "tgp-stat-spark" else "tgp-stat-spark-row" },
+			c = { { k = "image", p = { key = "i", asset = sparkKey, w = w, h = h, alt = "Sparkline" } } },
+		})
 	end
 	return { k = "el", p = { tag = "div", key = key, class = table.concat(classes, " ") }, c = children }
 end

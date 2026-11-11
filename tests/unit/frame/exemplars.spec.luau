@@ -46,9 +46,9 @@ for version, count in PROM do
 	end)
 end
 
-local GRAFANA_EXEMPLARS = { ["11.6.16"] = 120, ["12.4.12"] = 120, ["13.3.0"] = 58 }
+local GRAFANA_EXEMPLARS = { ["11.6.16"] = 120, ["12.4.12"] = 120, ["13.3.1"] = 120 }
 
-for _, version in { "11.6.16", "12.4.12", "13.3.0" } do
+for _, version in { "11.6.16", "12.4.12", "13.3.1" } do
 	describe("Grafana " .. version .. " exemplar frames", function()
 		local doc = json.decode(Fixtures.read("grafana/" .. version .. "/ds_query_prom_exemplars.json"))
 		local result = FrameGrafana.parseResults(doc, env).A :: any

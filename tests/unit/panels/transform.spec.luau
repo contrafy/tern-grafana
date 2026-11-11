@@ -17,10 +17,9 @@ local env = S.env
 
 -- The row of the one prom_table series labeled env="dev" (node), in each
 -- capture's series order.
-local DEV_ROW = { ["11.6.16"] = 2, ["12.4.12"] = 2, ["13.3.0"] = 6 }
--- Samples per prom_range series: 15m at 15s, but the 13.3.0 stack had run
--- only ~7m.
-local SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 29 }
+local DEV_ROW = { ["11.6.16"] = 2, ["12.4.12"] = 2, ["13.3.1"] = 6 }
+-- Samples per prom_range series: 15m at 15s.
+local SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.1"] = 61 }
 
 local function names(frame: Frame.Frame, frames: { Frame.Frame }): { string }
 	local out: { string } = {}

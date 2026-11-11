@@ -213,16 +213,16 @@ end
 -- samples nearest the range's ends, moved inside it unless that leaves at
 -- most two), and the series as drawn: getOuterIdxs adds the nearest
 -- present sample beyond each end, so a line enters the plot at its slope
--- and the plot clips it. Returns the series (itself when nothing is cut)
--- and the times of its first and last sample in view; nil bounds for an
--- empty series. Times must ascend; other series are kept whole.
-function M.window(s: Series.Series, tFrom: number, tTo: number): (Series.Series, number?, number?)
+-- and the plot clips it. Returns the series (itself when nothing is cut),
+-- the times of its first and last sample in view (nil bounds for an empty
+-- series) and whether its times ascend; other series are kept whole.
+function M.window(s: Series.Series, tFrom: number, tTo: number): (Series.Series, number?, number?, boolean)
 	local times = s.times
 	local n = #times
 	if n == 0 then
-		return s, nil, nil
+		return s, nil, nil, true
 	elseif not ascending(times) then
-		return s, tFrom, tTo
+		return s, tFrom, tTo, false
 	end
 	local i0, i1 = closestIdx(tFrom, times), closestIdx(tTo, times)
 	if i1 - i0 > 1 then
@@ -242,12 +242,12 @@ function M.window(s: Series.Series, tFrom: number, tTo: number): (Series.Series,
 		o1 += 1
 	end
 	if o0 == 1 and o1 == n then
-		return s, times[i0], times[i1]
+		return s, times[i0], times[i1], true
 	end
 	local copy = Tbl.copy(s)
 	copy.times = table.move(times, o0, o1, 1, table.create(o1 - o0 + 1))
 	copy.values = table.move(values, o0, o1, 1, table.create(o1 - o0 + 1))
-	return copy, times[i0], times[i1]
+	return copy, times[i0], times[i1], true
 end
 
 export type StackGroup = { mode: Series.StackMode, neg: boolean, members: { number } }
@@ -577,28 +577,51 @@ end
 
 -- The series' own value at each drawn time: the source sample when the time
 -- is one of its samples, else the drawn value with its transform undone.
--- An unstacked series drawn as extracted (no transform, no null spanning)
--- draws its own samples: those values are already the answer.
+-- An unstacked series drawn from its own samples (`plain`: ascending, no
+-- transform, at most cut to the range by M.window, not bucketed) without
+-- null spanning draws its own samples: those values are already the answer.
 function M.ownValues(
 	source: Series.Series,
-	shown: Series.Series,
+	plain: boolean,
 	st: SeriesStyle,
 	plot: Plot,
 	i: number,
 	spans: { boolean | number }
 ): { any }
 	local times, drawn = plot.times[i], plot.raw[i]
-	if shown == source and not plot.stacked[i] and spans[i] == false and ascending(source.times) then
+	if plain and not plot.stacked[i] and spans[i] == false then
 		return drawn
 	end
-	local at: { [number]: any } = {}
-	for j, t in source.times do
-		at[t] = source.values[j]
-	end
 	local neg = st.transform == "negative-Y"
+	local stimes, svalues = source.times, source.values
+	local m = #stimes
+	-- Ascending source times (`plain`) are walked alongside the drawn times
+	-- (a drawn time before the previous one restarts the walk); others are
+	-- looked up by time.
+	local at: { [number]: any }? = nil
+	if not plain then
+		local map: { [number]: any } = {}
+		for j, t in stimes do
+			map[t] = svalues[j]
+		end
+		at = map
+	end
 	local out: { any } = table.create(#times)
+	local j, prev = 1, -math.huge
 	for k, t in times do
-		local v = at[t]
+		local v: any
+		if at then
+			v = at[t]
+		else
+			if t < prev then
+				j = 1
+			end
+			prev = t
+			while j <= m and stimes[j] < t do
+				j += 1
+			end
+			v = if j <= m and stimes[j] == t then svalues[j] else nil
+		end
 		if v == nil then
 			v = drawn[k]
 			local n = finite(v)

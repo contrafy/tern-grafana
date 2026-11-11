@@ -37,22 +37,24 @@ local finite = Frame.finite
 -- NaN must not turn a mean or a max into NaN.
 function M.calcs(values: { any }): Calcs
 	local count, sum = 0, 0
-	local lo: number?, hi: number?, last: number? = nil, nil, nil
-	for _, raw in values do
-		local v = finite(raw)
-		if v then
+	local lo, hi, last = math.huge, -math.huge, nil :: number?
+	for _, v in values do
+		if type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
 			count += 1
 			sum += v
 			last = v
-			if lo == nil or v < lo then
+			if v < lo then
 				lo = v
 			end
-			if hi == nil or v > hi then
+			if v > hi then
 				hi = v
 			end
 		end
 	end
-	return { last = last, min = lo, max = hi, mean = if count > 0 then sum / count else nil, count = count }
+	if count == 0 then
+		return { count = 0 }
+	end
+	return { last = last, min = lo, max = hi, mean = sum / count, count = count }
 end
 
 -- Every number field of every frame with a time field, in order. Values

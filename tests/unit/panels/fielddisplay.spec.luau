@@ -96,4 +96,15 @@ describe("fielddisplay date units", function()
 	end)
 end)
 
+-- A histogram_quantile over no buckets is NaN (17781 Ingester stats):
+-- displayProcessor skips the unit for NaN and prints String(value).
+describe("fielddisplay non-finite values", function()
+	it("prints NaN like JavaScript for every unit", function()
+		for _, unit in { "bytes", "percent", "ops", "short", "binBps", "none" } do
+			local d = FieldConfig.display(item(unit), 0 / 0)
+			expect(d.prefix .. d.text .. d.suffix).toBe("NaN")
+		end
+	end)
+end)
+
 return nil

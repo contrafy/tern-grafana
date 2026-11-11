@@ -97,9 +97,9 @@ function M.swatch(class: string): Node
 end
 
 -- Tern's px for rowsNode, measured in a dashboard card, so a chart can
--- leave its legend room: list entries (swatch, name, values) wrap across
--- `width` onto 16 px lines 10 px apart; a table is a 22 px header and 21
--- px rows.
+-- leave its legend room: list entries (swatch, name, values with their
+-- `heads` labels) wrap across `width` onto 16 px lines 10 px apart; a
+-- table is a 22 px header and 21 px rows.
 M.LINE_PX = 16
 M.LINE_GAP_PX = 10
 M.ENTRY_GAP_PX = 12
@@ -108,17 +108,29 @@ M.CHAR_PX = 8
 M.TABLE_HEAD_PX = 22
 M.TABLE_ROW_PX = 21
 
-function M.height(rows: { Row }, mode: Mode, width: number): number
+-- A list entry's value `v` under calc heading `head`: VizLegendStatsList
+-- prints every stat as "<Title>: <value>" (lodash capitalize of the
+-- reducer's name, so "Last *" stays "Last *").
+local function labeled(head: string?, v: string): string
+	if head == nil or head == "" then
+		return v
+	end
+	return string.upper(string.sub(head, 1, 1)) .. string.lower(string.sub(head, 2)) .. ": " .. v
+end
+
+function M.height(rows: { Row }, mode: Mode, width: number, heads: { string }?): number
 	if #rows == 0 then
 		return 0
 	elseif mode == "table" then
 		return M.TABLE_HEAD_PX + #rows * M.TABLE_ROW_PX
 	end
+	local h = heads or {}
 	local lines, x = 1, 0
 	for _, r in rows do
 		local chars = utf8.len(r.name) or #r.name
-		for _, v in r.values do
-			chars += 1 + (utf8.len(v) or #v)
+		for k, v in r.values do
+			local s = labeled(h[k], v)
+			chars += 1 + (utf8.len(s) or #s)
 		end
 		local w = M.SWATCH_PX + chars * M.CHAR_PX
 		if x > 0 and x + M.ENTRY_GAP_PX + w > width then
@@ -131,9 +143,26 @@ function M.height(rows: { Row }, mode: Mode, width: number): number
 	return lines * M.LINE_PX + (lines - 1) * M.LINE_GAP_PX
 end
 
--- VizLegend rows under `key`: a wrapping list (name, then the values in
--- bold) or a table with a column per value heading. Shared by every panel
--- legend (lib/panels/charts).
+-- VizLayout caps a bottom legend at 35% of the viz and scrolls the rest
+-- (ScrollContainer). The class (panels.css tgp-lgcap-l<n>, -t<n>) that
+-- cuts a legend of `rows` across `width` after the whole list lines or
+-- table rows fitting `maxPx` and scrolls the rest; nil when it fits.
+M.CAP_MAX = 12
+
+function M.capClass(rows: { Row }, mode: Mode, width: number, maxPx: number, heads: { string }?): string?
+	if M.height(rows, mode, width, heads) <= maxPx then
+		return nil
+	elseif mode == "table" then
+		local n = math.floor((maxPx - M.TABLE_HEAD_PX) / M.TABLE_ROW_PX)
+		return "tgp-lgcap-t" .. math.clamp(n, 1, M.CAP_MAX)
+	end
+	local n = math.floor((maxPx + M.LINE_GAP_PX) / (M.LINE_PX + M.LINE_GAP_PX))
+	return "tgp-lgcap-l" .. math.clamp(n, 1, M.CAP_MAX)
+end
+
+-- VizLegend rows under `key`: a wrapping list (name, then each value in
+-- bold after its `heads` label, as VizLegendStatsList) or a table with a
+-- column per value heading. Shared by every panel legend (lib/panels/charts).
 function M.rowsNode(key: string, rows: { Row }, heads: { string }, mode: Mode): Node
 	if mode == "table" then
 		local columns: { Grid.Column } = { { head = "Name" } }
@@ -142,11 +171,11 @@ function M.rowsNode(key: string, rows: { Row }, heads: { string }, mode: Mode): 
 		end
 		local gridRows: { Grid.Row } = table.create(#rows)
 		for i, r in rows do
-			local cells: { Node } = {
+			local cells: { Node | string } = {
 				{ k = "row", p = { gap = "xs", align = "center" }, c = { M.swatch(r.class), Grid.text(r.name) } },
 			}
 			for _, v in r.values do
-				table.insert(cells, Grid.text(v))
+				table.insert(cells, v)
 			end
 			gridRows[i] = { key = "s" .. i, cells = cells }
 		end
@@ -155,8 +184,13 @@ function M.rowsNode(key: string, rows: { Row }, heads: { string }, mode: Mode): 
 	local entries: { Node } = table.create(#rows)
 	for i, r in rows do
 		local spans: { ui.Span } = { { t = r.name } }
-		if #r.values > 0 then
-			table.insert(spans, { t = " " .. table.concat(r.values, " "), s = "strong" })
+		for k, v in r.values do
+			local head = heads[k]
+			if head and head ~= "" then
+				local label = labeled(head, "")
+				table.insert(spans, { t = " " .. string.sub(label, 1, -2) })
+			end
+			table.insert(spans, { t = " " .. v, s = "strong" })
 		end
 		entries[i] = {
 			k = "row",
@@ -178,15 +212,12 @@ function M.view(layout: Layout, opts: Options?): Node
 	if o.mode == "table" then
 		table.insert(children, M.rowsNode(key .. ".t", rows, heads, "table"))
 	else
-		table.insert(children, M.rowsNode(key .. ".l", rows, heads, "list"))
+		table.insert(children, M.rowsNode(key .. ".l", rows, if o.cursor then {} else heads, "list"))
 	end
 	if layout.dropped > 0 then
 		table.insert(
 			children,
-			ui.muted(
-				string.format("%d more series not shown (chart limit %d)", layout.dropped, #layout.series),
-				{ key = "dropped" }
-			)
+			ui.muted(string.format("%d more series not shown (chart size limit)", layout.dropped), { key = "dropped" })
 		)
 	end
 	return { k = "col", p = { key = key, gap = "xs" }, c = children }

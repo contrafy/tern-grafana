@@ -1,0 +1,220 @@
+{
+  "uid": "tern-legacy",
+  "title": "Tern Legacy",
+  "tags": ["tern"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 14,
+  "version": 1,
+  "refresh": false,
+  "sharedCrosshair": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "annotations": { "list": [] },
+  "links": [],
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "custom",
+        "query": "prometheus,node",
+        "current": { "text": "prometheus", "value": "prometheus" },
+        "multi": false,
+        "includeAll": false,
+        "options": []
+      },
+      {
+        "name": "region",
+        "type": "constant",
+        "query": "eu-west",
+        "hide": 0
+      }
+    ]
+  },
+  "rows": [
+    {
+      "title": "Single stats and an old table",
+      "showTitle": true,
+      "collapse": false,
+      "height": 250,
+      "panels": [
+        {
+          "id": 1,
+          "type": "singlestat",
+          "title": "Flat one",
+          "span": 2,
+          "datasource": "Prometheus 3",
+          "targets": [{ "refId": "A", "expr": "vector(1)", "intervalFactor": 1 }],
+          "valueName": "avg",
+          "format": "none",
+          "decimals": 0,
+          "colorValue": false,
+          "colorBackground": false,
+          "thresholds": "",
+          "colors": ["#299c46", "rgba(237, 129, 40, 0.89)", "#d44a3a"],
+          "sparkline": { "show": true, "full": false, "lineColor": "#f4d598", "fillColor": "rgba(244, 213, 152, 0.12)" },
+          "nullPointMode": "connected",
+          "valueMaps": [{ "op": "=", "text": "N/A", "value": "null" }],
+          "mappingType": 1
+        },
+        {
+          "id": 2,
+          "type": "singlestat",
+          "title": "Flat zero",
+          "span": 2,
+          "datasource": "Prometheus 3",
+          "targets": [{ "refId": "A", "expr": "vector(0)", "intervalFactor": 1 }],
+          "valueName": "current",
+          "format": "none",
+          "colorValue": true,
+          "thresholds": "1,2",
+          "colors": ["#299c46", "rgba(237, 129, 40, 0.89)", "#d44a3a"],
+          "sparkline": { "show": true, "full": true, "lineColor": "rgb(31, 120, 193)", "fillColor": "rgba(31, 118, 189, 0.18)" },
+          "nullPointMode": "connected"
+        },
+        {
+          "id": 3,
+          "type": "singlestat",
+          "title": "Requests",
+          "span": 2,
+          "datasource": "Prometheus 3",
+          "targets": [{ "refId": "A", "expr": "sum(rate(prometheus_http_requests_total[1m]))", "intervalFactor": 1 }],
+          "valueName": "current",
+          "format": "reqps",
+          "decimals": 2,
+          "colorValue": false,
+          "sparkline": { "show": true, "full": false, "lineColor": "rgb(31, 120, 193)", "fillColor": "rgba(31, 118, 189, 0.18)" },
+          "nullPointMode": "connected"
+        },
+        {
+          "id": 4,
+          "type": "table",
+          "title": "Targets (old table styles)",
+          "span": 6,
+          "datasource": "Prometheus 3",
+          "transform": "table",
+          "targets": [
+            { "refId": "A", "expr": "up", "format": "table", "instant": true, "intervalFactor": 1 },
+            { "refId": "B", "expr": "scrape_duration_seconds", "format": "table", "instant": true, "intervalFactor": 1 }
+          ],
+          "styles": [
+            { "pattern": "Time", "type": "hidden", "alias": "Time", "dateFormat": "YYYY-MM-DD HH:mm:ss" },
+            { "pattern": "__name__", "type": "hidden" },
+            {
+              "pattern": "Value #A",
+              "type": "number",
+              "alias": "Up",
+              "decimals": 0,
+              "colorMode": "cell",
+              "thresholds": ["0", "0.5", "1"],
+              "colors": ["rgba(245, 54, 54, 0.9)", "rgba(237, 129, 40, 0.89)", "rgba(50, 172, 45, 0.97)"]
+            },
+            { "pattern": "Value #B", "type": "number", "alias": "Scrape", "unit": "s", "decimals": 3 },
+            { "pattern": "/.*/", "type": "string", "unit": "short" }
+          ],
+          "columns": [],
+          "sort": { "col": 0, "desc": true }
+        }
+      ]
+    },
+    {
+      "title": "Graphs with hideZero and hideEmpty",
+      "showTitle": true,
+      "collapse": false,
+      "height": "300px",
+      "panels": [
+        {
+          "id": 5,
+          "type": "graph",
+          "title": "Up by job (zeros hidden from the legend)",
+          "span": 6,
+          "datasource": "Prometheus 3",
+          "targets": [{ "refId": "A", "expr": "sum by (job) (up)", "legendFormat": "{{job}}", "intervalFactor": 1 }],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "legend": {
+            "show": true,
+            "alignAsTable": true,
+            "rightSide": true,
+            "values": true,
+            "avg": true,
+            "total": true,
+            "current": false,
+            "hideZero": true,
+            "hideEmpty": true
+          },
+          "yaxes": [
+            { "format": "short", "show": true, "logBase": 1 },
+            { "format": "short", "show": true, "logBase": 1 }
+          ],
+          "xaxis": { "mode": "time", "show": true },
+          "tooltip": { "shared": true, "sort": 0, "value_type": "individual" },
+          "links": [{ "title": "Tern Panels", "type": "dashboard", "dashUri": "db/tern-panels", "keepTime": true }]
+        },
+        {
+          "id": 6,
+          "type": "graph",
+          "title": "All zero (no legend)",
+          "span": 6,
+          "minSpan": 3,
+          "datasource": "Prometheus 3",
+          "targets": [{ "refId": "A", "expr": "sum by (job) (up) * 0", "legendFormat": "{{job}}", "intervalFactor": 1 }],
+          "lines": true,
+          "fill": 1,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "legend": {
+            "show": true,
+            "alignAsTable": true,
+            "rightSide": true,
+            "values": true,
+            "avg": true,
+            "total": true,
+            "hideZero": true,
+            "hideEmpty": true
+          },
+          "yaxes": [
+            { "format": "short", "show": true, "logBase": 1 },
+            { "format": "short", "show": true, "logBase": 1 }
+          ],
+          "xaxis": { "mode": "time", "show": true },
+          "tooltip": { "shared": true, "sort": 0, "value_type": "individual" }
+        },
+        {
+          "id": 7,
+          "type": "graph",
+          "title": "Up by job (zeros hidden from the legend)",
+          "span": 6,
+          "repeatPanelId": 5,
+          "datasource": "Prometheus 3",
+          "targets": [{ "refId": "A", "expr": "sum by (job) (up)", "intervalFactor": 1 }]
+        }
+      ]
+    },
+    {
+      "title": "Collapsed notes",
+      "showTitle": true,
+      "collapse": true,
+      "panels": [
+        {
+          "id": 8,
+          "type": "text",
+          "title": "Notes",
+          "span": 12,
+          "height": 150,
+          "mode": "markdown",
+          "content": "A collapsed row of a dashboard saved before Grafana 5 (schemaVersion 14, top-level `rows`)."
+        }
+      ]
+    },
+    {
+      "title": "Collapsed notes",
+      "showTitle": true,
+      "collapse": true,
+      "repeatIteration": 1500000000000,
+      "panels": [{ "id": 9, "type": "text", "title": "Left-over row copy", "span": 12, "content": "never shown" }]
+    }
+  ]
+}

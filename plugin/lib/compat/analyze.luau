@@ -64,6 +64,8 @@ export type DashResult = {
 	panels: { PanelResult },
 	-- Why the dashboard could not be analyzed.
 	error: string?,
+	-- Why a dashboard that loaded has no panel results (M.NO_PANELS).
+	note: string?,
 	native: number,
 	png: number,
 	browser: number,
@@ -198,9 +200,16 @@ local function count(c: Counts, mode: Ladder.Mode)
 	end
 end
 
+-- A dashboard without panels, after Grafana's schema migration (Grafana
+-- shows it empty too).
+M.NO_PANELS = "the dashboard has no panels"
+
 function M.result(uid: string, title: string, folder: string?, panels: { PanelResult }, err: string?): DashResult
 	local r: DashResult =
 		{ uid = uid, title = title, folder = folder, panels = panels, error = err, native = 0, png = 0, browser = 0 }
+	if err == nil and #panels == 0 then
+		r.note = M.NO_PANELS
+	end
 	for _, p in panels do
 		count(r, p.mode)
 	end

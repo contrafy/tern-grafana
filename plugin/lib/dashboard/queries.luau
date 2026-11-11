@@ -47,11 +47,14 @@
 -- reuses another panel's results: `dashboardQuery` reads its first target;
 -- the Dashboard block feeds the source panel's frames (lib/dashboard/state).
 --
--- Interval: maxDataPoints is the panel's, else config `dashboard.max_points`
--- (Tern gives a block its pane width in cells, not px); the interval is
--- Grafana's calculateInterval with the target's or panel's min interval, and
--- becomes `$__interval`/`$__interval_ms`. `$__rate_interval` is left to
--- Grafana's backend, which knows the datasource's scrape interval.
+-- Interval (scenes SceneQueryRunner.prepareRequests): maxDataPoints is the
+-- panel's, else the width in px the panel is laid out at
+-- (`Context.width_px`), else 500; intervalMs is calculateInterval over the
+-- range with the panel's min interval (`interval`), else its datasource's
+-- (DataSourceApi.interval), as the low limit. Every target gets the same
+-- intervalMs, `$__interval` and `$__interval_ms`; Prometheus and Loki leave
+-- the last two to Grafana's backend, which derives them from the step (and
+-- the target's own min interval), as it does `$__rate_interval`.
 --
 -- Exemplars: time series panels ask Prometheus range targets for exemplars
 -- when config `query.exemplars` is on (and never when it is off, whatever the
@@ -138,6 +141,9 @@ M.DASHBOARD = "-- Dashboard --"
 M.GRAFANA = "-- Grafana --"
 M.EXPRESSION = "__expr__"
 
+-- SceneQueryRunner.getMaxDataPoints without a panel width.
+M.DEFAULT_MAX_POINTS = 500
+
 -- Default `maxLines` for Loki log queries (Grafana's datasource default).
 M.LOKI_MAX_LINES = 1000
 
@@ -149,7 +155,8 @@ export type Context = {
 	scope: Scope,
 	from_ms: number,
 	to_ms: number,
-	max_points: number,
+	-- The width in px the panel is laid out at; nil: unknown.
+	width_px: number?,
 	datasources: { Datasource },
 	dashboard_uid: string?,
 	dashboard_title: string?,
@@ -510,6 +517,41 @@ local function minInterval(raw: string?, scope: Scope): number?
 	return Step.parseDuration(s)
 end
 
+-- DataSourceApi.interval, the low limit of a panel without a min interval:
+-- Prometheus (jsonData.timeInterval, else 15s), the SQL datasources (else
+-- 1m) and Elasticsearch set it; other datasources and `-- Mixed --` do not.
+local function dsInterval(ds: Datasource?, env: Env): string?
+	if ds == nil then
+		return nil
+	end
+	local jd = ds.json_data
+	local own = if jd then str(env, jd.timeInterval) else nil
+	if own == "" then
+		own = nil
+	end
+	if ds.type == "prometheus" then
+		return own or "15s"
+	elseif M.SQL_TYPES[ds.type] then
+		return own or "1m"
+	elseif ds.type == "elasticsearch" then
+		return own
+	end
+	return nil
+end
+
+-- The datasource instance a panel's query runner runs on: the panel's,
+-- else its first target's (SceneQueryRunner findFirstDatasource).
+local function runnerDs(panel: { [string]: any }, ctx: Context, env: Env): Datasource?
+	local raw = Env.value(env, panel.datasource)
+	if raw == nil then
+		local list = Env.value(env, panel.targets)
+		local first = if type(list) == "table" then list[1] else nil
+		raw = if type(first) == "table" then first.datasource else nil
+	end
+	local ref = resolveRef(raw, ctx.scope, ctx.datasources, env)
+	return if ref then findDs(ctx.datasources, ref.uid) else nil
+end
+
 local function formatterFor(dsType: string): Interpolate.Formatter
 	return if dsType == "loki" then Interpolate.loki else Interpolate.prometheus
 end
@@ -756,13 +798,35 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 		loki_split = features.lokiQuerySplitting == true,
 	}
 	local mdp = Env.value(env, panel.maxDataPoints)
-	local maxPoints = if type(mdp) == "number" and mdp > 0 then mdp else ctx.max_points
-	local panelMin = minInterval(str(env, panel.interval), ctx.scope)
-	local range_ms = math.max(1, ctx.to_ms - ctx.from_ms)
+	local width = ctx.width_px
+	local maxPoints = if type(mdp) == "number" and mdp > 0
+		then mdp
+		elseif width and width > 0 then math.floor(width + 0.5)
+		else M.DEFAULT_MAX_POINTS
+	local low = minInterval(str(env, panel.interval), ctx.scope)
+		or minInterval(dsInterval(runnerDs(panel, ctx, env), env), ctx.scope)
+	local interval = Step.interval(math.max(1, ctx.to_ms - ctx.from_ms), maxPoints, low)
+	local scope = Interpolate.merge(
+		Interpolate.builtins({
+			from_ms = ctx.from_ms,
+			to_ms = ctx.to_ms,
+			interval_ms = interval.interval_ms,
+			interval = interval.interval_str,
+			dashboard_title = ctx.dashboard_title,
+			dashboard_uid = ctx.dashboard_uid,
+			org_id = ctx.org_id,
+			user_login = ctx.user_login,
+		}),
+		ctx.scope
+	)
+	-- Prometheus and Loki applyTemplateVariables: the backend's.
+	local backendScope = Interpolate.merge(scope, {
+		__interval = Interpolate.value("$__interval"),
+		__interval_ms = Interpolate.value("$__interval_ms"),
+	})
 	local timeseries = str(env, panel.type) == "timeseries"
 	local queries: { { [string]: any } } = {}
 	local refIds: { string } = {}
-	local smallest: number? = nil
 	local parts: { number } = {}
 	local groups: { JobGroup } = {}
 	local groupOf: { [string]: number } = {}
@@ -804,21 +868,6 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 		then
 			continue
 		end
-		local interval = Step.interval(range_ms, maxPoints, minInterval(str(env, t.interval), ctx.scope) or panelMin)
-		smallest = if smallest then math.min(smallest, interval.interval_ms) else interval.interval_ms
-		local scope = Interpolate.merge(
-			Interpolate.builtins({
-				from_ms = ctx.from_ms,
-				to_ms = ctx.to_ms,
-				interval_ms = interval.interval_ms,
-				interval = interval.interval_str,
-				dashboard_title = ctx.dashboard_title,
-				dashboard_uid = ctx.dashboard_uid,
-				org_id = ctx.org_id,
-				user_login = ctx.user_login,
-			}),
-			ctx.scope
-		)
 		local mod = DsRegistry.module(ref.type)
 		local ds = if mod then findDs(ctx.datasources, ref.uid) else nil
 		if mod and ds and mod.start then
@@ -862,7 +911,9 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 				table.insert((pg :: PostGroup).targets, q)
 			end
 		else
-			q = shape(ref, t, scope, expr, env, if ref.uid == filtersUid then filters else nil, promOpts)
+			-- With expressions, interpolateVariablesInQueries replaces them too.
+			local own = if not expr and (ref.type == "prometheus" or ref.type == "loki") then backendScope else scope
+			q = shape(ref, t, own, expr, env, if ref.uid == filtersUid then filters else nil, promOpts)
 		end
 		q.refId = refId
 		q.datasource = { uid = ref.uid, type = ref.type }
@@ -887,7 +938,8 @@ function M.build(panel: { [string]: any }, ctx: Context, env: Env): (PanelQuery?
 	if #queries == 0 and #groups == 0 then
 		return nil, nil
 	end
-	local pq: PanelQuery = { queries = queries, ref_ids = refIds, interval_ms = smallest or 0, max_points = maxPoints }
+	local pq: PanelQuery =
+		{ queries = queries, ref_ids = refIds, interval_ms = interval.interval_ms, max_points = maxPoints }
 	if #post > 0 then
 		pq.post = post
 	end
@@ -1094,8 +1146,9 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 end
 
 -- Toggles Grafana made default and dropped from `featureToggles`, by the
--- major version that did: 13's gauge panel always draws gauge/v2.
-local GA_FEATURES: { [string]: number } = { newGauge = 13 }
+-- major version that did: 13's gauge panel always draws gauge/v2, and its
+-- panels always have the new header padding.
+local GA_FEATURES: { [string]: number } = { newGauge = 13, newPanelPadding = 13 }
 
 -- Grafana's frontend feature toggles (`featureToggles`), the ones on, plus
 -- the GA ones for the server's version (`buildInfo.version`).
@@ -1124,6 +1177,47 @@ function M.frontendFeatures(response: TransportTypes.Response, env: Env): { [str
 		end
 	end
 	return out
+end
+
+-- Grafana's frontend reads its OpenFeature flags from the server's OFREP
+-- endpoint (@grafana/runtime initOpenFeature: OFREPWebProvider at the app
+-- root, context `targetingKey` = the namespace plus `openFeatureContext`).
+-- The flags the native panels follow; Grafana 12 and older have none of
+-- them (12 answers the endpoint with its index page).
+M.OPEN_FEATURE_FLAGS = { "table.autoColumnWidths" }
+M.OPEN_FEATURE_SINCE = 13
+
+-- The OFREP evaluation of `flag` as the frontend asks for it, or nil when
+-- the server predates the flags or names no OpenFeature context.
+function M.flagRequest(response: TransportTypes.Response, flag: string, env: Env): Request?
+	local doc = Response.json(response, env, "frontend settings")
+	if type(doc) ~= "table" then
+		return nil
+	end
+	local build = Env.value(env, doc.buildInfo)
+	local version = if type(build) == "table" then Env.value(env, build.version) else nil
+	local major = M.major(if type(version) == "string" then version else nil)
+	local ctx = Env.value(env, doc.openFeatureContext)
+	if major == nil or major < M.OPEN_FEATURE_SINCE or type(ctx) ~= "table" then
+		return nil
+	end
+	local context = Tbl.copy(ctx)
+	local namespace = Env.value(env, doc.namespace)
+	context.targetingKey = if type(namespace) == "string" then namespace else context.namespace
+	return {
+		method = "POST",
+		path = "/ofrep/v1/evaluate/flags/" .. flag,
+		headers = { ["Content-Type"] = "application/json" },
+		body = env.encode({ context = context }),
+	}
+end
+
+-- Whether an OFREP evaluation answered true; anything else (an error, a
+-- page that is not JSON, a disabled flag) leaves the flag off, as the
+-- frontend's default value does.
+function M.flagOn(response: TransportTypes.Response, env: Env): boolean
+	local doc = Response.json(response, env, "feature flag")
+	return type(doc) == "table" and Env.value(env, doc.value) == true
 end
 
 -- The major version of a Grafana version string ("12.4.0" -> 12).

@@ -311,7 +311,7 @@ describe("connection test", function()
 		end)
 	end
 
-	for _, version in { "11.6.16", "12.4.12", "13.3.0" } do
+	for _, version in { "11.6.16", "12.4.12", "13.3.1" } do
 		it("checks Grafana " .. version .. " health, the token and the configured datasource uids", function()
 			local s = run(loaded(FILE), "lab/grafana", function(path: string)
 				local name = ({

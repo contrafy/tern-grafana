@@ -231,14 +231,14 @@ function M.render(opts: Options): string
 					elseif align == "right" or align == "end" then "end"
 					else "middle"
 				local base = m.text_baseline or "middle"
-				local dom = if base == "top" then "hanging" elseif base == "bottom" then "text-after-edge" else "central"
 				table.insert(
 					texts,
 					Kit.text(x + (m.offset_x or 0), y + (m.offset_y or 0), m.text :: string, {
 						anchor = anchor :: any,
 						size = m.text_size or 12,
 						class = "tgm-text",
-						attrs = fmt('dominant-baseline="%s" fill="%s"', dom, m.color),
+						baseline = if base == "top" then "top" elseif base == "bottom" then "bottom" else "middle",
+						attrs = fmt('fill="%s"', m.color),
 					})
 				)
 			end

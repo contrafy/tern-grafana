@@ -16,6 +16,7 @@ type QueryError = TransportTypes.QueryError
 type Response = TransportTypes.Response
 
 export type ListResult = { ok: true, values: { string } } | { ok: false, error: QueryError }
+export type SeriesResult = { ok: true, series: { { [string]: string } } } | { ok: false, error: QueryError }
 export type Metadata = { type: string, help: string, unit: string }
 export type MetadataResult = { ok: true, metadata: { [string]: Metadata } } | { ok: false, error: QueryError }
 export type Flavor = "prometheus" | "thanos" | "mimir" | "cortex" | "victoriametrics"
@@ -103,6 +104,20 @@ function M.labelValuesRequest(base: string, label: string, opts: ListOptions?): 
 	}
 end
 
+-- The series matching `match` over the range: /api/v1/series with whole
+-- seconds, the start rounded down and the end up.
+function M.seriesRequest(base: string, opts: { match: string, from_ms: number, to_ms: number }): Request
+	return {
+		method = "GET",
+		path = base .. "/api/v1/series",
+		query = {
+			{ "match[]", opts.match },
+			{ "start", string.format("%d", math.floor(opts.from_ms / 1000)) },
+			{ "end", string.format("%d", math.ceil(opts.to_ms / 1000)) },
+		},
+	}
+end
+
 -- One entry per metric (metadata repeats per target otherwise); all metrics
 -- unless `metric` names one.
 function M.metadataRequest(base: string, metric: string?): Request
@@ -167,6 +182,33 @@ function M.parseList(response: Response, env: Env): ListResult
 	end
 	table.sort(values)
 	return { ok = true, values = values }
+end
+
+-- Each series' label set (`__name__` included), in the answer's order.
+function M.parseSeries(response: Response, env: Env): SeriesResult
+	local doc, err = success(response, env, "series")
+	if err then
+		return { ok = false, error = err }
+	end
+	local data = Env.value(env, doc.data)
+	local series: { { [string]: string } } = {}
+	if type(data) == "table" then
+		for _, entry in data do
+			entry = Env.value(env, entry)
+			if type(entry) ~= "table" then
+				continue
+			end
+			local labels: { [string]: string } = {}
+			for k, v in entry do
+				v = Env.value(env, v)
+				if type(k) == "string" and type(v) == "string" then
+					labels[k] = v
+				end
+			end
+			table.insert(series, labels)
+		end
+	end
+	return { ok = true, series = series }
 end
 
 function M.parseMetadata(response: Response, env: Env): MetadataResult

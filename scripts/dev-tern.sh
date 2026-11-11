@@ -172,6 +172,7 @@ start)
 	# sign-in lives there and a sandbox without it stops at the sign-in sheet.
 	mkdir -p "$home/Library"
 	[ -e "$home/Library/Keychains" ] || ln -s "$HOME/Library/Keychains" "$home/Library/Keychains"
+	user_home=$HOME
 	export HOME="$home"
 	export CFFIXED_USER_HOME="$home"
 	export ZDOTDIR="$zdot"
@@ -184,6 +185,48 @@ start)
 	fi
 	# Shots land in <cwd>/target/shots: keep them in the sandbox.
 	cd "$sb"
+	# On macOS the window launches without activating (`open -g`), and when
+	# the OmniWM window manager answers on IPC (`ipcEnabled = true`) the new
+	# window, matched by its pid, is moved to workspace TG_TERN_WORKSPACE
+	# (default 7) as soon as OmniWM manages it, so a sandbox stays off the
+	# user's current workspace and never takes focus. A move right after the
+	# window appears can be ignored, so it repeats until the window reports
+	# that workspace. TG_TERN_BACKGROUND=0 starts a plain window instead.
+	if [ "${TG_TERN_BACKGROUND:-1}" = 1 ] && [ "$(uname)" = Darwin ]; then
+		exe=$(readlink -f "$(command -v "$tern_bin")")
+		app=${exe%/Contents/MacOS/*}
+		omniwm=${OMNIWMCTL:-/Applications/OmniWM.app/Contents/MacOS/omniwmctl}
+		ws=${TG_TERN_WORKSPACE:-7}
+		# OmniWM's socket is under the user's real home, not the sandbox's.
+		wm() { HOME=$user_home CFFIXED_USER_HOME=$user_home "$omniwm" "$@"; }
+		if [ -x "$omniwm" ] && wm ping >/dev/null 2>&1; then
+			(
+				i=0
+				while [ $i -lt 600 ]; do
+					pid=$(pgrep -f -- "MacOS/tern --control $ctl_sock" | head -n 1)
+					if [ -n "$pid" ]; then
+						w=$(wm query windows --bundle-id so.stencil.tern --format json 2>/dev/null |
+							jq -r --argjson p "$pid" '.result.payload.windows[] | select(.pid == $p) | "\(.id) \(.workspace.rawName)"' |
+							head -n 1)
+						case $w in
+						"") ;;
+						*" $ws") break ;;
+						*) wm window move-to-workspace "${w%% *}" "$ws" >/dev/null 2>&1 ;;
+						esac
+					fi
+					sleep 0.05
+					i=$((i + 1))
+				done
+			) </dev/null >/dev/null 2>&1 &
+		fi
+		set --
+		for v in TERN_CONFIG_DIR TERN_DAEMON_SOCKET STENCIL_LOG_DIR STENCIL_LOG XDG_CONFIG_HOME HOME \
+			CFFIXED_USER_HOME ZDOTDIR SHELL PATH; do
+			eval "set -- \"\$@\" --env \"$v=\${$v}\""
+		done
+		exec open -n -g -W "$@" --stdout "$STENCIL_LOG_DIR/window.out" --stderr "$STENCIL_LOG_DIR/window.out" \
+			-a "$app" --args --control "$ctl_sock" --out "$sb/target/shots" "$repo"
+	fi
 	exec "$tern_bin" --control "$ctl_sock" "$repo"
 	;;
 link)

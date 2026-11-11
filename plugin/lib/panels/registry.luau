@@ -121,6 +121,7 @@ end
 
 local STAT: PanelModule = {
 	types = { "stat" },
+	no_padding = true,
 	supports = supportsWith(valuesWhy),
 	view = function(panel: any, frames: { Frame }, env: Env, opts: Options): (Node, Assets.Assets?)
 		return stat().view(panel, frames, env, opts)
@@ -487,6 +488,13 @@ function M.parse(panel: any, tag: string, response: TransportTypes.Response, env
 		return { error = "could not read the answer: " .. tostring(result) }
 	end
 	return result
+end
+
+-- Whether Grafana draws the panel without PanelChrome's padding
+-- (PanelPlugin.setNoPadding: stat, canvas, geomap, dynamic text).
+function M.noPadding(panel: any, env: Env): boolean
+	local m = moduleOf(panel, env)
+	return m ~= nil and m.no_padding == true
 end
 
 -- The live redraw period of the panel, if it has one.

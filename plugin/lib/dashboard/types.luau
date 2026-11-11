@@ -37,6 +37,10 @@ export type PanelState = {
 	signature: string?,
 	-- The query sent with `signature`; its answer is parsed against it.
 	pq: Queries.PanelQuery?,
+	-- The width in px the last query was sent for; a resize alone does not
+	-- re-query, the next query takes the new width (SceneQueryRunner
+	-- setContainerWidth).
+	width_px: number?,
 	gen: number,
 	data: Queries.PanelData?,
 	error: string?,
@@ -76,8 +80,9 @@ export type PanelState = {
 }
 
 export type Picker = {
-	kind: "search" | "vars" | "var",
-	-- The variable a "var" picker edits.
+	kind: "search" | "vars" | "var" | "links",
+	-- The variable a "var" picker edits; the panel key a "links" picker
+	-- lists the links of.
 	name: string?,
 	query: string,
 	selected: string?,
@@ -95,11 +100,16 @@ export type Picker = {
 	list_status: ("loading" | "ready" | "error")?,
 	list_error: string?,
 	list_gen: number?,
+	-- A "links" picker's panel links, as built when it opened, or the
+	-- dashboards of dashboard link `dash_link` (a "dashboards" dropdown).
+	links: { PanelLink }?,
+	dash_link: number?,
 }
 
 export type PickerItem = { id: string, label: string, detail: string? }
 
-export type PanelLink = { title: string, url: string }
+-- `uid`: a dashboard a "dashboards" dashboard link lists (`url` its folder).
+export type PanelLink = { title: string, url: string, uid: string? }
 
 export type SearchState = {
 	gen: number,
@@ -116,6 +126,8 @@ export type Settings = {
 	features: { [string]: boolean },
 	-- Grafana's major version (buildInfo.version); nil while unknown.
 	major: number?,
+	-- OpenFeature flag evaluations still unanswered (Queries.flagRequest).
+	pending_flags: number?,
 	error: string?,
 }
 
@@ -213,6 +225,8 @@ export type State = {
 	-- Bumped by every ad hoc key or value list request (Picker.list_gen).
 	picker_gen: number,
 	search: SearchState,
+	-- The dashboards each "dashboards" dashboard link lists, by link index.
+	dash_hits: { [number]: { Search.Hit } },
 	updated_ms: number?,
 	-- View id of each panel card in the grid, recorded by the view, so a
 	-- focus move can scroll the card into view.
@@ -221,6 +235,8 @@ export type State = {
 	labels: { [string]: boolean },
 	-- Table panels flipped past their first page (Table pager `tpage`).
 	pages: { [string]: number },
+	-- Table panels showing another frame (Table frame selector `tframe`).
+	frames: { [string]: number },
 	-- View memo (lib/dashboard/view.luau): rendered native panels by key.
 	memo: { [string]: any },
 	-- Selected exemplar of the focused time series (single view): index
@@ -239,6 +255,9 @@ export type State = {
 	live_tick: number,
 	-- Dashboard data layers: annotations and alert states.
 	layers: Layers,
+	-- Annotation layers switched in the variable bar, by layer name (saved
+	-- with the block, like the variables in its link).
+	layer_on: { [string]: boolean },
 }
 
 -- An annotation layer of the dashboard (lib/dashboard/annotations.luau):
@@ -257,7 +276,13 @@ export type Layers = {
 	gen: number,
 	-- Identity of the last batch (its requests).
 	sig: string?,
+	-- The dashboard width in px the batch was sent for: annotation queries
+	-- ask for at most that many points (executeAnnotationQuery), the width
+	-- kept like a panel's (PanelState.width_px).
+	width_px: number?,
 	annotations: { AnnotationLayer },
+	-- The variable bar's annotation layer switches (Annotations.toggles).
+	toggles: { Annotations.Toggle },
 	-- Alert state per panel id; nil while unknown or when the range does
 	-- not end now.
 	alert_states: { [number]: AlertStates.State }?,
@@ -272,7 +297,16 @@ export type Layers = {
 }
 
 function M.newLayers(): Layers
-	return { gen = 0, sig = nil, annotations = {}, alert_states = nil, no_rules = false, marks = {}, stamp = 0 }
+	return {
+		gen = 0,
+		sig = nil,
+		annotations = {},
+		toggles = {},
+		alert_states = nil,
+		no_rules = false,
+		marks = {},
+		stamp = 0,
+	}
 end
 
 function M.new(env: Env): State
@@ -328,9 +362,11 @@ function M.new(env: Env): State
 		picker = nil,
 		picker_gen = 0,
 		search = { gen = 0, status = "ready", hits = {} },
+		dash_hits = {},
 		updated_ms = nil,
 		labels = {},
 		pages = {},
+		frames = {},
 		card_ids = {},
 		memo = {},
 		exemplar = nil,
@@ -342,6 +378,7 @@ function M.new(env: Env): State
 		live_ms = nil,
 		live_tick = 0,
 		layers = M.newLayers(),
+		layer_on = {},
 	}
 end
 

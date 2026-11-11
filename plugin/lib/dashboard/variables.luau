@@ -4,7 +4,7 @@
 -- selection, URL overrides, and the interpolation scope they produce.
 --
 -- Semantics follow Grafana's variable system (public/app/features/variables
--- and the Prometheus datasource's metricFindQuery): option regexes use the
+-- and the Prometheus and Loki datasources' metricFindQuery): option regexes use the
 -- first capture group or named groups `text`/`value`; sort modes 1..8;
 -- an include-all variable defaults to All; a multi-value variable keeps the
 -- still-valid part of its selection after its options change; a variable
@@ -16,6 +16,7 @@ local DsTypes = require("../datasources/types")
 local Env = require("../env")
 local Frame = require("../frame/types")
 local Interpolate = require("./interpolate")
+local Loki = require("../source/loki")
 local Metrics = require("../source/metrics")
 local Regex = require("../regex")
 local Route = require("../config/route")
@@ -78,12 +79,23 @@ export type Variable = {
 	adhoc: Adhoc.Set?,
 }
 
--- What a query variable asks the metrics source for.
+-- What a query variable asks its datasource for. Prometheus: `metrics` is
+-- filtered by the server (`server`, Grafana 12.1+) or by the frontend's
+-- unanchored regex test (before); `series` is the classic query, any other
+-- expression. Loki: `hidden` are the label names its frontend leaves out.
 export type Fetch =
 	{ kind: "label_names", match: string? }
 	| { kind: "label_values", label: string, match: string? }
-	| { kind: "metrics", regex: string }
+	| { kind: "metrics", regex: string, server: boolean }
 	| { kind: "query_result", expr: string }
+	| { kind: "series", match: string }
+	| { kind: "loki_label_names", hidden: { string } }
+	| { kind: "loki_label_values", label: string, stream: string? }
+
+-- The datasource instance a query variable reads (nil: not listed by
+-- Grafana), its type (the reference's, else the instance's) and Grafana's
+-- major version (nil: unknown, the newest behavior).
+export type FetchContext = { ds: DsTypes.Datasource?, ds_type: string?, major: number? }
 
 local KINDS: { [string]: Kind } = {
 	query = "query",
@@ -588,38 +600,108 @@ function M.signature(vars: { Variable }, ctx: ScopeContext?): string
 	return table.concat(parts, "\30")
 end
 
--- Parses the classic Prometheus variable query functions.
-function M.parseQuery(query: string): (Fetch?, string?)
-	local q = trim(query)
-	local inner = string.match(q, "^label_names%((.*)%)$")
-	if inner then
-		inner = trim(inner)
-		return { kind = "label_names", match = if inner == "" then nil else inner }, nil
+-- `inner` as JavaScript's `.+` matches it (no line breaks, not empty).
+local function dotPlus(inner: string?): string?
+	if inner == nil or inner == "" or string.find(inner, "[\r\n]") then
+		return nil
 	end
-	inner = string.match(q, "^label_values%((.*)%)$")
+	return inner
+end
+
+-- `s` with the call `name(...)` and trailing white space, its argument text
+-- as the regex `^name\((.+)\)\s*$` captures it.
+local function call(s: string, name: string): string?
+	local inner = string.match(s, "^" .. name .. "%((.*)%)%s*$")
+	return dotPlus(inner)
+end
+
+-- Grafana's isFilterDefined: blank, or `{}` once spaces are removed, is no filter.
+local function filterDefined(filter: string?): boolean
+	return filter ~= nil and filter ~= "" and string.gsub(filter, " ", "") ~= "{}"
+end
+
+-- The Prometheus datasource's metricFindQuery (packages/grafana-prometheus
+-- src/metric_find_query.ts, Grafana 11.6 to 13): label_names(), label
+-- names of metrics matching `.*<m>.*`, label_values([selector,] label),
+-- metrics(regex), query_result(expr), and any other expression as a series
+-- query (the empty forms answer nothing). `major` picks how metrics()
+-- filters (12.0 still filtered in the frontend; Tern takes 12 as 12.1+).
+-- nil and no error: Grafana answers no options without asking.
+function M.parseQuery(query: string, major: number?): (Fetch?, string?)
+	if string.match(query, "^label_names%(%)%s*$") then
+		return { kind = "label_names" }, nil
+	end
+	local inner = call(query, "label_names")
 	if inner then
-		local selector, label = string.match(inner, "^(.*),%s*([%w_]+)%s*$")
-		if selector and label then
-			return { kind = "label_values", label = label, match = trim(selector) }, nil
+		return { kind = "label_names", match = '{__name__=~".*' .. inner .. '.*"}' }, nil
+	end
+	inner = call(query, "label_values")
+	if inner then
+		local filter, label = string.match(inner, "^(.+),%s*(.+)$")
+		if label == nil then
+			label = inner
 		end
-		local only = string.match(inner, "^%s*([%w_]+)%s*$")
-		if only then
-			return { kind = "label_values", label = only }, nil
+		return { kind = "label_values", label = label :: string, match = if filterDefined(filter) then filter else nil },
+			nil
+	end
+	inner = call(query, "metrics")
+	if inner then
+		return { kind = "metrics", regex = inner, server = major == nil or major >= 12 }, nil
+	end
+	inner = call(query, "query_result")
+	if inner then
+		return { kind = "query_result", expr = inner }, nil
+	end
+	if query == "" or query == "label_values()" or query == "metrics()" or query == "query_result()" then
+		return nil, nil
+	end
+	return { kind = "series", match = query }, nil
+end
+
+-- Loki's label names its frontend hides (LanguageProvider HIDDEN_LABELS;
+-- Grafana 11 misspelled the first one).
+local LOKI_HIDDEN_11 = { "__aggregrated_metric__", "__tenant_id__", "__stream_shard__" }
+local LOKI_HIDDEN = { "__aggregated_metric__", "__tenant_id__", "__stream_shard__" }
+
+local function lokiValues(label: string, stream: string?): Fetch?
+	if label == "" then
+		return nil
+	end
+	return { kind = "loki_label_values", label = label, stream = if stream == "" or stream == "{}" then nil else stream }
+end
+
+-- The Loki datasource's metricFindQuery (public/app/plugins/datasource/
+-- loki/datasource.ts, Grafana 11.6 to 13): the editor's query object
+-- ({type: 0 label names | 1 label values, label, stream}) with label and
+-- stream interpolated, or a legacy string, interpolated, then parsed as
+-- label_names() or label_values([stream,] label); anything else answers
+-- nothing.
+function M.lokiFetch(model: any, query: string, scope: Interpolate.Scope, major: number?): Fetch?
+	local format = { format = Interpolate.loki }
+	local names: Fetch =
+		{ kind = "loki_label_names", hidden = if major and major < 12 then LOKI_HIDDEN_11 else LOKI_HIDDEN }
+	if type(model) == "table" then
+		if model.type == 0 then
+			return names
 		end
-		return nil, "label_values needs a label name"
+		local label = if type(model.label) == "string" then model.label else ""
+		local stream = if type(model.stream) == "string" then model.stream else ""
+		return lokiValues(Interpolate.replace(label, scope, format), Interpolate.replace(stream, scope, format))
 	end
-	inner = string.match(q, "^metrics%((.*)%)$")
-	if inner then
-		return { kind = "metrics", regex = trim(inner) }, nil
+	local q = Interpolate.replace(query, scope, format)
+	if string.match(q, "^label_names%(%)%s*$") then
+		return names
 	end
-	inner = string.match(q, "^query_result%((.*)%)$")
-	if inner then
-		return { kind = "query_result", expr = trim(inner) }, nil
+	local inner = string.match(q, "^label_values%((.*)%)%s*$")
+	if inner == nil or string.find(inner, "[\r\n]") then
+		return nil
 	end
-	if q == "" then
-		return nil, "the variable has no query"
+	local stream, label = string.match(inner, "^(.+),%s*([%a_%$][%w_]*)$")
+	if label then
+		return lokiValues(label, stream)
 	end
-	return nil, "unsupported variable query (supported: label_names, label_values, metrics, query_result)"
+	label = string.match(inner, "^([%a_%$][%w_]*)$")
+	return if label then lokiValues(label, nil) else nil
 end
 
 -- The datasource uid a variable queries, after interpolation.
@@ -632,36 +714,77 @@ function M.datasourceUid(v: Variable, scope: Interpolate.Scope): string?
 	return if resolved == "" then nil else resolved
 end
 
--- The fetch for a query variable with its references interpolated.
-function M.fetchFor(v: Variable, scope: Interpolate.Scope, builtins: Interpolate.Scope?): (Fetch?, string?)
-	if v.datasource_type and v.datasource_type ~= "prometheus" then
-		return nil, string.format("%s query variables are not supported (only prometheus)", v.datasource_type)
-	end
+-- PrometheusVariableSupport's own `$__interval` and `$__interval_ms`: the
+-- datasource's scrape interval (jsonData.timeInterval, else 15s).
+local function promIntervals(ds: DsTypes.Datasource?): Interpolate.Scope
+	local jd = if ds then ds.json_data else nil
+	local interval = if jd
+			and type(jd.timeInterval) == "string"
+			and jd.timeInterval ~= ""
+		then jd.timeInterval :: string
+		else "15s"
+	return {
+		__interval = Interpolate.value(interval),
+		__interval_ms = Interpolate.value(string.format("%d", Step.parseDuration(interval) or 15000)),
+	}
+end
+
+-- The fetch for a query variable with its references interpolated as its
+-- datasource interpolates them. nil and no error: no options, unasked.
+function M.fetchFor(
+	v: Variable,
+	scope: Interpolate.Scope,
+	builtins: Interpolate.Scope?,
+	ctx: FetchContext?
+): (Fetch?, string?)
+	local c: FetchContext = ctx or {}
+	local dsType = c.ds_type or v.datasource_type or "prometheus"
 	local s = if builtins then Interpolate.merge(builtins, scope) else scope
-	local q = Interpolate.replace(v.query, s, { format = Interpolate.prometheus })
-	return M.parseQuery(q)
+	if dsType == "loki" then
+		return M.lokiFetch(v.query_model, v.query, s, c.major), nil
+	elseif dsType ~= "prometheus" then
+		return nil, string.format("%s query variables are not supported (only prometheus and loki)", dsType)
+	end
+	local q =
+		Interpolate.replace(v.query, Interpolate.merge(s, promIntervals(c.ds)), { format = Interpolate.prometheus })
+	return M.parseQuery(q, c.major)
 end
 
 export type Range = { from_ms: number, to_ms: number }
 
 function M.request(fetch: Fetch, route: Route, range: Range): Request
+	local from_ms, to_ms = range.from_ms, range.to_ms
 	if fetch.kind == "label_names" then
 		local m = fetch.match
-		return Metrics.labelsRequest(
-			route,
-			{ match = if m then { m } else nil, from_ms = range.from_ms, to_ms = range.to_ms }
-		)
+		return Metrics.labelsRequest(route, { match = if m then { m } else nil, from_ms = from_ms, to_ms = to_ms })
 	elseif fetch.kind == "label_values" then
 		local m = fetch.match
 		return Metrics.labelValuesRequest(
 			route,
 			fetch.label,
-			{ match = if m then { m } else nil, from_ms = range.from_ms, to_ms = range.to_ms }
+			{ match = if m then { m } else nil, from_ms = from_ms, to_ms = to_ms }
 		)
 	elseif fetch.kind == "metrics" then
-		return Metrics.labelValuesRequest(route, "__name__", { from_ms = range.from_ms, to_ms = range.to_ms })
+		local match = if fetch.server then { '{__name__=~"' .. fetch.regex .. '"}' } else nil
+		return Metrics.labelValuesRequest(route, "__name__", { match = match, from_ms = from_ms, to_ms = to_ms })
+	elseif fetch.kind == "series" then
+		return Metrics.seriesRequest(route, { match = fetch.match, from_ms = from_ms, to_ms = to_ms })
+	elseif fetch.kind == "loki_label_names" then
+		return Loki.labelsRequest(route, { from_ms = from_ms, to_ms = to_ms })
+	elseif fetch.kind == "loki_label_values" then
+		return Loki.labelValuesRequest(route, fetch.label, { query = fetch.stream, from_ms = from_ms, to_ms = to_ms })
 	end
-	return Metrics.instantRequest(route, { expr = fetch.expr, time_ms = range.to_ms })
+	return Metrics.instantRequest(route, { expr = fetch.expr, time_ms = to_ms })
+end
+
+-- A series as the Prometheus datasource names it (getOriginalMetricName):
+-- `name{a="1",b="2"}`, labels in the answer's (sorted) order, unescaped.
+local function seriesText(labels: { [string]: string }): string
+	local parts: { string } = {}
+	for _, k in Frame.labelKeys(labels) do
+		table.insert(parts, k .. '="' .. labels[k] .. '"')
+	end
+	return (labels.__name__ or "") .. "{" .. table.concat(parts, ",") .. "}"
 end
 
 -- A sample as Prometheus writes it (Go strconv.FormatFloat(v, 'f', -1, 64):
@@ -732,12 +855,7 @@ function M.queryResultValues(frames: { Frame.Frame }): ({ string }?, string?)
 			local n = #field.values
 			local value = field.values[n]
 			local ts = if timeField then timeField.values[n] else nil
-			local labels: { [string]: string } = field.labels or {}
-			local parts: { string } = {}
-			for _, k in Frame.labelKeys(labels) do
-				table.insert(parts, k .. '="' .. labels[k] .. '"')
-			end
-			local text = (labels.__name__ or "") .. "{" .. table.concat(parts, ",") .. "}"
+			local text = seriesText(field.labels or {})
 			text ..= " " .. sampleText(if Frame.isNull(value) then 0 / 0 else value)
 			if type(ts) == "number" then
 				text ..= " " .. string.format("%d", ts)
@@ -756,13 +874,35 @@ function M.parseFetch(fetch: Fetch, route: Route, response: Response, env: Env):
 			return nil, (r :: any).error.message
 		end
 		return M.queryResultValues((r :: any).frames)
+	elseif fetch.kind == "series" then
+		local r = Metrics.parseSeries(route, response, env)
+		if not r.ok then
+			return nil, (r :: any).error.message
+		end
+		local out: { string } = {}
+		for _, labels in (r :: any).series :: { { [string]: string } } do
+			table.insert(out, seriesText(labels))
+		end
+		return out, nil
 	end
-	local r = Metrics.parseList(route, response, env)
+	local r = if fetch.kind == "loki_label_names" or fetch.kind == "loki_label_values"
+		then Loki.parseList(route, response, env)
+		else Metrics.parseList(route, response, env)
 	if not r.ok then
 		return nil, (r :: any).error.message
 	end
 	local values: { string } = (r :: any).values
-	if fetch.kind == "metrics" and fetch.regex ~= "" then
+	if fetch.kind == "loki_label_names" or (fetch.kind == "label_names" and fetch.match) then
+		local hidden: { string } = if fetch.kind == "loki_label_names" then fetch.hidden else { "__name__" }
+		local out: { string } = {}
+		for _, name in values do
+			if not table.find(hidden, name) then
+				table.insert(out, name)
+			end
+		end
+		return out, nil
+	end
+	if fetch.kind == "metrics" and not fetch.server and fetch.regex ~= "" then
 		local re, err = Regex.compile(fetch.regex)
 		if re == nil then
 			return nil, "metrics(): " .. tostring(err)

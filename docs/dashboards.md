@@ -21,6 +21,15 @@ own. Both need a context with a `grafana` endpoint (see [configuration.md](confi
 
 The block remembers its dashboard, range, variables and expanded panel across Tern restarts.
 
+Dashboards saved by older Grafanas open as Grafana shows them: Tern runs Grafana's dashboard schema migration
+(`DashboardMigrator`, which Grafana 12 and 13 run in their backend) on what `/api/dashboards/uid` answers.
+Dashboards from before Grafana 5 (schemaVersion below 16, top-level `rows`) get row panels and grid positions
+from their row heights and panel spans, leftover copies of repeated panels go, panel ids are made unique, old
+panel links, value mappings, table styles (`table` panels with styles become `table-old`, then a table) and
+variable flags are upgraded, and panels are ordered by grid position. Steps that only change state Tern never
+reads are left out (see `plugin/lib/dashboard/migrate_schema.luau`). A dashboard without panels is listed in the
+compatibility scan as "the dashboard has no panels".
+
 ## Keys
 
 | Key | Dashboard block | Panel block |
@@ -52,6 +61,12 @@ is cut at its Grafana height (a long logs panel or legend shows its first lines)
 of it. Clicking a panel focuses it, double-clicking expands it, clicking a row header collapses or expands the row, and
 clicking a variable chip opens its picker.
 
+Panels keep their gridPos widths, as Grafana's grid does: a 2-column stat beside a 10-column table stays 2 columns
+wide. Below Grafana's `md` breakpoint (a block narrower than 769 px) every panel takes the full width, one under
+the other. The dashboard's links (`dashboard.links`) are chips after the variables: a link opens in the browser pane
+(with the time range and variables when the link keeps them); a "dashboards" link lists the dashboards with its tags
+(a dropdown, or a chip per dashboard) and opens the picked one as a dashboard block.
+
 ## Variables
 
 Variables appear as chips under the title (hidden ones and constants are not shown). In a picker, typing filters
@@ -61,7 +76,8 @@ queries change.
 
 | Type | Supported |
 | --- | --- |
-| Query (Prometheus) | `label_values(metric_or_selector, label)`, `label_values(label)`, `label_names()`, `metrics(regex)`, `query_result(expr)`; the variable's regex (a capture group or named groups `text`/`value` pick the value, as in Grafana), sort modes, multi-value, include All with or without a custom all value, refresh on load or on time range change |
+| Query (Prometheus) | `label_values(metric_or_selector, label)`, `label_values(label)`, `label_names()`, `label_names(metric)`, `metrics(regex)`, `query_result(expr)`, and any other expression (`up{job=~"$job"}`) as Grafana's classic query: the series it matches, each as `name{label="value",...}`; the variable's regex (a capture group or named groups `text`/`value` pick the value, as in Grafana), sort modes, multi-value, include All with or without a custom all value, refresh on load or on time range change. `$__interval` is the datasource's scrape interval. `metrics(regex)` is matched by Prometheus (anchored) from Grafana 12 on, by an unanchored test before, as Grafana 11 does |
+| Query (Loki) | the query editor's label names and label values (with an optional stream selector), and the legacy `label_names()` and `label_values([stream,] label)` strings, as Grafana's Loki datasource lists them; regex, sort, multi-value and All as above |
 | Query (Grafana Incident) | `labels`, `severities`, `statuses` (listed through Grafana's `/api/ds/query`, as the plugin's frontend lists them; `roles` shows the plugin's error); regex, sort, multi-value and All as above |
 | Query (JSON API) | the variable's JSON API query, run as its panels run (see [JSON API](#json-api-marcusolsson-json-datasource)); text from `experimentalVariableTextField`, value from `experimentalVariableValueField`, else the first field; regex, sort, multi-value and All as above |
 | Custom | comma-separated values, `\,` for a literal comma, `text : value` pairs |
@@ -72,9 +88,13 @@ queries change.
 | Ad hoc filters | see [Ad hoc filters](#ad-hoc-filters) |
 
 Variables are resolved in dependency order: a variable that references another (`label_values(up{job=~"$job"},
-instance)`, a query on datasource `${ds}`) waits for it and is refreshed when it changes. Query variables of other
-datasource types (Loki, Tempo, SQL, ...) show as not supported, and panels referencing them keep the reference as
-written.
+instance)`, a query on datasource `${ds}`) waits for it and is refreshed when it changes. A variable's datasource is
+found as a panel's is: by uid, by name (`"datasource": "Loki"` in older dashboards) or through a datasource
+variable. Query variables of other datasource types (Tempo, SQL, ...) show as not supported, and panels referencing
+them keep the reference as written.
+
+Panels that run no queries (text, news, dashboard list, alert list, annotation list: the plugins Grafana marks
+`skipDataQuery`) are drawn natively whatever datasource or targets were saved with them, as Grafana ignores them.
 
 ### Ad hoc filters
 
@@ -118,8 +138,9 @@ include-All variables become an escaped regex alternation). Built-ins: `$__inter
 `$__range_s`, `$__range_ms`, `$__from`/`$__to` (with `:date`, `:date:iso`, `:date:seconds`), `$__dashboard`,
 `${__dashboard.uid}`, `$__org`, `${__user.login}`; `$__rate_interval` is computed by Grafana itself, which knows the datasource's scrape interval.
 
-Repeated panels and rows are laid out as Grafana does: one copy per selected value, `maxPerRow` copies per line
-(default 4), and each copy queries its own value.
+Repeated panels and rows are laid out as Grafana's dashboard scene does: one copy per selected value; a horizontal
+repeat spans the full width in `min(n, maxPerRow)` columns (default 4), so a panel beside it moves below all of its
+copies; a vertical repeat stacks its copies. Each copy queries its own value.
 
 ## How panels are shown: the ladder
 
@@ -185,7 +206,7 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 | stat, legacy singlestat | yes | reducers Tern cannot compute |
 | gauge | yes | see Gauge below |
 | bargauge | yes | `showUnfilled`, `sizing`/`minViz*`/`maxVizHeight` and the legend are not drawn |
-| table | yes | sparkline, image, data-links, actions and custom cells |
+| table | yes | sparkline, image, data-links, actions and custom cell types; see Tables below |
 | text, logs | yes | |
 | piechart, barchart, histogram, trend, candlestick | yes | |
 | xychart | yes | the options from before Grafana 11.3 (`seriesMapping`, `dims`) |
@@ -203,8 +224,14 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   soft min/max (`axisSoftMin`/`axisSoftMax`), axis placement, axis label and scale distribution. Any difference
   (typically a per-series unit override, or a legacy graph's right y axis) gives the series its own scale with its
   own ticks and unit: the first axis goes left, later ones right unless `axisPlacement` says otherwise, and a
-  `hidden` placement keeps the scale without drawing its axis. `axisLabel`, `axisCenteredZero`, `axisGridShow`
-  and log (base 2 or 10) and symlog scales are drawn; stacking is per scale and per `stacking.group`. The
+  `hidden` placement keeps the scale without drawing its axis. The time axis follows the time field's own
+  `axisPlacement`, so defaults that hide every axis (a legacy graph with both y axes off) hide it too; a scale
+  with no number to range over (every sample null or NaN) draws no ticks or axis. `axisLabel`, `axisCenteredZero`,
+  `axisGridShow` and log (base 2 or 10) and symlog scales are drawn; stacking is per scale and per `stacking.group` (an override
+  with `group: false` stacks its series alone, as Grafana keys the group). A stack's axis ranges over its stacked
+  values, not the zero its first series fills down to (a stacked constant 4 reads 0..8, as in Grafana). The y
+  ticks are spaced for the plot height Grafana gives the panel (15 px apart when its plot is at most 150 px
+  tall, else 30), so a dashboard card shows Grafana's tick count. The
   `negative-Y` transform draws a series below zero (its axis ticks read negative, as in Grafana) while the
   legend and the cursor read-out keep its own values; `constant` draws the series' first value across the range.
   Overrides may match fields by value (`byValue`: a reducer compared with `gt`, `gte`, `lt`, `lte`, `eq` or
@@ -212,7 +239,8 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 - **Time series drawing.** Every series is drawn with its own field config, from the defaults and overrides:
   `drawStyle` (line, bars, points), `lineWidth` (0 hides the line), `lineStyle` dash and dot, `lineInterpolation`
   (linear, smooth, step before/after), `fillOpacity` with `gradientMode` (see below), `showPoints` and
-  `pointSize` (auto shows points when the samples are at least two point sizes apart), `insertNulls` (Grafana's
+  `pointSize` (auto shows points when the samples are at least two point sizes apart; a lone sample between gaps
+  shows only as a point, as uPlot's butt-capped lines draw nothing for it), `insertNulls` (Grafana's
   null insertion: where samples are further apart than it, or than the time field's interval when it is off, as
   for Prometheus results, the line breaks; fields of one frame that disagree insert nothing, as in Grafana),
   `spanNulls` (true, or a gap in ms up to which the line is joined), `fillBelowTo` (the fill runs down to the
@@ -220,8 +248,13 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   axes are ranged as Grafana ranges them (uPlot's padded range: headroom above the data, a flat zero series on
   the floor of 0..100, soft bounds and whole numbers with decimals 0). Series colors follow Grafana's classic
   palette in Grafana's order: the position counts every number field of the graphable frames, hidden series
-  included. A fixed color, and a continuous scheme at the series' `seriesBy` value, color the series and its
-  legend swatch in Grafana's color; the thresholds mode uses the step's theme tone, like threshold lines.
+  included, and runs through the whole classic palette (series 11 on take its darker, lighter and literal colors,
+  not the first ten again). A fixed color, and a continuous scheme at the series' `seriesBy` value, color the
+  series and its legend swatch in Grafana's color; the thresholds mode uses the step's theme tone, like threshold lines. Every
+  series is drawn, as in Grafana: Tern caps an SVG at 256 KiB, so the series share that byte budget and each
+  is drawn with fewer samples; only series that would not fit even at 3 samples each are left out, counted
+  under the legend ("N more series not shown (chart size limit)"). In a dashboard card a bottom legend gets at
+  most 35% of the panel, as Grafana's VizLayout gives it, cut after the whole lines that fit; the rest scrolls.
 - **Time series gradients.** `gradientMode` opacity fades the fill to nothing at the bottom of the plot. `hue`
   colors line and fill from a lighter, hue-shifted top to a darker bottom of the series color (palette, fixed or
   by-value), as Grafana computes them per light and dark theme. `scheme` colors line and fill by value: threshold
@@ -248,32 +281,67 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   pin work as on any card), and their stats
   show each field's name above the value (`textMode` auto), as Grafana does. Values are drawn at the width of
   Tern's font, so they shrink to a narrow tile instead of being cut, and field names wrap in full; in a
-  height-capped card a long name keeps to the lines left above the value. A short card (a 6x3 stat with a
-  description, a 2-row stat) still draws its value at least a line tall within the room under its head line (a
-  2-row tile drops its padding for it); a sparkline that would leave the value less than a line is left out, as
-  Grafana drops the chart from a short stat. A `fixedColor` of `text` is Tern's own text color in both themes.
+  height-capped card a long name keeps to the lines left above the value. Values are sized like BigValue's in
+  Grafana's box for the panel: stat has no panel padding, and the header is 40 px with `newPanelPadding` (a Grafana
+  12.4 toggle, always on in 13) or 32 px, so a 2-row stat's value is as small as Grafana's (8 px on 12.4 and 13,
+  15 px on 11.6) and never larger than the room under the card's head line (a 2-row tile drops its padding for it);
+  a wide tile too short for its name on a line of its own keeps name and value on one row, the name cut.
+  `graphMode` area draws BigValue's chart: a line with a 20% fill in the value's color (a white fill under a
+  brightened line on a filled tile) behind the value at the bottom of the tile, as tall as the room the text
+  leaves (half the box in the wide layout), across the panel's time range. Gaps break the line and a sample alone
+  between gaps draws nothing, as Grafana's sparkline draws no points; a flat series lies on the bottom edge. The
+  chart is drawn only where Grafana's layout has one: a box over 100 px tall (over 50 px when wide), so a 3-row stat
+  shows its value alone. A `fixedColor` of `text` is Tern's own text color in both themes.
 - **Gauge.** Grafana 12 with the `newGauge` feature toggle (read from Grafana's frontend settings; on in Grafana
   Cloud) draws the radial gauge: `shape` gauge (a 220 degree arc) or circle, `barWidthFactor`, `barShape`
   rounded, `segmentCount`/`segmentSpacing`, `neutral` (the bar runs between the neutral value and the value,
-  clamped to min..max), `endpointMarker` point, `effects.gradient` (the bar shows the threshold colors it passes
-  through, one band per step, where Grafana blends them), `showThresholdMarkers` (an outer ring of threshold bands),
-  `showThresholdLabels` (min, each step, max and the neutral value around the arc), `sparkline`, `textMode` and the
-  text sizes. A gauge saved before the new gauge gets no gradient or sparkline, as Grafana's migration decides.
-  Without the toggle (Grafana 11, Grafana 12 default) it is the classic 270 degree gauge with the value in its
-  threshold color. Gauges are SVG pictures sized from the panel's grid size; colors follow the Tern theme.
-  `effects.barGlow`/`centerGlow` and the `glow` endpoint marker are not drawn.
+  clamped to min..max), `endpointMarker` point (on rounded bars only, as Grafana), `effects.gradient` (on by
+  default: the bar, its segments and the threshold ring blend through each threshold step's color at its value, or
+  a continuous scheme's colors, as Grafana's conic gradient; other color modes keep the value's color),
+  `showThresholdMarkers` (an outer ring of threshold bands), `showThresholdLabels` (min, each step, max and the
+  neutral value around the arc; on a circle min and max stand side by side at twelve o'clock, and on an arc the end
+  labels keep inside its ends, as RadialScaleLabels places them), `sparkline` (a smoothed line, the time series'
+  monotone cubic, with a 6 px point on the sample the reducer picked, for first, last, min and max and their
+  not-null forms, as Grafana 12.4 and 13 draw it),
+  `textMode` and the text sizes. A
+  gauge saved before the new gauge gets no gradient or sparkline, as Grafana's migration decides
+  (`parseFloat(pluginVersion)` below 13 without a `shape`: a version such as `v13.0.0` is not migrated). Without
+  the toggle (Grafana 11, Grafana 12 default) it is
+  the classic 270 degree gauge with the value in its threshold color. Gauges and bar gauges are SVG pictures sized
+  from the panel's grid size (no 320 px floor, so a small panel's names stay Grafana's size); colors follow the
+  Tern theme. `effects.barGlow`/`centerGlow` and the `glow` endpoint marker are not drawn.
+- **Pie chart.** Each slice is filled with Grafana's radial gradient of its color in the current theme (darker at the
+  inner radius, lighter at the outer one in the dark theme, the reverse in the light theme). Tern's SVG draws no
+  `radialGradient`, so the slice is a stack of concentric bands, one per 8-bit step of the gradient (at most one
+  per pixel of ring): neighbouring bands differ by one color level, which reads as the smooth gradient Grafana
+  draws. A pie of many slices gets fewer, coarser bands so its picture stays under Tern's SVG size cap.
 - **Panel time options.** "Relative time" (`timeFrom`) and "Time shift" (`timeShift`) change the range the
   panel queries, as Grafana's panel time range does (a relative time only applies when the dashboard range is
   relative), and the panel header shows Grafana's info ("Last 1 hour", "timeshift -1h") unless "Hide time info"
-  (`hideTimeOverride`) is set. `maxDataPoints` and the minimum `interval` set the query resolution.
-- **Metadata.** A panel description shows as an `i` marker and panel links as chips at the right end of the card's
-  head line, as in Grafana's panel header (hover shows the description; the expanded panel shows it in full). Links
-  open in the browser pane (variables and `${__url_time_range}` filled in; a path-only link opens on your Grafana).
-  Panel titles keep to one line, cut short. Transparent panels have no card background or border.
+  (`hideTimeOverride`) is set.
+- **Query resolution.** As Grafana's SceneQueryRunner: `maxDataPoints` is the panel's own, else the panel's width
+  in px (its columns of Grafana's grid over the block's width, a Tern cell taken as 7.9 px; the whole width when
+  expanded, pinned or below Grafana's md breakpoint), else 500. `intervalMs` is Grafana's `calculateInterval` over
+  the range with the panel's minimum `interval`, else its datasource's (Prometheus `timeInterval`, else 15s; SQL
+  `timeInterval`, else 1m; Elasticsearch `timeInterval`; none for `-- Mixed --`), the same for every target.
+  Prometheus and Loki leave `$__interval` and `$__interval_ms` to Grafana's backend, which derives them from the
+  step and the target's own min interval. A resize sends nothing: as in Grafana, the panel's next query (a
+  refresh, a range or variable change) takes the new width. Annotation queries ask for as many points as the
+  dashboard is wide.
+- **Metadata.** As in Grafana's panel header, at the right end of the card's head line: a failed query is a
+  warning icon (the message on hover; the focused card and the expanded panel spell it out, and the body says
+  "No data"), a description an `i` marker (hover shows it; the expanded panel shows it in full) and panel links a
+  link icon (one link opens on click, several open a menu; the expanded panel lists them). Links open in the
+  browser pane (variables and `${__url_time_range}` filled in; a path-only link opens on your Grafana). Panel
+  titles keep to one line, cut short. Transparent panels have no card background or border. A panel without data
+  shows "No data" (or its `noValue`) centered and muted. Panels whose Grafana plugin has no padding (stat, canvas,
+  geomap, dynamic text) fill the card to its border. Native panels are laid out for the block's width.
 - **Alert states.** A panel linked to Grafana-managed alert rules (rule annotations `__dashboardUid__` and
   `__panelId__`) shows Grafana's heart after its title: red and broken while a rule fires, yellow while one is
   pending, green otherwise (the most severe linked rule wins). As in Grafana, only while the range ends at `now`.
-- **Annotations.** Time series draw the dashboard's enabled annotation layers as Grafana does: dashed lines, region
+- **Annotations.** Annotation layers that are not hidden get a switch next to the variables (also in the `v`
+  picker); the block remembers them. A layer's datasource may be a reference, a name or a variable (`$datasource`).
+  Time series draw the dashboard's enabled annotation layers as Grafana does: dashed lines, region
   fills between two dashed lines and markers under the plot. Grafana's built-in "Annotations & Alerts" layer
   (the dashboard's annotations and the alert state history of linked rules: pending yellow, alerting red, normal
   green) and Prometheus layers (samples above 0, merged into regions by the query step) run natively; layer panel
@@ -305,9 +373,58 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   reducer; columns named like `Value (mean)`), limit (a number or a variable), rename by regex (`$1`
   replacements, `/.../g` for every match), series to rows (also an old table panel's "Time series to rows"),
   grouping to matrix (row, column and value fields; empty cells as empty, null, true, false or 0) and prepare
-  time series (multi, long and wide, plus the deprecated many). Values follow JavaScript as Grafana's code does:
+  time series (multi, long and wide, plus the deprecated many). Options a panel leaves out take the
+  transformation's defaults, as Grafana spreads them under the saved ones (an empty `calculateField` sums each
+  row into `Total`, an empty `reduce` takes Max), and a query without series reaches them as Grafana's frame
+  without fields. Values follow JavaScript as Grafana's code does:
   in a calculation a null counts as 0 and a gap a join created as NaN. Other transformations (partition by
   values, ...) and filters other than `byRefId` keep the panel on the ladder.
+
+### Tables
+
+- **Cells.** Values go through the field's display processor (unit, decimals, mappings, dates in the dashboard's
+  time zone, objects as JSON). `custom.cellOptions` (or a legacy `custom.displayMode`, migrated as Grafana does)
+  picks the cell: color text, color background (basic or gradient, `applyToRow` fills the row), gauge (basic,
+  gradient or LCD, value shown as text, colored or hidden), pill (the value split into colored tags), markdown and
+  JSON view; pill and markdown on non-string fields fall back to auto, as in Grafana. The sparkline, image,
+  data-links, actions and custom cell types take the ladder. `custom.align`, `custom.hidden`, `options.sortBy`
+  and the footer (`options.footer` with its reducer, or per-field `custom.footer.reducers`) apply.
+- **Columns.** Sized as Grafana 13's table does, by the server's `table.autoColumnWidths` OpenFeature flag (read
+  from Grafana's `/ofrep/v1/evaluate/flags/...` endpoint once per dashboard load, as its frontend reads it; on in
+  Grafana Cloud, off by default and before Grafana 13). Always `custom.width` exactly. With the flag on, other
+  columns are as wide as their content (at least `custom.minWidth`, at most 400 px; a gauge column 150 px or its
+  header) without shrinking, so a table wider than its card scrolls sideways instead of squeezing columns to an
+  ellipsis; with no `custom.width` column, the columns share the leftover width. With it off, the other columns
+  share the card's width, each at least `custom.minWidth` or 150 px, their text cut short.
+- **Data links.** A field's data links (from the field config or the frame) draw its cells as links; a click
+  opens the first one in the browser pane, with the cell's values and the dashboard's variables filled in.
+- **Pagination.** `options.enablePagination` (`options.footer.enablePagination` before Grafana 12.2) pages the
+  rows as Grafana does: as many rows per page as fit the panel's Grafana height at its `cellHeight` (sm, md, lg),
+  at least one. The pager under the table has previous, page and next buttons and "1 - 8 of 40 rows".
+- **Frames.** Several frames (say an instant query without format table) show one at a time, as Grafana's
+  table does: `options.frameIndex`, else the first. A frame selector under the table names the shown frame
+  (Grafana's frame display name) between previous and next buttons; clicking the name moves to the next frame.
+  Up to 48 columns are drawn, a wide table scrolling sideways.
+
+### Treemap (marcusolsson-treemap-panel)
+
+Drawn as the plugin's 2.1.1 frontend draws it:
+
+- **Fields.** Text, size and color come from `textField`, `sizeField` and `colorByField`, else the first string
+  field and the first number field; `groupByField` groups tiles and `labelFields` add badges to the tooltip.
+  Frames without text, size or color fields are left out; with none left the panel shows the plugin's "Configure
+  your query" text.
+- **Layout.** The hierarchy is the frame name, the group value, then the text split by the text field's
+  `custom.separator`; a leading "All" is dropped and a single top-level child collapses into the root. Tiles are
+  laid out with d3-hierarchy's tilings (`tiling`: squarify, binary, dice, slice, slice-dice) and Grafana's
+  paddings, values summed and sorted largest first. A tile shows its name when it fits.
+- **Colors.** A tile is filled with the hex Grafana fills it with: thresholds (percentage ones included),
+  value mappings, fixed colors, continuous schemes and the classic palette, with named colors in their light
+  shade under Tern's light theme. Group backgrounds are a faint tint of the text color.
+- **Tooltips and data links.** Hovering a tile shows Grafana's tooltip (name, formatted size, label badges); a
+  click opens the size field's first data link in the browser pane. Links fill in `${__data.fields.<name>}`,
+  `${__data.name}`, `${__value.raw}`, `${__field.name}`, `${__series.name}` and the dashboard's variables; a
+  path-only link opens on your Grafana.
 
 ### Clock panels (grafana-clock-panel)
 
@@ -362,7 +479,9 @@ Tern draws `grafana-clock-panel` itself, following the plugin's 2.1.8 behavior, 
   (its selectors target Grafana's DOM).
 - **Panel box.** As in the plugin, the content is a column as tall as the panel body (the card's height cap, or the
   panel's Grafana height when expanded) and scrolls inside it, so a template's `height: 100%` resolves against its
-  row.
+  row. Flex items keep the browser's automatic minimum size, so a narrow panel lays out as Grafana does at the same
+  width: wrappable text wraps word by word, and `white-space: nowrap` text (a card's title and its pill) runs past
+  the card and is cut at the panel's edge, in Grafana too (dev dashboard `tern-s4-dynamictext`, panel 7).
 - **Not native.** `helpers` or `afterRender` JavaScript ("the panel runs its own JavaScript (...)"),
   `contentPartials` and `externalStyles` (templates or stylesheets from URLs) fall back to the Grafana render.
 
@@ -475,7 +594,7 @@ trigger and problem queries itself against the Zabbix API:
 
 The range starts at the dashboard's own (`time` in its JSON) unless the link names one. Auto-refresh follows the
 dashboard's `refresh` interval but never runs more often than `dashboard.min_refresh` (default 30 s); `a` pauses it.
-A refresh re-runs every panel query and re-renders PNG panels. Times are shown and computed in UTC.
+A refresh re-runs every panel query and re-renders PNG panels.
 
 Refreshes are frugal with Tern's image cache, which keeps every distinct chart for the session
 ([performance.md](performance.md)): an answer byte-identical to the last one is not redrawn; time series draw a range
@@ -488,6 +607,22 @@ With `S` the block joins the shared time range (header shows `synced`, saved wit
 the range, cursor moves the cursor, and every 2 seconds the block adopts a newer range or cursor another synced
 Query, Dashboard, Panel, Logs or Trace block published; a new range re-runs the panel queries. See
 [query.md](query.md#shared-time) for the record and its rules.
+
+### Time zones
+
+Every absolute time a native panel shows (time axes, legends, cursor read-outs, table time cells, stat time values,
+tooltips, annotation lists) is formatted in the dashboard's `timezone`, as Grafana's dashboard date formatting does:
+
+- `browser` or unset: your local time zone, per value, so times on each side of a daylight saving change keep
+  their own offset.
+- `utc`: UTC.
+- An IANA name (`Europe/Berlin`, `America/New_York`): its offset and daylight saving rule at each value, for the
+  common zones of the Americas, Europe, Africa, Asia, Australia and New Zealand; `Etc/GMT+N` is exact. Other IANA
+  names and unknown strings fall back to your local zone.
+
+Exceptions follow the panels' own Grafana code: clock panels use their own zone setting (see
+[Clock panels](#clock-panels-grafana-clock-panel)), and the news panel's dates and the Zabbix Problems panel's
+last-change times use your local zone, as those plugins format them in the browser's time zone.
 
 ## Exemplars and jumps
 
@@ -508,11 +643,10 @@ share (with an exemplar selected, its labels), kept to `logs.correlate_labels`; 
 Optional `dashboard` section of the config file:
 
 ```json
-"dashboard": { "max_points": 600, "min_refresh": "30s", "render_theme": "dark" }
+"dashboard": { "min_refresh": "30s", "render_theme": "dark" }
 ```
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `max_points` | `600` | maxDataPoints for panels that set none (Tern blocks have no pane width to derive it from). 10 to 11000. |
 | `min_refresh` | `"30s"` | Shortest auto-refresh interval, as a duration (`"1m"`) or seconds. |
 | `render_theme` | `"dark"` | Theme of panels rendered by Grafana's image renderer: `"dark"` or `"light"`. |

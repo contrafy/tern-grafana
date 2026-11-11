@@ -68,6 +68,12 @@ describe("format.format special values", function()
 		check("currencyUSD", math.huge, nil, "", "∞", "")
 	end)
 
+	it("spells non-finite numbers like JavaScript's String", function()
+		expect(format.jsString(0 / 0)).toBe("NaN")
+		expect(format.jsString(math.huge)).toBe("Infinity")
+		expect(format.jsString(-math.huge)).toBe("-Infinity")
+	end)
+
 	it("treats a missing or empty unit as none", function()
 		check(nil, 999.5, nil, "", "1000", "")
 		check("", -42, nil, "", "-42", "")

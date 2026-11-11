@@ -146,6 +146,9 @@ local function jsNumber(env: Env, v: any): number?
 	return if n and n == n then n else nil
 end
 
+M.truthy = truthy
+M.jsNumber = jsNumber
+
 -- A fresh list, tagged so it encodes as `[]` when empty.
 local function newList(env: Env): { any }
 	local l: { any } = {}
@@ -581,12 +584,14 @@ local function activeThreshold(value: number, steps: { any }): any
 	return active
 end
 
+-- JavaScript String(v) of a JSON number (integers without a fraction).
 local function jsString(v: any): string
 	if type(v) == "number" and v == math.floor(v) and math.abs(v) < 1e21 then
 		return string.format("%d", v)
 	end
 	return tostring(v)
 end
+M.jsString = jsString
 
 -- valueMappings.ts upgradeOldAngularValueMapping.
 local function upgradeMapping(env: Env, old: { [any]: any }, kind: number, thresholds: any): any

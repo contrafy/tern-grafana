@@ -73,6 +73,12 @@ describe("clock time mode", function()
 		expect(Clock.format("YYYY-MM-DD HH:mm", 1709251199000, 0, "UTC")).toBe("2024-02-29 23:59")
 	end)
 
+	it("prints numeric formats with literals, years past 9999 and before year 0 as moment does", function()
+		expect(Clock.format("M/D/YYYY H:m:s [at] 100%", 1709251199000, -300, "")).toBe("2/29/2024 18:59:59 at 100%")
+		expect(Clock.format("YYYY-MM-DD", 253402300800000, 0, "")).toBe("+10000-01-01")
+		expect(Clock.format("YYYY-MM-DD", -62198755200000, 0, "")).toBe("-0001-01-01")
+	end)
+
 	it("shows the date in dateFormat above the time", function()
 		local r = Clock.compute(
 			clock({ timezone = "Asia/Tokyo", dateSettings = { showDate = true, dateFormat = "YYYY-MM-DD" } }),

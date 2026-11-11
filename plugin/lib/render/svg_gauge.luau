@@ -12,8 +12,15 @@
 -- Every color is a class: an exact color class (lib/render/ts_gradient
 -- tg-gc<n>, or a tone pair "tgp-fx tgp-<tone>") drawn with the shape role
 -- tg-line (strokes) or tg-bar (fills), so a theme switch recolors without
--- a new blob. Grafana's conic color gradient becomes the threshold bands
--- the gradient passes through, each in its step's color.
+-- a new blob. effects.gradient (RadialArcPath: a CSS conic-gradient masked
+-- by the bar, the threshold ring and each segment) becomes sub-arcs of at
+-- most CONIC_STEP degrees, each stroked with a linear gradient between the
+-- two stops around it laid along its chord (Tern's SVG has no conic
+-- gradient), so the colors at the sub-arcs' ends are the conic gradient's.
+
+local Hash = require("../hash")
+local SvgPaths = require("./svg_paths")
+local Stat = require("../panels/stat")
 
 local M = {}
 
@@ -21,6 +28,10 @@ export type Style = "v1" | "gauge" | "circle"
 
 -- A run of the scale (0..1 fractions of min..max) in one color class.
 export type Band = { from: number, to: number, class: string }
+
+-- A conic gradient stop: a color class at a fraction of the scale (may lie
+-- outside 0..1).
+export type Stop = { at: number, class: string }
 
 export type Label = { at: number, text: string }
 
@@ -41,6 +52,9 @@ export type Spec = {
 	fill_to: number,
 	-- Colors along the scale the filled run is painted in.
 	bands: { Band },
+	-- effects.gradient: the conic gradient's stops, sorted (it paints the
+	-- filled run, the filled segments and the ring instead of their classes).
+	gradient: { Stop }?,
 	-- Color class of each segment by its start fraction (segmented bars).
 	segment_class: ((at: number) -> string)?,
 	-- The outer threshold ring (showThresholdMarkers).
@@ -59,6 +73,9 @@ export type Spec = {
 	-- Sparkline values scaled to 0..1 (nil entries are gaps).
 	spark: { number? }?,
 	spark_class: string?,
+	-- 1-based sparkline sample the reducer picked (Sparkline showHighlights,
+	-- Grafana 12.4 and later): drawn as a point.
+	spark_highlight: number?,
 }
 
 -- RadialGauge constants.
@@ -67,6 +84,11 @@ local ARC_END = 110
 local V1_START = 225
 local V1_RANGE = 270
 local LINE_HEIGHT = 1.21
+-- The widest sub-arc one linear gradient stands in for the conic one, in
+-- degrees.
+local CONIC_STEP = 10
+-- Degrees a gradient sub-arc overlaps the next one.
+local SEAM_OVERLAP = 0.5
 
 local function rad(deg: number): number
 	return (deg - 90) * math.pi / 180
@@ -255,6 +277,45 @@ local function grow(b: Box, x: number, y: number)
 	b.x1, b.y1 = math.max(b.x1, x), math.max(b.y1, y)
 end
 
+-- The lowest and highest label positions on the scale.
+local function labelEnds(labels: { Label }): (number, number)
+	local lo, hi = math.huge, -math.huge
+	for _, l in labels do
+		lo, hi = math.min(lo, l.at), math.max(hi, l.at)
+	end
+	return lo, hi
+end
+
+-- A label's angle in degrees (RadialScaleLabels getStartOffset): on a full
+-- circle the lowest label moves clockwise and the highest back by 0.65 of
+-- its width, so min and max at twelve o'clock stand side by side; on an arc
+-- an end label that would cross the arc's end moves half its width inside.
+-- The labels follow a path a line of text inside their radius.
+local function labelAngle(s: Spec, d: Dimensions, l: Label, lo: number, hi: number): number
+	local at = clamp01(l.at)
+	local length = d.range / 360 * 2 * math.pi * (d.labels_radius - d.labels_size * 1.2)
+	if s.style == "v1" or length <= 0 then
+		return d.start + at * d.range
+	end
+	local offset = at * length
+	local width = Stat.textEm(l.text) * d.labels_size
+	if d.range >= 360 then
+		if l.at == lo then
+			offset += width * 0.65
+		elseif l.at == hi then
+			offset -= width * 0.65
+		end
+	else
+		if l.at == lo and offset - width / 2 < 0 then
+			offset += width / 2
+		end
+		if l.at == hi and offset + width / 2 > length then
+			offset -= width / 2
+		end
+	end
+	return d.start + offset / length * d.range
+end
+
 -- The box around what the arc part draws: the bar (its rounded caps), the
 -- threshold ring and labels over the arc's sweep, and the center the text
 -- sits on. Grafana draws a gauge at min(width, height) of its panel; a
@@ -271,8 +332,9 @@ function M.arcBounds(s: Spec, d: Dimensions): Box
 		grow(b, d.cx + outer * math.cos(a), d.cy + outer * math.sin(a))
 	end
 	local labels: { Label } = s.labels or {}
+	local lo, hi = labelEnds(labels)
 	for _, l in labels do
-		local a = rad(d.start + clamp01(l.at) * d.range)
+		local a = rad(labelAngle(s, d, l, lo, hi))
 		local r = d.labels_radius - d.labels_size * 0.6
 		local x, y = d.cx + r * math.cos(a), d.cy + r * math.sin(a)
 		local half = 0.3 * d.labels_size * (utf8.len(l.text) or #l.text)
@@ -315,38 +377,128 @@ function M.render(s: Spec): (string, number, number)
 			)
 		end
 	end
+	-- The conic gradient over the scale run from..to at radius r: one piece
+	-- per run between two stops (past the first or last stop, its color),
+	-- split into sub-arcs of at most CONIC_STEP degrees. Rounded, the run's
+	-- two ends are round: the last sub-arc goes first, so the ones before
+	-- it cover its round start, and the second covers the first's round end.
+	local defined: { [string]: boolean } = {}
+	local function conic(stops: { Stop }, from: number, to: number, r: number, width: number, rounded: boolean)
+		type Sub = { a: number, b: number, p: Stop, q: Stop }
+		local subs: { Sub } = {}
+		local function add(a: number, b: number, p: Stop, q: Stop)
+			if b <= a then
+				return
+			end
+			local n = if p.class == q.class then 1 else math.ceil((b - a) * d.range / CONIC_STEP)
+			for j = 1, n do
+				table.insert(subs, { a = a + (b - a) * (j - 1) / n, b = a + (b - a) * j / n, p = p, q = q })
+			end
+		end
+		local first, last = stops[1], stops[#stops]
+		add(from, math.min(to, first.at), first, first)
+		for i = 1, #stops - 1 do
+			add(math.max(from, stops[i].at), math.min(to, stops[i + 1].at), stops[i], stops[i + 1])
+		end
+		add(math.max(from, last.at), to, last, last)
+		local function draw(k: number)
+			local sub = subs[k]
+			local linecap = if rounded and (k == 1 or k == #subs) then "round" else "butt"
+			local start, sweep = d.start + sub.a * d.range, (sub.b - sub.a) * d.range
+			-- Each sub-arc but the run's last reaches a little into the next,
+			-- drawn over it: abutting antialiased edges leave a light seam.
+			local overlap = if k < #subs then math.min(SEAM_OVERLAP, sweep) else 0
+			if sub.p.class == sub.q.class then
+				arc(sub.q.class, start, sweep + overlap, r, width, linecap)
+				return
+			end
+			-- The gradient line runs from where the conic gradient is p to
+			-- where it is q, along the sub-arc's chord.
+			local span = sub.q.at - sub.p.at
+			local u0, u1 = (sub.a - sub.p.at) / span, (sub.b - sub.p.at) / span
+			local a0, a1 = rad(start), rad(start + sweep)
+			local x0, y0 = d.cx + r * math.cos(a0), d.cy + r * math.sin(a0)
+			local dx, dy = d.cx + r * math.cos(a1) - x0, d.cy + r * math.sin(a1) - y0
+			local back, ahead = u0 / (u1 - u0), (1 - u0) / (u1 - u0)
+			local def = string.format(
+				' gradientUnits="userSpaceOnUse" x1="%s" y1="%s" x2="%s" y2="%s"><stop offset="0" class="%s"/><stop offset="1" class="%s"/>',
+				fmt(x0 - dx * back),
+				fmt(y0 - dy * back),
+				fmt(x0 + dx * ahead),
+				fmt(y0 + dy * ahead),
+				sub.p.class,
+				sub.q.class
+			)
+			local id = "tgq" .. Hash.fnv1a32hex(def)
+			if not defined[id] then
+				defined[id] = true
+				push('<defs><linearGradient id="%s"%s</linearGradient></defs>', id, def)
+			end
+			push(
+				'<path class="tg-line" stroke="url(#%s)" fill="none" stroke-width="%s" stroke-linecap="%s" d="%s"/>',
+				id,
+				fmt(width),
+				linecap,
+				M.arcPath(d.cx, d.cy, start, sweep + overlap, r)
+			)
+		end
+		if #subs > 1 then
+			draw(#subs)
+		end
+		for k = 1, math.max(#subs - 1, 1) do
+			if subs[k] then
+				draw(k)
+			end
+		end
+	end
+	local gradient = if s.gradient and #(s.gradient :: { Stop }) > 0 then s.gradient :: { Stop } else nil
 	local from, to = clamp01(s.fill_from), clamp01(s.fill_to)
 	local segments = s.segments or 1
 	if segments > 1 then
 		-- RadialBarSegmented: each segment is filled when its start lies in
-		-- the filled run, in the color of its own start value.
+		-- the filled run, in the color of its own start value (the gradient
+		-- under it with effects.gradient).
 		local n, between = M.segmentLayout(d, segments, s.segment_spacing or 0.3)
 		local step = d.range / n
 		for i = 0, n - 1 do
 			local at = i / n
 			local filled = at >= from and at < to
-			local class = if filled and s.segment_class then s.segment_class(at) else nil
-			arc(
-				if filled then class or "tgp-fx tgp-neutral" else "tgg-track",
-				d.start + step * i + 0.01,
-				step - between,
-				d.radius,
-				d.bar,
-				"butt"
-			)
+			local a, sweep = step * i + 0.01, step - between
+			if filled and gradient then
+				conic(gradient, a / d.range, (a + sweep) / d.range, d.radius, d.bar, false)
+			else
+				local class = if filled and s.segment_class then s.segment_class(at) else nil
+				arc(
+					if filled then class or "tgp-fx tgp-neutral" else "tgg-track",
+					d.start + a,
+					sweep,
+					d.radius,
+					d.bar,
+					"butt"
+				)
+			end
 		end
 	else
 		arc("tgg-track", d.start, d.range, d.radius, d.bar, cap)
-		local runs = M.fillRuns(s.bands, from, to)
-		for i, r in runs do
-			-- Rounded caps only on the ends of the whole bar.
-			local linecap = if s.rounded and (i == 1 or i == #runs) and #runs == 1 then "round" else "butt"
-			arc(r.class, d.start + r.from * d.range, (r.to - r.from) * d.range, d.radius, d.bar, linecap)
+		if gradient then
+			conic(gradient, from, to, d.radius, d.bar, s.rounded == true)
+		else
+			local runs = M.fillRuns(s.bands, from, to)
+			for i, r in runs do
+				-- Rounded caps only on the ends of the whole bar.
+				local linecap = if s.rounded and (i == 1 or i == #runs) and #runs == 1 then "round" else "butt"
+				arc(r.class, d.start + r.from * d.range, (r.to - r.from) * d.range, d.radius, d.bar, linecap)
+			end
 		end
 	end
 	if s.ring then
-		for _, b in s.ring do
-			arc(b.class, d.start + b.from * d.range, (b.to - b.from) * d.range, d.ring_radius, d.ring_width, "butt")
+		local ring = s.ring :: { Band }
+		if gradient and #ring > 0 then
+			conic(gradient, ring[1].from, ring[#ring].to, d.ring_radius, d.ring_width, false)
+		else
+			for _, b in ring do
+				arc(b.class, d.start + b.from * d.range, (b.to - b.from) * d.range, d.ring_radius, d.ring_width, "butt")
+			end
 		end
 	end
 	if s.endpoint and segments <= 1 and to > from then
@@ -368,13 +520,14 @@ function M.render(s: Spec): (string, number, number)
 		end
 	end
 	if s.labels and #s.labels > 0 then
+		local lo, hi = labelEnds(s.labels)
 		for _, l in s.labels do
-			local a = rad(d.start + clamp01(l.at) * d.range)
+			local a = rad(labelAngle(s, d, l, lo, hi))
 			local r = d.labels_radius - d.labels_size * 0.6
 			push(
-				'<text class="tgg-label" x="%s" y="%s" font-size="%s" text-anchor="middle" dominant-baseline="middle">%s</text>',
+				'<text class="tgg-label" x="%s" y="%s" font-size="%s" text-anchor="middle">%s</text>',
 				fmt(d.cx + r * math.cos(a)),
-				fmt(d.cy + r * math.sin(a)),
+				fmt(d.cy + r * math.sin(a) + d.labels_size * 0.36),
 				fmt(d.labels_size),
 				escape(l.text)
 			)
@@ -406,7 +559,7 @@ function M.render(s: Spec): (string, number, number)
 	if showValue then
 		-- Prefix and suffix at 70% size beside the value. Tern's SVG sanitizer
 		-- drops <tspan>, so each part is its own <text>, laid out with the
-		-- 0.6 em glyph estimate.
+		-- advance widths of the SVG's font (.tgg, Geist).
 		local unit = math.max(vSize * 0.7, 6)
 		local tone = if s.text_class then s.text_class .. " tg-bar" else "tgg-text"
 		type Part = { text: string, size: number }
@@ -419,19 +572,22 @@ function M.render(s: Spec): (string, number, number)
 			table.insert(parts, { text = s.suffix :: string, size = unit })
 		end
 		local function width(p: Part): number
-			return 0.6 * p.size * (utf8.len(p.text) or #p.text)
+			return Stat.textEm(p.text) * p.size
 		end
 		local total = 0
 		for _, p in parts do
 			total += width(p)
 		end
 		local x = d.cx - total / 2
+		-- Tern's SVG ignores dominant-baseline: the value's baseline centers
+		-- its cap height on the line, and the unit parts share it.
+		local baseline = valueY - offset + vSize * 0.36
 		for _, p in parts do
 			push(
-				'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="start" dominant-baseline="middle">%s</text>',
+				'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="start">%s</text>',
 				tone,
 				fmt(x),
-				fmt(valueY - offset),
+				fmt(baseline),
 				fmt(p.size),
 				escape(p.text)
 			)
@@ -440,10 +596,10 @@ function M.render(s: Spec): (string, number, number)
 	end
 	if showName then
 		push(
-			'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="middle" dominant-baseline="middle">%s</text>',
+			'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="middle">%s</text>',
 			if showValue then "tgg-name" else "tgg-text",
 			fmt(d.cx),
-			fmt(nameY - offset),
+			fmt(nameY - offset + nSize * 0.36),
 			fmt(nSize),
 			escape(s.name :: string)
 		)
@@ -458,31 +614,69 @@ function M.render(s: Spec): (string, number, number)
 			then d.cy + d.radius / (if showName and showValue then 3.3 else 4)
 			else d.bottom - h - 8
 		local left = d.cx - w / 2
-		local line: { string } = {}
-		local first: number? = nil
-		local last: number? = nil
+		local hi = s.spark_highlight
+		if hi then
+			-- Sparkline with showHighlights: the plot keeps HIGHLIGHT_IDX_POINT_SIZE / 2
+			-- (3 px) of padding on every side for the point.
+			left, top, w, h = left + 3, top + 3, math.max(w - 6, 1), math.max(h - 6, 1)
+		end
+		local pts: { number } = {}
 		for i, v in spark do
 			if v then
-				local x = left + (i - 1) / (#spark - 1) * w
-				local y = top + h - clamp01(v) * h
-				table.insert(line, string.format("%s%s %s", if first == nil then "M" else "L", fmt(x), fmt(y)))
-				first = first or x
-				last = x
+				table.insert(pts, left + (i - 1) / (#spark - 1) * w)
+				table.insert(pts, top + h - clamp01(v) * h)
 			end
 		end
-		if first and last and #line > 1 then
+		if #pts >= 4 then
+			local first, last = pts[1], pts[#pts - 1]
 			local class = s.spark_class or "tgp-fx tgp-info"
-			local path = table.concat(line)
+			-- RadialSparkline: lineInterpolation smooth (the time series' monotone
+			-- cubic, which never overshoots a sample).
+			local segs = SvgPaths.smoothSegs(pts)
+			local parts: { string } = { "M" .. fmt(segs[1]) .. " " .. fmt(segs[2]) }
+			for o = 3, #segs, 6 do
+				table.insert(
+					parts,
+					string.format(
+						"C%s %s %s %s %s %s",
+						fmt(segs[o]),
+						fmt(segs[o + 1]),
+						fmt(segs[o + 2]),
+						fmt(segs[o + 3]),
+						fmt(segs[o + 4]),
+						fmt(segs[o + 5])
+					)
+				)
+			end
+			local path = table.concat(parts)
+			-- RadialSparkline: gradientMode opacity at fillOpacity 40, the fill
+			-- fading from 40% at the plot's top to none at its bottom (a mask,
+			-- the color stays the class's).
+			local area = string.format("%sL%s %sL%s %sZ", path, fmt(last), fmt(top + h), fmt(first), fmt(top + h))
+			local mask = "tgs" .. Hash.fnv1a32hex(area)
 			push(
-				'<path class="%s tg-area" fill-opacity="0.2" d="%sL%s %sL%s %sZ"/>',
-				class,
-				path,
-				fmt(last),
-				fmt(top + h),
-				fmt(first),
-				fmt(top + h)
+				'<defs><linearGradient id="%s-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient><mask id="%s"><rect x="%s" y="%s" width="%s" height="%s" fill="url(#%s-g)"/></mask></defs>',
+				mask,
+				mask,
+				fmt(left),
+				fmt(top),
+				fmt(w),
+				fmt(h),
+				mask
 			)
+			push('<path class="%s tg-area" fill-opacity="0.4" mask="url(#%s)" d="%s"/>', class, mask, area)
 			push('<path class="%s tg-line" fill="none" stroke-width="1" d="%s"/>', class, path)
+		end
+		local hv = if hi then spark[hi] else nil
+		if hi and hv then
+			-- The calc's sample (getSparklineHighlight) as a 6 px point in the
+			-- line's color.
+			push(
+				'<circle class="%s" cx="%s" cy="%s" r="3"/>',
+				s.spark_class or "tgp-fx tgp-info",
+				fmt(left + (hi - 1) / (#spark - 1) * w),
+				fmt(top + h - clamp01(hv) * h)
+			)
 		end
 	end
 	-- Tight viewBox (2 px margin) inside the design box: text and

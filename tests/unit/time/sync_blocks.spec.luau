@@ -83,6 +83,8 @@ local function dashboardLoading(e: any): any
 		return Support.response(DS.grafana(GRAFANA, "dashboard_tern_panels.json"))
 	elseif string.match(tag, "^fs/") then
 		return Support.response(DS.grafana(GRAFANA, "frontend_settings.json"))
+	elseif string.match(tag, "^flag/") then
+		return Support.response(DS.grafana(GRAFANA, "ofrep_table_auto_column_widths.json"))
 	elseif string.match(tag, "^user/") then
 		return Support.response(DS.grafana(GRAFANA, "user.json"))
 	elseif string.match(tag, "^lib/") then

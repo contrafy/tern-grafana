@@ -285,7 +285,11 @@ describe("calculateField (calculateField.test.ts)", function()
 			nameOf({ mode = "binary", binary = { left = { fixed = "1" }, operator = "-", right = { fixed = 0.5 } } })
 		).toBe("1 - 0.5")
 		expect(nameOf({ mode = "reduceRow", reduce = { reducer = "max" } })).toBe("Max")
-		expect(nameOf({ mode = "reduceRow" })).toBe("math")
+		-- Through the pipeline the options sit on defaultOptions (mode reduceRow,
+		-- reduce { reducer = "sum" }), a shallow spread: an own `reduce` replaces it.
+		expect(nameOf({ mode = "reduceRow" })).toBe("Total")
+		expect(nameOf({})).toBe("Total")
+		expect(nameOf({ mode = "reduceRow", reduce = { include = {} } })).toBe("math")
 		expect(nameOf({ mode = "index" })).toBe("Row")
 	end)
 
@@ -357,10 +361,8 @@ describe("calculateField in practice", function()
 			expect(#out).toBe(1)
 			expect(T.names(out[1])).toEqual({ "Time", "ratio" })
 			local v = out[1].fields[2].values
-			-- 11/12: both series cover the same 61 timestamps. 13.3.0 (a ~7m
-			-- old stack): sum(up) has one sample before rate()'s first point,
-			-- so the outer join has 30 rows.
-			expect(#v).toBe(if version == "13.3.0" then 30 else 61)
+			-- Both series cover the same 61 timestamps.
+			expect(#v).toBe(61)
 			local t0 = idle.fields[1].values[1]
 			local row = table.find(out[1].fields[1].values, t0)
 			local totalAt = table.find(total.fields[1].values, t0)

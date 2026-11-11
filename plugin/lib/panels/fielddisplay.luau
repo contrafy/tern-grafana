@@ -11,6 +11,7 @@ local Mappings = require("./mappings")
 local Range = require("../time/range")
 local Reduce = require("./reduce")
 local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -202,6 +203,17 @@ end
 -- moment's fromNow at a display offset ("2 hours ago", "in a day").
 M.fromNow = fromNow
 
+-- The current day of the last `now` and zone asked about: a table formats
+-- every row against the same clock.
+local nowDay: { now: number, zone: Range.Offset, day: string } = { now = 0 / 0, zone = 0, day = "" }
+
+local function sameDay(ms: number, now: number, zone: Range.Offset): boolean
+	if nowDay.now ~= now or nowDay.zone ~= zone then
+		nowDay.now, nowDay.zone, nowDay.day = now, zone, string.sub(Range.formatMs(now, zone), 1, 10)
+	end
+	return string.sub(Range.formatMs(ms, zone), 1, 10) == nowDay.day
+end
+
 -- A date unit's text (dateTimeFormatters.ts) at the display offset: a
 -- "time:" moment pattern, the unit's pattern (its today pattern on the
 -- current day), moment's fromNow, or the system format with milliseconds
@@ -219,9 +231,8 @@ local function formatDate(ms: number, unit: string, o: Options, showMs: boolean)
 		pattern = ISO .. ".SSS"
 	else
 		local p = DATE_UNITS[unit]
-		local sameDay = now ~= nil
-			and Range.formatMs(ms, zone):sub(1, 10) == Range.formatMs(now :: number, zone):sub(1, 10)
-		pattern = if p[2] and sameDay then p[2] else p[1]
+		local today = p[2]
+		pattern = if today and now ~= nil and sameDay(ms, now, zone) then today else p[1]
 	end
 	return ClockFormat.format(pattern, ms, offset, "")
 end
@@ -254,9 +265,9 @@ local function continuousTone(mode: string, percent: number): Thresholds.Tone
 	return "accent"
 end
 
--- The series class of a palette position (lib/render/svg_timeseries).
+-- The series class of a palette position (lib/render/ts_gradient).
 function M.paletteClass(seriesIndex: number): string
-	return "tg-s" .. tostring((seriesIndex - 1) % M.PALETTE + 1)
+	return TsGradient.paletteClass(seriesIndex)
 end
 
 export type Scale = { color: string, tone: Thresholds.Tone, percent: number, class: string? }
@@ -345,9 +356,12 @@ function M.display(item: Item, value: any, opts: Options?): Display
 				text, prefix, suffix = f.text, f.prefix, f.suffix
 			end
 		end
+		-- getDisplayProcessor: the scale's percent always, its color unless a
+		-- mapping set one.
+		local s = scale(item, numeric, o)
+		percent = s.percent
 		if color == nil then
-			local s = scale(item, numeric, o)
-			color, tone, class, percent = s.color, s.tone, s.class, s.percent
+			color, tone, class = s.color, s.tone, s.class
 		end
 	end
 	if text == nil and type(value) == "boolean" then
@@ -355,7 +369,11 @@ function M.display(item: Item, value: any, opts: Options?): Display
 		text = if value then labels[1] else labels[2]
 	end
 	if text == nil then
-		text = if value == nil then "" elseif type(value) == "string" then value else tostring(value)
+		text = if value == nil
+			then ""
+			elseif type(value) == "string" then value
+			elseif type(value) == "number" then Format.jsString(value)
+			else tostring(value)
 		if text == "" then
 			text = cfg.no_value or ""
 		end

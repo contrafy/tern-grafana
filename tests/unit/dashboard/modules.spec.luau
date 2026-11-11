@@ -65,6 +65,8 @@ local function answer(version: string, e: any): string?
 		return S.grafana(version, "dashboard_tern_panels.json")
 	elseif string.match(tag, "^fs/") then
 		return S.grafana(version, "frontend_settings.json")
+	elseif string.match(tag, "^flag/") then
+		return S.grafana(version, "ofrep_table_auto_column_widths.json")
 	elseif string.match(tag, "^user/") then
 		return S.grafana(version, "user.json")
 	elseif string.match(tag, "^lib/") then
@@ -236,7 +238,9 @@ for _, version in S.VERSIONS do
 			expect(string.find(flatten(view.main), "Last 1 hour timeshift -1h", 1, true) ~= nil).toBe(true)
 		end)
 
-		it("shows the description behind an info marker, links as chips, transparent without a card", function()
+		-- VizPanelLinks: a link icon in the header, not the link's text; one
+		-- link opens on click, several open a menu.
+		it("shows the description behind an info marker, links behind an icon, transparent without a card", function()
 			local h = start(version, function(panels)
 				panels[2].json.description = "What $job means"
 				panels[2].json.links = { { title = "Runbook", url = "/d/abc?${__url_time_range}" } }
@@ -253,9 +257,11 @@ for _, version in S.VERSIONS do
 			end)
 			expect(string.sub(info.p.title, 1, 5)).toBe("What ")
 			local link = findNode(card, function(n)
-				return n.p and n.p.class == "tgp2-link"
+				return n.p and n.p.class == "tgp2-links"
 			end)
-			expect(flatten(link)).toBe("Runbook")
+			expect(flatten(link)).toBe(View.LINK_GLYPH)
+			expect(link.p.title).toBe("Runbook")
+			expect(link.p.actions.click).toBe("plink=1:p2")
 			local _, effects: any =
 				State.update(h.s, { kind = "event", ev = { ev = "action", act = "plink", value = "1:p2" } }, h.env)
 			local target = assert(Scheme.decode(effects[1].target))

@@ -11,6 +11,7 @@ local DsRegistry = require("../datasources/registry")
 local Effect = require("../effect")
 local Env = require("../env")
 local GrafanaSource = require("../source/grafana")
+local Links = require("./links")
 local Model = require("./model")
 local Png = require("./png")
 local Queries = require("./queries")
@@ -105,6 +106,7 @@ function M.onDashboard(s: State, response: any, env: Env, effects: { Effect })
 	for _, uid in Model.libraryRefs(d) do
 		table.insert(effects, http(tag("lib", s.gen, uid), route, Model.libraryRequest(uid)))
 	end
+	Links.requestDashboardLinks(s, env, effects)
 	s.updated_ms = env.now_ms
 	Advance.armRefresh(s, effects)
 	Advance.advance(s, env, false, effects)
@@ -124,12 +126,24 @@ function M.onSettings(s: State, response: any, env: Env, effects: { Effect })
 	local r = GrafanaSource.parseFrontendSettings(route, response, env)
 	if r.ok then
 		local fs = (r :: any).settings :: GrafanaSource.FrontendSettings
+		-- The OpenFeature flags come from their own requests; the settings
+		-- stay loading until every one is answered, so panels are laid out
+		-- once, as the frontend lays them out after initOpenFeature.
+		local pending = 0
+		for _, flag in Queries.OPEN_FEATURE_FLAGS do
+			local req = Queries.flagRequest(response, flag, env)
+			if req then
+				pending += 1
+				table.insert(effects, http(tag("flag", s.gen, flag), route, req))
+			end
+		end
 		s.settings = {
-			status = "ready",
+			status = if pending > 0 then "loading" else "ready",
 			renderer = fs.renderer_available == true,
 			datasources = Queries.frontendDatasources(response, env),
 			features = Queries.frontendFeatures(response, env),
 			major = Queries.major(fs.version),
+			pending_flags = pending,
 		}
 	else
 		s.settings = {
@@ -141,6 +155,25 @@ function M.onSettings(s: State, response: any, env: Env, effects: { Effect })
 		}
 	end
 	Advance.advance(s, env, false, effects)
+end
+
+-- An OpenFeature flag's evaluation (Queries.flagRequest): on joins the
+-- feature toggles; the last answer readies the settings.
+function M.onFlag(s: State, flag: string, response: any, env: Env, effects: { Effect }): boolean
+	local settings = s.settings
+	local pending = settings.pending_flags or 0
+	if settings.status ~= "loading" or pending <= 0 then
+		return false
+	end
+	if Queries.flagOn(response, env) then
+		settings.features[flag] = true
+	end
+	settings.pending_flags = pending - 1
+	if pending == 1 then
+		settings.status = "ready"
+	end
+	Advance.advance(s, env, false, effects)
+	return true
 end
 
 function M.onUser(s: State, response: any, env: Env, effects: { Effect })
@@ -168,8 +201,8 @@ function M.onVariable(s: State, name: string, response: any, env: Env, effects: 
 		return false
 	end
 	local scope = Core.scopeOf(s)
-	local fetch = Variables.fetchFor(v, scope, Core.builtinScope(s))
-	local uid = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
+	local uid, source = Advance.variableSource(s, v, scope)
+	local fetch = Variables.fetchFor(v, scope, Core.builtinScope(s), source)
 	if fetch == nil or uid == nil then
 		Variables.setError(v, "variable query changed while loading")
 	else

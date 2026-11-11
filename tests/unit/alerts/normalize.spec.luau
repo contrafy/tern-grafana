@@ -10,20 +10,20 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local GRAFANA = { "11.6.16", "12.4.12", "13.3.0" }
+local GRAFANA = { "11.6.16", "12.4.12", "13.3.1" }
 local PROMETHEUS = { "2.53.5", "3.15.0" }
 -- Shortly after the alerting fixtures were captured (2026-10-09T20:31Z).
 local NOW = 1791577860000
--- Grafana 13's alerting fixtures come from a later, fresh stack (2026-11-09T15:56Z).
+-- Grafana 13's alerting fixtures come from a later, fresh stack (2026-11-11T16:22Z).
 local ALWAYS_FIRING_ACTIVE_AT = {
 	["11.6.16"] = 1791576960000,
 	["12.4.12"] = 1791576960000,
-	["13.3.0"] = 1794239540000,
+	["13.3.1"] = 1794414070000,
 }
 local ALWAYS_FIRING_LAST_EVAL = {
 	["11.6.16"] = 1791577900000,
 	["12.4.12"] = 1791577900000,
-	["13.3.0"] = 1794239760000,
+	["13.3.1"] = 1794414160000,
 }
 
 local env: any = { now_ms = NOW, decode = json.decode, encode = json.encode, null = json.null }
@@ -219,7 +219,7 @@ describe("Prometheus alerts", function()
 				"alertmanager/0.34.1/alerts.json",
 				"grafana/11.6.16/alerting_am_alerts.json",
 				"grafana/12.4.12/alerting_am_alerts.json",
-				"grafana/13.3.0/alerting_am_alerts.json",
+				"grafana/13.3.1/alerting_am_alerts.json",
 			}
 		do
 			for _, raw in json.decode(Fixtures.read(path)) do

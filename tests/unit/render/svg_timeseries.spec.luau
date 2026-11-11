@@ -242,15 +242,26 @@ describe("svg_timeseries.render output", function()
 		expect(r.points <= 200).toBe(true)
 	end)
 
-	it("draws at most series_cap series and reports the rest as dropped", function()
-		local r = Svg.render(many(12, 10))
-		expect(r.dropped).toBe(2)
-		expect(r.layout.dropped).toBe(2)
-		expect(#r.layout.series).toBe(10)
-		expect(#paths(r.svg, "tg-s10")).toBe(2)
-		local capped = Svg.render(many(5, 10), { series_cap = 2 })
-		expect(capped.dropped).toBe(3)
-		expect(#capped.layout.series).toBe(2)
+	-- Grafana draws every series (1860 Network Traffic Basic: 22 Rx and Tx
+	-- series; node-mixin Disk I/O: 56): they share the byte budget, each
+	-- drawn with fewer samples.
+	it("draws every series, with fewer samples each, and stays under the cap", function()
+		local few = Svg.render(many(10, 2000))
+		local r = Svg.render(many(60, 2000))
+		expect(r.dropped).toBe(0)
+		expect(#r.layout.series).toBe(60)
+		expect(#paths(r.svg, "tg-line")).toBe(60)
+		expect(#r.svg <= Svg.CAP).toBe(true)
+		expect(#r.layout.series[60].times < #few.layout.series[10].times).toBe(true)
+		checkXml(r.svg)
+	end)
+
+	it("leaves out only the series that cannot fit the size cap, and counts them", function()
+		local r = Svg.render(many(800, 3))
+		expect(r.dropped > 0).toBe(true)
+		expect(#r.layout.series + r.dropped).toBe(800)
+		expect(r.layout.dropped).toBe(r.dropped)
+		expect(#r.svg <= Svg.CAP).toBe(true)
 	end)
 
 	it("says No data for an empty result", function()
@@ -776,11 +787,46 @@ describe("svg_timeseries.render y scales", function()
 		})
 		local axes = r.layout.axes :: { any }
 		expect(axes[1].max >= 40).toBe(true)
-		expect(axes[2].max < 10).toBe(true)
+		-- Alone on its scale, the flat 5 ranges 0..10 (uPlot pads a flat
+		-- series by its value), not stacked onto the other scale's 40.
+		expect(axes[2].max).toBe(10)
 		local groups = render({ ten, thirty }, {
 			series = { { stack = "normal", stack_group = "A" }, { stack = "normal", stack_group = "B" } },
 		})
 		expect(groups.layout.y_max < 40).toBe(true)
+	end)
+
+	-- uPlot ranges a stack over its accumulated values; the base the first
+	-- series fills down to is not data (Alertmanager overview "Alerts": a
+	-- lone stacked 4 reads 0..8; 9578 "Active alerts": 3..4 dipping to 2
+	-- reads from 1.8, not 0).
+	it("ranges a stack over its tops, not the base it fills to", function()
+		local flat = render({ series(4, values({ 4, 4, 4, 4 })) }, { series = { { stack = "normal" } } })
+		expect(flat.layout.y_min).toBe(0)
+		expect(flat.layout.y_max).toBe(8)
+		local dip = render(
+			{ series(4, values({ 3, 4, 2, 4 })), series(4, values({ 0, 0, 0, 0 })) },
+			{ series = { { stack = "normal" }, { stack = "normal" } } }
+		)
+		expect(dip.layout.y_min).toBe(1.8)
+		expect(dip.layout.y_max).toBe(4.2)
+	end)
+
+	-- calculateSpace: 15 px between y ticks in a plot up to 150 px tall,
+	-- else 30 (node-mixin Load Average: 0..14 every 2 in Grafana's 140 px).
+	it("spaces y ticks for the plot height Grafana gives the panel", function()
+		local load = series(4, values({ 0, 6, 12.5, 7 }))
+		expect(tickTexts(render({ load }, { height = 196 }).svg, "end")).toEqual({ "0", "5", "10" })
+		expect(tickTexts(render({ load }, { height = 196, tick_height = 140 }).svg, "end")).toEqual({
+			"0",
+			"2",
+			"4",
+			"6",
+			"8",
+			"10",
+			"12",
+			"14",
+		})
 	end)
 
 	-- uPlot rangeLog with whole magnitudes, ticks at the powers of the base.
@@ -958,6 +1004,9 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		local line1 = tag(r.svg, "tg-s1", "tg-line") :: string
 		expect(line1).toContain('stroke-width="1.5"')
 		expect(has(line1, "dasharray")).toBe(false)
+		-- uPlot strokes solid lines with butt caps: a lone sample between
+		-- gaps (a zero-length segment) stays invisible without points.
+		expect(line1).toContain('stroke-linecap="butt"')
 		-- A dotted line rounds its caps; lineWidth 0 draws no line at all.
 		local dotted = render({ a, b }, {
 			series = { { dash = { 0, 10 }, dot = true } :: Svg.SeriesStyle, { line_width = 0 } :: Svg.SeriesStyle },
@@ -1116,15 +1165,17 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		end)
 	end)
 
-	-- Bars: barWidthFactor of the slot, barAlignment -1/0/1 around the time,
-	-- outlined with the line width, filled by fillOpacity; bars at the plot
-	-- edges are cut to it (uPlot clips the plot).
+	-- Bars as uPlot's bars path builder sizes them: barWidthFactor of the
+	-- column (here the 5 samples' spacing), the outline inset into it,
+	-- whole pixels once the gap is 5 px or more; barAlignment -1/0/1 around
+	-- the time; filled by fillOpacity; bars at the plot edges are cut to it
+	-- (uPlot clips the plot).
 	it("sizes and aligns bars per series", function()
 		local five = series(5, function(i)
 			return i
 		end)
-		-- x and width of the third (middle) bar.
-		local function midX(style: Svg.SeriesStyle): (number, number)
+		-- x and width of the third (middle) bar, and the column width.
+		local function midX(style: Svg.SeriesStyle): (number, number, number)
 			local r = render({ five }, { series = { style } })
 			local d = absolute(string.match(tag(r.svg, "tg-line") :: string, ' d="([^"]*)"') :: string)
 			local Layout = require("../../../plugin/lib/render/layout")
@@ -1133,19 +1184,21 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 				if y == top then
 					local x10 = math.floor((tonumber(bx) :: number) * 10 + 0.5)
 					local r10 = math.floor((tonumber(right) :: number) * 10 + 0.5)
-					return x10 / 10, (r10 - x10) / 10
+					return x10 / 10, (r10 - x10) / 10, (r.layout.plot_right - r.layout.plot_left) / 4
 				end
 			end
 			error("no bar for 3")
 		end
-		local cx, cw = midX({ draw = "bars", fill_opacity = 50 })
+		-- lineWidth 1 is drawn 1.5 wide (LINE_SCALE) and inset by that.
+		local cx, cw, col = midX({ draw = "bars", fill_opacity = 50 })
+		expect(cw).toBe(math.floor(col * 0.6 - 1.5 + 0.5))
 		local ax, aw = midX({ draw = "bars", bar_alignment = 1 })
 		local bx = midX({ draw = "bars", bar_alignment = -1 })
-		expect(math.abs(ax - (cx + cw / 2)) < 0.2).toBe(true)
-		expect(math.abs(bx - (cx - cw / 2)) < 0.2).toBe(true)
+		expect(math.abs(ax - (cx + cw / 2 + 0.75)) < 0.2).toBe(true)
+		expect(math.abs(bx - (cx - cw / 2 - 0.75)) < 0.2).toBe(true)
 		expect(aw).toBe(cw)
 		local _, narrow = midX({ draw = "bars", bar_width_factor = 0.3 })
-		expect(math.abs(narrow - cw / 2) < 0.2).toBe(true)
+		expect(narrow).toBe(math.floor(col * 0.3 - 1.5 + 0.5))
 		local r = render({ five }, { series = { { draw = "bars" } } })
 		local first = tonumber(string.match(tag(r.svg, "tg-line") :: string, ' d="M([%d%.]+)')) :: number
 		expect(first).toBe(r.layout.plot_left)
@@ -1153,8 +1206,44 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		expect(tag(filled.svg, "tg-bar")).toContain('fill-opacity="0.50"')
 		expect(tag(render({ five }, { series = { { draw = "bars" } } }).svg, "tg-bar")).toBeNil()
 	end)
+
+	-- uPlot's findColWidth: the column is the distance between the series'
+	-- two closest samples, not the range over the sample count. Per-minute
+	-- counts with two adjacent minutes in 6 hours (the user's CASE ORIGIN
+	-- panel) are hairline bars in Grafana however few rows there are, and an
+	-- outline that would take half the bar is not drawn.
+	it("sizes bars from the series' two closest samples", function()
+		local MIN = 60000
+		local function widths(minutes: { number }): ({ number }, Svg.Result)
+			local times, vals = {}, {}
+			for i, m in minutes do
+				times[i] = T0 + m * MIN
+				vals[i] = 1 + i % 3
+			end
+			local r = render({ Frame.timeSeries({}, times, vals) }, {
+				from_ms = T0,
+				to_ms = T0 + 360 * MIN,
+				series = { { draw = "bars", bar_width_factor = 0.3, line_width = 2, fill_opacity = 100 } },
+			})
+			local d = absolute(string.match(tag(r.svg, "tg-bar") :: string, ' d="([^"]*)"') :: string)
+			local out: { number } = {}
+			for bx, right in string.gmatch(d, "M([%d%.]+) [%d%.]+V[%d%.]+H([%d%.]+)") do
+				table.insert(out, math.floor(((tonumber(right) :: number) - (tonumber(bx) :: number)) * 10 + 0.5) / 10)
+			end
+			return out, r
+		end
+		local hair, r = widths({ 30, 31, 90, 200, 290 })
+		expect(hair).toEqual({ 1, 1, 1, 1, 1 })
+		expect(tag(r.svg, "tg-line")).toBeNil()
+		-- An hour apart at the closest: a column of an hour, its gap over
+		-- 5 px, the 2 px outline (drawn 3) inset.
+		local wide, r2 = widths({ 30, 90, 200, 290 })
+		local col = (r2.layout.plot_right - r2.layout.plot_left) * 60 / 360
+		expect(wide[1]).toBe(math.floor(col * 0.3 - 3 + 0.5))
+		expect(tag(r2.svg, "tg-line")).toContain('stroke-width="3"')
+	end)
 end)
--- Recorded on dashboard tern-v08-tsbar (Grafana 13.3.0): SQL rows long
+-- Recorded on dashboard tern-v08-tsbar (Grafana 13.3.1): SQL rows long
 -- before the range and a monthly series whose first month precedes it.
 describe("svg_timeseries.render samples beyond the range", function()
 	local Fixtures = require("../../lib/fixtures")
@@ -1163,7 +1252,7 @@ describe("svg_timeseries.render samples beyond the range", function()
 	local json = require("../../lib/json")
 
 	local function load(n: number): ({ Frame.Frame }, number, number)
-		local base = "grafana/13.3.0/ds_query_v08_tsbar_" .. n
+		local base = "grafana/13.3.1/ds_query_v08_tsbar_" .. n
 		local env = Support.env()
 		local req = json.decode(Fixtures.read(base .. ".request.json"))
 		local out: { Frame.Frame } = {}

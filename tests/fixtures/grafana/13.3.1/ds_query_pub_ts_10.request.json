@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","expr":"sum(increase(alertmanager_alerts_received_total[1m])) by (status) and on () (minute() % 7 == 0)","legendFormat":"{{ status }}","interval":"1m","intervalFactor":1,"datasource":{"type":"prometheus","uid":"prom3"},"intervalMs":10000,"maxDataPoints":640}],"from":"1794416148000","to":"1794419748000"}

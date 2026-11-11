@@ -1,0 +1,1 @@
+{"matchers":[{"name":"alertname","value":"TernGrafanaAlwaysFiring","isRegex":false,"isEqual":true}],"startsAt":"2026-11-11T16:21:51Z","endsAt":"2026-11-11T17:21:51Z","createdBy":"tern-grafana capture","comment":"Fixture capture silence"}

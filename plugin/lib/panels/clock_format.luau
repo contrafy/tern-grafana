@@ -386,29 +386,84 @@ local function tokenize(source: string): { Piece }
 	return pieces
 end
 
--- Tokenized formats by format string: a clock panel formats the same one or
+-- Numeric tokens a format can compile to: string.format directive and the
+-- civil field it prints (YYYY only for years 0-9999, as tokenValue pads).
+local NUMERIC: { [string]: { string } } = {
+	YYYY = { "%04d", "y" },
+	M = { "%d", "mo" },
+	MM = { "%02d", "mo" },
+	D = { "%d", "d" },
+	DD = { "%02d", "d" },
+	H = { "%d", "h" },
+	HH = { "%02d", "h" },
+	m = { "%d", "mi" },
+	mm = { "%02d", "mi" },
+	s = { "%d", "s" },
+	ss = { "%02d", "s" },
+}
+
+-- A tokenized format; `template` and `slots` when every token is NUMERIC
+-- (Grafana's date units: a table formats one time per row).
+type Compiled = { pieces: { Piece }, template: string?, slots: { string }? }
+
+local function compile(fmt: string): Compiled
+	local pieces = tokenize(fmt)
+	local parts: { string } = {}
+	local slots: { string } = {}
+	for _, piece in pieces do
+		local tok = piece.tok
+		local n = if tok then NUMERIC[tok] else nil
+		if n then
+			table.insert(parts, n[1])
+			table.insert(slots, n[2])
+		elseif tok and string.find(tok, "^%a") then
+			return { pieces = pieces }
+		else
+			table.insert(parts, (string.gsub(piece.text, "%%", "%%%%")))
+		end
+	end
+	return { pieces = pieces, template = table.concat(parts), slots = slots }
+end
+
+-- Compiled formats by format string: a clock panel formats the same one or
 -- two strings every second.
-local tokenCache: { [string]: { Piece } } = {}
+local tokenCache: { [string]: Compiled } = {}
 local tokenCacheSize = 0
 local TOKEN_CACHE_MAX = 128
 
 -- `ms` (epoch ms) formatted with a moment format string in a zone at
 -- `offset` minutes east with abbreviation `abbr`.
 function M.format(fmt: string, ms: number, offset: number, abbr: string): string
-	local pieces = tokenCache[fmt]
-	if pieces == nil then
-		pieces = tokenize(fmt)
+	local c = tokenCache[fmt]
+	if c == nil then
+		c = compile(fmt)
 		if tokenCacheSize >= TOKEN_CACHE_MAX then
 			table.clear(tokenCache)
 			tokenCacheSize = 0
 		end
-		tokenCache[fmt] = pieces
+		tokenCache[fmt] = c
 		tokenCacheSize += 1
 	end
+	local compiled = c :: Compiled
 	local wall = ms + offset * MINUTE
 	local days = wall // DAY
 	local rem = wall - days * DAY
 	local y, mo, d = civilFromDays(days)
+	local h, mi, s = rem // HOUR, rem % HOUR // MINUTE, rem % MINUTE // SECOND
+	local template, slots = compiled.template, compiled.slots
+	if template and slots and y >= 0 and y <= 9999 then
+		local values: { number } = table.create(#slots)
+		for k, slot in slots do
+			values[k] = if slot == "y"
+				then y
+				elseif slot == "mo" then mo
+				elseif slot == "d" then d
+				elseif slot == "h" then h
+				elseif slot == "mi" then mi
+				else s
+		end
+		return string.format(template, table.unpack(values))
+	end
 	local p: Parts = {
 		ms = ms,
 		offset = offset,
@@ -416,14 +471,14 @@ function M.format(fmt: string, ms: number, offset: number, abbr: string): string
 		y = y,
 		mo = mo,
 		d = d,
-		h = rem // HOUR,
-		mi = rem % HOUR // MINUTE,
-		s = rem % MINUTE // SECOND,
+		h = h,
+		mi = mi,
+		s = s,
 		milli = rem % SECOND // 1,
 		wd = weekday(days),
 		doy = days - daysFromCivil(y, 1, 1) + 1,
 	}
-	local list = pieces :: { Piece }
+	local list = compiled.pieces
 	local out: { string } = table.create(#list)
 	for k, piece in list do
 		local tok = piece.tok

@@ -7,3 +7,5 @@
 dev/.data/
 tests/fixtures/generated.luau
 tests/fixtures/generated.luau.*
+dev/grafana/public/
+__pycache__/

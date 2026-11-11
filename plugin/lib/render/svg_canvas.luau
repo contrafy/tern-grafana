@@ -91,14 +91,22 @@ function M.render(opts: Options): string
 				)
 			)
 		elseif s.kind == "ellipse" then
+			-- Tern's SVG drops <ellipse>: two half-ellipse arcs draw the same shape.
+			local rx, ry = math.max(0, (s.w - sw) / 2), math.max(0, (s.h - sw) / 2)
 			table.insert(
 				out,
 				fmt(
-					'<ellipse cx="%.1f" cy="%.1f" rx="%.1f" ry="%.1f" fill="%s"%s/>',
-					cx,
+					'<path d="M%.1f %.1fA%.1f %.1f 0 1 0 %.1f %.1fA%.1f %.1f 0 1 0 %.1f %.1fZ" fill="%s"%s/>',
+					cx - rx,
 					cy,
-					math.max(0, (s.w - sw) / 2),
-					math.max(0, (s.h - sw) / 2),
+					rx,
+					ry,
+					cx + rx,
+					cy,
+					rx,
+					ry,
+					cx - rx,
+					cy,
 					fill,
 					strokeAttr
 				)
@@ -134,7 +142,8 @@ function M.render(opts: Options): string
 					anchor = if align == "left" then "start" elseif align == "right" then "end" else "middle",
 					size = size,
 					class = "tgv-text",
-					attrs = fmt('dominant-baseline="central" fill="%s"', paint(s.text_color or "#000000")),
+					baseline = "middle",
+					attrs = fmt('fill="%s"', paint(s.text_color or "#000000")),
 				})
 			)
 		end

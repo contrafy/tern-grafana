@@ -1,8 +1,8 @@
 --!strict
 -- Shared panel view pieces: the options every panel view takes, the panel
 -- module interface (one file per panel type, registered in registry.luau),
--- Grafana's no-data message, tone -> span token, and the stat sparkline as
--- Tern's native `chart` spark.
+-- Grafana's no-data message, tone -> span token, and the stat sparkline's
+-- plot (Sparkline utils.ts).
 
 local Assets = require("../render/assets")
 local DsTypes = require("../datasources/types")
@@ -13,6 +13,7 @@ local Lttb = require("../time/lttb")
 local Range = require("../time/range")
 local Thresholds = require("../units/thresholds")
 local TransportTypes = require("../transport/types")
+local TsData = require("../render/ts_data")
 local ui = require("../ui")
 
 type Env = Env.Env
@@ -53,6 +54,9 @@ export type Options = {
 	card_height: number?,
 	-- Table: the page the user flipped to (1-based; nil is the first).
 	page: number?,
+	-- Table: the frame the user picked in the frame selector (1-based; nil
+	-- is options.frameIndex, else the first).
+	frame: number?,
 	-- The panel's query range after its own time overrides (timeFrom,
 	-- timeShift); from_ms/to_ms carry the same range.
 	time: { from_ms: number, to_ms: number }?,
@@ -104,9 +108,19 @@ export type PanelModule = {
 	requests: ((panel: any, ctx: RequestContext, env: Env) -> { PanelRequest })?,
 	parse: ((panel: any, tag: string, response: TransportTypes.Response, env: Env) -> any)?,
 	liveMs: ((panel: any, env: Env) -> number?)?,
+	-- Grafana's PanelPlugin.setNoPadding(): PanelChrome gives the panel its
+	-- whole box less the 1 px border (and the title header), no padding.
+	no_padding: boolean?,
 }
 
 local M = {}
+
+-- PanelChrome's header above a titled panel's content, px: 40 with
+-- newPanelPadding (a Grafana 12 feature toggle, always on in 13), else 32.
+function M.headerPx(opts: Options): number
+	local features = opts.features
+	return if features and features.newPanelPadding then 40 else 32
+end
 
 -- Whether any frame holds a value (PanelDataErrorView hasData).
 function M.hasData(frames: { Frame.Frame }): boolean
@@ -127,12 +141,18 @@ function M.noDataText(panel: any, env: Env): string
 	return nv or "No data"
 end
 
+-- PanelDataErrorView: the message centered in the panel's box, in the
+-- secondary text color (dashboard.css tg-nodata).
 function M.noData(panel: any, env: Env, key: string): Node
-	return ui.muted(M.noDataText(panel, env), { key = key })
+	return {
+		k = "el",
+		p = { tag = "div", key = key, class = "tg-nodata" },
+		c = { ui.text({ ui.span(M.noDataText(panel, env), "muted") }) },
+	}
 end
 
--- Most bars in a stat sparkline (a spark bar is 4 px wide).
-M.SPARK_POINTS = 60
+-- Most points in a stat sparkline: a few per px of a stat panel's width.
+M.SPARK_POINTS = 400
 
 -- Span style token for a tone ("" for neutral).
 function M.token(tone: Thresholds.Tone): string
@@ -151,17 +171,66 @@ function M.toneClass(tone: Thresholds.Tone): string
 	return "tgp-" .. tone
 end
 
--- A sparkline of `values` (NULL/NaN as gaps), downsampled to SPARK_POINTS
--- and scaled to the series' own min..max like Grafana's sparkline axis (a
--- Tern spark grows bars from zero, which would flatten a series far from 0).
-function M.spark(
-	key: string,
-	values: { any },
-	times: { any }?,
-	tone: Thresholds.Tone?,
+export type SparkOptions = {
+	-- The field's config: min, max, decimals and noValue (getYRange).
 	min: number?,
-	max: number?
-): Node?
+	max: number?,
+	decimals: number?,
+	no_value: string?,
+	-- The panel's time range and the time field's sample interval: the
+	-- sparkline spans the range, with gaps where samples are missing.
+	from_ms: number?,
+	to_ms: number?,
+	interval: number?,
+}
+
+-- A sparkline's points as fractions of its plot: x across, y up (NaN for a
+-- gap); base is where the fill ends, value 0 on the y range (uPlot fills to
+-- 0) clamped to it.
+export type Spark = { x: { number }, y: { number }, base: number }
+
+-- guessDecimals: the digits after the point of the number as written.
+local function guessDecimals(n: number): number
+	local frac = string.match(tostring(n), "%.(%d+)")
+	return if frac then #frac else 0
+end
+
+-- roundDecimals (Math.round at `decimals` places).
+local function roundDecimals(n: number, decimals: number): number
+	local f = 10 ^ decimals
+	return math.floor(n * f + 0.5) / f
+end
+
+-- Sparkline's getYRange: the samples' range widened by the config's min,
+-- max and numeric noValue; when it rounds to one value at the field's
+-- decimals, a flat series sits at the bottom of [v, 2v] ([0, 1] for zero)
+-- and a negative one at the top of [2v, v].
+local function sparkRange(lo: number, hi: number, o: SparkOptions): (number, number)
+	lo = math.min(lo, o.min or math.huge)
+	hi = math.max(hi, o.max or -math.huge)
+	local nv = if o.no_value then tonumber(o.no_value) else nil
+	if nv and nv == nv then
+		lo, hi = math.min(lo, nv), math.max(hi, nv)
+	end
+	local decimals = o.decimals or math.max(guessDecimals(lo), guessDecimals(hi))
+	local rlo, rhi = roundDecimals(lo, decimals), roundDecimals(hi, decimals)
+	if rlo ~= rhi then
+		return lo, hi
+	elseif rlo == 0 then
+		return 0, 1
+	elseif rlo < 0 then
+		return rlo * 2, rlo
+	end
+	return rlo, rlo * 2
+end
+
+-- A sparkline of `values` (NULL/NaN as gaps) as Grafana's stat plots it
+-- (preparePlotFrame, nullToValue, prepareConfig): across the panel's time
+-- range, with nulls where samples are more than the interval apart
+-- (applyNullInsertThreshold) that a numeric noValue fills, scaled to
+-- getYRange; nil for fewer than two points (prepareSeries draws nothing).
+-- Downsampled to SPARK_POINTS.
+function M.spark(values: { any }, times: { any }?, o: SparkOptions): Spark?
 	local ts: { number }, vs: { any }
 	local count = #values
 	local dense = times ~= nil and #times == count
@@ -191,38 +260,45 @@ function M.spark(
 	if #ts < 2 then
 		return nil
 	end
+	local interval = o.interval
+	local x0, x1 = ts[1], ts[#ts]
+	if dense and interval and interval > 0 then
+		local filled
+		ts, filled = TsData.insertNulls(ts, { vs }, interval, o.from_ms, o.to_ms)
+		vs = filled[1]
+	end
+	if dense and o.from_ms and o.to_ms and o.to_ms > o.from_ms then
+		x0, x1 = o.from_ms :: number, o.to_ms :: number
+	end
+	local nv = if o.no_value then tonumber(o.no_value) else nil
+	if nv and nv == nv then
+		local out = table.create(#vs)
+		for i, v in vs do
+			out[i] = Frame.finite(v) or nv
+		end
+		vs = out
+	end
 	ts, vs = Lttb.downsample(ts, vs, M.SPARK_POINTS, Frame.NULL)
-	local lo, hi = min, max
-	if lo == nil or hi == nil then
-		for _, v in vs do
-			local n = Frame.finite(v)
-			if n then
-				lo = if lo == nil or n < lo then n else lo
-				hi = if hi == nil or n > hi then n else hi
-			end
+	local lo, hi = math.huge, -math.huge
+	for _, v in vs do
+		local n = Frame.finite(v)
+		if n then
+			lo, hi = math.min(lo, n), math.max(hi, n)
 		end
 	end
-	if lo == nil or hi == nil then
+	if lo > hi then
 		return nil
 	end
-	local span = (hi :: number) - (lo :: number)
-	local series: { { value: number? } } = table.create(#vs)
-	for i, v in vs do
-		local n = Frame.finite(v)
-		if n == nil then
-			series[i] = {}
-		elseif span <= 0 then
-			series[i] = { value = 1 }
-		else
-			-- 5% floor keeps the minimum visible as a bar, not a stub.
-			series[i] = { value = 0.05 + 0.95 * math.clamp((n - (lo :: number)) / span, 0, 1) }
-		end
+	lo, hi = sparkRange(lo, hi, o)
+	local span, width = hi - lo, x1 - x0
+	local n = #ts
+	local xs, ys = table.create(n), table.create(n)
+	for i = 1, n do
+		local v = Frame.finite(vs[i])
+		xs[i] = if width > 0 then (ts[i] - x0) / width else 0
+		ys[i] = if v == nil then 0 / 0 else (v - lo) / span
 	end
-	local token = if tone then M.token(tone) else ""
-	return {
-		k = "chart",
-		p = { key = key, kind = "spark", token = if token ~= "" then token else "accent", series = series },
-	}
+	return { x = xs, y = ys, base = math.clamp(-lo / span, 0, 1) }
 end
 
 return M
