@@ -127,16 +127,39 @@ describe("Legend.height", function()
 	end)
 end)
 
+-- VizLayout: a bottom legend gets at most 35% of the viz and scrolls the
+-- rest (node-mixin Disk I/O: 56 entries, three lines shown).
+describe("Legend.capClass", function()
+	local function row(name: string, values: { string }): Legend.Row
+		return { class = "", name = name, values = values }
+	end
+	it("cuts a legend after the whole lines that fit, and leaves one that fits alone", function()
+		local rows = {}
+		for i = 1, 56 do
+			table.insert(rows, row("nbd" .. i .. " read", {}))
+		end
+		expect(Legend.capClass(rows, "list", 900, 80)).toBe("tgp-lgcap-l3")
+		expect(Legend.capClass({ row("a", {}) }, "list", 900, 80)).toBe(nil)
+		expect(Legend.capClass(rows, "table", 900, 80)).toBe("tgp-lgcap-t2")
+	end)
+end)
+
 describe("Legend.view", function()
-	it("lists names with values and notes dropped series", function()
+	it("lists every series, and notes those left out by the size cap", function()
 		local list = {}
 		for i = 1, 12 do
 			table.insert(list, Frame.timeSeries({ i = tostring(i) }, { 0 }, { i }))
 		end
-		local layout = Svg.render(list).layout
-		local all = table.concat(texts(Legend.view(layout)), "\n")
-		expect(all).toContain('{i="1"}')
-		expect(all).toContain("2 more series not shown")
+		local all = table.concat(texts(Legend.view(Svg.render(list).layout)), "\n")
+		expect(all).toContain('{i="12"}')
+		expect((string.find(all, "not shown", 1, true))).toBe(nil)
+		local huge = {}
+		for i = 1, 800 do
+			table.insert(huge, Frame.timeSeries({ i = tostring(i) }, { 0 }, { i }))
+		end
+		local layout = Svg.render(huge).layout
+		local capped = table.concat(texts(Legend.view(layout)), "\n")
+		expect(capped).toContain(string.format("%d more series not shown (chart size limit)", layout.dropped))
 	end)
 
 	it("renders a table legend with a header per calc", function()

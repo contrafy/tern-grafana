@@ -131,6 +131,23 @@ function M.height(rows: { Row }, mode: Mode, width: number): number
 	return lines * M.LINE_PX + (lines - 1) * M.LINE_GAP_PX
 end
 
+-- VizLayout caps a bottom legend at 35% of the viz and scrolls the rest
+-- (ScrollContainer). The class (panels.css tgp-lgcap-l<n>, -t<n>) that
+-- cuts a legend of `rows` across `width` after the whole list lines or
+-- table rows fitting `maxPx` and scrolls the rest; nil when it fits.
+M.CAP_MAX = 12
+
+function M.capClass(rows: { Row }, mode: Mode, width: number, maxPx: number): string?
+	if M.height(rows, mode, width) <= maxPx then
+		return nil
+	elseif mode == "table" then
+		local n = math.floor((maxPx - M.TABLE_HEAD_PX) / M.TABLE_ROW_PX)
+		return "tgp-lgcap-t" .. math.clamp(n, 1, M.CAP_MAX)
+	end
+	local n = math.floor((maxPx + M.LINE_GAP_PX) / (M.LINE_PX + M.LINE_GAP_PX))
+	return "tgp-lgcap-l" .. math.clamp(n, 1, M.CAP_MAX)
+end
+
 -- VizLegend rows under `key`: a wrapping list (name, then the values in
 -- bold) or a table with a column per value heading. Shared by every panel
 -- legend (lib/panels/charts).
@@ -183,10 +200,7 @@ function M.view(layout: Layout, opts: Options?): Node
 	if layout.dropped > 0 then
 		table.insert(
 			children,
-			ui.muted(
-				string.format("%d more series not shown (chart limit %d)", layout.dropped, #layout.series),
-				{ key = "dropped" }
-			)
+			ui.muted(string.format("%d more series not shown (chart size limit)", layout.dropped), { key = "dropped" })
 		)
 	end
 	return { k = "col", p = { key = key, gap = "xs" }, c = children }

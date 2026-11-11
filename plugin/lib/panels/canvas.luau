@@ -38,6 +38,8 @@ type Node = ui.Node
 local M = {}
 
 M.types = { "canvas" }
+-- module.ts setNoPadding().
+M.no_padding = true
 
 M.WIDTH = 960
 M.HEIGHT = 300

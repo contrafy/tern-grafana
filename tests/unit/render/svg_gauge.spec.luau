@@ -60,4 +60,77 @@ describe("radial gauge viewBox", function()
 	end
 end)
 
+-- effects.gradient is a CSS conic-gradient in Grafana: the color at an
+-- angle of the arc is its place on the scale between the stops. Tern's SVG
+-- has none, so each sub-arc is stroked with a linear gradient between its
+-- two stops laid along its chord: at both ends of every sub-arc the
+-- gradient's parameter must be the place between the stops there, or the
+-- colors would jump at the joints.
+describe("radial gauge gradient", function()
+	for _, style in { "gauge", "circle" } do
+		it("puts the conic gradient's color at each sub-arc end: " .. style, function()
+			local s = spec(style, 400, 300)
+			s.ring = nil
+			s.labels = nil
+			s.fill_to = 0.8
+			s.gradient = { { at = 0, class = "tg-gc1" }, { at = 0.5, class = "tg-gc2" }, { at = 1, class = "tg-gc3" } }
+			local svg = SvgGauge.render(s)
+			local d = SvgGauge.dimensions(s)
+			-- Each gradient: its line and the scale run of its stop pair.
+			local lines: { [string]: { number } } = {}
+			for id, x1, y1, x2, y2, a in
+				string.gmatch(
+					svg,
+					'<linearGradient id="(%w+)" gradientUnits="userSpaceOnUse" x1="([%d.%-]+)" y1="([%d.%-]+)" x2="([%d.%-]+)" y2="([%d.%-]+)"><stop offset="0" class="([%w%-]+)"/>'
+				)
+			do
+				local from = if a == "tg-gc1" then 0 else 0.5
+				lines[id] = {
+					tonumber(x1) :: number,
+					tonumber(y1) :: number,
+					tonumber(x2) :: number,
+					tonumber(y2) :: number,
+					from,
+				}
+			end
+			local function fraction(x: number, y: number): number
+				-- Degrees past the start, a rounded start point a hair before it
+				-- still at 0.
+				local deg = math.deg(math.atan2(y - d.cy, x - d.cx)) + 90
+				return ((deg - d.start + 0.5) % 360 - 0.5) / d.range
+			end
+			local subs = 0
+			for id, x0, y0, x1, y1 in
+				string.gmatch(
+					svg,
+					'stroke="url%(#(%w+)%)"[^>]*d="M([%d.-]+) ([%d.-]+)A[%d.]+ [%d.]+ 0 %d 1 ([%d.-]+) ([%d.-]+)"'
+				)
+			do
+				subs += 1
+				local g = lines[id]
+				assert(g, "gradient " .. id)
+				local gx, gy = g[3] - g[1], g[4] - g[2]
+				for _, p in
+					{
+						{ tonumber(x0) :: number, tonumber(y0) :: number },
+						{ tonumber(x1) :: number, tonumber(y1) :: number },
+					}
+				do
+					local along = ((p[1] - g[1]) * gx + (p[2] - g[2]) * gy) / (gx * gx + gy * gy)
+					expect(math.abs(along - (fraction(p[1], p[2]) - g[5]) / 0.5) < 0.01).toBe(true)
+				end
+			end
+			-- 0.8 of 220 (360) degrees in sub-arcs of at most 10 degrees per stop pair.
+			expect(subs).toBe(if style == "gauge" then 18 else 29)
+			-- Colors are the stops' classes, not computed fills.
+			expect(
+				string.find(svg, '<stop offset="0" class="tg-gc1"/><stop offset="1" class="tg-gc2"/>', 1, true) ~= nil
+			).toBe(true)
+			expect(
+				string.find(svg, '<stop offset="0" class="tg-gc2"/><stop offset="1" class="tg-gc3"/>', 1, true) ~= nil
+			).toBe(true)
+		end)
+	end
+end)
+
 return nil

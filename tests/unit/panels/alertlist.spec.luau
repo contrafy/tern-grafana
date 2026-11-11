@@ -16,11 +16,11 @@ local Queries = require("../../../plugin/lib/dashboard/queries")
 local describe, it, expect = t.describe, t.it, t.expect
 
 -- 6m 12s after the firing rules' activeAt (2026-10-12T22:13:30Z; Grafana 13's
--- fresh stack: 2026-11-09T15:52:20Z).
+-- fresh stack: 2026-11-11T16:21:10Z).
 local NOW = {
 	["11.6.16"] = 1791843582000,
 	["12.4.12"] = 1791843582000,
-	["13.3.0"] = 1794239912000,
+	["13.3.1"] = 1794414442000,
 }
 
 local function env(version: string): any

@@ -40,11 +40,12 @@ end
 
 local CTX = { time = { from_ms = 1791840751000, to_ms = 1791844351000 }, dashboard_uid = "tern-all-panels" }
 
--- The seeded annotations: Grafana 13's fresh stack gave them other ids and times.
+-- The seeded annotations: Grafana 13's fresh stack gave them other ids and
+-- times, and was seeded with two more (on tern-alert-states).
 local SEEDED = {
-	["11.6.16"] = { org = 3, deploy = 2, org_range = "2026-10-12 21:28:34  -  2026-10-12 21:33:34" },
-	["12.4.12"] = { org = 3, deploy = 2, org_range = "2026-10-12 21:28:34  -  2026-10-12 21:33:34" },
-	["13.3.0"] = { org = 5, deploy = 4, org_range = "2026-11-09 15:07:29  -  2026-11-09 15:12:29" },
+	["11.6.16"] = { count = 3, org = 3, deploy = 2, org_range = "2026-10-12 21:28:34  -  2026-10-12 21:33:34" },
+	["12.4.12"] = { count = 3, org = 3, deploy = 2, org_range = "2026-10-12 21:28:34  -  2026-10-12 21:33:34" },
+	["13.3.1"] = { count = 5, org = 5, deploy = 4, org_range = "2026-11-11 15:36:29  -  2026-11-11 15:41:29" },
 }
 
 for _, version in S.VERSIONS do
@@ -86,7 +87,7 @@ for _, version in S.VERSIONS do
 
 		it("reads organization-wide annotations as belonging to no dashboard or panel", function()
 			local list = answer(version, "annotations_annolist").annotations
-			expect(#list).toBe(3)
+			expect(#list).toBe(SEEDED[version].count)
 			local org = byId(list, SEEDED[version].org)
 			expect(org.dashboard_uid).toBeNil()
 			expect(org.panel_id).toBeNil()

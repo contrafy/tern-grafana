@@ -69,6 +69,9 @@ export type Fit = {
 	change_px: number,
 	-- Title and value side by side (the wide layouts).
 	wide: boolean,
+	-- A wide tile too short for the name on a line of its own: name and
+	-- value stay on one row (panels2.css tgp-stat-row).
+	row: boolean?,
 	-- justifyMode center, or auto without a title.
 	center: boolean,
 	-- Lines a wrapped title may take in the height-capped card
@@ -141,7 +144,8 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			light = Thresholds.lightOf(d.color)
 		end
 		local tile: Tile = {
-			title = if mode == "value_and_name" then v.title else nil,
+			-- The no-values placeholder has no name (createNoValuesFieldDisplay).
+			title = if mode == "value_and_name" and v.title ~= "" then v.title else nil,
 			value = if mode == "name" then v.title elseif mode == "none" then "" else text,
 			tone = d.tone,
 			color_mode = colorMode,
@@ -158,15 +162,18 @@ function M.tiles(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			tile.exact = (v.item :: FieldConfig.Item).config.color_mode ~= "thresholds"
 		end
 		if v.spark and v.item then
-			local item = v.item :: FieldConfig.Item
-			tile.spark = Common.spark(
-				opts.key .. ".spark" .. i,
-				v.spark.values,
-				v.spark.times,
-				if colorMode == "none" then nil else d.tone,
-				item.config.min,
-				item.config.max
-			)
+			local field = (v.item :: FieldConfig.Item).config
+			local range = opts.time
+			tile.spark = Common.spark(opts.key .. ".spark" .. i, v.spark.values, v.spark.times, {
+				tone = if colorMode == "none" then nil else d.tone,
+				min = field.min,
+				max = field.max,
+				decimals = field.decimals,
+				no_value = field.no_value,
+				from_ms = if range then range.from_ms else opts.from_ms,
+				to_ms = if range then range.to_ms else opts.to_ms,
+				interval = v.spark.interval,
+			})
 		end
 		if showChange and v.item and not v.placeholder then
 			local item = v.item :: FieldConfig.Item
@@ -199,18 +206,19 @@ end
 -- layout and calculateFontSize (utils/measureText.ts) the largest size that
 -- fits the box's width and height, every value aligned to the longest
 -- (getDisplayValueAlignmentFactors). The px come from the panel's Grafana
--- size (opts.size) with the height bounded by the Tern card's height cap.
--- The value is drawn as an SVG of that size that shrinks to a narrower tile
--- (valueSvg): Tern's style sheets have no container units and a block knows
--- its pane width only in cells, not px. Title and percent change snap to size classes
--- (panels2.css tgp-stat-fs<N>).
+-- size (opts.size): stat is a no-padding panel (PanelPlugin.setNoPadding),
+-- so its box is the panel less the 1 px border and, with a title, the
+-- header (Common.headerPx); the height is bounded by the Tern card's height
+-- cap. The value is drawn as an SVG of that size that shrinks to a narrower
+-- tile (valueSvg): Tern's style sheets have no container units and a block
+-- knows its pane width only in cells, not px. Title and percent change snap
+-- to size classes (panels2.css tgp-stat-fs<N>).
 
 local LINE_HEIGHT = 1.2
 local MAX_TITLE_SIZE = 30
 local ITEM_SPACING = 3
--- PanelChrome: a 32 px header when the panel has a title; 8 px padding.
-local HEADER_PX = 32
-local PANEL_PADDING_PX = 8
+-- PanelChrome's border, above and below and on either side.
+local BORDER_PX = 2
 -- The Tern tile's padding (panels.css .tgp-stat: 6 px 8 px) and the row
 -- Tern's spark chart takes under the value.
 M.TILE_PAD_X = 16
@@ -218,9 +226,6 @@ M.TILE_PAD_Y = 12
 M.SPARK_PX = 34
 -- Tern's text line, px: image max heights are given in lines.
 local LINE_PX = 16
--- The smallest fitted value: one Tern line tall (valueSvg's 13 px text is
--- a 16 px image).
-M.MIN_VALUE_PX = math.floor(LINE_PX / LINE_HEIGHT)
 
 -- Font size classes, px (panels2.css tgp-stat-fs<N>).
 M.FONT_SIZES = table.freeze({
@@ -520,8 +525,8 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 	-- Grafana's panel content box. The width needs no bound: the value is
 	-- an SVG that scales down to the tile (tileNode); Tern's cx.cols counts
 	-- cells, not px.
-	local w = size.w - PANEL_PADDING_PX * 2
-	local h = size.h - (if hasTitle then HEADER_PX else 0) - PANEL_PADDING_PX * 2
+	local w = size.w - BORDER_PX
+	local h = size.h - (if hasTitle then Common.headerPx(opts) else 0) - BORDER_PX
 	local orientation = Json.str(env, options.orientation) or "auto"
 	local cols, bw, bh = M.grid(#tiles, math.max(w, 1), math.max(h, 1), orientation)
 	local value, title = "", ""
@@ -558,10 +563,10 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 		room = r
 		tightTile = tight
 		-- BigValue pads its box (8 px, 12 px above 100 px) where the tile
-		-- already has its own padding: a value without a name gets the room
-		-- plus that padding. Named tiles keep it for the name, which wraps
-		-- more in a Tern tile, often narrower than Grafana's box.
-		local box = if title ~= "" then r else r + (if r + 16 > 100 then 24 else 16)
+		-- already has its own padding: the box is the room plus that padding.
+		-- A name that wraps more in a Tern tile, often narrower than
+		-- Grafana's box, takes its lines from the value below.
+		local box = r + (if r + 16 > 100 then 24 else 16)
 		if box < bh then
 			bh, capped = math.max(box, 1), true
 		end
@@ -591,31 +596,33 @@ local function panelFit(panel: any, env: Env, tiles: { Tile }, opts: Common.Opti
 	local changeH = if change then M.sizeClass(fit.change_px) * LINE_HEIGHT else 0
 	if room and valueSize == nil and fit.wide and title ~= "" then
 		-- A Tern tile is often narrower than Grafana's box: the wide layout
-		-- then wraps the name above the value (panels2.css tgp-stat-wide), so
-		-- the value leaves the tile a line of the name, at most 0.7 of the
-		-- value's size as in the wide layouts.
+		-- then wraps the name above the value (panels2.css tgp-stat-wide).
+		-- A tile too short for the name on a line of its own keeps name and
+		-- value on one row as BigValue does, the name cut (tgp-stat-row), and
+		-- the value at most the room's line.
 		local lines = (room - changeH) / LINE_HEIGHT
-		local px = lines / 1.7
-		if px * 0.7 > fit.title_px then
-			px = lines - fit.title_px
-		end
-		if px < fit.value_px then
-			fit.value_px, capped = px, true
-			fit.title_px = math.min(fit.title_px, px * 0.7)
+		if fit.value_px + fit.title_px > lines then
+			fit.row, capped = true, true
+			if fit.value_px > lines then
+				fit.value_px = lines
+				fit.title_px = math.min(fit.title_px, lines * 0.7)
+			end
 		end
 	end
-	if valueSize == nil then
+	if valueSize == nil and capped then
 		-- Rounded down in a capped box so the drawn value (valueSvg) is not
-		-- taller than the room; never below a line.
-		fit.value_px = math.max(if capped then math.floor(fit.value_px) else fit.value_px, M.MIN_VALUE_PX)
+		-- taller than the room.
+		fit.value_px = math.floor(fit.value_px)
 	end
 	if room and title ~= "" then
 		-- The lines a wrapped name has in the tile above the value and the
 		-- percent change: a Tern tile is often narrower than Grafana's, so
-		-- names wrap more. A tight tile keeps its line of value over the name.
+		-- names wrap more. A tight tile keeps its line of value over the name;
+		-- a row has one line beside it.
 		local rest = room - math.ceil(math.floor(fit.value_px + 0.5) * LINE_HEIGHT) - changeH
-		fit.title_lines =
-			math.max(if tightTile then 0 else 1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
+		fit.title_lines = if fit.row
+			then 1
+			else math.max(if tightTile then 0 else 1, math.floor(rest / (M.sizeClass(fit.title_px) * LINE_HEIGHT)))
 	end
 	return fit, cols
 end
@@ -703,7 +710,7 @@ local function tileNode(tile: Tile, key: string, fit: Fit?, assetKey: string, as
 		end
 		changeClass ..= " " .. fsClass(fit.change_px)
 		if fit.wide then
-			lineClass ..= " tgp-stat-wide"
+			lineClass ..= if fit.row then " tgp-stat-wide tgp-stat-row" else " tgp-stat-wide"
 		end
 		if fit.center then
 			lineClass ..= " tgp-stat-center"

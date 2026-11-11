@@ -10,12 +10,11 @@ local describe, it, expect = t.describe, t.it, t.expect
 local env = S.env
 
 -- The idle series' legend Last * / Max per prom_range capture, the end of
--- the 15m window each was captured in, and a sample near its middle (the
--- 13.3.0 stack had run only ~7m: 29 samples instead of 61).
-local LAST_IDLE = { ["11.6.16"] = "9.62", ["12.4.12"] = "9.45", ["13.3.0"] = "9.48" }
-local MAX_IDLE = { ["11.6.16"] = "9.69", ["12.4.12"] = "9.69", ["13.3.0"] = "9.58" }
-local TO_MS = { ["11.6.16"] = 1791577908000, ["12.4.12"] = 1791577908000, ["13.3.0"] = 1794239763000 }
-local MID_SAMPLE = { ["11.6.16"] = 30, ["12.4.12"] = 30, ["13.3.0"] = 15 }
+-- the 15m window each was captured in, and a sample near its middle.
+local LAST_IDLE = { ["11.6.16"] = "9.62", ["12.4.12"] = "9.45", ["13.3.1"] = "7.60" }
+local MAX_IDLE = { ["11.6.16"] = "9.69", ["12.4.12"] = "9.69", ["13.3.1"] = "9.46" }
+local TO_MS = { ["11.6.16"] = 1791577908000, ["12.4.12"] = 1791577908000, ["13.3.1"] = 1794414168000 }
+local MID_SAMPLE = { ["11.6.16"] = 30, ["12.4.12"] = 30, ["13.3.1"] = 30 }
 
 local function count(s: string, needle: string): number
 	local n, i = 0, 1
@@ -595,6 +594,71 @@ for _, version in S.VERSIONS do
 
 		it("joins gaps up to the insertNulls threshold", function()
 			expect(runs(8)).toBe(1)
+		end)
+	end)
+end
+
+-- tern-pub-ts: synthetic repros of public dashboards' time series (1860
+-- Network Traffic Basic and Memory Basic), drawn in a 7-row dashboard card.
+for _, version in S.VERSIONS do
+	describe("timeseries public repros on tern-pub-ts, Grafana " .. version, function()
+		local function pubPanel(id: number): any
+			for _, p in S.decode("grafana/" .. version .. "/dashboard_tern_pub_ts.json").dashboard.panels do
+				if p.id == id then
+					return p
+				end
+			end
+			error("no panel " .. id)
+		end
+		local CARD = { key = "p", size = { w = 800, h = 258 }, card_height = 228 }
+
+		-- Grafana draws all 22 Rx and Tx series; the byRegexp /.*Tx.*/
+		-- negative-Y override draws the Tx ones below zero.
+		it("draws every series, Tx below zero", function()
+			local frames = S.frames(version, "pub_ts_1")
+			expect(#frames).toBe(22)
+			local node, assets = Timeseries.view(pubPanel(1), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(count(svg, "tg-line")).toBe(22)
+			local negative = 0
+			for _, label in ticks(svg, "end") do
+				if string.sub(label, 1, 1) == "-" then
+					negative += 1
+				end
+			end
+			expect(negative > 0).toBe(true)
+			local legend = S.text(S.find(node, function(n)
+				return n.p and n.p.key == "p.legend"
+			end))
+			expect(legend).toContain("Tx eth0")
+			expect((string.find(legend, "not shown", 1, true))).toBeNil()
+		end)
+
+		-- The Total override's stacking {group: false} stacks it alone, so
+		-- the axis tops out near Total, not at Total plus the stack (2x).
+		it("takes a {group: false} series off the stack", function()
+			local frames = S.frames(version, "pub_ts_2")
+			local total = 0
+			for _, f in frames do
+				if f.refId == "A" then
+					for _, v in f.fields[2].values do
+						if type(v) == "number" then
+							total = math.max(total, v)
+						end
+					end
+				end
+			end
+			expect(total > 0).toBe(true)
+			local _, assets = Timeseries.view(pubPanel(2), frames, env, CARD)
+			local top = 0
+			for _, label in ticks(assets.p.bytes, "end") do
+				local n = tonumber(string.match(label, "^([%d%.]+) GiB$"))
+				if n then
+					top = math.max(top, n)
+				end
+			end
+			expect(top >= total / 2 ^ 30 * 0.75).toBe(true)
+			expect(top < total / 2 ^ 30 * 1.5).toBe(true)
 		end)
 	end)
 end

@@ -304,11 +304,14 @@ function M.sortByTime(frame: Frame): Frame
 	end
 	local tv = tf.values
 	local sorted = true
+	local prev = tv[1]
 	for i = 2, #tv do
-		if type(tv[i]) == "number" and type(tv[i - 1]) == "number" and tv[i] < tv[i - 1] then
+		local t = tv[i]
+		if type(t) == "number" and type(prev) == "number" and t < prev then
 			sorted = false
 			break
 		end
+		prev = t
 	end
 	if sorted then
 		return frame

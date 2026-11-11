@@ -369,6 +369,12 @@
 	justify-content: flex-end;
 }
 .tgp-stat-fit .tgp-stat-wide.tgp-stat-center .tgp-stat-value { margin-left: 0; justify-content: center; }
+/* A wide tile too short for the name on a line of its own (Fit.row):
+   name and value stay on one row as BigValue draws them, the name cut. */
+.tgp-stat-fit .tgp-stat-wide.tgp-stat-row { flex-wrap: nowrap; }
+.tgp-stat-fit .tgp-stat-row .tgp-stat-title { flex: 0 1 auto; overflow: hidden; }
+.tgp-stat-fit .tgp-stat-row .tgp-stat-title .sf-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tgp-stat-fit .tgp-stat-row .tgp-stat-value { flex-shrink: 0; }
 .tgp-stat-fit .tgp-stat-value .sf-image { max-width: 100%; }
 .tgp-stat-on-solid { fill: var(--page); }
 /* colorMode background_solid and background (BigValueLayout getPanelStyles):

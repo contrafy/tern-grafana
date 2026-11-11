@@ -27,8 +27,8 @@ end
 
 -- Instance order of each prom_instant capture: the first gauge reading 1
 -- (up) and the `down` target.
-local UP = { ["11.6.16"] = 1, ["12.4.12"] = 1, ["13.3.0"] = 2 }
-local DOWN = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.0"] = 1 }
+local UP = { ["11.6.16"] = 1, ["12.4.12"] = 1, ["13.3.1"] = 2 }
+local DOWN = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.1"] = 1 }
 
 for _, version in S.VERSIONS do
 	describe("gauge on tern-panels, Grafana " .. version, function()
@@ -108,16 +108,25 @@ for _, version in S.VERSIONS do
 
 		-- Sized to Grafana's panel less its header, the bars ran past a
 		-- dashboard card's body (Case Priority, Total incidents by severity):
-		-- in a capped card they take the body's height.
+		-- in a capped card they take the body's height. Uncapped, the viz is
+		-- the panel less PanelChrome's 32 px header (40 with newPanelPadding),
+		-- 1 px border and 8 px padding.
 		it("fits the bars into the card body", function()
 			local capped = { key = "g", size = { w = 733, h = 524 }, card_height = 482 }
 			local node = Gauge.barView(S.panel(version, 8), S.frames(version, "prom2_range"), env, capped)
 			expect((node :: any).p.h).toBe(482)
+			expect((node :: any).p.w).toBe(733 - 18)
 			local free = Gauge.barView(S.panel(version, 8), S.frames(version, "prom2_range"), env, {
 				key = "g",
 				size = { w = 733, h = 524 },
 			})
-			expect((free :: any).p.h).toBe(524 - Gauge.HEADER_PX)
+			expect((free :: any).p.h).toBe(524 - 32 - 18)
+			local padded = Gauge.barView(S.panel(version, 8), S.frames(version, "prom2_range"), env, {
+				key = "g",
+				size = { w = 733, h = 524 },
+				features = { newPanelPadding = true },
+			})
+			expect((padded :: any).p.h).toBe(524 - 40 - 18)
 		end)
 
 		-- lcd lights each cell up to the value in the color of the cell's own
@@ -256,7 +265,8 @@ end)
 -- with newGauge, fieldConfig noValue and min/max, options.neutral. The
 -- placeholder value is numeric 0 with the noValue text
 -- (createNoValuesFieldDisplay); the neutral value draws the bar 0..neutral
--- and the threshold gradient paints it.
+-- and the threshold gradient (a conic gradient through each step's color
+-- at its value) paints it.
 local NO_QUERY = [[{
 	"type": "gauge", "title": "No query", "pluginVersion": "12.4.0",
 	"fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "min": 0, "max": 20,
@@ -272,7 +282,7 @@ local NO_QUERY = [[{
 local V2 = { key = "g", features = { newGauge = true }, size = { w = 600, h = 300 } }
 
 describe("gauge without data (Grafana 12.4 newGauge)", function()
-	it("shows the noValue text and draws the bar from 0 to the neutral value in the gradient's bands", function()
+	it("shows the noValue text and draws the bar from 0 to the neutral value in the threshold gradient", function()
 		local specs = Gauge.specs(S.json(NO_QUERY), {}, env, V2)
 		expect(#specs).toBe(1)
 		local g = specs[1]
@@ -280,19 +290,36 @@ describe("gauge without data (Grafana 12.4 newGauge)", function()
 		expect(g.text).toBe("6")
 		expect(g.fill_from).toBe(0)
 		expect(g.fill_to).toBe(0.3)
-		expect(g.bands).toEqual({
+		-- getFormattedThresholds without the offset color: green at min,
+		-- #EAB839 and red at 1 of 0..20, red again at max.
+		expect(g.gradient).toEqual({
+			{ at = 0, class = class("green") },
+			{ at = 0.05, class = class("#EAB839") },
+			{ at = 0.05, class = class("red") },
+			{ at = 1, class = class("red") },
+		})
+		expect(g.ring).toEqual({
 			{ from = 0, to = 0.05, class = class("green") },
 			{ from = 0.05, to = 1, class = class("red") },
 		})
-		expect(g.ring).toEqual(g.bands)
 		local node, assets = Gauge.view(S.json(NO_QUERY), {}, env, V2)
 		local img = S.find(node, function(n)
 			return n.k == "image"
 		end)
 		local svg = assets[img.p.asset].bytes
-		-- The red run covers the bar from 1 to 6 of 0..20.
-		expect(string.find(svg, 'class="' .. class("red") .. ' tg-line"', 1, true) ~= nil).toBe(true)
-		expect(string.find(svg, ">6</text>", 1, true) ~= nil).toBe(true)
+		-- 0..1 blends green into #EAB839; 1..6 of 0..20 is red.
+		expect(
+			has(
+				svg,
+				'<stop offset="0" class="'
+					.. class("green")
+					.. '"/><stop offset="1" class="'
+					.. class("#EAB839")
+					.. '"/>'
+			)
+		).toBe(true)
+		expect(has(svg, 'class="' .. class("red") .. ' tg-line"')).toBe(true)
+		expect(has(svg, ">6</text>")).toBe(true)
 	end)
 
 	it("clamps the neutral value to max: noValue 0 on 0..1 fills the whole arc", function()
@@ -326,6 +353,7 @@ describe("gauge without data (Grafana 12.4 newGauge)", function()
 		local g = Gauge.specs(panel, {}, env, V2)[1]
 		-- Without the gradient the bar is the value's color: the base step.
 		expect(g.bands).toEqual({ { from = 0, to = 1, class = class("green") } })
+		expect(g.gradient).toBeNil()
 	end)
 
 	it("segments the bar and colors each filled segment by its own value", function()
@@ -343,6 +371,81 @@ describe("gauge without data (Grafana 12.4 newGauge)", function()
 		local segment = real.segment_class :: (number) -> string
 		expect(segment(0)).toBe(class("green"))
 		expect(segment(0.25)).toBe(class("red"))
+	end)
+end)
+
+-- The node-mixin "Memory Usage" gauge (synthetic copy in dev dashboard
+-- tern-pub-gauges, panel 7): saved with pluginVersion "v13.0.0" and no
+-- options at all. gaugePanelMigrationHandler migrates only when
+-- parseFloat(pluginVersion ?? "8") < 13; parseFloat("v13.0.0") is NaN, so
+-- Grafana 12.4 (newGauge) and 13 draw the panelcfg defaults: the threshold
+-- gradient, the sparkline and the threshold ring, no endpoint dots on the
+-- flat bar.
+local MEMORY = [[{
+	"type": "gauge", "title": "Memory Usage", "pluginVersion": "v13.0.0",
+	"fieldConfig": {"defaults": {"min": 0, "max": 100, "unit": "percent",
+		"thresholds": {"steps": [{"color": "rgba(50, 172, 45, 0.97)"}, {"color": "rgba(237, 129, 40, 0.89)", "value": 80},
+			{"color": "rgba(245, 54, 54, 0.9)", "value": 90}]}}}
+}]]
+
+describe("gauge saved with pluginVersion v13.0.0 (Grafana 12.4 newGauge, 13)", function()
+	local frame = {
+		fields = {
+			{ name = "Time", type = "time", values = { 1791577800000, 1791577860000, 1791577908000 }, config = {} },
+			{ name = "Value", type = "number", values = { 64.1, 65.9, 65.3 }, config = {} },
+		},
+	}
+
+	it("is not migrated: gradient, sparkline and markers on", function()
+		local look = Gauge.look(S.json(MEMORY), env, true)
+		expect(look.gradient).toBe(true)
+		expect(look.sparkline).toBe(true)
+		expect(look.markers).toBe(true)
+		expect(look.endpoint).toBe(false)
+		-- An absent pluginVersion is "8": migrated.
+		local old = S.json(MEMORY)
+		old.pluginVersion = nil
+		expect(Gauge.look(old, env, true).gradient).toBe(false)
+	end)
+
+	it("paints the bar and ring with the threshold gradient and draws the sparkline", function()
+		local g = Gauge.specs(S.json(MEMORY), { frame :: any }, env, V2)[1]
+		expect(g.text).toBe("65.3")
+		expect(g.gradient).toEqual({
+			{ at = 0, class = class("rgba(50, 172, 45, 0.97)") },
+			{ at = 0.8, class = class("rgba(237, 129, 40, 0.89)") },
+			{ at = 0.9, class = class("rgba(245, 54, 54, 0.9)") },
+			{ at = 1, class = class("rgba(245, 54, 54, 0.9)") },
+		})
+		expect(g.ring ~= nil).toBe(true)
+		expect(g.spark and #(g.spark :: { number? })).toBe(3)
+		-- Sparkline's y range is the field's min..max (0..100), not the
+		-- data's: Grafana draws 64-66% as a nearly flat line.
+		expect(math.abs(((g.spark :: { number? })[1] :: number) - 0.641) < 1e-9).toBe(true)
+		expect(math.abs(((g.spark :: { number? })[2] :: number) - 0.659) < 1e-9).toBe(true)
+		local node, assets = Gauge.view(S.json(MEMORY), { frame :: any }, env, V2)
+		local img = S.find(node, function(n)
+			return n.k == "image"
+		end)
+		local svg = assets[img.p.asset].bytes
+		-- 65.3% sits between the green stop and the 80 orange one.
+		expect(
+			has(
+				svg,
+				'<stop offset="0" class="'
+					.. class("rgba(50, 172, 45, 0.97)")
+					.. '"/><stop offset="1" class="'
+					.. class("rgba(237, 129, 40, 0.89)")
+					.. '"/>'
+			)
+		).toBe(true)
+		expect(has(svg, 'stroke="url(#tgq')).toBe(true)
+		expect(has(svg, "tg-area")).toBe(true)
+		-- RadialBar passes endpointMarker only to rounded bars.
+		expect(has(svg, "tgg-dot")).toBe(false)
+		local rounded = S.json(MEMORY)
+		rounded.options = { barShape = "rounded" }
+		expect(Gauge.look(rounded, env, true).endpoint).toBe(true)
 	end)
 end)
 

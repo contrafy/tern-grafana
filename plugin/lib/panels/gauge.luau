@@ -7,8 +7,9 @@
 -- value (lib/panels/values), laid out like VizRepeater's autoGrid. Grafana
 -- 12 with the newGauge feature toggle, and every Grafana 13, draws gauge/v2
 -- (RadialGauge: shape, barWidthFactor, barShape, segmentCount/Spacing,
--- neutral, sparkline, effects.gradient, endpointMarker, textMode, text
--- sizes); otherwise gauge/v1 (the flot gauge). Both scale the value over the field's
+-- neutral, sparkline, effects.gradient for thresholds and continuous
+-- schemes, endpointMarker on rounded bars, textMode, text sizes); otherwise
+-- gauge/v1 (the flot gauge). Both scale the value over the field's
 -- min..max, put threshold markers in an outer ring and threshold labels at
 -- min, each step and max (getFormattedThresholds).
 --
@@ -26,6 +27,7 @@ local Env = require("../env")
 local FieldConfig = require("./fieldconfig")
 local Frame = require("../frame/types")
 local Json = require("./json")
+local Shared = require("./transforms/shared")
 local SvgBarGauge = require("../render/svg_bargauge")
 local SvgGauge = require("../render/svg_gauge")
 local Thresholds = require("../units/thresholds")
@@ -255,16 +257,20 @@ function M.barSpecs(
 		}
 end
 
--- The viz height Grafana gives a gauge: the card body in a height-capped
--- card (opts.card_height), else the panel less its header row.
-local function vizHeight(opts: Common.Options, size: { w: number, h: number }, least: number): number
-	return math.max(opts.card_height or (size.h - M.HEADER_PX), least)
+-- PanelChrome's border and padding around the viz, px across.
+local CHROME_PX = 2 + 2 * 8
+
+-- The viz box Grafana gives a gauge: the panel less its border and
+-- padding; its height the card body in a height-capped card
+-- (opts.card_height), else the panel's less its header too.
+local function vizSize(opts: Common.Options, size: { w: number, h: number }, least: number): (number, number)
+	local w = math.max(size.w - CHROME_PX, 60)
+	return w, math.max(opts.card_height or (size.h - Common.headerPx(opts) - CHROME_PX), least)
 end
 
 function M.barView(panel: any, frames: { Frame }, env: Env, opts: Common.Options): (Node, Assets.Assets)
 	local size = opts.size or M.BAR_SIZE
-	local w = math.max(size.w, 60)
-	local h = vizHeight(opts, size, 40)
+	local w, h = vizSize(opts, size, 40)
 	local bars, o = M.barSpecs(panel, frames, env, opts, w, h)
 	local svg, iw, ih = SvgBarGauge.render(bars, o)
 	local alt: { string } = {}
@@ -276,8 +282,6 @@ end
 
 -- Radial gauge ----------------------------------------------------------------
 
--- Grafana panel chrome above the visualization (header row), px.
-M.HEADER_PX = 32
 M.DEFAULT_SIZE = { w = 480, h = 240 }
 -- VizRepeater itemSpacing for gauges.
 M.SPACING = 16
@@ -303,8 +307,9 @@ export type Look = {
 
 -- The gauge options Grafana would render with: panelcfg.cue defaults, and
 -- for v2 gauge/v2/migrations.ts gaugePanelMigrationHandler (a panel saved
--- by the old gauge gets no gradient, no sparkline, and markers only in
--- thresholds color mode).
+-- by the old gauge, parseFloat(pluginVersion ?? "8") below 13 and no
+-- shape, gets no gradient, no sparkline, and markers only in thresholds
+-- color mode; a version parseFloat cannot read, "v13.0.0", is not migrated).
 function M.look(panel: any, env: Env, v2: boolean): Look
 	local o = Json.obj(env, Json.path(env, panel, "options"))
 	local text = Json.obj(env, o.text)
@@ -341,9 +346,10 @@ function M.look(panel: any, env: Env, v2: boolean): Look
 	look.glow = Json.bool(env, effects.barGlow) == true
 	look.segments = Json.num(env, o.segmentCount) or 1
 	look.segment_spacing = Json.num(env, o.segmentSpacing) or 0.3
-	look.endpoint = (Json.str(env, o.endpointMarker) or "point") == "point"
+	look.endpoint = look.rounded and (Json.str(env, o.endpointMarker) or "point") == "point"
 	look.text_mode = Json.str(env, o.textMode) or "auto"
-	local version = tonumber(string.match(Json.str(env, panel.pluginVersion) or "", "^%d+%.?%d*") or "") or 8
+	local pluginVersion = Env.value(env, panel.pluginVersion)
+	local version = if pluginVersion == nil then 8 else Shared.jsParseFloat(pluginVersion)
 	if shape == nil and version < 13 then
 		local colorMode = Json.str(env, Json.path(env, panel, "fieldConfig", "defaults", "color", "mode"))
 		if colorMode ~= "thresholds" then
@@ -404,6 +410,50 @@ function M.bands(item: FieldConfig.Item, lo: number, hi: number, theme: Threshol
 	return out
 end
 
+-- buildGradientColors (RadialGauge/colors.ts) on the scale lo..hi:
+-- thresholds put each step's color at its value (getFormattedThresholds
+-- without the offset color: from the base step at min to the step active
+-- at max, that color again at max; a stop never before an earlier one, as
+-- in a CSS gradient), a continuous scheme spreads its colors evenly. Nil
+-- for the other modes: their gradient is shades of the value's color that
+-- have no exact class, so the bar keeps the value's color.
+function M.gradient(item: FieldConfig.Item, lo: number, hi: number, opts: Common.Options): { SvgGauge.Stop }?
+	local mode = item.config.color_mode
+	if mode ~= "thresholds" then
+		return if string.sub(mode, 1, 11) == "continuous-" then schemeGradient(mode, opts) else nil
+	end
+	local th = item.config.thresholds
+	local pct = th.mode == "percentage"
+	local min, max = item.range_min or 0, item.range_max or 100
+	if pct then
+		min, max = 0, 100
+	end
+	local out: { SvgGauge.Stop } = {}
+	local function add(value: number, color: string)
+		local at = if pct then value / 100 elseif hi ~= lo then (value - lo) / (hi - lo) else 0
+		local prev = out[#out]
+		table.insert(out, {
+			at = if prev then math.max(at, prev.at) else at,
+			class = TsGradient.stopClass(Thresholds.color(color, opts.theme), opts.theme),
+		})
+	end
+	local function valueOf(s: any): number
+		return if s and type(s.value) == "number" then s.value else -math.huge
+	end
+	local list = th.steps
+	for i, s in list do
+		local value = valueOf(s)
+		add(if value == -math.huge then min else value, s.color)
+		if list[i + 1] == nil or valueOf(list[i + 1]) > max then
+			if max > value then
+				add(max, s.color)
+			end
+			break
+		end
+	end
+	return if #out > 0 then out else nil
+end
+
 -- getFormattedThresholds values: min, each step inside the range, max.
 local function labelValues(item: FieldConfig.Item, lo: number, hi: number): { number }
 	local th = item.config.thresholds
@@ -427,7 +477,9 @@ local function frac(v: number, lo: number, hi: number): number
 	return if f ~= f then 0 else f
 end
 
-local function sparkOf(spark: Values.Spark?): { number? }?
+-- The sparkline's values as fractions of its y range: Sparkline's
+-- getYRange, the field's configured min and max, else the data's.
+local function sparkOf(spark: Values.Spark?, min: number?, max: number?): { number? }?
 	if spark == nil then
 		return nil
 	end
@@ -441,6 +493,7 @@ local function sparkOf(spark: Values.Spark?): { number? }?
 	if lo > hi then
 		return nil
 	end
+	lo, hi = min or lo, max or hi
 	local out: { number? } = table.create(#spark.values)
 	for i, v in spark.values do
 		local n = Frame.finite(v)
@@ -512,9 +565,8 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			segment_spacing = look.segment_spacing,
 			fill_from = from,
 			fill_to = to,
-			bands = if look.gradient and thresholdsMode
-				then M.bands(item, lo, hi, opts.theme)
-				else { { from = 0, to = 1, class = valueClass } },
+			bands = { { from = 0, to = 1, class = valueClass } },
+			gradient = if look.gradient then M.gradient(item, lo, hi, opts) else nil,
 			endpoint = look.endpoint,
 			text_class = if v2 then nil else valueClass,
 			value_size = look.value_size,
@@ -536,11 +588,14 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 				)
 			end
 		end
-		local ringOn = look.markers and thresholdsMode and (not v2 or lo ~= hi)
+		-- gauge/v1 drew markers and labels only from thresholds; gauge/v2's
+		-- ThresholdsBar and RadialScaleLabels draw the thresholds in any color
+		-- mode (the ring only when min and max differ).
+		local ringOn = look.markers and (if v2 then lo ~= hi else thresholdsMode)
 		if ringOn then
 			spec.ring = M.bands(item, lo, hi, opts.theme)
 		end
-		if look.labels and thresholdsMode then
+		if look.labels and (v2 or thresholdsMode) then
 			local labels: { SvgGauge.Label } = {}
 			local values_ = labelValues(item, lo, hi)
 			local neutral = look.neutral
@@ -556,11 +611,12 @@ function M.specs(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		if mode == "value" or mode == "value_and_name" then
 			spec.prefix, spec.text, spec.suffix = d.prefix, d.text, d.suffix
 		end
-		if mode == "name" or mode == "value_and_name" then
+		-- The no-values placeholder has no name (createNoValuesFieldDisplay).
+		if (mode == "name" or mode == "value_and_name") and v.title ~= "" then
 			spec.name = v.title
 		end
 		if look.sparkline and v.spark then
-			spec.spark = sparkOf(v.spark)
+			spec.spark = sparkOf(v.spark, item.config.min, item.config.max)
 			spec.spark_class = valueClass
 		end
 		table.insert(out, spec)
@@ -575,8 +631,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		return Common.noData(panel, env, opts.key), {}
 	end
 	local size = opts.size or M.DEFAULT_SIZE
-	local w = math.max(size.w, 60)
-	local h = vizHeight(opts, size, 60)
+	local w, h = vizSize(opts, size, 60)
 	local cols, rows = M.grid(#specs, w, h)
 	local cw = math.floor((w - M.SPACING * (cols - 1)) / cols)
 	local ch = math.floor((h - M.SPACING * (rows - 1)) / rows)

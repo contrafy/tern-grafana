@@ -212,8 +212,8 @@ end
 -- The part of a run (pixel points, x ascending) between x = lo and x = hi:
 -- the points inside plus where the drawn edge crosses each bound (the
 -- line's height there, or the value a step holds). Empty when nothing of
--- the run is inside. Tern's SVG sanitizer drops clipPath and mask, so
--- samples beyond the time range are cut here instead.
+-- the run is inside. Tern's SVG sanitizer drops clipPath, so samples
+-- beyond the time range are cut here instead.
 local function clipRun(p: { number }, interp: Interpolation, lo: number, hi: number): { number }
 	local n = #p // 2
 	if n == 0 or (p[1] >= lo and p[2 * n - 1] <= hi) then
@@ -741,8 +741,8 @@ function M.area(
 	return finish(b)
 end
 
--- Bars `barW` wide, centered on their time (align 0), ending at it (-1) or
--- starting at it (1), as uPlot's bars path builder places them.
+-- Bars `barW` wide whose left edge is `shift` px from their time (uPlot's
+-- bars path builder places them by barAlignment, lib/render/svg_timeseries).
 function M.bars(
 	g: Geometry,
 	times: { number },
@@ -750,12 +750,11 @@ function M.bars(
 	bottoms: { number }?,
 	base: number,
 	barW: number,
-	align: number
+	shift: number
 ): (string, number)
 	local parts, k, L = {}, 0, 0
 	local X, Y = 0, 0
 	local count = 0
-	local shift = if align == 1 then 0 elseif align == -1 then -barW else -barW / 2
 	local left, right = g.left, g.right
 	for i, t in times do
 		local v = tops[i]

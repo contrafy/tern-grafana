@@ -202,6 +202,17 @@ end
 -- moment's fromNow at a display offset ("2 hours ago", "in a day").
 M.fromNow = fromNow
 
+-- The current day of the last `now` and zone asked about: a table formats
+-- every row against the same clock.
+local nowDay: { now: number, zone: Range.Offset, day: string } = { now = 0 / 0, zone = 0, day = "" }
+
+local function sameDay(ms: number, now: number, zone: Range.Offset): boolean
+	if nowDay.now ~= now or nowDay.zone ~= zone then
+		nowDay.now, nowDay.zone, nowDay.day = now, zone, string.sub(Range.formatMs(now, zone), 1, 10)
+	end
+	return string.sub(Range.formatMs(ms, zone), 1, 10) == nowDay.day
+end
+
 -- A date unit's text (dateTimeFormatters.ts) at the display offset: a
 -- "time:" moment pattern, the unit's pattern (its today pattern on the
 -- current day), moment's fromNow, or the system format with milliseconds
@@ -219,9 +230,8 @@ local function formatDate(ms: number, unit: string, o: Options, showMs: boolean)
 		pattern = ISO .. ".SSS"
 	else
 		local p = DATE_UNITS[unit]
-		local sameDay = now ~= nil
-			and Range.formatMs(ms, zone):sub(1, 10) == Range.formatMs(now :: number, zone):sub(1, 10)
-		pattern = if p[2] and sameDay then p[2] else p[1]
+		local today = p[2]
+		pattern = if today and now ~= nil and sameDay(ms, now, zone) then today else p[1]
 	end
 	return ClockFormat.format(pattern, ms, offset, "")
 end

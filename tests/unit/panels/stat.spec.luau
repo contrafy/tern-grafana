@@ -13,9 +13,8 @@ local OPTS = { key = "s" }
 
 local JOBS = { "alertmanager", "down", "loki", "node", "prometheus", "tempo" }
 
--- Samples of prom_range refId B (sum(up) over 15m): the 13.3.0 stack was
--- captured ~7m after it started.
-local B_SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 30 }
+-- Samples of prom_range refId B (sum(up) over 15m at 15 s).
+local B_SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.1"] = 61 }
 local SPARK_POINTS = 60
 
 for _, version in S.VERSIONS do
@@ -330,30 +329,41 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 		return assert(tonumber(string.match(svg, 'font%-size="(%d+)"')))
 	end
 
-	-- Grafana's 1000x500 render of panel 17 draws the lone "5" about 356 px
-	-- tall: the box height (452 px less 12 px padding twice) over the line
-	-- height 1.2. A fixed size would look tiny next to it.
+	-- Stat is a no-padding panel (PanelPlugin.setNoPadding): BigValue's box
+	-- is the panel less its 1 px border and header, 40 px with Grafana
+	-- 12.4's newPanelPadding (32 without). Grafana 12.4's 1000x500 d-solo
+	-- render of panel 17 draws the lone "5" at 361.667 px: the 458 px box
+	-- less 12 px padding twice, over the line height 1.2 (11.6: 368.333 px
+	-- in its 466 px box). A fixed size would look tiny next to it.
+	local G12 = { newPanelPadding = true, newGauge = true }
 	it("grows a lone value to the box height and centers it", function()
 		local node, assets = Stat.view(
 			S.panel("12.4.12", 17),
 			S.refFrames("12.4.12", "prom_range", "B"),
 			env,
-			{ key = "s", size = { w = 1000, h = 500 } }
+			{ key = "s", size = { w = 1000, h = 500 }, features = G12 }
 		)
-		expect(valuePx(node, assets)).toBe(357)
+		expect(valuePx(node, assets)).toBe(362)
 		expect(has(classOf(node, "l"), "tgp-stat-center")).toBe(true)
 		expect(has(classOf(node, "s1"), "tgp-stat-fit")).toBe(true)
+		node, assets = Stat.view(
+			S.panel("12.4.12", 17),
+			S.refFrames("12.4.12", "prom_range", "B"),
+			env,
+			{ key = "s", size = { w = 1000, h = 500 } }
+		)
+		expect(valuePx(node, assets)).toBe(368)
 	end)
 
 	-- Panel 6 at its gridPos 4x4 (267x144 px) with six named values:
-	-- autoGrid puts them 3 by 2, each box 81.7x46.5; the title takes 15% of
-	-- the box height and the value the rest.
+	-- autoGrid puts them 3 by 2 in the 265x102 box, each 86.3x49.5; the
+	-- title takes 15% of the box height and the value the rest.
 	it("lays many values in VizRepeater's grid and sizes them alike", function()
 		local node, assets = Stat.view(
 			S.panel("12.4.12", 6),
 			S.frames("12.4.12", "prom2_range"),
 			env,
-			{ key = "s", size = { w = 267, h = 144 } }
+			{ key = "s", size = { w = 267, h = 144 }, features = G12 }
 		)
 		expect(has(classOf(node, "g"), "tgp-stat-g3")).toBe(true)
 		local sizes: { number } = {}
@@ -365,20 +375,38 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 			expect(has(classOf(tile, "t"), "tgp-stat-fs10")).toBe(true)
 		end
 		-- The box height less its padding and the title line, over 1.2.
-		expect(sizes).toEqual({ 20, 20 })
+		expect(sizes).toEqual({ 22, 22 })
 	end)
 
-	-- A wide box (w/h > 2.5) with a sparkline gives the value 40% of the
-	-- width and half the height (WideWithChartLayout).
+	-- A wide box (w/h > 2.5: 265x102) with a sparkline gives the value 40%
+	-- of the width and half the height less 12 px padding twice: 32.5 px
+	-- (WideWithChartLayout).
 	it("uses the wide layout for wide panels", function()
 		local node, assets = Stat.view(
 			S.panel("12.4.12", 5),
 			S.refFrames("12.4.12", "prom_range", "B"),
 			env,
-			{ key = "s", size = { w = 267, h = 144 } }
+			{ key = "s", size = { w = 267, h = 144 }, features = G12 }
 		)
 		expect(has(classOf(node, "l"), "tgp-stat-wide")).toBe(true)
 		expect(valuePx(node, assets)).toBe(33)
+	end)
+
+	-- The 2-row stats of public dashboards (11074 Uptime, Blackbox HTTP
+	-- Status Code): Grafana 12.4 and 13 leave BigValue a 26 px box under the
+	-- 40 px header, so the value is 10 px of line at 8.333 px (measured);
+	-- 11.6's 32 px header leaves 34 px and a 15 px value.
+	it("keeps a 2-row stat's value as small as Grafana draws it", function()
+		local panel = S.json([[{"type": "stat", "title": "Uptime",
+			"fieldConfig": {"defaults": {"unit": "s", "decimals": 0}, "overrides": []},
+			"options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "textMode": "auto",
+				"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}}]])
+		local frame = { fields = { { name = "v", type = "number", values = { 82800 }, config = {} } } }
+		local size = { w = 133, h = 68 }
+		local node, assets = Stat.view(panel, { frame :: any }, env, { key = "s", size = size, features = G12 })
+		expect(valuePx(node, assets)).toBe(8)
+		node, assets = Stat.view(panel, { frame :: any }, env, { key = "s", size = size })
+		expect(valuePx(node, assets)).toBe(15)
 	end)
 
 	it("honors text.valueSize and text.titleSize", function()

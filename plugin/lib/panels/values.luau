@@ -27,6 +27,8 @@ type Item = FieldConfig.Item
 export type Spark = {
 	values: { any },
 	times: { any }?,
+	-- The time field's sample interval (ms), when the source sets one.
+	interval: number?,
 	-- 1-based sample the calc picked (getSparklineHighlight), if any.
 	highlight: number?,
 }
@@ -192,7 +194,12 @@ function M.values(panel: any, items: { Item }, env: Env, opts: Options?): { Valu
 				local d = FieldConfig.display(item, results[calc], disp)
 				local spark: Spark? = nil
 				if o.sparkline and timeField then
-					spark = { values = values, times = timeField.values, highlight = highlightOf(values, calc) }
+					spark = {
+						values = values,
+						times = timeField.values,
+						interval = if timeField.config then timeField.config.interval else nil,
+						highlight = highlightOf(values, calc),
+					}
 				end
 				table.insert(out, { title = item.name, display = d, item = item, calc = calc, spark = spark })
 			end
@@ -219,7 +226,9 @@ function M.values(panel: any, items: { Item }, env: Env, opts: Options?): { Valu
 		d.numeric = 0
 		local percent = (0 - lo) / (hi - lo)
 		d.percent = if percent == percent then percent else 0
-		table.insert(out, { title = "No data", display = d, item = placeholder, placeholder = true })
+		-- createNoValuesFieldDisplay sets no display title: BigValue and the
+		-- gauges draw the message without a name.
+		table.insert(out, { title = "", display = d, item = placeholder, placeholder = true })
 	end
 	return out
 end

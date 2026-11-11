@@ -12,8 +12,14 @@
 -- Every color is a class: an exact color class (lib/render/ts_gradient
 -- tg-gc<n>, or a tone pair "tgp-fx tgp-<tone>") drawn with the shape role
 -- tg-line (strokes) or tg-bar (fills), so a theme switch recolors without
--- a new blob. Grafana's conic color gradient becomes the threshold bands
--- the gradient passes through, each in its step's color.
+-- a new blob. effects.gradient (RadialArcPath: a CSS conic-gradient masked
+-- by the bar, the threshold ring and each segment) becomes sub-arcs of at
+-- most CONIC_STEP degrees, each stroked with a linear gradient between the
+-- two stops around it laid along its chord (Tern's SVG has no conic
+-- gradient), so the colors at the sub-arcs' ends are the conic gradient's.
+
+local Hash = require("../hash")
+local Stat = require("../panels/stat")
 
 local M = {}
 
@@ -21,6 +27,10 @@ export type Style = "v1" | "gauge" | "circle"
 
 -- A run of the scale (0..1 fractions of min..max) in one color class.
 export type Band = { from: number, to: number, class: string }
+
+-- A conic gradient stop: a color class at a fraction of the scale (may lie
+-- outside 0..1).
+export type Stop = { at: number, class: string }
 
 export type Label = { at: number, text: string }
 
@@ -41,6 +51,9 @@ export type Spec = {
 	fill_to: number,
 	-- Colors along the scale the filled run is painted in.
 	bands: { Band },
+	-- effects.gradient: the conic gradient's stops, sorted (it paints the
+	-- filled run, the filled segments and the ring instead of their classes).
+	gradient: { Stop }?,
 	-- Color class of each segment by its start fraction (segmented bars).
 	segment_class: ((at: number) -> string)?,
 	-- The outer threshold ring (showThresholdMarkers).
@@ -67,6 +80,9 @@ local ARC_END = 110
 local V1_START = 225
 local V1_RANGE = 270
 local LINE_HEIGHT = 1.21
+-- The widest sub-arc one linear gradient stands in for the conic one, in
+-- degrees.
+local CONIC_STEP = 10
 
 local function rad(deg: number): number
 	return (deg - 90) * math.pi / 180
@@ -315,38 +331,125 @@ function M.render(s: Spec): (string, number, number)
 			)
 		end
 	end
+	-- The conic gradient over the scale run from..to at radius r: one piece
+	-- per run between two stops (past the first or last stop, its color),
+	-- split into sub-arcs of at most CONIC_STEP degrees. Rounded, the run's
+	-- two ends are round: the last sub-arc goes first, so the ones before
+	-- it cover its round start, and the second covers the first's round end.
+	local defined: { [string]: boolean } = {}
+	local function conic(stops: { Stop }, from: number, to: number, r: number, width: number, rounded: boolean)
+		type Sub = { a: number, b: number, p: Stop, q: Stop }
+		local subs: { Sub } = {}
+		local function add(a: number, b: number, p: Stop, q: Stop)
+			if b <= a then
+				return
+			end
+			local n = if p.class == q.class then 1 else math.ceil((b - a) * d.range / CONIC_STEP)
+			for j = 1, n do
+				table.insert(subs, { a = a + (b - a) * (j - 1) / n, b = a + (b - a) * j / n, p = p, q = q })
+			end
+		end
+		local first, last = stops[1], stops[#stops]
+		add(from, math.min(to, first.at), first, first)
+		for i = 1, #stops - 1 do
+			add(math.max(from, stops[i].at), math.min(to, stops[i + 1].at), stops[i], stops[i + 1])
+		end
+		add(math.max(from, last.at), to, last, last)
+		local function draw(k: number)
+			local sub = subs[k]
+			local linecap = if rounded and (k == 1 or k == #subs) then "round" else "butt"
+			local start, sweep = d.start + sub.a * d.range, (sub.b - sub.a) * d.range
+			if sub.p.class == sub.q.class then
+				arc(sub.q.class, start, sweep, r, width, linecap)
+				return
+			end
+			-- The gradient line runs from where the conic gradient is p to
+			-- where it is q, along the sub-arc's chord.
+			local span = sub.q.at - sub.p.at
+			local u0, u1 = (sub.a - sub.p.at) / span, (sub.b - sub.p.at) / span
+			local a0, a1 = rad(start), rad(start + sweep)
+			local x0, y0 = d.cx + r * math.cos(a0), d.cy + r * math.sin(a0)
+			local dx, dy = d.cx + r * math.cos(a1) - x0, d.cy + r * math.sin(a1) - y0
+			local back, ahead = u0 / (u1 - u0), (1 - u0) / (u1 - u0)
+			local def = string.format(
+				' gradientUnits="userSpaceOnUse" x1="%s" y1="%s" x2="%s" y2="%s"><stop offset="0" class="%s"/><stop offset="1" class="%s"/>',
+				fmt(x0 - dx * back),
+				fmt(y0 - dy * back),
+				fmt(x0 + dx * ahead),
+				fmt(y0 + dy * ahead),
+				sub.p.class,
+				sub.q.class
+			)
+			local id = "tgq" .. Hash.fnv1a32hex(def)
+			if not defined[id] then
+				defined[id] = true
+				push('<defs><linearGradient id="%s"%s</linearGradient></defs>', id, def)
+			end
+			push(
+				'<path class="tg-line" stroke="url(#%s)" fill="none" stroke-width="%s" stroke-linecap="%s" d="%s"/>',
+				id,
+				fmt(width),
+				linecap,
+				M.arcPath(d.cx, d.cy, start, sweep, r)
+			)
+		end
+		if #subs > 1 then
+			draw(#subs)
+		end
+		for k = 1, math.max(#subs - 1, 1) do
+			if subs[k] then
+				draw(k)
+			end
+		end
+	end
+	local gradient = if s.gradient and #(s.gradient :: { Stop }) > 0 then s.gradient :: { Stop } else nil
 	local from, to = clamp01(s.fill_from), clamp01(s.fill_to)
 	local segments = s.segments or 1
 	if segments > 1 then
 		-- RadialBarSegmented: each segment is filled when its start lies in
-		-- the filled run, in the color of its own start value.
+		-- the filled run, in the color of its own start value (the gradient
+		-- under it with effects.gradient).
 		local n, between = M.segmentLayout(d, segments, s.segment_spacing or 0.3)
 		local step = d.range / n
 		for i = 0, n - 1 do
 			local at = i / n
 			local filled = at >= from and at < to
-			local class = if filled and s.segment_class then s.segment_class(at) else nil
-			arc(
-				if filled then class or "tgp-fx tgp-neutral" else "tgg-track",
-				d.start + step * i + 0.01,
-				step - between,
-				d.radius,
-				d.bar,
-				"butt"
-			)
+			local a, sweep = step * i + 0.01, step - between
+			if filled and gradient then
+				conic(gradient, a / d.range, (a + sweep) / d.range, d.radius, d.bar, false)
+			else
+				local class = if filled and s.segment_class then s.segment_class(at) else nil
+				arc(
+					if filled then class or "tgp-fx tgp-neutral" else "tgg-track",
+					d.start + a,
+					sweep,
+					d.radius,
+					d.bar,
+					"butt"
+				)
+			end
 		end
 	else
 		arc("tgg-track", d.start, d.range, d.radius, d.bar, cap)
-		local runs = M.fillRuns(s.bands, from, to)
-		for i, r in runs do
-			-- Rounded caps only on the ends of the whole bar.
-			local linecap = if s.rounded and (i == 1 or i == #runs) and #runs == 1 then "round" else "butt"
-			arc(r.class, d.start + r.from * d.range, (r.to - r.from) * d.range, d.radius, d.bar, linecap)
+		if gradient then
+			conic(gradient, from, to, d.radius, d.bar, s.rounded == true)
+		else
+			local runs = M.fillRuns(s.bands, from, to)
+			for i, r in runs do
+				-- Rounded caps only on the ends of the whole bar.
+				local linecap = if s.rounded and (i == 1 or i == #runs) and #runs == 1 then "round" else "butt"
+				arc(r.class, d.start + r.from * d.range, (r.to - r.from) * d.range, d.radius, d.bar, linecap)
+			end
 		end
 	end
 	if s.ring then
-		for _, b in s.ring do
-			arc(b.class, d.start + b.from * d.range, (b.to - b.from) * d.range, d.ring_radius, d.ring_width, "butt")
+		local ring = s.ring :: { Band }
+		if gradient and #ring > 0 then
+			conic(gradient, ring[1].from, ring[#ring].to, d.ring_radius, d.ring_width, false)
+		else
+			for _, b in ring do
+				arc(b.class, d.start + b.from * d.range, (b.to - b.from) * d.range, d.ring_radius, d.ring_width, "butt")
+			end
 		end
 	end
 	if s.endpoint and segments <= 1 and to > from then
@@ -406,7 +509,7 @@ function M.render(s: Spec): (string, number, number)
 	if showValue then
 		-- Prefix and suffix at 70% size beside the value. Tern's SVG sanitizer
 		-- drops <tspan>, so each part is its own <text>, laid out with the
-		-- 0.6 em glyph estimate.
+		-- advance widths of the SVG's font (.tgg, Geist).
 		local unit = math.max(vSize * 0.7, 6)
 		local tone = if s.text_class then s.text_class .. " tg-bar" else "tgg-text"
 		type Part = { text: string, size: number }
@@ -419,7 +522,7 @@ function M.render(s: Spec): (string, number, number)
 			table.insert(parts, { text = s.suffix :: string, size = unit })
 		end
 		local function width(p: Part): number
-			return 0.6 * p.size * (utf8.len(p.text) or #p.text)
+			return Stat.textEm(p.text) * p.size
 		end
 		local total = 0
 		for _, p in parts do

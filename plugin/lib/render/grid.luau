@@ -14,7 +14,8 @@ export type Row = { key: string, cells: { Node }, action: string? }
 
 local M = {}
 
--- tern-grafana.css defines tg-cols-1 .. tg-cols-<MAX_COLUMNS>.
+-- tern-grafana.css defines tg-cols-1 .. tg-cols-<MAX_COLUMNS>; panels.css
+-- defines the table panel's (tgp-table) up to its own, wider limit.
 M.MAX_COLUMNS = 16
 
 -- A plain text cell.
@@ -22,8 +23,8 @@ function M.text(s: string, style: string?): Node
 	return { k = "text", p = { spans = { if style then { t = s, s = style } else { t = s } } } }
 end
 
-function M.grid(key: string, columns: { Column }, rows: { Row }, role: string?): Node
-	local n = math.min(#columns, M.MAX_COLUMNS)
+function M.grid(key: string, columns: { Column }, rows: { Row }, role: string?, maxColumns: number?): Node
+	local n = math.min(#columns, maxColumns or M.MAX_COLUMNS)
 	local cellClass: { string } = table.create(n)
 	local children: { Node } = table.create(n + #rows)
 	for i = 1, n do
