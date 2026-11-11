@@ -1,7 +1,8 @@
 # Tern SDK capability matrix
 
 First verified against Tern 0.7.0 (9ca00e4) on macOS 27.0.1 arm64 (Apple M5), 2026-10-09; the facts the plugin relies
-on were re-verified on Tern 0.9.13 (8c6dfbd) on 2026-11-09 (next section, which wins where they differ). The 0.7.0
+on were re-verified on Tern 0.9.13 (8c6dfbd) on 2026-11-09 and on Tern 0.9.16 (41a10a5) on 2026-11-11 (next
+sections; the newest wins where they differ). The 0.7.0
 rendering rows ran in an isolated sandbox (`scripts/dev-tern.sh`, sandbox `/tmp/tg-tern`) with a throwaway spike plugin
 (`.sandbox/spike-render/`, id `tern-grafana`, never shipped) linked through `scripts/dev-tern.sh link`. Evidence
 quotes are from `tern ctl --control /tmp/tg-tern/ctl.sock ...` replies (`tree`, `dump`, `pick`, `perf`, `a11y`),
@@ -14,10 +15,56 @@ Status: **Verified** (observed in this build), **Workaround** (the direct capabi
 substitute was observed working), **Unsupported** (observed absent or not working), **Unverified** (not exercised,
 with the reason).
 
-## Tern 0.9.13 re-verification
+## Tern 0.9.16 re-verification
+
+Tern 0.9.16 (41a10a5), macOS 27 arm64, 2026-11-11. Typings: `tern plugin types DIR` on 0.9.16 writes a file
+byte-identical to tern-sdk `plugins/tern.d.luau` at ba85dce (sha256 `2a4d5365...`), now pinned in
+`scripts/bootstrap.sh` (was 0479f70); `make typecheck` passes unchanged. The typings diff adds only a `window` field
+on block events, `cx:open(target, {window = ...})`, an `unload` hook and a `process_exit` event (a `tern.process.run`
+child that outlives its VM). Live rows ran in sandbox `/tmp/tg-tern-tern916` with a throwaway spike plugin
+(`.sandbox/tern916-spike/`, id `tern-grafana`, deleted afterwards); docs quotes are from https://docs.stencil.so/tern/
+fetched the same day.
+
+| Fact | 0.7.0 / 0.8.3 | 0.9.13 | 0.9.16 | Evidence (0.9.16) |
+| --- | --- | --- | --- | --- |
+| Host budget 2 s | 2 s | 2 s, trip pauses the hook | Verified (unchanged) | Key handler busy 1800 ms ran; 2200 ms: `tern: probe.key exceeded 2000 ms`, `paused hook="probe.key" paused_ms=5000`; keys pressed during the pause never reached `key`. Docs (Limits) add a wall-time cap of 10 budgets per call, native calls included. |
+| Window budget 50 ms | 50 ms | 50 ms, pause | Verified (unchanged) | Command busy 40 ms ran; 60 ms: `command busy60 exceeded 50 ms`, paused 5000 ms; `tern.on("budget")` got `{"hook":"command busy60","ms":50,"paused_ms":5000,"state":"paused"}`, then `{"hook":"command busy60","state":"resumed"}`. |
+| Formatter budget 4 ms | 4 ms | 4 ms, pause | Verified (unchanged) | Status formatter busy 3 ms: segment `T9SEG` shown; 6 ms: `status exceeded 4 ms`, paused 5000 ms, `tree "#statusline .sl-plugin"` count 0. |
+| One status formatter per plugin | second replaces first | same | Verified (unchanged) | Registered `T9SEG` then `T9SEGB`: the status line showed only `T9SEGB`. |
+| SVG elements drawn | (not listed) | (not listed) | Verified: `svg`, `g`, `defs`, `linearGradient`, `stop`, `path` (arcs included), `circle`, `line`, `rect`, `mask`, `text`; everything else dropped with its subtree | `ctl dump ".sf-img-svg *"`: `mask` kept and painted (a green rect masked to a disc); `linearGradient` painted. `clipPath` dropped (`defs` empty, the clipped rect painted whole), `radialGradient` dropped (a `fill="url(#r)"` rect painted nothing), `foreignObject` dropped with its text (the control rect beside it drawn), `use`, `pattern`, `ellipse`, `polygon`, `polyline` absent from the dump. Docs (image): the same drawn list; "any other element (`script`, `foreignObject`, `image`, `use`, `title`, ...) is dropped with its subtree". The plugin's one `<ellipse>` (canvas panel) is now a two-arc `path`; tests/unit/dashboard/svg_elements.spec.luau keeps every tern-all-panels SVG inside the drawn set. |
+| SVG: `var()` in attributes, inline `style` | not painted | not painted | Verified (unchanged) | `fill="var(--bad)"` rect and `style="fill:#ff0000"` rect both black in the shot. |
+| SVG: class colors from the plugin sheet | paint, override hex | same | Verified (unchanged) | `.t9-cls { fill: rgb(0,200,0) }` painted green over `fill="#ff00ff"`; the plain hex rect stayed magenta. |
+| SVG `<title>` | stripped | stripped | Verified (unchanged) | `dump` lists the `rect` but no `title`. |
+| SVG `dominant-baseline` | ignored | ignored | Verified (unchanged) | Plain, `middle` and `central` `<text>` at one `y`: identical rect top (1394 px) and baseline in the shot. |
+| SVG cap 256 KiB | 262144 draws, 262145 placeholder | same | Verified (unchanged) | 262144 B: `sf sf-image sf-zoom`; 262145 B: `sf sf-image missing`. |
+| Stylesheet properties | (rejections found ad hoc) | (rejections found ad hoc) | Verified: the property list on docs Styles > Supported CSS parses | A sheet with one `initial` declaration per documented property loaded with no error for any of them: the longhands `display position top right bottom left z-index box-sizing width height min-width min-height max-width max-height margin-* padding-* overflow-x overflow-y visibility zoom content-visibility contain-intrinsic-width contain-intrinsic-height flex-direction flex-wrap flex-grow flex-shrink flex-basis order align-items align-self align-content justify-content justify-items justify-self row-gap column-gap grid-template-columns grid-template-rows grid-column grid-row color color-scheme opacity background-color background-image background-position background-size background-repeat background-origin background-clip object-fit image-rendering border-{top,right,bottom,left}-{width,style,color} border-{top-left,top-right,bottom-right,bottom-left}-radius border-collapse outline-width outline-style outline-color outline-offset box-shadow transform transform-origin translate rotate scale perspective perspective-origin filter backdrop-filter mix-blend-mode isolation clip-path mask-image mask-position mask-size mask-repeat mask-origin mask-clip mask-composite mask-mode will-change font-family font-size font-weight font-style line-height letter-spacing text-align text-decoration-line text-decoration-style text-decoration-color text-overflow line-clamp white-space word-break overflow-wrap text-wrap text-fit text-transform font-variant-numeric -webkit-font-smoothing -stencil-text-snap -stencil-font-thicken tab-size vertical-align list-style-type list-style-position list-style-image content caret-color accent-color cursor pointer-events user-select touch-action scrollbar-width scrollbar-color overscroll-behavior scroll-behavior overflow-anchor scroll-padding-* scroll-snap-type scroll-snap-align scroll-snap-stop app-region transition-* animation-* fill fill-opacity stroke stroke-width stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset stroke-opacity stop-color stop-opacity rx ry`, the shorthands `margin padding inset scroll-padding border-width border-style border-color border-top/right/bottom/left border border-radius outline background mask font flex flex-flow gap place-items place-content overflow contain-intrinsic-size grid-template text-decoration list-style transition animation`, and the `-stencil-*` extensions. Still rejected (each logged under `plugin style sheet has errors`): `text-indent`, `word-spacing`, `table-layout`, `grid-auto-rows`, `aspect-ratio` (`unknown property`), `width: fit-content` and `font-size: small` (`unexpected Ident`), `10cqw` (`unsupported length unit`), `@container` (`unsupported at-rule`), `repeat(auto-fill, ...)` (`unexpected token`). CSS `radial-gradient()` works in `background` (docs), not inside SVG. |
+| Plugin/block/lens id rule | `^[a-z][a-z0-9-]{0,31}$` | same | Verified (docs, unchanged) | Docs (Limits): "Plugin, block and lens ids `^[a-z][a-z0-9-]{0,31}$` (1-32 bytes)". Our ids load (e2e below). |
+| Toast levels | `success`, `info`, `error` | unknown levels drawn as error | Changed in the window half: unknown levels raise | Window `cx:toast("warn", ...)`: `runtime error: unknown toast level \`warn\` (success, info or error)`. Host `cx:toast("warn"/"warning", ...)` still returns without error and draws an error-styled toast (`toast swap err`). The plugin sends only `ToastLevel` values (typed). |
+| `cx.cols` / `cx.rows`, `resize` | constant 80x24, no `resize` | track the pane in cells | Verified, with one unexplained miss | Fresh daemon: `init cols=80 rows=24`, then `resize` 17 ms later (`cols=68`, then 56 as the split animated, 8 calls in 110 ms); after a plugin reload `init` saw the pane's real size (`cols=116 rows=57`). In the first session of the sandbox (plugin linked into a running daemon) two blocks kept 80x24 and never got `resize` across `ctl zoom` and splits, while `ctl state` gave them 116x58. Not relied on: the plugin sizes from fixed design widths. |
+| Reserved click action `copy` | copies, no event | same | Verified (unchanged) | `click = "copy"`: clipboard became `COPYME916`, no event; `click = "other"` -> `{"act":"other","ev":"action","id":"main.1","sf":"p","window":""}` (new `sf` and `window` fields). |
+| Decoded JSON arrays carry a protected metatable | yes | yes | Verified (unchanged) | `decode("[1,2]")` and nested `[]` have the `tern.json.array` metatable, objects none; `table.clone` raises `table has a protected metatable`; `table.insert` works; `encode` keeps `[]` vs `{}`. |
+| Plugin reload re-runs `init` of open blocks | yes | yes | Verified (unchanged) | Saving a spike file: `t916.host loaded`, then `t916.init` for each open block. |
+| Sandbox blob cache isolation | blobs under `<sandbox>/home` | same | Verified (unchanged) | The spike's first 14 blobs landed in `/tmp/tg-tern-tern916/home/Library/Caches/Tern/blobs`. |
+| `tern ctl` commands used by e2e | (0.7/0.8) | 12 of 12 | Verified | `sh scripts/e2e.sh` (sandbox `/tmp/tg-tern-tern916-e2e`): 12 of 12 scenarios passed in 161 s with no stylesheet errors and no plugin change. |
+| Background tabs: kv `visible_panes` pause | works | 0 blobs in 3 min | Verified (unchanged) | docs/performance.md, "Re-measured on Tern 0.9.16". |
+| Blob cache eviction | none | 1 GiB LRU trim at daemon start only | Unchanged: trim at daemon start only | Prefilled 1114 files / 1,153,961,123 B: daemon start left 1037 / 1,073,220,771 B (77 oldest gone). Running at the cap, a 100 KB image per second: 91 files in 92 s, 0 removed, none after closing the block; next start: 1132 -> 1123 files, 1,073,286,143 B. The Limits page no longer mentions blobs (0.9.13 did). |
+
+New APIs checked for the plugin's workarounds (tern.d.luau @ ba85dce and the docs, 0.9.16):
+
+| Wanted | Exists on 0.9.16? | Decision |
+| --- | --- | --- |
+| Free or evict a blob, cache size | No: `BlockCx` still has only `blob(bytes, mime)`; docs: an id works "while Tern's blob cache keeps the bytes". | Keep the mitigations; upstream draft updated (docs/upstream/stencil-blob-cache.md). |
+| Pane visibility, scroll position | No: `PaneInfo` adds nothing visibility-related; window events unchanged (`focus`, `pane_*`, `tab_*`, `float_moved`, `budget`, ...). | Keep `plugin/visibility_window.luau`. |
+| Pane size in px | No: cells only (`cx.cols`/`cx.rows`, `resize`). | Keep fixed design widths. |
+| Container units / queries | No: `cqw` is `unsupported length unit`, `@container` `unsupported at-rule`; `vw`/`vh` are the window's. | Keep stat SVG sizing and size classes. |
+| Radial gradients in SVG | No: `radialGradient` is dropped (row above); only CSS `radial-gradient()` backgrounds exist, which cannot paint inside an SVG. | Keep sampled concentric rings (ts_gradient, svg_pie). |
+| Masks in SVG | Yes: `mask` is drawn. | Not adopted: path clipping in svg_paths already cuts at the plot edges without it. |
+| Keychain secrets | `tern.secrets.get/set` (window half only; also in 0.9.13) | Not adopted: v1 auth is token_cmd/env/file by decision; `token_cmd` can already call `security`. |
+
+## Tern 0.9.13 re-verification (history)
 
 Tern 0.9.13 (8c6dfbd), macOS 27 arm64, 2026-11-09. Typings: `tern plugin types DIR` on 0.9.13 writes a file
-byte-identical to tern-sdk `plugins/tern.d.luau` at 0479f70 (sha256 `50ac8b5d...`), now pinned in
+byte-identical to tern-sdk `plugins/tern.d.luau` at 0479f70 (sha256 `50ac8b5d...`), pinned then in
 `scripts/bootstrap.sh` (was ed7a10d); `make typecheck` passes on it unchanged. Live rows ran in sandbox
 `/tmp/tg-tern-terncheck` with a throwaway spike plugin (`.sandbox/terncheck-spike/`, id `tern-grafana`, deleted
 afterwards); docs quotes are from https://docs.stencil.so/tern/ fetched the same day.
