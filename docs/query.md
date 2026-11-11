@@ -42,7 +42,8 @@ Links never carry credentials; a link with a credential-like parameter is refuse
   `/api/v1/label/<name>/values`, metric help `/api/v1/metadata`, through Grafana's datasource proxy for Grafana
   contexts) and cached per context for 5 minutes (30 seconds after an error).
 - **Result:**
-  - graph mode: a chart (series beyond the chart limit are counted under the legend) with a legend; with the
+  - graph mode: a chart of every series (they share the 256 KiB SVG budget; only series that cannot fit at all
+    are counted under the legend) with a legend; with the
     cursor on, the legend shows each series' value at the cursor time;
   - table mode: one row per series with its labels and value;
   - a failed query shows a card with the server's message (for example

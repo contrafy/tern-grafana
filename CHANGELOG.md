@@ -7,6 +7,85 @@ versions may break).
 
 ## [Unreleased]
 
+### Changed
+
+- Dev stack: the Grafana 13 server runs 13.3.1 (digest pinned, with
+  `table.autoColumnWidths` on) and its fixtures are re-recorded; the APIs the
+  plugin reads were checked against Grafana Cloud's 13.4 and answer with the
+  same shapes. Fixture capture refuses to record the imported public
+  dashboards.
+
+### Fixed
+
+- Dashboards saved by older Grafanas open as Grafana shows them: Grafana's
+  schema migration runs on load. Pre-Grafana 5 dashboards (top-level `rows`:
+  Prometheus 2.0 overview, Docker, Kubernetes cluster, Grafana internals, the
+  Loki and Tempo mixins) drew nothing and counted as "native 0"; they now get
+  Grafana's rows and grid positions (checked against Grafana 12.4's own
+  migration of 36 public dashboards). Leftover copies of repeated panels are
+  dropped (9578 Alertmanager's collapsed rows held 69), old `table` panels
+  with styles migrate as `table-old`, old panel links, value mappings and
+  variable flags are upgraded. The compatibility scan names a dashboard without
+  panels instead of reporting "native 0".
+- An old table style's hidden column (`custom.hideFrom.viz`) is hidden again:
+  dotted `custom.*` override ids set nested options as in Grafana.
+- A time series whose series are all hidden from the legend (graph
+  `hideZero`/`hideEmpty`) draws no legend, as Grafana's.
+- Stat sparklines follow Grafana's: a flat series lies at the bottom of its
+  range instead of filling it, and the sparkline spans the panel's time range
+  with gaps where samples are missing.
+- Time series draw every series, as Grafana does: they share the 256 KiB
+  byte budget with fewer samples each, and only series that would not fit even
+  at 3 samples are left out ("N more series not shown (chart size limit)").
+  Panels with more than 10 series lost their later ones (1860 Network Traffic
+  Basic dropped every Tx series, along with their negative-Y override).
+- A `custom.stacking` override with `group: false` stacks the series alone, as
+  Grafana keys the group (1860 Memory Basic: Total no longer sits on top).
+- Stacked y axes range over the stack's values, not the base it fills down
+  to (a stacked constant 4 reads 0..8 as in Grafana).
+- Dashboard time series space y ticks for the plot height Grafana gives the
+  panel (15 px under 150 px), so a 7-row panel shows Grafana's tick count.
+- A long bottom legend in a dashboard card is cut at 35% of the panel and
+  scrolls, as Grafana's VizLayout does.
+- Tables with several frames show one at a time with Grafana's frame selector
+  (`options.frameIndex`, previous/next) instead of "N more frames", and draw
+  up to 48 columns (was 16).
+- Time series bars are as wide as Grafana draws them: uPlot's column is the
+  distance between a series' two closest samples, so per-minute counts over
+  hours are hairline bars, and an outline that would take half a bar is
+  dropped.
+- Table columns follow the server's `table.autoColumnWidths` flag, read from
+  Grafana's OpenFeature endpoint as its frontend reads it: on (Grafana Cloud),
+  columns fit their content and a gauge column takes Grafana's 150 px instead
+  of 228; off (the default), the columns share the panel width, at least
+  150 px or their minimum width each.
+- An expanded dynamic text panel takes Grafana's full panel height (the plugin
+  has no panel padding).
+- Pie chart gradients no longer show bands: a slice is drawn with one band per
+  color level of Grafana's radial gradient instead of 8 flat rings, and a pie
+  of hundreds of slices stays under the SVG size cap.
+- Time series render faster when a series has samples outside the range, and
+  re-rendered time columns are no longer kept in memory.
+- Prometheus query variables whose query is a series selector or any other
+  expression (`up{job=~"$jobs"}` with a regex picking the instance) resolve
+  as Grafana's classic query does, from the series it matches; they were
+  unsupported and left every panel using them without data.
+  `label_names(metric)` lists the label names of the matching metrics,
+  `metrics(regex)` filters as the Grafana version does, `$__interval` in a
+  variable query is the datasource's scrape interval, and the empty forms
+  (`label_values()`, ...) answer no values instead of an error.
+- Loki query variables resolve: the query editor's label names and label
+  values (with a stream selector) and the legacy `label_values(...)` and
+  `label_names()` strings, as Grafana's Loki datasource lists them.
+- A query variable whose datasource is given by name (`"Loki"`) asks that
+  datasource instead of a uid of the same text.
+- Loki queries keep a plain variable value as written (Grafana 11.6 and later
+  no longer double its backslashes) and no longer escape quotes in
+  multi-value variables.
+- A text panel saved with a datasource that does not resolve draws natively
+  instead of going to the image renderer: panels that run no queries ignore
+  their datasource, as in Grafana.
+
 ## [0.6.0] - 2026-11-10
 
 ### Added
