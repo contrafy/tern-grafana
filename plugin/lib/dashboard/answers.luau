@@ -11,6 +11,7 @@ local DsRegistry = require("../datasources/registry")
 local Effect = require("../effect")
 local Env = require("../env")
 local GrafanaSource = require("../source/grafana")
+local Links = require("./links")
 local Model = require("./model")
 local Png = require("./png")
 local Queries = require("./queries")
@@ -105,6 +106,7 @@ function M.onDashboard(s: State, response: any, env: Env, effects: { Effect })
 	for _, uid in Model.libraryRefs(d) do
 		table.insert(effects, http(tag("lib", s.gen, uid), route, Model.libraryRequest(uid)))
 	end
+	Links.requestDashboardLinks(s, env, effects)
 	s.updated_ms = env.now_ms
 	Advance.armRefresh(s, effects)
 	Advance.advance(s, env, false, effects)

@@ -91,6 +91,7 @@ M.pngError = Png.err
 M.link = Links.link
 M.grafanaUrl = Links.grafanaUrl
 M.panelLinks = Links.panelLinks
+M.dashboardLinks = Links.dashboardLinks
 M.pickerItems = Picker.items
 M.pickerItemsFor = Picker.itemsFor
 M.focusedExemplars = Keys.focusedExemplars
@@ -248,6 +249,10 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		Links.openPanelLink(s, value, env, effects)
 	elseif act == "dlink" then
 		Links.openDataLink(value, effects)
+	elseif act == "dl" then
+		Links.openDashboardLink(s, value, env, effects)
+	elseif act == "dls" then
+		Picker.openDashboardLinks(s, value)
 	elseif act == "tpage" then
 		local page, key = string.match(value, "^(%d+):(.+)$")
 		if page and key and Core.find(s, key) then
@@ -327,6 +332,8 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		return Answers.onJob(s, parts, msg.response, env, effects)
 	elseif kind == "dsv" then
 		return Answers.onVariableJob(s, parts, msg.response, env, effects)
+	elseif kind == "dlinks" then
+		return Links.onDashboardLinks(s, parts[3] or "", msg.response, env)
 	elseif kind == "png" then
 		return Answers.onPng(s, msg.tag, msg.response, env, effects)
 	elseif kind == "adhoc" then

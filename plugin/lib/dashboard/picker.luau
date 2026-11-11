@@ -469,6 +469,15 @@ function M.openLinks(s: State, key: string, env: Env)
 	s.picker = { kind = "links", name = key, query = "", links = Links.panelLinks(s, inst, env) }
 end
 
+-- A "dashboards" dashboard link's dropdown: the dashboards it lists.
+function M.openDashboardLinks(s: State, index: string)
+	local i = tonumber(index)
+	if i == nil then
+		return
+	end
+	s.picker = { kind = "links", query = "", links = Links.dashboardHits(s, i), dash_link = i }
+end
+
 function M.openVar(s: State, name: string)
 	local v = Variables.find(s.vars, name)
 	if v == nil or v.kind == "constant" or v.kind == "unsupported" then
@@ -529,7 +538,11 @@ function M.pick(s: State, id: string, env: Env, effects: { Effect })
 		openDashboard(s, id, effects)
 	elseif p.kind == "links" then
 		s.picker = nil
-		Links.openPanelLink(s, id .. ":" .. (p.name or ""), env, effects)
+		if p.dash_link then
+			Links.openDashboardLink(s, tostring(p.dash_link) .. ":" .. id, env, effects)
+		else
+			Links.openPanelLink(s, id .. ":" .. (p.name or ""), env, effects)
+		end
 	elseif p.kind == "vars" then
 		if string.sub(id, 1, #M.LAYER_ID) == M.LAYER_ID then
 			M.toggleLayer(s, string.sub(id, #M.LAYER_ID + 1), env, effects)

@@ -96,13 +96,16 @@ export type Picker = {
 	list_status: ("loading" | "ready" | "error")?,
 	list_error: string?,
 	list_gen: number?,
-	-- A "links" picker's panel links, as built when it opened.
+	-- A "links" picker's panel links, as built when it opened, or the
+	-- dashboards of dashboard link `dash_link` (a "dashboards" dropdown).
 	links: { PanelLink }?,
+	dash_link: number?,
 }
 
 export type PickerItem = { id: string, label: string, detail: string? }
 
-export type PanelLink = { title: string, url: string }
+-- `uid`: a dashboard a "dashboards" dashboard link lists (`url` its folder).
+export type PanelLink = { title: string, url: string, uid: string? }
 
 export type SearchState = {
 	gen: number,
@@ -218,6 +221,8 @@ export type State = {
 	-- Bumped by every ad hoc key or value list request (Picker.list_gen).
 	picker_gen: number,
 	search: SearchState,
+	-- The dashboards each "dashboards" dashboard link lists, by link index.
+	dash_hits: { [number]: { Search.Hit } },
 	updated_ms: number?,
 	-- View id of each panel card in the grid, recorded by the view, so a
 	-- focus move can scroll the card into view.
@@ -349,6 +354,7 @@ function M.new(env: Env): State
 		picker = nil,
 		picker_gen = 0,
 		search = { gen = 0, status = "ready", hits = {} },
+		dash_hits = {},
 		updated_ms = nil,
 		labels = {},
 		pages = {},

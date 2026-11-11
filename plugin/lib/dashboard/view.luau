@@ -42,12 +42,9 @@ M.HINT = "arrows focus  enter expand  v variables  1-9 [ ] - + range  r refresh 
 	.. "o browser  p pin  I investigate  / search"
 -- Tern's text line in px: card heights are given in lines.
 M.LINE_PX = 16
--- Narrowest a panel gets before its band wraps (Grafana stacks panels on narrow screens); small
--- enough that a wrapped panel still fits a narrow split.
-M.MIN_PANEL_WIDTH = "18ch"
--- Bases are scaled down this much so a band's gaps fit and it only wraps on a narrow pane;
--- flex-grow hands the slack back.
-M.BASIS_SLACK = 0.96
+-- Grafana's grid keeps its 24 columns down to the md breakpoint (theme.breakpoints.values.md);
+-- a narrower dashboard stacks every panel at the full width.
+M.STACK_BELOW_PX = 769
 -- Card chrome in px: the head line with the card's top and bottom padding
 -- (a card without a head, an untitled panel's, has the padding only); a
 -- panel with a description or links has a chip line under the head.
@@ -566,8 +563,21 @@ local function panelCard(
 	return ui.card(head, children, props)
 end
 
+-- A grid node's flex shrink. Grafana gives a w-column panel f(W + m) - m
+-- px (f its share of the grid's W, m the margin): every node loses
+-- (1 - f)m. A row's bases sum to 1 and its n nodes overflow it by its
+-- (n - 1) gaps, which flexbox takes from each node by shrink x basis;
+-- shrink (1 - f) / f makes that loss (1 - f) x gap for every node, so a
+-- half-empty last row of repeats is as wide per panel as a full one.
+local function shrinkOf(f: number): number
+	return if f > 0 and f < 1 then (1 - f) / f else 1
+end
+
 -- `parent` is the view id of the node this one goes in: Tern names every
 -- node `<parent id>.<key>`, and the state reveals cards by these ids.
+-- `stacked`: below Grafana's md breakpoint every panel takes the full width;
+-- otherwise a node's width is its gridPos share of its parent less its share
+-- of the gaps (shrinkOf) and a band never wraps.
 local function layoutNode(
 	n: Layout.Node,
 	byKey: { [string]: Repeat.Instance },
@@ -575,23 +585,27 @@ local function layoutNode(
 	env: Env,
 	assets: Assets.Assets,
 	idx: number,
-	parent: string
+	parent: string,
+	stacked: boolean
 ): Node
+	local basis = if stacked then 1 else n.basis
+	local shrink = shrinkOf(basis)
 	if n.kind == "gap" then
-		return { k = "el", p = { tag = "div", key = "g" .. idx, basis = n.basis * M.BASIS_SLACK, grow = 0, shrink = 1 } }
+		return {
+			k = "el",
+			p = { tag = "div", key = "g" .. idx, basis = if stacked then 0 else basis, grow = 0, shrink = shrink },
+		}
 	elseif n.kind == "panel" then
 		local id = parent .. "." .. n.key
 		local card = panelCard(s, byKey[n.key], env, assets, false, id)
 		local p = card.p :: { [string]: any }
-		-- Like Grafana's narrow-screen layout, a band wraps once a panel would get
-		-- narrower than MIN_PANEL_WIDTH, and a wrapped panel takes the full width.
-		p.basis, p.grow, p.shrink = n.basis * M.BASIS_SLACK, 1, 1
+		p.basis, p.grow, p.shrink = basis, 0, shrink
 		-- Every panel type is exactly Grafana's panel height, as in its grid:
 		-- short content leaves the card's room below it, content past it (a
 		-- long logs panel, a legend, a wrapped clock) is clipped here and
 		-- shown whole when the panel is expanded.
 		local lines = string.format("%dlines", M.heightLines(n.h))
-		p.min = { w = M.MIN_PANEL_WIDTH, h = lines }
+		p.min = { w = 0, h = lines }
 		p.max = { h = lines }
 		s.card_ids[n.key] = id
 		return card
@@ -600,19 +614,52 @@ local function layoutNode(
 	local children: { Node } = {}
 	local kids: { Layout.Node } = (n :: any).children
 	for i, c in kids do
-		table.insert(children, layoutNode(c, byKey, s, env, assets, i, parent .. "." .. key))
+		table.insert(children, layoutNode(c, byKey, s, env, assets, i, parent .. "." .. key, stacked))
 	end
-	local props: { [string]: any } = { key = key, basis = n.basis * M.BASIS_SLACK, grow = 1, shrink = 1 }
+	local props: { [string]: any } = { key = key, basis = basis, grow = 0, shrink = shrink, min = { w = 0 } }
 	if n.kind == "row" then
 		props.align = "start"
-		props.wrap = true
+		props.wrap = stacked
 		return ui.row(children, props)
 	end
-	props.min = { w = M.MIN_PANEL_WIDTH }
 	return ui.col(children, props)
 end
 
-local function varChips(s: State): Node?
+-- A dropdown chip's caret (Grafana's angle-down).
+M.CARET = "▾"
+
+-- DashboardLinksControls after the variables: a "link" is a button, a
+-- "dashboards" link a dropdown of its dashboards or a button per dashboard.
+local function linkChips(s: State, env: Env, chips: { Node })
+	local function chip(key: string, text: string, tooltip: string?, action: string)
+		table.insert(chips, {
+			k = "el",
+			p = { tag = "span", key = key, class = "tg-dash-var", title = tooltip, actions = { click = action } },
+			c = { ui.text({ ui.span(text, "strong") }) },
+		})
+	end
+	for i, l in State.dashboardLinks(s, env) do
+		if l.kind == "link" then
+			chip("dl." .. i, if l.title == "" then l.url else l.title, l.tooltip, "dl=" .. i)
+		elseif l.dropdown then
+			chip(
+				"dl." .. i,
+				(if l.title == "" then "Dashboards" else l.title) .. " " .. M.CARET,
+				l.tooltip,
+				"dls=" .. i
+			)
+		else
+			local hits = s.dash_hits[i]
+			if hits then
+				for n, h in hits do
+					chip(string.format("dl.%d.%d", i, n), h.title, l.tooltip, string.format("dl=%d:%d", i, n))
+				end
+			end
+		end
+	end
+end
+
+local function varChips(s: State, env: Env): Node?
 	local chips: { Node } = {}
 	for _, v in s.vars do
 		if v.hide >= 2 or v.kind == "constant" then
@@ -667,13 +714,16 @@ local function varChips(s: State): Node?
 			c = { ui.text(spans) },
 		})
 	end
+	if not s.solo then
+		linkChips(s, env, chips)
+	end
 	if #chips == 0 then
 		return nil
 	end
 	return ui.row(chips, { key = "vars", wrap = true })
 end
 
-local function header(s: State): Node
+local function header(s: State, env: Env): Node
 	local d = s.dashboard
 	local spans: { ui.SpanLike } = {}
 	if d then
@@ -699,7 +749,7 @@ local function header(s: State): Node
 		table.insert(spans, ui.span("  synced", "accent"))
 	end
 	local children: { Node } = { ui.text(spans, { key = "title" }) }
-	local chips = varChips(s)
+	local chips = varChips(s, env)
 	if chips and not s.solo then
 		table.insert(children, chips)
 	end
@@ -728,6 +778,7 @@ end
 local function grid(s: State, env: Env, assets: Assets.Assets): { Node }
 	table.clear(s.card_ids)
 	local out: { Node } = {}
+	local stacked = M.designWidth(env) < M.STACK_BELOW_PX
 	for _, sec in s.sections do
 		local collapsed = s.collapsed[sec.key]
 		if collapsed == nil then
@@ -745,7 +796,7 @@ local function grid(s: State, env: Env, assets: Assets.Assets): { Node }
 				byKey[inst.key] = inst
 			end
 			for i, band in Layout.arrange(items) do
-				table.insert(children, layoutNode(band, byKey, s, env, assets, i, "main.sec." .. sec.key))
+				table.insert(children, layoutNode(band, byKey, s, env, assets, i, "main.sec." .. sec.key, stacked))
 			end
 		end
 		table.insert(out, ui.col(children, { key = "sec." .. sec.key }))
@@ -781,7 +832,7 @@ local function pickerNode(s: State): Node?
 			else "ready"
 		props.message = s.search.error
 	elseif p.kind == "links" then
-		props.title = "Panel links"
+		props.title = if p.dash_link then "Dashboards" else "Panel links"
 		props.placeholder = "Filter links"
 	elseif p.kind == "vars" then
 		props.title = if #s.layers.toggles > 0 then "Variables and annotations" else "Variables"
@@ -841,7 +892,7 @@ function M.view(s: State, env: Env): (Effect.View, Assets.Assets)
 	elseif s.phase == "loading" or s.dashboard == nil then
 		table.insert(main, muted("Loading dashboard", "loading"))
 	else
-		table.insert(main, header(s))
+		table.insert(main, header(s, env))
 		if s.vars_error then
 			table.insert(main, errorText(s.vars_error :: string, "verr"))
 		end
