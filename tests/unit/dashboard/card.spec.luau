@@ -24,6 +24,29 @@ describe("View.cardHeight", function()
 		expect(View.cardHeight(8, false, false)).toBe(18 * 16 - 24)
 		expect(View.cardHeight(8, true, true)).toBe(18 * 16 - 64)
 	end)
+
+	-- PanelPlugin.setNoPadding (stat, canvas, geomap, dynamic text): Grafana
+	-- gives the panel its box less the 2 px border and the header, so a
+	-- padded body clipped the bottom of jdzw5lf's dynamic text by 11 px.
+	it("gives a no-padding panel the card less its border and head only", function()
+		expect(View.cardHeight(8, false, true, false, true)).toBe(18 * 16 - 2 - 28)
+		expect(View.cardHeight(8, false, false, false, true)).toBe(18 * 16 - 2)
+		-- Transparent, untitled (jdzw5lf panel 1, 7 rows: 16 lines).
+		expect(View.cardHeight(7, false, false, true, true)).toBe(256 - 2)
+		expect(View.cardHeight(14, false, true, true, true)).toBe(512 - 2 - 4 - 20)
+	end)
+end)
+
+-- Tern images never scale up: a w=12 panel designed for a 1600 px dashboard
+-- left ~11% of a 1846 px pane's card empty on the right.
+describe("View.designWidth", function()
+	it("lays panels out over the block's width in cells, never narrower than 1600 px", function()
+		expect(View.designWidth({ cols = 234 } :: any)).toBe(math.floor(234 * View.CELL_PX))
+		expect(View.designWidth({} :: any)).toBe(1600)
+		-- A block left at Tern's initial 80x24: designed narrower than its
+		-- card, every image would sit small at the card's left.
+		expect(View.designWidth({ cols = 80 } :: any)).toBe(1600)
+	end)
 end)
 
 return nil

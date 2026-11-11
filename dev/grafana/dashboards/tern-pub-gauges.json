@@ -1,0 +1,288 @@
+{
+  "uid": "tern-pub-gauges",
+  "title": "Tern Pub Gauges",
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["tern"],
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "bargauge",
+      "title": "Pressure",
+      "description": "Small horizontal bar gauge: names left of the bars (public 1860 Pressure).",
+      "gridPos": { "x": 0, "y": 0, "w": 3, "h": 4 },
+      "pluginVersion": "11.6.1",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "dark-yellow", "value": 70 },
+              { "color": "dark-red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "namePlacement": "auto",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "maxVizHeight": 300,
+        "valueMode": "color",
+        "text": {},
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(0.061)", "legendFormat": "CPU", "instant": true, "range": false, "editorMode": "code" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(0.001)", "legendFormat": "Mem", "instant": true, "range": false, "editorMode": "code" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(0.014)", "legendFormat": "I/O", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Uptime",
+      "gridPos": { "x": 3, "y": 0, "w": 2, "h": 2 },
+      "pluginVersion": "7.2.0",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "rgba(245, 54, 54, 0.9)", "value": null },
+              { "color": "rgba(237, 129, 40, 0.89)", "value": 1 },
+              { "color": "rgba(50, 172, 45, 0.97)", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(82800)", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "CPU Cores",
+      "gridPos": { "x": 3, "y": 2, "w": 2, "h": 2 },
+      "pluginVersion": "7.2.0",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "rgba(245, 54, 54, 0.9)", "value": null },
+              { "color": "rgba(50, 172, 45, 0.97)", "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(10)", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total RAM",
+      "gridPos": { "x": 3, "y": 4, "w": 2, "h": 2 },
+      "pluginVersion": "7.2.0",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "rgba(245, 54, 54, 0.9)", "value": null },
+              { "color": "rgba(50, 172, 45, 0.97)", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(8589934592)", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "",
+      "description": "Untitled lcd bar gauge: names above the bars (public 11074 CPU Busy).",
+      "gridPos": { "x": 5, "y": 0, "w": 3, "h": 6 },
+      "pluginVersion": "7.2.0",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "min": 0.1,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "lcd",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(18.5)", "legendFormat": "CPU Busy", "instant": true, "range": false, "editorMode": "code" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(64.5)", "legendFormat": "Used RAM Memory", "instant": true, "range": false, "editorMode": "code" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(2.5)", "legendFormat": "Used Max Mount(/etc/hostname)", "instant": true, "range": false, "editorMode": "code" },
+        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(23.6)", "legendFormat": "Used SWAP", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "HTTP Status Code",
+      "description": "A 2-row stat without data (public Blackbox Exporter).",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 2 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "text", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "up{job=\"tern-no-such-job\"}", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "gauge",
+      "title": "Memory Usage",
+      "description": "A gauge saved with pluginVersion v13.0.0 and no options (public node-mixin): not migrated, so gauge/v2 defaults.",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 7 },
+      "pluginVersion": "v13.0.0",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "rgba(50, 172, 45, 0.97)" },
+              { "color": "rgba(237, 129, 40, 0.89)", "value": 80 },
+              { "color": "rgba(245, 54, 54, 0.9)", "value": 90 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "65 + 3 * sin(vector(time() / 600))", "editorMode": "code" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "gauge",
+      "title": "CPU Busy",
+      "description": "A small gauge saved by Grafana 11.6 (migrated: no gradient, no sparkline).",
+      "gridPos": { "x": 18, "y": 0, "w": 3, "h": 4 },
+      "pluginVersion": "11.6.1",
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "dark-green", "value": null },
+              { "color": "orange", "value": 85 },
+              { "color": "red", "value": 95 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prom3" }, "expr": "vector(18.9)", "instant": true, "range": false, "editorMode": "code" }
+      ]
+    }
+  ]
+}

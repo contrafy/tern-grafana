@@ -28,6 +28,8 @@ local function fixtureFor(version: string, tag: string): string?
 		return S.grafana(version, "dashboard_tern_all_panels.json")
 	elseif string.match(tag, "^fs/") then
 		return S.grafana(version, "frontend_settings_all_panels.json")
+	elseif string.match(tag, "^flag/") then
+		return S.grafana(version, "ofrep_table_auto_column_widths.json")
 	elseif string.match(tag, "^user/") then
 		return S.grafana(version, "user.json")
 	end
@@ -115,10 +117,17 @@ for _, version in S.VERSIONS do
 			local g9 = Gauge.specs(panel(9), {}, h.env, { key = "k", features = features })[1]
 			expect(g9.text).toBe("0")
 			if newGauge then
-				-- neutral 6 on 0..16: the bar runs 0..6, red past the 2 step.
+				-- neutral 6 on 0..16: the bar runs 0..6; the gradient blends
+				-- green into #EAB839 up to the 2 step, red from there.
 				expect(g8.style).toBe("gauge")
 				expect(g8.fill_to).toBe(6 / 16)
-				expect(g8.bands[#g8.bands].class).toBe(TsGradient.stopClass(Thresholds.color("red")))
+				local red = TsGradient.stopClass(Thresholds.color("red"))
+				expect(g8.gradient).toEqual({
+					{ at = 0, class = TsGradient.stopClass(Thresholds.color("green")) },
+					{ at = 2 / 16, class = TsGradient.stopClass(Thresholds.color("#EAB839")) },
+					{ at = 2 / 16, class = red },
+					{ at = 1, class = red },
+				})
 				-- neutral 6 clamps to max 1: the whole circle, segments in
 				-- Grafana's fallback gray.
 				expect(g9.style).toBe("circle")
@@ -243,13 +252,15 @@ for _, version in S.VERSIONS do
 				return image, px
 			end
 			-- p5 has a title and a description: one head line holding both.
-			local body = View.cardHeight(8, false, true)
+			local body = View.cardHeight(8, false, true, false, true)
 			local up, upPx = stat("p5")
 			local none, nonePx = stat("p6")
 			expect(up.p.alt).toBe("5")
 			expect(none.p.alt).toBe("No targets")
-			-- Width-bound in Grafana's 400 px box: 360 px over 10 characters of ~0.55 em.
-			expect(nonePx >= 50 and nonePx <= 70).toBe(true)
+			-- Width-bound: Grafana's 386 px panel (a w=6 panel in a 1600 px
+			-- window) draws it at 70.2 px over 360 px of text; Tern lays the
+			-- panel out 400 px wide (no padding, 1 px border: 374 px of text).
+			expect(nonePx >= 68 and nonePx <= 74).toBe(true)
 			expect(upPx >= 100).toBe(true)
 			for _, image in { up, none } do
 				local lines = assert(tonumber(string.match(image.p.max.h, "^(%d+)lines$")))

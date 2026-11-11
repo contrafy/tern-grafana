@@ -59,6 +59,16 @@ local function variableModule(
 	return mod, ds, loading
 end
 
+-- The datasource a built-in query variable reads, resolved like a panel's
+-- (uid, name or `${var}`, else the default): the uid its requests go to and
+-- what Variables.fetchFor needs of it.
+function M.variableSource(s: State, v: Variables.Variable, scope: Interpolate.Scope): (string?, Variables.FetchContext)
+	local key = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
+	local ds = if key then Queries.findDatasource(s.settings.datasources, key) else nil
+	return if ds then ds.uid else key,
+		{ ds = ds, ds_type = v.datasource_type or (if ds then ds.type else nil), major = s.settings.major }
+end
+
 -- Starts a module's variable job; true when it ended at once.
 local function startVariableJob(
 	s: State,
@@ -142,10 +152,14 @@ local function advanceVariables(s: State, env: Env, effects: { Effect })
 				end
 				continue
 			end
-			local fetch, err = Variables.fetchFor(v, scope, Core.builtinScope(s))
-			local uid = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
+			local uid, source = M.variableSource(s, v, scope)
+			local fetch, err = Variables.fetchFor(v, scope, Core.builtinScope(s), source)
 			if fetch == nil then
-				Variables.setError(v, err or "unsupported variable query")
+				if err then
+					Variables.setError(v, err)
+				else
+					Variables.setOptions(v, {})
+				end
 				Core.changed(s)
 				progressed = true
 				break

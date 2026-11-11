@@ -1,0 +1,158 @@
+{
+  "uid": "tern-pub-vars",
+  "title": "Tern Pub Vars",
+  "description": "Synthetic repro of public dashboard variable patterns: Prometheus series queries with regex extraction (gcom 17781), Loki label_values variables as strings and editor objects (gcom 13639, 12611), a Loki datasource referenced by name, and a text panel with an unresolved, unused datasource (gcom 12611).",
+  "tags": ["tern"],
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "jobs",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prom3" },
+        "query": { "query": "label_values(up, job)", "refId": "StandardVariableQuery" },
+        "definition": "label_values(up, job)",
+        "regex": "/^(node|prometheus)$/",
+        "sort": 1,
+        "refresh": 1,
+        "current": {}
+      },
+      {
+        "name": "host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prom3" },
+        "query": { "query": "up{job=~\"$jobs\"}", "refId": "StandardVariableQuery" },
+        "definition": "up{job=~\"$jobs\"}",
+        "regex": ".*instance=\"(.*?):.*\".*",
+        "sort": 1,
+        "refresh": 1,
+        "current": {}
+      },
+      {
+        "name": "port",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prom3" },
+        "query": { "query": "up{job=~\"$jobs\"}", "refId": "StandardVariableQuery" },
+        "definition": "up{job=~\"$jobs\"}",
+        "regex": ".*instance=\".*:(.*?)\".*",
+        "sort": 3,
+        "refresh": 1,
+        "current": {}
+      },
+      {
+        "name": "target",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prom3" },
+        "query": { "query": "up", "refId": "StandardVariableQuery" },
+        "definition": "up",
+        "regex": "/instance=\"(?<value>[^\"]+)\",job=\"(?<text>[^\"]+)\"/",
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "refresh": 2,
+        "current": {}
+      },
+      {
+        "name": "app",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "query": "label_values(app)",
+        "definition": "label_values(app)",
+        "regex": "",
+        "sort": 0,
+        "refresh": 1,
+        "current": {}
+      },
+      {
+        "name": "level",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "query": {
+          "label": "level",
+          "refId": "LokiVariableQueryEditor-VariableQuery",
+          "stream": "{app=\"$app\"}",
+          "type": 1
+        },
+        "definition": "label_values({app_name=\"$app\"}, level_name)",
+        "regex": "",
+        "sort": 0,
+        "multi": true,
+        "includeAll": true,
+        "refresh": 2,
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] }
+      },
+      {
+        "name": "label",
+        "type": "query",
+        "datasource": "Loki",
+        "query": "label_names()",
+        "definition": "label_names()",
+        "regex": "",
+        "sort": 0,
+        "refresh": 1,
+        "current": {}
+      },
+      {
+        "name": "search",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "up of $host:$port",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "targets": [
+        { "refId": "A", "expr": "sum(up{job=~\"$jobs\", instance=\"$host:$port\"})", "instant": true, "range": false }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "targets: ${target:text}",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "targets": [
+        { "refId": "A", "expr": "count(up{instance=~\"$target\"})", "instant": true, "range": false }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 6 },
+      "datasource": { "uid": "${DS_MISSING}" },
+      "targets": [{ "refId": "A", "datasource": { "uid": "${DS_MISSING}" } }],
+      "options": { "mode": "markdown", "content": "Logs of **$app** ($label labels), host $host" }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Lines of $app by level",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (level) (count_over_time({app=\"$app\", level=~\"$level\"} |= \"$search\" [$__interval]))",
+          "legendFormat": "{{level}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Logs of $app",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [{ "refId": "A", "expr": "{app=\"$app\", level=~\"$level\"} |= \"$search\" | logfmt" }]
+    }
+  ]
+}

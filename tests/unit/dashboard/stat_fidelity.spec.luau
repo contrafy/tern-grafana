@@ -17,6 +17,8 @@ local function fixtureFor(version: string, tag: string): string?
 		return S.grafana(version, "dashboard_tern_stat_fidelity.json")
 	elseif string.match(tag, "^fs/") then
 		return S.grafana(version, "frontend_settings.json")
+	elseif string.match(tag, "^flag/") then
+		return S.grafana(version, "ofrep_table_auto_column_widths.json")
 	elseif string.match(tag, "^user/") then
 		return S.grafana(version, "user.json")
 	end
@@ -108,7 +110,7 @@ for _, version in S.VERSIONS do
 		-- Every short stat, with or without a description, links, a
 		-- sparkline or a name, keeps a value of at least a line that fits the
 		-- room its card has under the head and chip lines it draws.
-		it("keeps a short stat's value between one line and its card's room", function()
+		it("keeps a short stat's value between Grafana's size and its card's room", function()
 			local META = { "none", "description", "links", "both" }
 			local variants: { { id: number, h: number, meta: string } } = {}
 			local h = start(version, function(d: any)
@@ -160,7 +162,9 @@ for _, version in S.VERSIONS do
 				local tight = find(c, function(n)
 					return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-stat-tight", 1, true)
 				end) ~= nil
-				local room = View.cardHeight(v.h, false, #c.p.head > 0 or chips)
+				-- Stat is a no-padding panel (PanelPlugin.setNoPadding): its body
+				-- is the card less the border and the head only.
+				local room = View.cardHeight(v.h, false, #c.p.head > 0 or chips, false, true)
 					- (if tight then 0 else Stat.TILE_PAD_Y)
 					- (if spark then Stat.SPARK_PX else 0)
 				local image = find(c, function(n)
@@ -174,8 +178,15 @@ for _, version in S.VERSIONS do
 				if name and not string.find(name.p.class, "tgp-stat-clamp0", 1, true) then
 					nameH = assert(tonumber(string.match(name.p.class, "tgp%-stat%-fs(%d+)"))) * 1.2
 				end
-				expect(image.p.h >= View.LINE_PX).toBe(true)
-				expect(image.p.h + nameH <= room).toBe(true)
+				local row = find(c, function(n)
+					return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-stat-row", 1, true)
+				end) ~= nil
+				-- Never below Grafana's own 2-row value: 8.333 px (a 10 px line)
+				-- under the 40 px header of 12.4's newPanelPadding and 13, 15 px
+				-- (18) under 11.6's 32 px one.
+				expect(image.p.h >= (if version == "11.6.16" then 18 else 10)).toBe(true)
+				-- Stacked, the name's lines sit above the value; a row has it beside.
+				expect((if row then math.max(image.p.h, nameH) else image.p.h + nameH) <= room).toBe(true)
 			end
 		end)
 	end)

@@ -118,9 +118,9 @@ end
 -- still answers schema v1: tabs and rows become rows in reading order, auto
 -- grids get a gridPos, and a collapsed row keeps its panels. The plugin reads
 -- that answer, so a v2 dashboard needs no second model.
-describe("dashboard model of a schema v2 dashboard on Grafana 13.3.0", function()
+describe("dashboard model of a schema v2 dashboard on Grafana 13.3.1", function()
 	local env = S.env()
-	local d = assert(Model.parseResponse(S.response(S.grafana("13.3.0", "dashboard_tern_v2_layouts.json")), env))
+	local d = assert(Model.parseResponse(S.response(S.grafana("13.3.1", "dashboard_tern_v2_layouts.json")), env))
 
 	it("reads the v1 view Grafana derives from the v2 spec", function()
 		expect(d.uid).toBe("tern-v2-layouts")

@@ -438,4 +438,34 @@ describe("queries for other datasource plugins", function()
 	end)
 end)
 
+-- Grafana's frontend reads its OpenFeature flags (table.autoColumnWidths
+-- sizes table columns to content) from the server's OFREP endpoint, not
+-- from featureToggles: Tern must ask the server the same way and keep a
+-- flag off when the server has no answer, as the frontend's default does.
+describe("OpenFeature flags", function()
+	local env = S.env()
+	local FLAG = "table.autoColumnWidths"
+
+	it("asks Grafana 13 for a flag with the frontend's context", function()
+		local req = Queries.flagRequest(S.response(S.grafana("13.3.1", "frontend_settings.json")), FLAG, env) :: any
+		expect(req.method).toBe("POST")
+		expect(req.path).toBe("/ofrep/v1/evaluate/flags/" .. FLAG)
+		local recorded = json.decode(Fixtures.read("grafana/13.3.1/ofrep_table_auto_column_widths.request.json"))
+		expect(json.decode(req.body)).toEqual(recorded)
+	end)
+
+	it("does not ask Grafana 12 and 11, which have no such flags", function()
+		for _, version in { "12.4.12", "11.6.16" } do
+			expect(Queries.flagRequest(S.response(S.grafana(version, "frontend_settings.json")), FLAG, env)).toBeNil()
+		end
+	end)
+
+	it("reads the evaluation, and an error or a page as off", function()
+		expect(Queries.flagOn(S.response(S.grafana("13.3.1", "ofrep_table_auto_column_widths.json")), env)).toBe(true)
+		expect(Queries.flagOn(S.body(200, '{"key":"table.autoColumnWidths","value":false}'), env)).toBe(false)
+		expect(Queries.flagOn(S.body(500, "failed to evaluate flag"), env)).toBe(false)
+		expect(Queries.flagOn(S.body(200, "<!DOCTYPE html><html></html>"), env)).toBe(false)
+	end)
+end)
+
 return nil

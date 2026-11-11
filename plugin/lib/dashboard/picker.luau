@@ -14,6 +14,7 @@ local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
 local Interpolate = require("./interpolate")
+local Links = require("./links")
 local Loki = require("../source/loki")
 local Metrics = require("../source/metrics")
 local Queries = require("./queries")
@@ -29,6 +30,10 @@ type PickerItem = Types.PickerItem
 type Variable = Variables.Variable
 
 local M = {}
+
+-- Variables picker item id of an annotation layer switch (variable names
+-- have no colon).
+M.LAYER_ID = "layer:"
 
 local function matches(text: string, query: string): boolean
 	return query == "" or string.find(string.lower(text), string.lower(query), 1, true) ~= nil
@@ -386,10 +391,27 @@ function M.items(s: State): { PickerItem }
 		for _, h in s.search.hits do
 			table.insert(out, { id = h.uid, label = h.title, detail = h.folder })
 		end
+	elseif p.kind == "links" then
+		local links: { Types.PanelLink } = p.links or {}
+		for i, l in links do
+			if matches(l.title, p.query) then
+				table.insert(out, { id = tostring(i), label = l.title, detail = l.url })
+			end
+		end
 	elseif p.kind == "vars" then
 		for _, v in s.vars do
 			if v.hide < 2 and v.kind ~= "constant" and matches(v.label or v.name, p.query) then
 				table.insert(out, { id = v.name, label = v.label or v.name, detail = Variables.display(v) })
+			end
+		end
+		-- The annotation layer switches of the variable bar.
+		for _, t in s.layers.toggles do
+			if matches(t.name, p.query) then
+				table.insert(out, {
+					id = M.LAYER_ID .. t.name,
+					label = t.name,
+					detail = if t.on then "annotations on" else "annotations off",
+				})
 			end
 		end
 	else
@@ -426,6 +448,27 @@ function M.itemsFor(s: State, kind: "vars"): { PickerItem }
 	return out
 end
 
+-- Switches annotation layer `name` on or off (its variable bar toggle).
+function M.toggleLayer(s: State, name: string, env: Env, effects: { Effect })
+	for _, t in s.layers.toggles do
+		if t.name == name then
+			s.layer_on[name] = not t.on
+			Advance.advance(s, env, false, effects)
+			return
+		end
+	end
+end
+
+-- Grafana's panel links menu (VizPanelLinks with several links): a
+-- picker of the links of panel `key`.
+function M.openLinks(s: State, key: string, env: Env)
+	local inst = Core.find(s, key)
+	if inst == nil then
+		return
+	end
+	s.picker = { kind = "links", name = key, query = "", links = Links.panelLinks(s, inst, env) }
+end
+
 function M.openVar(s: State, name: string)
 	local v = Variables.find(s.vars, name)
 	if v == nil or v.kind == "constant" or v.kind == "unsupported" then
@@ -453,6 +496,7 @@ local function openDashboard(s: State, uid: string, effects: { Effect })
 	s.focus = nil
 	s.expanded = false
 	s.collapsed = {}
+	s.layer_on = {}
 	Answers.startLoad(s, effects)
 end
 
@@ -483,8 +527,15 @@ function M.pick(s: State, id: string, env: Env, effects: { Effect })
 	end
 	if p.kind == "search" then
 		openDashboard(s, id, effects)
+	elseif p.kind == "links" then
+		s.picker = nil
+		Links.openPanelLink(s, id .. ":" .. (p.name or ""), env, effects)
 	elseif p.kind == "vars" then
-		M.openVar(s, id)
+		if string.sub(id, 1, #M.LAYER_ID) == M.LAYER_ID then
+			M.toggleLayer(s, string.sub(id, #M.LAYER_ID + 1), env, effects)
+		else
+			M.openVar(s, id)
+		end
 	else
 		local v = Variables.find(s.vars, p.name or "")
 		if v == nil then

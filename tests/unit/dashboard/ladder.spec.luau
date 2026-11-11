@@ -13,6 +13,7 @@ local Queries = require("../../../plugin/lib/dashboard/queries")
 local RenderPng = require("../../../plugin/lib/dashboard/render_png")
 local Route = require("../../../plugin/lib/config/route")
 local S = require("./support")
+local Tbl = require("../../../plugin/lib/tbl")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
@@ -25,7 +26,7 @@ local function supports(panel: { [string]: any }, _env: any): (boolean, string?)
 	return true, nil
 end
 
-local EXPECTED_RENDERER = { ["11.6.16"] = false, ["12.4.12"] = true, ["13.3.0"] = true }
+local EXPECTED_RENDERER = { ["11.6.16"] = false, ["12.4.12"] = true, ["13.3.1"] = true }
 
 for _, version in S.VERSIONS do
 	local env = S.env()
@@ -73,6 +74,20 @@ for _, version in S.VERSIONS do
 			local d = assert(Model.parseResponse(S.response(S.grafana(version, "dashboard_tern_panels.json")), env))
 			local lib = assert(Model.findPanel(d, 18))
 			expect(Ladder.nativeBlocker(lib, ctx, env)).toBe("library panel is still loading")
+		end)
+
+		-- gcom 12611: a text panel saved with a datasource variable that no
+		-- longer exists, on the panel and its one target. Grafana runs no
+		-- queries for text panels (skipDataQuery) and draws it; so must Tern.
+		it("draws a text panel natively whatever unresolved datasource it was saved with", function()
+			local d = assert(Model.parseResponse(S.response(S.grafana(version, "dashboard_tern_pub_vars.json")), env))
+			local text = assert(Model.findPanel(d, 3))
+			expect(Ladder.decide(text, ctx, env)).toEqual({ mode = "native" })
+			-- The same reference keeps a panel that queries off the native rung.
+			local stat = Tbl.copy(text)
+			stat.json = Tbl.copy(text.json)
+			stat.json.type = "stat"
+			expect(Ladder.nativeBlocker(stat, ctx, env)).toBe("datasource ${DS_MISSING} is not resolved")
 		end)
 	end)
 end

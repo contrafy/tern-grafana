@@ -1094,8 +1094,9 @@ function M.frontendDatasources(response: TransportTypes.Response, env: Env): { D
 end
 
 -- Toggles Grafana made default and dropped from `featureToggles`, by the
--- major version that did: 13's gauge panel always draws gauge/v2.
-local GA_FEATURES: { [string]: number } = { newGauge = 13 }
+-- major version that did: 13's gauge panel always draws gauge/v2, and its
+-- panels always have the new header padding.
+local GA_FEATURES: { [string]: number } = { newGauge = 13, newPanelPadding = 13 }
 
 -- Grafana's frontend feature toggles (`featureToggles`), the ones on, plus
 -- the GA ones for the server's version (`buildInfo.version`).
@@ -1124,6 +1125,47 @@ function M.frontendFeatures(response: TransportTypes.Response, env: Env): { [str
 		end
 	end
 	return out
+end
+
+-- Grafana's frontend reads its OpenFeature flags from the server's OFREP
+-- endpoint (@grafana/runtime initOpenFeature: OFREPWebProvider at the app
+-- root, context `targetingKey` = the namespace plus `openFeatureContext`).
+-- The flags the native panels follow; Grafana 12 and older have none of
+-- them (12 answers the endpoint with its index page).
+M.OPEN_FEATURE_FLAGS = { "table.autoColumnWidths" }
+M.OPEN_FEATURE_SINCE = 13
+
+-- The OFREP evaluation of `flag` as the frontend asks for it, or nil when
+-- the server predates the flags or names no OpenFeature context.
+function M.flagRequest(response: TransportTypes.Response, flag: string, env: Env): Request?
+	local doc = Response.json(response, env, "frontend settings")
+	if type(doc) ~= "table" then
+		return nil
+	end
+	local build = Env.value(env, doc.buildInfo)
+	local version = if type(build) == "table" then Env.value(env, build.version) else nil
+	local major = M.major(if type(version) == "string" then version else nil)
+	local ctx = Env.value(env, doc.openFeatureContext)
+	if major == nil or major < M.OPEN_FEATURE_SINCE or type(ctx) ~= "table" then
+		return nil
+	end
+	local context = Tbl.copy(ctx)
+	local namespace = Env.value(env, doc.namespace)
+	context.targetingKey = if type(namespace) == "string" then namespace else context.namespace
+	return {
+		method = "POST",
+		path = "/ofrep/v1/evaluate/flags/" .. flag,
+		headers = { ["Content-Type"] = "application/json" },
+		body = env.encode({ context = context }),
+	}
+end
+
+-- Whether an OFREP evaluation answered true; anything else (an error, a
+-- page that is not JSON, a disabled flag) leaves the flag off, as the
+-- frontend's default value does.
+function M.flagOn(response: TransportTypes.Response, env: Env): boolean
+	local doc = Response.json(response, env, "feature flag")
+	return type(doc) == "table" and Env.value(env, doc.value) == true
 end
 
 -- The major version of a Grafana version string ("12.4.0" -> 12).

@@ -134,6 +134,13 @@ function M.initWith(args: { string }, saved: any, env: Env, solo: boolean): (Sta
 		-- The first poll adopts what the other blocks share.
 		table.insert(effects, Shared.timer(s.sync))
 	end
+	if type(saved) == "table" and type(saved.layers) == "table" then
+		for name, on in saved.layers do
+			if type(name) == "string" and type(on) == "boolean" then
+				s.layer_on[name] = on
+			end
+		end
+	end
 	local raw = if type(saved) == "table" and type(saved.link) == "string" then saved.link else args[1]
 	if raw and raw ~= "" then
 		local l, err = Scheme.decode(raw)
@@ -231,6 +238,10 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		end
 	elseif act == "var" then
 		Picker.openVar(s, value)
+	elseif act == "layer" then
+		Picker.toggleLayer(s, value, env, effects)
+	elseif act == "plinks" then
+		Picker.openLinks(s, value, env)
 	elseif act == "browser" then
 		Links.openPanelInBrowser(s, value, effects)
 	elseif act == "plink" then
@@ -241,6 +252,12 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		local page, key = string.match(value, "^(%d+):(.+)$")
 		if page and key and Core.find(s, key) then
 			s.pages[key] = tonumber(page) :: number
+		end
+	elseif act == "tframe" then
+		local frame, key = string.match(value, "^(%d+):(.+)$")
+		if frame and key and Core.find(s, key) then
+			s.frames[key] = tonumber(frame) :: number
+			s.pages[key] = nil
 		end
 	elseif act == "dashboard" then
 		local url = Links.grafanaUrl(s, env)
@@ -286,6 +303,8 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		Answers.onDashboard(s, msg.response, env, effects)
 	elseif kind == "fs" then
 		Answers.onSettings(s, msg.response, env, effects)
+	elseif kind == "flag" then
+		return Answers.onFlag(s, table.concat(parts, "/", 3), msg.response, env, effects)
 	elseif kind == "user" then
 		Answers.onUser(s, msg.response, env, effects)
 	elseif kind == "lib" then
@@ -398,7 +417,11 @@ function M.save(s: State): any
 	if encoded == nil then
 		return nil
 	end
-	return { link = encoded, sync = if s.sync.on then true else nil }
+	return {
+		link = encoded,
+		sync = if s.sync.on then true else nil,
+		layers = if next(s.layer_on) then s.layer_on else nil,
+	}
 end
 
 return M

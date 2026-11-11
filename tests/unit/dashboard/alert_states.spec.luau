@@ -12,8 +12,14 @@ local describe, it, expect = t.describe, t.it, t.expect
 
 local env = S.env()
 
+-- Typed references only: string references resolve through the dashboard's
+-- datasources (lib/dashboard/layers, specs in annotation_layers.spec).
+local function typeOf(raw: any): string?
+	return if type(raw) == "table" then raw.type else nil
+end
+
 local function builtIn(): Annotations.Def
-	return Annotations.defs({ Annotations.BUILT_IN }, env)[1]
+	return Annotations.defs({ Annotations.BUILT_IN }, env, {}, typeOf)[1]
 end
 
 describe("alert states (AlertStatesDataLayer)", function()
@@ -64,7 +70,7 @@ describe("annotation layers", function()
 				step = "60s",
 			},
 			{ name = "Loki", enable = true, datasource = { type = "loki", uid = "l" } },
-		}, env)
+		}, env, {}, typeOf)
 		expect(#defs).toBe(2)
 		expect(defs[1].name).toBe("Annotations & Alerts")
 		expect(defs[2].kind).toBe("prometheus")
@@ -75,7 +81,7 @@ describe("annotation layers", function()
 	-- seeded deploy annotation, both on tern-panels panel 2.
 	it("colors alert state changes by their new state, other annotations by iconColor", function()
 		local events =
-			assert(Annotations.parse(builtIn(), S.response(S.grafana("13.3.0", "annotations_dashboard.json")), env))
+			assert(Annotations.parse(builtIn(), S.response(S.grafana("13.3.1", "annotations_dashboard.json")), env))
 		local colors: { [string]: boolean } = {}
 		for _, e in events do
 			colors[e.color] = true
@@ -133,7 +139,7 @@ describe("annotation layers", function()
 				expr = "x",
 				filter = { exclude = true, ids = { 1 } },
 			},
-		}, env)[2]
+		}, env, {}, typeOf)[2]
 		local layers = { { def = def, events = { { time_ms = 1, color = "red" } } } }
 		expect(#Annotations.marks(layers, 1)).toBe(0)
 		expect(#Annotations.marks(layers, 2)).toBe(1)
@@ -149,7 +155,7 @@ describe("annotation layers", function()
 				datasource = { type = "prometheus", uid = "p" },
 				expr = "x",
 			},
-		}, env)[1]
+		}, env, {}, typeOf)[1]
 		local frame: any = {
 			meta = { executedQueryString = "Expr: x\nStep: 1m0s" },
 			fields = {

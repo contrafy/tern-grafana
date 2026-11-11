@@ -37,13 +37,24 @@ local function fixtureFor(version: string, uid: string, e: any): string?
 		return S.grafana(version, "dashboard_" .. string.gsub(uid, "-", "_") .. ".json")
 	elseif string.match(tag, "^fs/") then
 		return S.grafana(version, "frontend_settings.json")
+	elseif string.match(tag, "^flag/") then
+		return S.grafana(version, "ofrep_table_auto_column_widths.json")
 	elseif string.match(tag, "^user/") then
 		return S.grafana(version, "user.json")
 	elseif string.match(tag, "^lib/") then
 		return S.grafana(version, "library_element.json")
 	elseif string.match(tag, "^var/") then
-		if e.request.path == "/api/ds/query" then
+		local path = e.request.path
+		if path == "/api/ds/query" then
 			return S.grafana(version, "ds_query_prom_instant.json")
+		elseif path == "/api/datasources/proxy/uid/prom3/api/v1/series" then
+			return S.grafana(version, "ds_proxy_prom_series.json")
+		end
+		local lokiLabel = string.match(path, "^/api/datasources/proxy/uid/loki/loki/api/v1/label/(%w+)/values$")
+		if path == "/api/datasources/proxy/uid/loki/loki/api/v1/labels" then
+			return S.grafana(version, "ds_proxy_loki_labels.json")
+		elseif lokiLabel then
+			return S.grafana(version, "ds_proxy_loki_label_values_" .. lokiLabel .. ".json")
 		elseif string.find(e.request.path, "__name__", 1, true) then
 			return "prometheus/3.15.0/label_values_name.json"
 		end
@@ -515,6 +526,41 @@ for _, version in S.VERSIONS do
 		end)
 	end)
 
+	-- tern-pub-vars (findings of the public dashboard pass): series-query
+	-- variables with regexes, Loki variables (one naming its datasource
+	-- "Loki" instead of referencing uid "loki"), and a text panel saved with
+	-- a datasource variable that does not exist.
+	describe("dashboard block public variable patterns on Grafana " .. version, function()
+		it("resolves every variable, queries Loki with them and draws the text panel natively", function()
+			local h = start(version, "tern-grafana://dashboard?context=lab&uid=tern-pub-vars")
+			local byName: { [string]: any } = {}
+			for _, v in h.s.vars do
+				byName[v.name] = v
+				expect({ v.name, v.status }).toEqual({ v.name, "ready" })
+			end
+			expect(byName.host.values).toEqual({ "node-exporter" })
+			expect(byName.port.values).toEqual({ "9100" })
+			expect(byName.app.values).toEqual({ "checkout" })
+			expect(byName.level.values).toEqual({ "$__all" })
+			expect(byName.label.options[1].value).toBe("app")
+			expect(modes(h)["3"]).toBe("native")
+			local logs: any = nil
+			for tag, e in h.pending do
+				if string.match(tag, "^q/") and string.find(e.request.body or "", "logfmt", 1, true) then
+					logs = json.decode(e.request.body)
+				end
+			end
+			assert(logs, "the logs panel must be queried")
+			local levels: { string } = {}
+			for _, o in byName.level.options do
+				table.insert(levels, o.value)
+			end
+			expect(logs.queries[1].expr).toBe(
+				'{app="checkout", level=~"' .. table.concat(levels, "|") .. '"} |= "" | logfmt'
+			)
+		end)
+	end)
+
 	describe("panel block on Grafana " .. version, function()
 		it("shows and queries only its panel, with the copy's repeat value", function()
 			local h = start(
@@ -644,12 +690,11 @@ local function answer(h: Harness, panel: string, path: string)
 	error("no pending query for " .. panel)
 end
 
--- Exemplars each capture returned: Grafana 13's fresh stack had only minutes
--- of spanmetrics behind it.
-local EXEMPLARS = { ["11.6.16"] = 120, ["12.4.12"] = 120, ["13.3.0"] = 58 }
+-- Exemplars each capture returned.
+local EXEMPLARS = { ["11.6.16"] = 120, ["12.4.12"] = 120, ["13.3.1"] = 120 }
 -- Exemplars outside the range are not drawn, so the block must look at the
--- hour the capture covered (Grafana 13: 2026-11-09T15:56:10Z).
-local EXEMPLARS_AT = { ["11.6.16"] = S.NOW_MS, ["12.4.12"] = S.NOW_MS, ["13.3.0"] = 1794239770000 }
+-- hour the capture covered (Grafana 13: 2026-11-11T16:22:40Z).
+local EXEMPLARS_AT = { ["11.6.16"] = S.NOW_MS, ["12.4.12"] = S.NOW_MS, ["13.3.1"] = 1794414167000 }
 
 for _, version in S.VERSIONS do
 	describe("dashboard exemplars on Grafana " .. version, function()

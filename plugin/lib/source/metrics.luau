@@ -38,6 +38,7 @@ export type RangeQuery = {
 export type InstantQuery = { expr: string, time_ms: number, ref_id: string?, format: Format?, legend: string? }
 export type ListOptions = Prom.ListOptions
 export type ListResult = Prom.ListResult
+export type SeriesResult = Prom.SeriesResult
 export type MetadataResult = Prom.MetadataResult
 export type HealthResult = Prom.HealthResult
 export type Exemplar = FrameProm.Exemplar
@@ -182,6 +183,10 @@ function M.labelValuesRequest(route: Route, label: string, opts: ListOptions?): 
 	return Prom.labelValuesRequest(base(route), label, opts)
 end
 
+function M.seriesRequest(route: Route, opts: { match: string, from_ms: number, to_ms: number }): Request
+	return Prom.seriesRequest(base(route), opts)
+end
+
 function M.metadataRequest(route: Route, metric: string?): Request
 	return Prom.metadataRequest(base(route), metric)
 end
@@ -192,6 +197,10 @@ end
 
 function M.parseList(_route: Route, response: Response, env: Env): ListResult
 	return Prom.parseList(response, env)
+end
+
+function M.parseSeries(_route: Route, response: Response, env: Env): SeriesResult
+	return Prom.parseSeries(response, env)
 end
 
 function M.parseMetadata(_route: Route, response: Response, env: Env): MetadataResult

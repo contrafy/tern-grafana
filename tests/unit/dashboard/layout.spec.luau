@@ -87,6 +87,13 @@ describe("layout edge cases", function()
 		expect(shape(nodes)).toEqual({ { ["row@1.000"] = { "_0.500", "a@0.500" } } })
 	end)
 
+	-- The fifth copy of a 4-per-line repeat is a quarter wide in Grafana,
+	-- not stretched over the line.
+	it("keeps empty grid space after a left panel so it keeps its width", function()
+		local nodes = Layout.arrange({ { key = "a", grid = { x = 0, y = 0, w = 6, h = 4 } } })
+		expect(shape(nodes)).toEqual({ { ["row@1.000"] = { "a@0.250", "_0.750" } } })
+	end)
+
 	it("falls back to reading order for overlapping panels instead of looping", function()
 		local nodes = Layout.arrange({
 			{ key = "a", grid = { x = 0, y = 0, w = 12, h = 4 } },

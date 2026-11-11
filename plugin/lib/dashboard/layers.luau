@@ -12,6 +12,8 @@ local Annotations = require("./annotations")
 local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
+local Interpolate = require("./interpolate")
+local Json = require("../panels/json")
 local Queries = require("./queries")
 local Route = require("../config/route")
 local SvgAnnotations = require("../render/svg_annotations")
@@ -72,9 +74,38 @@ local function sameStates(a: { [number]: AlertStates.State }?, b: { [number]: Al
 	return true
 end
 
+-- The datasource type of an annotation layer's reference under `qctx`
+-- (DashboardMigrator migrateDatasourceNameToRef, then the datasource
+-- service's lookup by uid or name with variables interpolated).
+local function typeOf(qctx: Queries.Context, env: Env): Annotations.TypeOf
+	return function(raw: any): string?
+		raw = Env.value(env, raw)
+		local uid: string? = nil
+		if type(raw) == "table" then
+			local typ = Json.str(env, raw.type)
+			if typ then
+				return typ
+			end
+			uid = Json.str(env, raw.uid)
+		elseif type(raw) == "string" then
+			uid = raw
+		end
+		if uid == nil or uid == "" or uid == "default" then
+			for _, ds in qctx.datasources do
+				if ds.is_default then
+					return ds.type
+				end
+			end
+			return nil
+		end
+		local ds = Queries.findDatasource(qctx.datasources, Interpolate.replace(uid :: string, qctx.scope))
+		return if ds then ds.type else nil
+	end
+end
+
 -- Sends the layer requests when they changed (or `force`, a refresh).
 -- Runs once the variables have settled (a Prometheus layer's expression
--- may use them).
+-- and datasource may use them).
 function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
 	local d, route, r = s.dashboard, s.route, s.range
 	if d == nil or route == nil or r == nil then
@@ -84,7 +115,8 @@ function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
 	local qctx = Core.queryContext(s, Core.scopeOf(s), env, r, nil)
 	local layers: { Types.AnnotationLayer } = {}
 	local requests: { TransportTypes.Request } = {}
-	for _, def in Annotations.defs(d.annotations, env) do
+	ls.toggles = Annotations.toggles(d.annotations, env, s.layer_on)
+	for _, def in Annotations.defs(d.annotations, env, s.layer_on, typeOf(qctx, env)) do
 		local request: TransportTypes.Request
 		local pq: Queries.PanelQuery? = nil
 		if def.kind == "prometheus" then

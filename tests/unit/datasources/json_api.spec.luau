@@ -93,6 +93,8 @@ local function open(version: string): Block
 				response = S.response(S.grafana(version, "dashboard_tern_s4_json.json"))
 			elseif string.match(tg, "^fs/") then
 				response = S.response(S.grafana(version, "s4_json_frontend_settings.json"))
+			elseif string.match(tg, "^flag/") then
+				response = S.response(S.grafana(version, "ofrep_table_auto_column_widths.json"))
 			elseif string.match(tg, "^user/") then
 				response = S.response(S.grafana(version, "user.json"))
 			elseif string.sub(e.request.path, 1, #PROXY) == PROXY then

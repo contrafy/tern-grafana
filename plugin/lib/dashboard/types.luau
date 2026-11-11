@@ -76,8 +76,9 @@ export type PanelState = {
 }
 
 export type Picker = {
-	kind: "search" | "vars" | "var",
-	-- The variable a "var" picker edits.
+	kind: "search" | "vars" | "var" | "links",
+	-- The variable a "var" picker edits; the panel key a "links" picker
+	-- lists the links of.
 	name: string?,
 	query: string,
 	selected: string?,
@@ -95,6 +96,8 @@ export type Picker = {
 	list_status: ("loading" | "ready" | "error")?,
 	list_error: string?,
 	list_gen: number?,
+	-- A "links" picker's panel links, as built when it opened.
+	links: { PanelLink }?,
 }
 
 export type PickerItem = { id: string, label: string, detail: string? }
@@ -116,6 +119,8 @@ export type Settings = {
 	features: { [string]: boolean },
 	-- Grafana's major version (buildInfo.version); nil while unknown.
 	major: number?,
+	-- OpenFeature flag evaluations still unanswered (Queries.flagRequest).
+	pending_flags: number?,
 	error: string?,
 }
 
@@ -221,6 +226,8 @@ export type State = {
 	labels: { [string]: boolean },
 	-- Table panels flipped past their first page (Table pager `tpage`).
 	pages: { [string]: number },
+	-- Table panels showing another frame (Table frame selector `tframe`).
+	frames: { [string]: number },
 	-- View memo (lib/dashboard/view.luau): rendered native panels by key.
 	memo: { [string]: any },
 	-- Selected exemplar of the focused time series (single view): index
@@ -239,6 +246,9 @@ export type State = {
 	live_tick: number,
 	-- Dashboard data layers: annotations and alert states.
 	layers: Layers,
+	-- Annotation layers switched in the variable bar, by layer name (saved
+	-- with the block, like the variables in its link).
+	layer_on: { [string]: boolean },
 }
 
 -- An annotation layer of the dashboard (lib/dashboard/annotations.luau):
@@ -258,6 +268,8 @@ export type Layers = {
 	-- Identity of the last batch (its requests).
 	sig: string?,
 	annotations: { AnnotationLayer },
+	-- The variable bar's annotation layer switches (Annotations.toggles).
+	toggles: { Annotations.Toggle },
 	-- Alert state per panel id; nil while unknown or when the range does
 	-- not end now.
 	alert_states: { [number]: AlertStates.State }?,
@@ -272,7 +284,16 @@ export type Layers = {
 }
 
 function M.newLayers(): Layers
-	return { gen = 0, sig = nil, annotations = {}, alert_states = nil, no_rules = false, marks = {}, stamp = 0 }
+	return {
+		gen = 0,
+		sig = nil,
+		annotations = {},
+		toggles = {},
+		alert_states = nil,
+		no_rules = false,
+		marks = {},
+		stamp = 0,
+	}
 end
 
 function M.new(env: Env): State
@@ -331,6 +352,7 @@ function M.new(env: Env): State
 		updated_ms = nil,
 		labels = {},
 		pages = {},
+		frames = {},
 		card_ids = {},
 		memo = {},
 		exemplar = nil,
@@ -342,6 +364,7 @@ function M.new(env: Env): State
 		live_ms = nil,
 		live_tick = 0,
 		layers = M.newLayers(),
+		layer_on = {},
 	}
 end
 

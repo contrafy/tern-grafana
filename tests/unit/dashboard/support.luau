@@ -11,13 +11,13 @@ local json = require("../../lib/json")
 
 local M = {}
 
-M.VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
+M.VERSIONS = { "11.6.16", "12.4.12", "13.3.1" }
 
 -- 2026-10-09T20:31:47Z, the capture time of the Grafana fixtures.
 M.NOW_MS = 1791577907000
 
 -- Whether each stack's frontend settings report an image renderer.
-M.RENDERER = { ["11.6.16"] = false, ["12.4.12"] = true, ["13.3.0"] = true } :: { [string]: boolean }
+M.RENDERER = { ["11.6.16"] = false, ["12.4.12"] = true, ["13.3.1"] = true } :: { [string]: boolean }
 
 M.CONFIG = assert(
 	Validate.parseFile(
