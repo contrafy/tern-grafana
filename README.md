@@ -85,11 +85,14 @@ first rung of a ladder that works:
 
 Panels show what Grafana shows around the data: a heart after the title for
 linked Grafana alert rules (firing, pending, normal), the dashboard's
-annotation layers on time series, alert state history included, paged tables
-with data links in their cells, and every time in the dashboard's time zone.
+annotation layers on time series, alert state history included,
+[paged tables with data links](docs/dashboards.md#tables) in their cells, and
+every time in the [dashboard's time zone](docs/dashboards.md#time-zones).
 Ad hoc filter variables get a picker that adds, edits and removes filters and
 rewrites Prometheus and Loki queries as Grafana does
-([ad hoc filters](docs/dashboards.md#ad-hoc-filters)).
+([ad hoc filters](docs/dashboards.md#ad-hoc-filters)). The treemap draws with
+d3's tilings and Grafana's colors
+([treemap](docs/dashboards.md#treemap-marcusolsson-treemap-panel)).
 
 **Datasource plugins** that do their work in Grafana's frontend are ported, so
 their panels and query variables run natively through Grafana: Zabbix (metrics,

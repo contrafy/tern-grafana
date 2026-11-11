@@ -185,7 +185,7 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 | stat, legacy singlestat | yes | reducers Tern cannot compute |
 | gauge | yes | see Gauge below |
 | bargauge | yes | `showUnfilled`, `sizing`/`minViz*`/`maxVizHeight` and the legend are not drawn |
-| table | yes | sparkline, image, data-links, actions and custom cells |
+| table | yes | sparkline, image, data-links, actions and custom cell types; see Tables below |
 | text, logs | yes | |
 | piechart, barchart, histogram, trend, candlestick | yes | |
 | xychart | yes | the options from before Grafana 11.3 (`seriesMapping`, `dims`) |
@@ -308,6 +308,46 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   time series (multi, long and wide, plus the deprecated many). Values follow JavaScript as Grafana's code does:
   in a calculation a null counts as 0 and a gap a join created as NaN. Other transformations (partition by
   values, ...) and filters other than `byRefId` keep the panel on the ladder.
+
+### Tables
+
+- **Cells.** Values go through the field's display processor (unit, decimals, mappings, dates in the dashboard's
+  time zone, objects as JSON). `custom.cellOptions` (or a legacy `custom.displayMode`, migrated as Grafana does)
+  picks the cell: color text, color background (basic or gradient, `applyToRow` fills the row), gauge (basic,
+  gradient or LCD, value shown as text, colored or hidden), pill (the value split into colored tags), markdown and
+  JSON view; pill and markdown on non-string fields fall back to auto, as in Grafana. The sparkline, image,
+  data-links, actions and custom cell types take the ladder. `custom.align`, `custom.hidden`, `options.sortBy`
+  and the footer (`options.footer` with its reducer, or per-field `custom.footer.reducers`) apply.
+- **Columns.** Sized as Grafana 13's table does: `custom.width` exactly, other columns as wide as their content
+  (at least `custom.minWidth`, at most 400 px) without shrinking, so a table wider than its card scrolls sideways
+  instead of squeezing columns to an ellipsis. With no `custom.width` column, the columns share the leftover width.
+- **Data links.** A field's data links (from the field config or the frame) draw its cells as links; a click
+  opens the first one in the browser pane, with the cell's values and the dashboard's variables filled in.
+- **Pagination.** `options.enablePagination` (`options.footer.enablePagination` before Grafana 12.2) pages the
+  rows as Grafana does: as many rows per page as fit the panel's Grafana height at its `cellHeight` (sm, md, lg),
+  at least one. The pager under the table has previous, page and next buttons and "1 - 8 of 40 rows".
+- **Frames.** Grafana shows one frame at a time with a frame picker; Tern shows the first and says how many more
+  there are.
+
+### Treemap (marcusolsson-treemap-panel)
+
+Drawn as the plugin's 2.1.1 frontend draws it:
+
+- **Fields.** Text, size and color come from `textField`, `sizeField` and `colorByField`, else the first string
+  field and the first number field; `groupByField` groups tiles and `labelFields` add badges to the tooltip.
+  Frames without text, size or color fields are left out; with none left the panel shows the plugin's "Configure
+  your query" text.
+- **Layout.** The hierarchy is the frame name, the group value, then the text split by the text field's
+  `custom.separator`; a leading "All" is dropped and a single top-level child collapses into the root. Tiles are
+  laid out with d3-hierarchy's tilings (`tiling`: squarify, binary, dice, slice, slice-dice) and Grafana's
+  paddings, values summed and sorted largest first. A tile shows its name when it fits.
+- **Colors.** A tile is filled with the hex Grafana fills it with: thresholds (percentage ones included),
+  value mappings, fixed colors, continuous schemes and the classic palette, with named colors in their light
+  shade under Tern's light theme. Group backgrounds are a faint tint of the text color.
+- **Tooltips and data links.** Hovering a tile shows Grafana's tooltip (name, formatted size, label badges); a
+  click opens the size field's first data link in the browser pane. Links fill in `${__data.fields.<name>}`,
+  `${__data.name}`, `${__value.raw}`, `${__field.name}`, `${__series.name}` and the dashboard's variables; a
+  path-only link opens on your Grafana.
 
 ### Clock panels (grafana-clock-panel)
 
@@ -475,7 +515,7 @@ trigger and problem queries itself against the Zabbix API:
 
 The range starts at the dashboard's own (`time` in its JSON) unless the link names one. Auto-refresh follows the
 dashboard's `refresh` interval but never runs more often than `dashboard.min_refresh` (default 30 s); `a` pauses it.
-A refresh re-runs every panel query and re-renders PNG panels. Times are shown and computed in UTC.
+A refresh re-runs every panel query and re-renders PNG panels.
 
 Refreshes are frugal with Tern's image cache, which keeps every distinct chart for the session
 ([performance.md](performance.md)): an answer byte-identical to the last one is not redrawn; time series draw a range
@@ -488,6 +528,22 @@ With `S` the block joins the shared time range (header shows `synced`, saved wit
 the range, cursor moves the cursor, and every 2 seconds the block adopts a newer range or cursor another synced
 Query, Dashboard, Panel, Logs or Trace block published; a new range re-runs the panel queries. See
 [query.md](query.md#shared-time) for the record and its rules.
+
+### Time zones
+
+Every absolute time a native panel shows (time axes, legends, cursor read-outs, table time cells, stat time values,
+tooltips, annotation lists) is formatted in the dashboard's `timezone`, as Grafana's dashboard date formatting does:
+
+- `browser` or unset: your local time zone, per value, so times on each side of a daylight saving change keep
+  their own offset.
+- `utc`: UTC.
+- An IANA name (`Europe/Berlin`, `America/New_York`): its offset and daylight saving rule at each value, for the
+  common zones of the Americas, Europe, Africa, Asia, Australia and New Zealand; `Etc/GMT+N` is exact. Other IANA
+  names and unknown strings fall back to your local zone.
+
+Exceptions follow the panels' own Grafana code: clock panels use their own zone setting (see
+[Clock panels](#clock-panels-grafana-clock-panel)), and the news panel's dates and the Zabbix Problems panel's
+last-change times use your local zone, as those plugins format them in the browser's time zone.
 
 ## Exemplars and jumps
 
