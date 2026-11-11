@@ -45,6 +45,13 @@ describe("reduce (reduce.test.ts)", function()
 		expect(f.fields[7].values).toEqual({ 4, 4, 4, 4 })
 	end)
 
+	-- transformDataFrame spreads the panel's options over defaultOptions.
+	it("reduces with Max when saved without reducers (defaultOptions)", function()
+		local out = T.one("reduce", {}, { multiA() })
+		expect(T.fieldNames(out[1])).toEqual({ "Field", "Max" })
+		expect(out[1].fields[2].values).toEqual({ 6, 10000.6 })
+	end)
+
 	it("reduces a frame of all nulls to NaN, keeping the row", function()
 		local nulls = T.frame({ T.f("time", "time", { 1, 2 }), T.f("temperature", "number", { NULL, NULL }) }, "C", "A")
 		local out = T.one("reduce", { reducers = { "max", "count" } }, { multiB(), nulls })

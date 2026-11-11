@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"editorMode":"code","expr":"sum(rate(tern_no_such_metric_total[$__rate_interval])) by (user)","instant":false,"legendFormat":"{{ user }}","range":true,"intervalMs":10000,"maxDataPoints":480}],"from":"1794416283000","to":"1794419883000"}

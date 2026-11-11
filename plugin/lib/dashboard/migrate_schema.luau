@@ -5,9 +5,10 @@
 -- DashboardMigrator.ts (updateSchema: the dashboard steps in order, then the
 -- panel steps over every panel and every collapsed row's panel) and the
 -- DashboardModel constructor around it (unique panel ids, panels sorted by
--- gridPos). Grafana 12 and 13 load dashboards through the app platform API,
--- whose backend runs the same steps (apps/dashboard/pkg/migration: migrate.go
--- and schemaversion; its v1beta1 answer is the specs' oracle) and answers
+-- gridPos, a refId for every target: PanelModel). Grafana 12 and 13 load
+-- dashboards through the app platform API, whose backend runs the same steps
+-- (apps/dashboard/pkg/migration: migrate.go and schemaversion; its v1beta1
+-- answer is the specs' oracle) and answers
 -- the result as a save model, without the copies of repeated panels a saved
 -- dashboard may still hold; where the backend and the browser differ this
 -- follows the backend: the legacy rows' panels get unique ids too, mapping
@@ -744,6 +745,65 @@ local function sortByGridPos(env: Env, panels: { any })
 	end
 end
 
+-- getRefId: A to Z, then AA, AB, ...
+local function refIdOf(num: number): string
+	if num < 26 then
+		return string.char(65 + num)
+	end
+	return refIdOf(num // 26 - 1) .. string.char(65 + num % 26)
+end
+
+-- PanelModel.restoreModel: defaultsDeep with `targets: [{ refId: "A" }]`
+-- names a first target without the key "A", then ensureQueryIds gives each
+-- target whose refId is falsy getNextRefId's first id no target has. The
+-- panel itself, or a copy with copied targets when an id was added.
+function M.ensureQueryIds(env: Env, p: Obj): Obj
+	local targets = Json.tbl(env, p.targets)
+	if targets == nil then
+		return p
+	end
+	local taken: { [any]: boolean } = {}
+	local missing = false
+	for i, raw in targets do
+		local t = Json.tbl(env, raw)
+		if t == nil then
+			continue
+		elseif i == 1 and t.refId == nil then
+			taken.A = true
+			missing = true
+		elseif truthy(env, t.refId) then
+			taken[t.refId] = true
+		else
+			missing = true
+		end
+	end
+	if not missing then
+		return p
+	end
+	local list = copyList(env, targets)
+	local num = 0
+	for i, raw in list do
+		local t = Json.tbl(env, raw)
+		if t == nil or (truthy(env, t.refId) and not (i == 1 and t.refId == nil)) then
+			continue
+		end
+		local c: Obj = Tbl.copy(t)
+		if i == 1 and t.refId == nil then
+			c.refId = "A"
+		else
+			while taken[refIdOf(num)] do
+				num += 1
+			end
+			c.refId = refIdOf(num)
+			taken[c.refId] = true
+		end
+		list[i] = c
+	end
+	local out: Obj = Tbl.copy(p)
+	out.targets = list
+	return out
+end
+
 -- The dashboard JSON (`dashboard` of `/api/dashboards/uid/<uid>`) as
 -- Grafana 12 and 13 load it: panel ids unique, migrated to the latest
 -- schema, copies of repeated panels left in the saved model dropped (the
@@ -832,7 +892,23 @@ function M.migrate(d: Obj, env: Env): Obj
 	local kept: { Obj } = array(env, {})
 	for _, p in panels do
 		if p.repeatPanelId == nil and p.repeatedByRow == nil then
-			table.insert(kept, p)
+			local own = M.ensureQueryIds(env, p)
+			local kids = Json.tbl(env, own.panels)
+			local newKids: { any }? = nil
+			for j, k in Json.list(env, kids) do
+				local kp = Json.tbl(env, k)
+				local ensured = if kp then M.ensureQueryIds(env, kp) else nil
+				if ensured and ensured ~= kp then
+					local list = newKids or copyList(env, kids :: { any })
+					list[j] = ensured
+					newKids = list
+				end
+			end
+			if newKids then
+				own = if own == p then Tbl.copy(p) else own
+				own.panels = newKids
+			end
+			table.insert(kept, own)
 		end
 	end
 	sortByGridPos(env, kept)

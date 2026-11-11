@@ -171,7 +171,7 @@ function M.parseWithExemplars(
 		return result, {}
 	end
 	local ok = result :: any
-	local frames, exemplars = FrameGrafana.splitExemplars(ok.frames)
+	local frames, exemplars = FrameGrafana.splitExemplars(FrameGrafana.withFields(ok.frames))
 	return { ok = true, frames = frames, warnings = ok.warnings }, exemplars
 end
 

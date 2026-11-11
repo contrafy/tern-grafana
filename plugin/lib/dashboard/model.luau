@@ -321,7 +321,7 @@ function M.applyLibrary(d: Dashboard, uid: string, model: { [string]: any }?, en
 			merged.id = p.json.id
 			merged.gridPos = p.json.gridPos
 			merged.libraryPanel = p.json.libraryPanel
-			local resolved = panelOf(env, merged)
+			local resolved = panelOf(env, MigrateSchema.ensureQueryIds(env, merged))
 			if resolved then
 				s.panels[i] = resolved
 			end

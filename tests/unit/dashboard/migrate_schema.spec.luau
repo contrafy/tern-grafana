@@ -100,6 +100,28 @@ describe("dashboard schema migration", function()
 		expect(json.encode(raw)).toBe(before)
 		expect(rawequal(d.panels[2], raw.panels[1])).toBe(true)
 	end)
+
+	-- The node-exporter mixin saves table targets without a refId; its groupBy
+	-- reads the "Value #A" / "Value #B" columns those refIds name.
+	it("gives targets without a refId the first free one, at every schema version", function()
+		local raw = json.decode([[{"schemaVersion": 42, "panels": [
+			{"id": 1, "type": "table", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 7},
+				"targets": [{"expr": "a"}, {"expr": "b", "refId": null}, {"expr": "c", "refId": "B"}, {"expr": "d", "refId": ""}]},
+			{"id": 2, "type": "stat", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 7}, "targets": [{"refId": "A"}]},
+			{"id": 3, "type": "row", "gridPos": {"x": 0, "y": 7, "w": 24, "h": 1}, "collapsed": true,
+				"panels": [{"id": 4, "type": "stat", "targets": [{"expr": "e"}]}]}]}]])
+		local before = json.encode(raw)
+		local d = MigrateSchema.migrate(raw, env)
+		local refs = {}
+		for i, q in d.panels[1].targets do
+			refs[i] = q.refId
+		end
+		-- defaultsDeep names the first "A"; ensureQueryIds skips the taken B.
+		expect(refs).toEqual({ "A", "C", "B", "D" })
+		expect(d.panels[3].panels[1].targets[1].refId).toBe("A")
+		expect(json.encode(raw)).toBe(before)
+		expect(rawequal(d.panels[2], raw.panels[2])).toBe(true)
+	end)
 end)
 
 return nil

@@ -12,7 +12,8 @@
 # - intervalMs: rangeutil.calculateInterval: roundInterval(range / maxDataPoints), raised to the low
 #   limit, which is panel `interval`, else the datasource's min interval (provisioned timeInterval 10s
 #   for Prometheus).
-# - each target gets its own or the panel's datasource; `${trace_id}` is replaced with $trace_id.
+# - each target gets its own or the panel's datasource, and a refId when it has none; `${trace_id}` is
+#   replaced with $trace_id.
 
 def dur_ms:
 	capture("^(?<n>[0-9]+)(?<u>ms|s|m|h|d|w|y)$")
@@ -35,6 +36,14 @@ def ds_min_interval: {"prometheus": "10s"}[.type // ""];
 
 def empty_expr: (.datasource.type == "prometheus" or .datasource.type == "loki") and ((.expr // "") == "");
 
+# PanelModel.ensureQueryIds: a target without a refId gets the first of A..Z no target has.
+def ensure_query_ids:
+	reduce range(0; length) as $i (.;
+		if (.[$i].refId // "") == "" then
+			. as $ts
+			| .[$i].refId = ([("ABCDEFGHIJKLMNOPQRSTUVWXYZ" | split(""))[] | select(. as $l | $ts | map(.refId) | index($l) | not)][0])
+		else . end);
+
 . as $d
 | ($d.panels[] | select(.id == $pid)) as $p
 | ($d.time.from | ltrimstr("now-") | dur_ms) as $span
@@ -44,7 +53,7 @@ def empty_expr: (.datasource.type == "prometheus" or .datasource.type == "loki")
 | ($to - $range) as $from
 | ($p.maxDataPoints // ($p.gridPos.w * 80)) as $mdp
 | [
-	($p.targets // [])[]
+	($p.targets // [] | ensure_query_ids)[]
 	| . + {datasource: (.datasource // $p.datasource)}
 	| select((.hide // false) | not)
 	| select(empty_expr | not)

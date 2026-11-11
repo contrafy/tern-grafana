@@ -9,6 +9,7 @@
 -- back to the proxy on a 5xx from /api/ds/query (`fallback`).
 
 local Env = require("../env")
+local FrameGrafana = require("../frame/grafana")
 local FrameTypes = require("../frame/types")
 local Grafana = require("./grafana")
 local Http = require("../transport/http")
@@ -182,7 +183,7 @@ local function dsFrames(response: Response, env: Env): ({ Frame }?, QueryError?)
 	if not r.ok then
 		return nil, r.error
 	end
-	return r.frames, nil
+	return FrameGrafana.withFields(r.frames), nil
 end
 
 function M.parseTrace(mode: Mode, response: Response, env: Env): TraceResult

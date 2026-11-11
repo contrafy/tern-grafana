@@ -285,7 +285,11 @@ describe("calculateField (calculateField.test.ts)", function()
 			nameOf({ mode = "binary", binary = { left = { fixed = "1" }, operator = "-", right = { fixed = 0.5 } } })
 		).toBe("1 - 0.5")
 		expect(nameOf({ mode = "reduceRow", reduce = { reducer = "max" } })).toBe("Max")
-		expect(nameOf({ mode = "reduceRow" })).toBe("math")
+		-- Through the pipeline the options sit on defaultOptions (mode reduceRow,
+		-- reduce { reducer = "sum" }), a shallow spread: an own `reduce` replaces it.
+		expect(nameOf({ mode = "reduceRow" })).toBe("Total")
+		expect(nameOf({})).toBe("Total")
+		expect(nameOf({ mode = "reduceRow", reduce = { include = {} } })).toBe("math")
 		expect(nameOf({ mode = "index" })).toBe("Row")
 	end)
 
