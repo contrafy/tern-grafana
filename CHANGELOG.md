@@ -7,6 +7,21 @@ versions may break).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-11
+
+### Added
+
+- Dashboard links (`dashboard.links`) show after the variables: link
+  buttons open in the browser pane with the variables, time range and
+  variable values Grafana adds, and "dashboards" links list the dashboards
+  with their tags (as a dropdown or one chip each) and open them natively.
+- Verified on Tern 0.9.16; the SDK typings are pinned to its release.
+- `make test` runs every spec twice: interpreted, and compiled to native code
+  with the Luau version Tern embeds, as release Tern runs plugins. Tern
+  0.9.16's Luau 0.740 miscompiled a gauge gradient loop into an endless one
+  (the plugin ran out of memory and every dashboard block failed); the loop
+  is rewritten and the miscompile is recorded in the capability matrix.
+
 ### Changed
 
 - Dev stack: the Grafana 13 server runs 13.3.1 (digest pinned, with
@@ -31,6 +46,9 @@ versions may break).
   nothing and a flat series lies on the bottom edge (old singlestats on
   9578 and 3662), and a stat too short for Grafana's chart (a 3-row stat
   such as 17781's Panics) shows its value alone, at Grafana's size.
+- A value that is NaN prints `NaN`, as Grafana does, instead of `nan`.
+- An empty cell in a color-background table column is filled to the row's
+  height in the column's base color, instead of a thin strip.
 - A circular gauge's threshold labels at twelve o'clock stand side by side
   ("1" and "0" read "10", as in Grafana) instead of one over the other, and
   an arc's end labels keep inside its ends.
@@ -49,8 +67,6 @@ versions may break).
   stats) no longer wrap their band onto extra rows, and a repeat's
   half-empty last row has panels as wide as a full row's. Panels stack at
   the full width only below Grafana's 769 px breakpoint.
-- Dashboard links (`dashboard.links`) show after the variables: link
-  buttons and "dashboards" links (by tag, as a dropdown or one chip each).
 - Text in canvas, flame graph, geomap, heatmap, node graph and state timeline
   panels sits where Grafana draws it: Tern's SVG ignores dominant-baseline,
   so the labels were about a third of an em too high; their baseline is now
@@ -604,7 +620,8 @@ versions may break).
   Alertmanager, Loki, Tempo, image renderer) and fixtures recorded from it.
 - SDK capability matrix and architecture contract.
 
-[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/contrafy/tern-grafana/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/contrafy/tern-grafana/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/contrafy/tern-grafana/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/contrafy/tern-grafana/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/contrafy/tern-grafana/compare/v0.3.0...v0.4.0
