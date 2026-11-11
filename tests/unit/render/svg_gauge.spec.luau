@@ -131,6 +131,66 @@ describe("radial gauge gradient", function()
 			).toBe(true)
 		end)
 	end
+
+	-- Sub-arcs that only abut leave a light antialiased seam at every joint
+	-- (seen live on node-mixin's Memory Usage): each reaches into the next,
+	-- and the run still ends exactly at the value.
+	it("overlaps consecutive sub-arcs and ends the run at the value", function()
+		local s = spec("gauge", 400, 300)
+		s.ring = nil
+		s.labels = nil
+		s.fill_to = 0.8
+		s.gradient = { { at = 0, class = "tg-gc1" }, { at = 0.5, class = "tg-gc2" }, { at = 1, class = "tg-gc3" } }
+		local svg = SvgGauge.render(s)
+		local d = SvgGauge.dimensions(s)
+		local function fraction(x: number, y: number): number
+			local deg = math.deg(math.atan2(y - d.cy, x - d.cx)) + 90
+			return ((deg - d.start + 0.5) % 360 - 0.5) / d.range
+		end
+		local runs: { { number } } = {}
+		for x0, y0, x1, y1 in
+			string.gmatch(
+				svg,
+				'stroke="url%(#%w+%)"[^>]*d="M([%d.%-]+) ([%d.%-]+)A[%d.]+ [%d.]+ 0 %d 1 ([%d.%-]+) ([%d.%-]+)"'
+			)
+		do
+			table.insert(runs, {
+				fraction(tonumber(x0) :: number, tonumber(y0) :: number),
+				fraction(tonumber(x1) :: number, tonumber(y1) :: number),
+			})
+		end
+		table.sort(runs, function(a, b)
+			return a[1] < b[1]
+		end)
+		expect(#runs).toBe(18)
+		for k = 1, #runs - 1 do
+			expect(runs[k][2] - runs[k + 1][1] > 0.4 / d.range).toBe(true)
+		end
+		expect(math.abs(runs[#runs][2] - 0.8) < 1e-3).toBe(true)
+	end)
+end)
+
+-- RadialSparkline fills with gradientMode opacity: 40% under the line,
+-- fading to none at the plot's bottom, in the value's color class.
+describe("radial gauge sparkline", function()
+	it("fades its fill from 40% to none", function()
+		local s = spec("gauge", 400, 300)
+		s.spark = { 0.2, 0.6, 0.4 }
+		s.spark_class = "tg-gc7"
+		local svg = SvgGauge.render(s)
+		local id = string.match(svg, '<path class="tg%-gc7 tg%-area" fill%-opacity="0.4" mask="url%(#(%w+)%)"')
+		assert(id, "masked area")
+		expect(
+			string.find(
+				svg,
+				'<linearGradient id="'
+					.. id
+					.. '-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="0"/>',
+				1,
+				true
+			) ~= nil
+		).toBe(true)
+	end)
 end)
 
 return nil

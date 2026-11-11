@@ -77,17 +77,19 @@ M.CELL_PX = 7.9
 
 -- The dashboard width native panels are laid out for: the block's width
 -- (env.cols cells, updated on every resize), as Grafana lays its grid out
--- over the browser window, never below Grafana's typical desktop width.
--- Tern images never scale up and card heights are fixed: an SVG designed
--- narrower than its card is drawn small at the card's left (a block that
--- still reports Tern's initial 80x24 cells after a resize did that), one
--- designed wider only scales down.
+-- over the browser window. Tern images never scale up and card heights
+-- are fixed: an SVG designed wider than its card scales down and leaves
+-- the card's bottom empty. A block that never got Tern's resize notice
+-- still reports the initial 80x24 cells (Tern 0.9.16): unknown or that
+-- size designs for Grafana's typical desktop width.
+M.MIN_DESIGN_WIDTH = 320
+
 function M.designWidth(env: Env): number
-	local cols = env.cols
-	if cols and cols > 0 then
-		return math.max(RenderPng.DESIGN_WIDTH, math.floor(cols * M.CELL_PX))
+	local cols, rows = env.cols, env.rows
+	if cols == nil or cols <= 0 or (cols == 80 and rows == 24) then
+		return RenderPng.DESIGN_WIDTH
 	end
-	return RenderPng.DESIGN_WIDTH
+	return math.max(M.MIN_DESIGN_WIDTH, math.floor(cols * M.CELL_PX))
 end
 
 -- The card body's height in px under the card's height cap (heightLines),

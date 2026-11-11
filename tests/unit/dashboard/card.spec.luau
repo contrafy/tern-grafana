@@ -40,12 +40,22 @@ end)
 -- Tern images never scale up: a w=12 panel designed for a 1600 px dashboard
 -- left ~11% of a 1846 px pane's card empty on the right.
 describe("View.designWidth", function()
-	it("lays panels out over the block's width in cells, never narrower than 1600 px", function()
-		expect(View.designWidth({ cols = 234 } :: any)).toBe(math.floor(234 * View.CELL_PX))
+	it("lays panels out over the block's width in cells", function()
+		expect(View.designWidth({ cols = 234, rows = 60 } :: any)).toBe(math.floor(234 * View.CELL_PX))
+		-- Narrower than Grafana's desktop: designed at the pane's width, so a
+		-- 3-column bar gauge fills its card instead of shrinking to its top
+		-- (Node Exporter Full's Pressure in a 1264 px pane).
+		expect(View.designWidth({ cols = 160, rows = 50 } :: any)).toBe(math.floor(160 * View.CELL_PX))
+		expect(View.designWidth({ cols = 20, rows = 10 } :: any)).toBe(View.MIN_DESIGN_WIDTH)
+	end)
+
+	-- A block that never got Tern's resize notice reports the initial 80x24
+	-- forever (Tern 0.9.16): designed 632 px, every image would sit small
+	-- at its card's left. That size, or none, designs for 1600 px.
+	it("uses Grafana's desktop width for an unknown or initial 80x24 size", function()
 		expect(View.designWidth({} :: any)).toBe(1600)
-		-- A block left at Tern's initial 80x24: designed narrower than its
-		-- card, every image would sit small at the card's left.
-		expect(View.designWidth({ cols = 80 } :: any)).toBe(1600)
+		expect(View.designWidth({ cols = 80, rows = 24 } :: any)).toBe(1600)
+		expect(View.designWidth({ cols = 80, rows = 30 } :: any)).toBe(math.floor(80 * View.CELL_PX))
 	end)
 end)
 

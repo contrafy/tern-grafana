@@ -83,6 +83,8 @@ local LINE_HEIGHT = 1.21
 -- The widest sub-arc one linear gradient stands in for the conic one, in
 -- degrees.
 local CONIC_STEP = 10
+-- Degrees a gradient sub-arc overlaps the next one.
+local SEAM_OVERLAP = 0.5
 
 local function rad(deg: number): number
 	return (deg - 90) * math.pi / 180
@@ -359,8 +361,11 @@ function M.render(s: Spec): (string, number, number)
 			local sub = subs[k]
 			local linecap = if rounded and (k == 1 or k == #subs) then "round" else "butt"
 			local start, sweep = d.start + sub.a * d.range, (sub.b - sub.a) * d.range
+			-- Each sub-arc but the run's last reaches a little into the next,
+			-- drawn over it: abutting antialiased edges leave a light seam.
+			local overlap = if k < #subs then math.min(SEAM_OVERLAP, sweep) else 0
 			if sub.p.class == sub.q.class then
-				arc(sub.q.class, start, sweep, r, width, linecap)
+				arc(sub.q.class, start, sweep + overlap, r, width, linecap)
 				return
 			end
 			-- The gradient line runs from where the conic gradient is p to
@@ -390,7 +395,7 @@ function M.render(s: Spec): (string, number, number)
 				id,
 				fmt(width),
 				linecap,
-				M.arcPath(d.cx, d.cy, start, sweep, r)
+				M.arcPath(d.cx, d.cy, start, sweep + overlap, r)
 			)
 		end
 		if #subs > 1 then
@@ -475,9 +480,9 @@ function M.render(s: Spec): (string, number, number)
 			local a = rad(d.start + clamp01(l.at) * d.range)
 			local r = d.labels_radius - d.labels_size * 0.6
 			push(
-				'<text class="tgg-label" x="%s" y="%s" font-size="%s" text-anchor="middle" dominant-baseline="middle">%s</text>',
+				'<text class="tgg-label" x="%s" y="%s" font-size="%s" text-anchor="middle">%s</text>',
 				fmt(d.cx + r * math.cos(a)),
-				fmt(d.cy + r * math.sin(a)),
+				fmt(d.cy + r * math.sin(a) + d.labels_size * 0.36),
 				fmt(d.labels_size),
 				escape(l.text)
 			)
@@ -529,12 +534,15 @@ function M.render(s: Spec): (string, number, number)
 			total += width(p)
 		end
 		local x = d.cx - total / 2
+		-- Tern's SVG ignores dominant-baseline: the value's baseline centers
+		-- its cap height on the line, and the unit parts share it.
+		local baseline = valueY - offset + vSize * 0.36
 		for _, p in parts do
 			push(
-				'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="start" dominant-baseline="middle">%s</text>',
+				'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="start">%s</text>',
 				tone,
 				fmt(x),
-				fmt(valueY - offset),
+				fmt(baseline),
 				fmt(p.size),
 				escape(p.text)
 			)
@@ -543,10 +551,10 @@ function M.render(s: Spec): (string, number, number)
 	end
 	if showName then
 		push(
-			'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="middle" dominant-baseline="middle">%s</text>',
+			'<text class="%s" x="%s" y="%s" font-size="%s" text-anchor="middle">%s</text>',
 			if showValue then "tgg-name" else "tgg-text",
 			fmt(d.cx),
-			fmt(nameY - offset),
+			fmt(nameY - offset + nSize * 0.36),
 			fmt(nSize),
 			escape(s.name :: string)
 		)
@@ -576,15 +584,22 @@ function M.render(s: Spec): (string, number, number)
 		if first and last and #line > 1 then
 			local class = s.spark_class or "tgp-fx tgp-info"
 			local path = table.concat(line)
+			-- RadialSparkline: gradientMode opacity at fillOpacity 40, the fill
+			-- fading from 40% at the plot's top to none at its bottom (a mask,
+			-- the color stays the class's).
+			local area = string.format("%sL%s %sL%s %sZ", path, fmt(last), fmt(top + h), fmt(first), fmt(top + h))
+			local mask = "tgs" .. Hash.fnv1a32hex(area)
 			push(
-				'<path class="%s tg-area" fill-opacity="0.2" d="%sL%s %sL%s %sZ"/>',
-				class,
-				path,
-				fmt(last),
-				fmt(top + h),
-				fmt(first),
-				fmt(top + h)
+				'<defs><linearGradient id="%s-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="white"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient><mask id="%s"><rect x="%s" y="%s" width="%s" height="%s" fill="url(#%s-g)"/></mask></defs>',
+				mask,
+				mask,
+				fmt(left),
+				fmt(top),
+				fmt(w),
+				fmt(h),
+				mask
 			)
+			push('<path class="%s tg-area" fill-opacity="0.4" mask="url(#%s)" d="%s"/>', class, mask, area)
 			push('<path class="%s tg-line" fill="none" stroke-width="1" d="%s"/>', class, path)
 		end
 	end

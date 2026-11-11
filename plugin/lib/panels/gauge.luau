@@ -212,7 +212,14 @@ function M.barSpecs(
 			fill = fill,
 			class = if item then Charts.valueClass(item, d, opts) else Charts.toneClass(d.tone),
 		}
-		if item then
+		if v.placeholder then
+			-- createNoValuesFieldDisplay has no field: BarGauge draws its cells
+			-- and bar in the theme's gray, the message in the value color.
+			local gray = Charts.toneClass("neutral")
+			bar.cell_class = function(_: number): string
+				return gray
+			end
+		elseif item then
 			local it = item :: FieldConfig.Item
 			local cfgMode = it.config.color_mode
 			if mode == "gradient" then

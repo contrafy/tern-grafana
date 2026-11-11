@@ -355,9 +355,12 @@ function M.display(item: Item, value: any, opts: Options?): Display
 				text, prefix, suffix = f.text, f.prefix, f.suffix
 			end
 		end
+		-- getDisplayProcessor: the scale's percent always, its color unless a
+		-- mapping set one.
+		local s = scale(item, numeric, o)
+		percent = s.percent
 		if color == nil then
-			local s = scale(item, numeric, o)
-			color, tone, class, percent = s.color, s.tone, s.class, s.percent
+			color, tone, class = s.color, s.tone, s.class
 		end
 	end
 	if text == nil and type(value) == "boolean" then

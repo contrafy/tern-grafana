@@ -209,9 +209,30 @@ describe("bar gauge with fixed colors per row", function()
 		expect(has(svg, 'class="' .. bars[2].class .. ' tg-bar"')).toBe(true)
 		expect(has(svg, 'fill-opacity="0.35"')).toBe(true)
 		-- Two bars fill the panel: thick bars, the value far above 14 px.
-		local size =
-			tonumber(string.match(svg, 'font%-size="([%d.]+)" text%-anchor="end" dominant%-baseline="central">201<'))
+		local size = tonumber(string.match(svg, 'font%-size="([%d.]+)" text%-anchor="end">201<'))
 		expect(size ~= nil and (size :: number) > 40).toBe(true)
+	end)
+end)
+
+-- Tern's SVG ignores dominant-baseline (docs/sdk-capability-matrix.md):
+-- tern-all-panels' vertical lcd "noValue" bar gauge drew its "0" with the
+-- top half cut off. Every text's baseline sits below its line's middle.
+describe("bar gauge text baselines", function()
+	it("places baselines by hand and keeps the vertical value inside the image", function()
+		local panel = S.json([[{
+			"type": "bargauge", "options": {"orientation": "vertical", "displayMode": "lcd"},
+			"fieldConfig": {"defaults": {"min": 0, "max": 100, "unit": "percent", "noValue": "0"}}
+		}]])
+		local bars, o = Gauge.barSpecs(panel, {}, env, OPTS, 298, 232)
+		local svg = SvgBarGauge.render(bars, o)
+		expect(has(svg, "dominant-baseline")).toBe(false)
+		local y, size = string.match(svg, '<text [^>]* y="([%d.]+)" font%-size="([%d.]+)"[^>]*>0</text>')
+		assert(y and size, "value text")
+		local base, px = tonumber(y) :: number, tonumber(size) :: number
+		-- The glyph's top (cap height about 0.72 em) stays in the image.
+		expect(base - 0.72 * px >= 0).toBe(true)
+		-- No field: the cells are the theme's gray, not the thresholds'.
+		expect(has(svg, "tgp-neutral")).toBe(true)
 	end)
 end)
 
@@ -446,6 +467,25 @@ describe("gauge saved with pluginVersion v13.0.0 (Grafana 12.4 newGauge, 13)", f
 		local rounded = S.json(MEMORY)
 		rounded.options = { barShape = "rounded" }
 		expect(Gauge.look(rounded, env, true).endpoint).toBe(true)
+	end)
+end)
+
+-- tern-all-panels "Bar gauge: up by job": `up` mapped to "up"/"down" with
+-- mapping colors, min 0 max 1. A mapping replaces the text and color only:
+-- Grafana fills an "up" bar to the end.
+describe("bar gauge with value mappings", function()
+	it("fills by the value's percent when a mapping sets text and color", function()
+		local panel = S.json([[{
+			"type": "bargauge", "options": {"displayMode": "gradient"},
+			"fieldConfig": {"defaults": {"min": 0, "max": 1,
+				"mappings": [{"type": "value", "options": {"0": {"text": "down", "color": "red"}, "1": {"text": "up", "color": "green"}}}]}}
+		}]])
+		local frame = {
+			fields = { { name = "v", type = "number", values = { 1 }, config = {} } },
+		}
+		local bars = Gauge.barSpecs(panel, { frame :: any }, env, OPTS, 480, 200)
+		expect(bars[1].text).toBe("up")
+		expect(bars[1].fill).toBe(1)
 	end)
 end)
 

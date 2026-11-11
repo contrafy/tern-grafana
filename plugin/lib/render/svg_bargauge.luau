@@ -207,14 +207,16 @@ function M.render(bars: { Bar }, o: Options): (string, number, number)
 			)
 		)
 	end
+	-- `y` is the line's middle: Tern's SVG ignores dominant-baseline, so the
+	-- baseline that centers a cap-height line there (as stat's value).
 	local function text(class: string, x: number, y: number, s: string, size: number, anchor: string)
 		table.insert(
 			out,
 			fmt(
-				'<text class="%s" x="%.1f" y="%.1f" font-size="%.1f" text-anchor="%s" dominant-baseline="central">%s</text>',
+				'<text class="%s" x="%.1f" y="%.1f" font-size="%.1f" text-anchor="%s">%s</text>',
 				class,
 				x,
-				y,
+				y + size * 0.36,
 				size,
 				anchor,
 				Kit.escape(s)
