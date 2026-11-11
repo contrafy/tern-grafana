@@ -36,6 +36,13 @@ The harness is `tests/bench/` (`run.luau` runner, `scenarios/*.luau`, `lib/bench
 | `compat/100-dashboards` | The Compat block's whole scan over 100 dashboards (the five fixture dashboards cycled) |
 | `irm/poll` | One IRM status poll from the scrubbed IRM captures, cold (with discovery) and warm |
 | `window/load` | Bytes and modules `plugin/window.luau` loads (the set `scripts/check-window-load.sh` budgets) and every shipped module, with `loadstring` compile time |
+| `dashboard/alert-states-adhoc`, `alert-states-plain` | tern-alert-states (built-in "Annotations & Alerts" layer, a Prometheus layer, a disabled one) with tern-fid2-adhoc's datasource and ad hoc variables (three filters), its three time series repeated to 12 panels of 10 series x 360 points; the built-in layer answers 300 annotations (points, regions, alert state changes), the rules request the recorded rules (panel 2 firing). `plain` is the same dashboard without ad hoc variables and the Prometheus layer, its annotation and rules requests answered empty: the difference is what layers, alert states and filters cost |
+| `dashboard/tern-s4-json` | The recorded JSON API dashboard (gauges, stats, a time series grouped by city, a table), every datasource proxy request answered from its capture |
+| `panel/timeseries-window-3y` | One time series panel, a 6 h range over 5 series of three years of hourly samples (a query without a time filter): all but a few samples lie outside the range |
+| `panel/timezone-table-10k`, `timezone-timeseries-10k` | A table with a 10k-row time column and a time series of 10k samples, a minute apart across the March 2026 DST change, in `utc` and in `America/New_York` (offset looked up per value) |
+| `panel/dynamictext-50` | tern-s4-dynamictext panels 1 and 2 (Handlebars, inline HTML styles, markdown) rendered once per row over 50 rows |
+| `panel/zabbix-problems-500` | `job`: the Zabbix datasource job for tern-s4-zabbix panel 7 on the recorded API answers; `render`: the Problems panel (table layout) over 500 problems built from the recorded ones |
+| `panel/json-api-2000` | tern-s4-json panels 6 (time series grouped by city) and 7 (table): the JSON API datasource job on a 2000-entry forecast document (`job_*`; it parses the document itself with `lib/datasources/jsonpath`, outside `Env.decode`, so `nodecode` includes that parse), then the render |
 
 "Paint" is what `plugin/block_runner.luau` does on a render: the machine's `view`, then every asset through a blob
 cache as `plugin/blob_host.luau` does (`lib/render/assets` + `lib/render/blob_cache`), minting counted instead of
@@ -151,3 +158,74 @@ The Compat scan is slower than before (reproduced in a second run: 37.8 ms witho
 the top plugin entries are the `panels/registry` support wrappers (`valuesWhy` and the time series `supports`, both
 `require` their module on each call since panel modules load lazily), 9-10% self each, and `compat/analyze`
 `summarize`, 10%. Same-answer refreshes are 0.1-1.4 ms slower on every dashboard.
+
+## 0.6.0 against 0.5.0
+
+2026-11-11, Apple M5, luau `--codegen`. Before: `git archive v0.5.0` in a temporary directory with this harness
+(unchanged since 0.5.0) and the current fixtures (only additions since 0.5.0), new scenarios skipped where 0.5.0 lacks
+the module. After: this branch with the fixes below. The machine ran other agents' suites throughout (load average
+10-35), which moved medians of the same code by 50-300% between runs, so every number here is the minimum over
+2 interleaved rounds of each tree (30 iterations, 200 for the timezone panels, 3 for the large dashboard); a
+regression was only acted on when the minimums reproduced it and a profile showed the cause. Times in ms.
+
+| Scenario | Metric | 0.5.0 | 0.6.0 + fixes | Change |
+| --- | --- | --- | --- | --- |
+| tern-all-panels | first paint / refresh, new data (without decode) | 16.1 / 10.5 | 15.2 / 10.6 | flat |
+| tern-panels | refresh, new data (without decode) | 3.31 | 4.29 | +29%: null insertion at gaps (`ts_data.insertNulls`, `nullThreshold`), Grafana parity |
+| tern-sql | first paint (without decode) | 1.07 | 1.21 | +13% (more panels drawn natively: 183 -> 225 nodes) |
+| large, 60 x 50 x 1000 | refresh, new data (without decode) | 356 | 172 | -52% |
+| | painted after each answer (without decode) | 518 | 179 | -65% |
+| | retained growth per refresh | -15 KB | -8 KB | was +95,670 KB before the leak fix |
+| tern-all-panels | retained growth per refresh | -10 KB | -10 KB | was +238 KB before the leak fix |
+| timeseries-window-3y | render | 13.9 | 7.0 | -50% (was +50% before the fix) |
+| timezone-table-10k | render, UTC / New York | 0.95 / - | 1.15 / 1.09-1.24 | +25% (was +55%) |
+| timezone-timeseries-10k | render, UTC / New York | 0.94-1.19 / - | 0.87-0.94 / 0.87-0.95 | flat; the per-value offset costs nothing measurable |
+| Query, 7 d, 20 x 11000 | refresh (without decode) | 18.3 | 21.3 | +17%, within this session's noise |
+| panel cursor | cursor move | 0.084 | 0.097-0.12 | +0.02-0.03 ms |
+
+Compat contradicts itself between pairs (100 dashboards +49-73% slower, 1000 dashboards 11% faster), so it reads as
+noise here. The Logs tail poll read +73-86% in two 20-iteration pairs taken beside other runs; with 60 iterations
+per tree in two interleaved pairs it is 1.66 / 1.69 ms (0.6.0) against 1.48 / 1.60 ms (0.5.0) without decode,
+minimums, medians crossing over (3.18 / 3.03 against 2.17 / 3.58), and `make bench-profile` on both trees shows the
+same distribution (trace id regex and `logs/view` rows on top; `time/range.formatMs` 0.95% against 0.81% of samples).
+No regression: the Logs block's modules did not change since 0.5.0 and nothing on its path got slower.
+
+New paths (no 0.5.0 counterpart):
+
+| Scenario | Metric | 0.6.0 + fixes |
+| --- | --- | --- |
+| alert-states-adhoc vs alert-states-plain | first paint without decode | 56 vs 31 (each layer answer redraws the 12 charts its marks change; the profile is SVG rendering, annotation drawing itself is under 1 ms) |
+| | refresh, new data without decode | 30 vs 27 |
+| | refresh, same answer | 0.90 vs 0.35 |
+| tern-s4-json | first paint / refresh without decode | 1.6 / 0.9 |
+| dynamictext-50 | panel 1 / panel 2 render | 2.4 / 2.6 |
+| zabbix-problems-500 | datasource job / render | 0.76 / 0.77 |
+| json-api-2000 | datasource job, panel 6 / 7 | 12-15 (17-22 before the parser fix) |
+
+### Fixes in this round
+
+Output is unchanged in each case (specs pass; equivalence checked over the formats and instants listed).
+
+- Memory leak, `panels/timeseries` (fixed by its owner on this report): the inserted-nulls cache is weak-keyed by the
+  time column, but when nothing was inserted its entry stored that same column, and Luau weak tables are not
+  ephemerons (verified: entries whose value references the key survive collection). Every time column ever rendered
+  stayed live with its value columns: +95.7 MB per refresh on the large dashboard, +238 KB on tern-all-panels; now
+  -8 and -10 KB (flat).
+- Windowed time series, `render/ts_data` + `render/svg_timeseries` (fixed by their owner): the window cut defeated
+  `ownValues`' fast path, so every render hashed all source samples (26k per series) and rescanned their order.
+  `Data.window` now reports the order it checked and the fast path covers cuts of untransformed series: 13.9 ms
+  (0.5.0) -> 14-15 ms (0.6.0) -> 7.0 ms.
+- Date units, `panels/fielddisplay` and `panels/clock_format`: 0.6.0 formats table and stat times through moment
+  patterns (`ClockFormat.format`) per value and, for every value, formatted the value and `now` again to decide
+  "today" even for units without a today pattern. The today check now runs only for units that have one and keeps
+  the current day per `now` and zone; formats made only of numeric tokens and literals (Grafana's date units)
+  compile once to a single `string.format`. 10k ISO times: 14 -> 4 ms (`--codegen`), 88 -> 8 ms (interpreter);
+  table render 1.46 -> 1.15 ms.
+- JSON API documents, `datasources/jsonpath`: the order-keeping JSON parser dispatches on bytes, returns strings
+  without escapes by one `string.sub`, skips whitespace without a pattern call when there is none, and allocates
+  the JavaScript key reordering only for objects with array-index keys. 570 KB pretty-printed document:
+  17 -> 9.5 ms.
+- `panels/charts` `sortByTime`: one read per sample in the already-sorted check.
+
+Left as is: the table panel is still +25% over 0.5.0 after these fixes (content-sized columns, pagination and data
+links, all new behavior); tern-panels' +1 ms is Grafana's null insertion at gaps.
