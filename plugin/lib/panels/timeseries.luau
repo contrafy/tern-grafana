@@ -353,7 +353,7 @@ local function gradientStops(
 	if st.gradient == "hue" then
 		local base: string
 		if mode == "palette-classic" or mode == "palette-classic-by-name" then
-			base = TsGradient.PALETTE_HEX[(item.series_index - 1) % #TsGradient.PALETTE_HEX + 1]
+			base = TsGradient.paletteHex(item.series_index)
 		elseif mode == "fixed" or mode == "shades" then
 			base = cfg.fixed_color or ""
 		else
@@ -636,9 +636,18 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if opts.card_height and legendLook.show then
 		render.height = Charts.chartHeight(opts, rh, rw, legendRows, legendLook)
 	end
+	-- The x axis follows the time field's own config (TimeSeries/utils.ts
+	-- xField axisPlacement): defaults hiding every axis hide it too.
+	for _, item in items do
+		if item.field.type == "time" then
+			render.x_axis_hidden = Json.str(env, item.config.custom.axisPlacement) == "hidden"
+			break
+		end
+	end
 	if opts.size then
 		local titled = (Json.str(env, Json.path(env, panel, "title")) or "") ~= ""
 		render.tick_height = M.grafanaPlotHeight(opts.size.w, opts.size.h, titled, legendRows, legendLook)
+			+ (if render.x_axis_hidden then M.GRAFANA_PX.x_axis else 0)
 	end
 	local result = renderMemo(opts.key, baked, render)
 	local drawn: { Drawn } = {}

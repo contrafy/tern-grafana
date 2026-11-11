@@ -64,4 +64,20 @@ describe("ts_gradient pie rings", function()
 	end)
 end)
 
+-- fieldColor.ts: a classic palette series takes colors[seriesIndex % 64]
+-- of getClassicPalette, so the eleventh series onward gets the darker,
+-- lighter and literal colors, not the first ten again (public 11074: the
+-- twelfth series, eth0_transmit, is dark-purple in Grafana, not yellow).
+describe("ts_gradient classic palette", function()
+	it("cycles the whole classic palette", function()
+		expect(TsGradient.paletteClass(2)).toBe("tg-s2")
+		expect(TsGradient.paletteClass(10)).toBe("tg-s10")
+		expect(TsGradient.paletteClass(11)).toBe(TsGradient.stopClass("dark-red"))
+		expect(TsGradient.paletteClass(12)).toBe(TsGradient.stopClass("dark-purple"))
+		expect(TsGradient.paletteClass(19)).toBe(TsGradient.stopClass("#447EBC"))
+		expect(TsGradient.paletteClass(65)).toBe("tg-s1")
+		expect(TsGradient.paletteColor(12)).toBe("dark-purple")
+	end)
+end)
+
 return nil

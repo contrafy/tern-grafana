@@ -486,8 +486,7 @@ local function yRaw(g: Geometry, v: number): number
 end
 
 -- The line through each run of present samples, cut to the plot's width.
--- A lone sample becomes a zero-length segment, which a round cap still
--- draws as a dot.
+-- A lone sample becomes a zero-length segment (invisible under butt caps).
 function M.line(g: Geometry, times: { number }, values: { any }, interp: Interpolation): (string, number)
 	local b = newBuf()
 	local cut = beyond(g, times, values)

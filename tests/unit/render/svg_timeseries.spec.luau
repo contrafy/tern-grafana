@@ -1004,6 +1004,9 @@ describe("svg_timeseries.render per-series look (UPlotSeriesBuilder.ts)", functi
 		local line1 = tag(r.svg, "tg-s1", "tg-line") :: string
 		expect(line1).toContain('stroke-width="1.5"')
 		expect(has(line1, "dasharray")).toBe(false)
+		-- uPlot strokes solid lines with butt caps: a lone sample between
+		-- gaps (a zero-length segment) stays invisible without points.
+		expect(line1).toContain('stroke-linecap="butt"')
 		-- A dotted line rounds its caps; lineWidth 0 draws no line at all.
 		local dotted = render({ a, b }, {
 			series = { { dash = { 0, 10 }, dot = true } :: Svg.SeriesStyle, { line_width = 0 } :: Svg.SeriesStyle },

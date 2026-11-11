@@ -440,9 +440,25 @@ function M.pieRings(color: string, theme: Theme?, max: number): { string }
 	return out
 end
 
--- The color name of palette class tg-s<k> (getClassicPalette).
+-- The color name of classic palette position k (getClassicPalette).
 function M.paletteColor(k: number): string
-	return CLASSIC[(k - 1) % #M.PALETTE_HEX + 1]
+	return CLASSIC[(k - 1) % #CLASSIC + 1]
+end
+
+-- The dark-theme color of classic palette position k (the tg-s<k> color).
+function M.paletteHex(k: number): string
+	return Thresholds.color(M.paletteColor(k), "dark")
+end
+
+-- The class of classic palette position k: tg-s1..tg-s10 for the first ten
+-- colors, the stop class of the color past them (fieldColor.ts cycles the
+-- whole classic palette, so series 11 is dark-red, not green again).
+function M.paletteClass(k: number): string
+	local i = (k - 1) % #CLASSIC + 1
+	if i <= #M.PALETTE_HEX then
+		return "tg-s" .. tostring(i)
+	end
+	return M.stopClass(CLASSIC[i])
 end
 
 -- The colors a by-value scheme runs through, or nil when the mode has none

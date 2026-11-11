@@ -97,6 +97,9 @@ export type Options = {
 	-- tick spacing (15 px up to 150 px, else 30) and increments from it, so
 	-- the axis keeps Grafana's tick count (default: the SVG's plot height).
 	tick_height: number?,
+	-- No time axis: the plot runs to the bottom edge (the time field's
+	-- custom.axisPlacement hidden).
+	x_axis_hidden: boolean?,
 	-- Grafana legendFormat for series names.
 	legend: string?,
 	-- Exemplar markers (any order); those in the time range are drawn, at
@@ -600,7 +603,10 @@ local function build(ctx: Ctx): (string, number)
 	end
 
 	-- Grid and axis labels.
-	local ticks = Axis.timeTicks(layout.t_from, layout.t_to, layout.plot_right - layout.plot_left, opts.offset_min)
+	-- A hidden x axis (the time field's axisPlacement) has no ticks, grid or labels.
+	local ticks: Axis.TimeTicks = if opts.x_axis_hidden
+		then { incr = 0, format = "", ticks = {}, labels = {} }
+		else Axis.timeTicks(layout.t_from, layout.t_to, layout.plot_right - layout.plot_left, opts.offset_min)
 	local grid: { string } = {}
 	for k, a in axes do
 		local scale = ctx.scales[k]
@@ -618,15 +624,17 @@ local function build(ctx: Ctx): (string, number)
 	if #grid > 0 then
 		table.insert(out, '<path class="tg-grid" fill="none" stroke-width="1" d="' .. table.concat(grid) .. '"/>')
 	end
-	table.insert(
-		out,
-		fmt(
-			'<path class="tg-axis" fill="none" stroke-width="1" d="M%.1f %.1fH%.1f"/>',
-			layout.plot_left,
-			bottom,
-			layout.plot_right
+	if not opts.x_axis_hidden then
+		table.insert(
+			out,
+			fmt(
+				'<path class="tg-axis" fill="none" stroke-width="1" d="M%.1f %.1fH%.1f"/>',
+				layout.plot_left,
+				bottom,
+				layout.plot_right
+			)
 		)
-	)
+	end
 	for k, a in axes do
 		if a.side == "hidden" then
 			continue
@@ -844,9 +852,9 @@ local function build(ctx: Ctx): (string, number)
 					end
 					dash = ' stroke-dasharray="' .. table.concat(parts, " ") .. '"'
 				end
-				-- uPlot strokes with butt caps; dotted lines get round ones.
-				-- Solid lines keep round caps so a lone sample shows as a dot.
-				local cap = if look.dash and not look.dot then "butt" else "round"
+				-- uPlot strokes with butt caps (a lone sample between gaps
+				-- draws nothing unless points show it); dotted lines get round ones.
+				local cap = if look.dot then "round" else "butt"
 				table.insert(
 					out,
 					fmt(
@@ -1078,7 +1086,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 		spans[i] = looks[i].span
 	end
 
-	local plotTop, plotBottom = PAD_TOP, H - X_AXIS_H
+	local plotTop, plotBottom = PAD_TOP, H - (if opts.x_axis_hidden then 1 else X_AXIS_H)
 	local plotH = plotBottom - plotTop
 	-- Bytes per drawn sample over all series, and the series' own elements.
 	local estimate = 0
@@ -1145,8 +1153,22 @@ function M.render(frames: { Frame }, options: Options?): Result
 				hi = if hi == nil then e.value else math.max(hi :: number, e.value)
 			end
 		end
-		scales[k] = buildScale(spec, lo, hi, opts.tick_height or plotH)
 		local st = spec.style
+		if
+			lo == nil
+			and hi == nil
+			and not spec.percent
+			and st.min == nil
+			and st.max == nil
+			and st.soft_min == nil
+			and st.soft_max == nil
+		then
+			-- Nothing finite to range over (all null or NaN): uPlot leaves
+			-- the scale unset, so its axis has no ticks, grid or width.
+			scales[k] = { min = 0, max = 1, step = 1, ticks = {} }
+		else
+			scales[k] = buildScale(spec, lo, hi, opts.tick_height or plotH)
+		end
 		local unit = if spec.percent then "percentunit" else st.unit
 		labels[k] = yLabels(scales[k], unit, st.decimals)
 		if spec.side ~= "hidden" then
@@ -1154,7 +1176,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 			for _, label in labels[k] do
 				chars = math.max(chars, utf8.len(label) or #label)
 			end
-			local w = math.max(AXIS_MIN_W, chars * Axis.CHAR_PX + 12)
+			local w = if #labels[k] == 0 then 0 else math.max(AXIS_MIN_W, chars * Axis.CHAR_PX + 12)
 			if st.label ~= nil and st.label ~= "" then
 				w += AXIS_LABEL_W
 			end

@@ -660,6 +660,61 @@ for _, version in S.VERSIONS do
 			expect(top >= total / 2 ^ 30 * 0.75).toBe(true)
 			expect(top < total / 2 ^ 30 * 1.5).toBe(true)
 		end)
+
+		-- Old graphs from 11074 and 9578, as the dashboard migrates them.
+		local Migrate = require("../../../plugin/lib/panels/migrate")
+		local TsGradient = require("../../../plugin/lib/render/ts_gradient")
+		local function graph(id: number): any
+			return (Migrate.migrate(S.clone(pubPanel(id)), env))
+		end
+
+		-- 10 receive then 10 transmit series: the classic palette runs on
+		-- past its first ten colors, so transmit eth0 (series 12) is
+		-- dark-purple as in Grafana, and only receive eth0 is yellow.
+		it("colors series past the tenth from the rest of the classic palette", function()
+			local frames = S.frames(version, "pub_ts_8")
+			expect(#frames).toBe(20)
+			local _, assets = Timeseries.view(graph(8), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(pathTag(svg, TsGradient.stopClass("dark-purple"), "tg-line") ~= nil).toBe(true)
+			expect(count(svg, 'class="tg-s2 tg-line"')).toBe(1)
+		end)
+
+		-- Every sample NaN: uPlot leaves the scale unset, so Grafana draws
+		-- no y ticks (9578 and Alertmanager overview Notification durations).
+		it("draws no y axis when no sample is a number", function()
+			local frames = S.frames(version, "pub_ts_9")
+			expect(#frames > 0).toBe(true)
+			local _, assets = Timeseries.view(graph(9), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(#ticks(svg, "end")).toBe(0)
+			expect(#ticks(svg, "start")).toBe(0)
+			expect(#ticks(svg, "middle") > 0).toBe(true)
+		end)
+
+		-- Lone increase samples seven minutes apart, lines without points:
+		-- Grafana draws nothing for them (9578 Received alerts).
+		it("leaves lone samples undrawn when points are off", function()
+			local frames = S.frames(version, "pub_ts_10")
+			local _, assets = Timeseries.view(graph(10), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(pathTag(svg, "tg-dots")).toBeNil()
+			local line = pathTag(svg, "tg-line") :: string
+			expect(line).toContain('stroke-linecap="butt"')
+		end)
+
+		-- Both y axes hidden: the migrated defaults' axisPlacement hidden
+		-- reaches the time field, so the log volume has no time axis either
+		-- and its bars reach the bottom (13639).
+		it("hides the time axis with the time field's axisPlacement", function()
+			local frames = S.frames(version, "pub_ts_11")
+			local _, assets = Timeseries.view(graph(11), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(#ticks(svg, "middle")).toBe(0)
+			expect((string.find(svg, "tg-axis", 1, true))).toBeNil()
+			local _, plain = Timeseries.view(pubPanel(1), S.frames(version, "pub_ts_1"), env, CARD)
+			expect(#ticks(plain.p.bytes, "middle") > 0).toBe(true)
+		end)
 	end)
 end
 

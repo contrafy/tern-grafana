@@ -710,6 +710,154 @@
           "csvContent": "host,c01,c02,c03,c04,c05,c06,c07,c08,c09,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22,c23,c24\nnode-1,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124\nnode-2,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224\nnode-3,301,302,303,304,305,306,307,308,309,310,311,312,313,314,315,316,317,318,319,320,321,322,323,324"
         }
       ]
+    },
+    {
+      "id": 8,
+      "type": "graph",
+      "title": "Network bandwidth per device",
+      "description": "Old graph, 10 receive then 10 transmit series (public 11074): transmit eth0 is palette position 12 (dark-purple, not yellow again); the legend table keeps names whole.",
+      "gridPos": { "x": 0, "y": 26, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "aliasColors": {},
+      "bars": false,
+      "lines": true,
+      "linewidth": 1,
+      "fill": 1,
+      "points": false,
+      "pointradius": 1,
+      "nullPointMode": "null",
+      "stack": false,
+      "legend": {
+        "alignAsTable": true,
+        "avg": true,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": true,
+        "values": true,
+        "hideEmpty": true,
+        "hideZero": true
+      },
+      "seriesOverrides": [{ "alias": "/.*_transmit$/", "transform": "negative-Y" }],
+      "xaxis": { "mode": "time", "show": true, "values": [] },
+      "yaxes": [
+        { "format": "bps", "label": "transmit (-) / receive (+)", "logBase": 1, "show": true },
+        { "format": "short", "logBase": 1, "show": false }
+      ],
+      "yaxis": { "align": false },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_network_receive_bytes_total{device!~\"lo\"}[2m])*8",
+          "legendFormat": "{{device}}_receive",
+          "interval": "",
+          "intervalFactor": 1
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_network_transmit_bytes_total{device!~\"lo\"}[2m])*8",
+          "legendFormat": "{{device}}_transmit",
+          "interval": "",
+          "intervalFactor": 1
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "graph",
+      "title": "Notification durations",
+      "description": "histogram_quantile over buckets that never moved: every sample NaN (public 9578, Alertmanager overview). Grafana draws no y axis.",
+      "gridPos": { "x": 8, "y": 26, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "aliasColors": {},
+      "bars": false,
+      "lines": true,
+      "linewidth": 1,
+      "fill": 0,
+      "points": false,
+      "nullPointMode": "connected",
+      "stack": false,
+      "legend": { "alignAsTable": true, "avg": true, "hideEmpty": true, "hideZero": true, "rightSide": true, "show": true, "values": true },
+      "seriesOverrides": [],
+      "xaxis": { "mode": "time", "show": true, "values": [] },
+      "yaxes": [
+        { "format": "s", "logBase": 1, "show": true },
+        { "format": "short", "logBase": 1, "show": true }
+      ],
+      "yaxis": { "align": false },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(histogram_quantile(0.99, rate(alertmanager_notification_latency_seconds_bucket[5m]))) by (integration)",
+          "legendFormat": "0.99q {{ integration }}",
+          "intervalFactor": 1
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "graph",
+      "title": "Received alerts",
+      "description": "increase over $__interval between sparse samples: lone values between gaps (public 9578). Lines without points: Grafana draws nothing for a lone sample.",
+      "gridPos": { "x": 16, "y": 26, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prom3" },
+      "aliasColors": {},
+      "bars": false,
+      "lines": true,
+      "linewidth": 1,
+      "fill": 1,
+      "points": false,
+      "pointradius": 5,
+      "nullPointMode": "null",
+      "stack": false,
+      "legend": { "show": false },
+      "seriesOverrides": [{ "alias": "resolved", "color": "#7eb26d", "transform": "negative-Y" }],
+      "xaxis": { "mode": "time", "show": true, "values": [] },
+      "yaxes": [
+        { "format": "short", "logBase": 1, "show": true },
+        { "format": "short", "logBase": 1, "show": true }
+      ],
+      "yaxis": { "align": false },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(alertmanager_alerts_received_total[1m])) by (status) and on () (minute() % 7 == 0)",
+          "legendFormat": "{{ status }}",
+          "interval": "1m",
+          "intervalFactor": 1
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "graph",
+      "title": "",
+      "description": "Log volume bars with both y axes hidden (public 13639): the migrated defaults hide the time axis too.",
+      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 3 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "aliasColors": {},
+      "bars": true,
+      "lines": false,
+      "linewidth": 1,
+      "fill": 1,
+      "points": false,
+      "nullPointMode": "null",
+      "stack": false,
+      "legend": { "show": false },
+      "seriesOverrides": [],
+      "xaxis": { "mode": "time", "show": true, "values": [] },
+      "yaxes": [
+        { "format": "short", "logBase": 1, "show": false },
+        { "format": "short", "logBase": 1, "show": false }
+      ],
+      "yaxis": { "align": false },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"loggen\"}[$__interval]))",
+          "legendFormat": ""
+        }
+      ]
     }
   ]
 }

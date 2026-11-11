@@ -11,6 +11,7 @@ local Mappings = require("./mappings")
 local Range = require("../time/range")
 local Reduce = require("./reduce")
 local Thresholds = require("../units/thresholds")
+local TsGradient = require("../render/ts_gradient")
 
 type Env = Env.Env
 type Frame = Frame.Frame
@@ -264,9 +265,9 @@ local function continuousTone(mode: string, percent: number): Thresholds.Tone
 	return "accent"
 end
 
--- The series class of a palette position (lib/render/svg_timeseries).
+-- The series class of a palette position (lib/render/ts_gradient).
 function M.paletteClass(seriesIndex: number): string
-	return "tg-s" .. tostring((seriesIndex - 1) % M.PALETTE + 1)
+	return TsGradient.paletteClass(seriesIndex)
 end
 
 export type Scale = { color: string, tone: Thresholds.Tone, percent: number, class: string? }
@@ -368,7 +369,11 @@ function M.display(item: Item, value: any, opts: Options?): Display
 		text = if value then labels[1] else labels[2]
 	end
 	if text == nil then
-		text = if value == nil then "" elseif type(value) == "string" then value else tostring(value)
+		text = if value == nil
+			then ""
+			elseif type(value) == "string" then value
+			elseif type(value) == "number" then Format.jsString(value)
+			else tostring(value)
 		if text == "" then
 			text = cfg.no_value or ""
 		end
