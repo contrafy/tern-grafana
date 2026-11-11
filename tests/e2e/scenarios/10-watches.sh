@@ -19,7 +19,7 @@ click_text "watch e2e target down" "$SEG" || {
 	return
 }
 E2E_WAIT=20 wait_for "the watch's query block" has "$Q"
-bwait query 'up{instance="node-exporter:9999", job="down"} 0' || return
+bwait query 'up{instance="node-exporter:9999", job="down"} Last *: 0' || return
 eq "watch query opened" "$(alltext "$Q .sf-input" | head -1)" '> up{job="down"}'
 eq "on the watch's context" "$(texts "$Q .sf-badge" | jq -r '.[0]')" lab
 shot query
