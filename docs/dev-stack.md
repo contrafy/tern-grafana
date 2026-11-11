@@ -262,10 +262,13 @@ python3 scripts/public-dashboards.py remove [GRAFANA..] # delete that folder aga
   error), `tern-pub-vars` (Prometheus series-query variables with a regex, Loki `label_values` variables with
   string, object and by-name datasources, a Loki logs panel, a text panel with an unresolved datasource;
   fixtures `ds_proxy_prom_series*`, `ds_proxy_loki_labels`, `ds_proxy_loki_label_values_*`),
-  `tern-pub-gauges` (small bar gauges, two-row stats, a 13.0 gauge; `ds_query_pub_gauges_<panel>` from
+  `tern-pub-gauges` (small bar gauges, two-row stats, a 13.0 gauge, stat sparklines over a series with gaps, on
+  a 3-row stat and in a fixed color; `ds_query_pub_gauges_<panel>` from
   `capture_pub_gauges`), `tern-pub-ts` (five Prometheus time series and two tables, one on a TestData CSV;
-  `ds_query_pub_ts_<panel>` from `capture_pub_ts`) and `tern-legacy` (schemaVersion 14 with top-level rows,
-  singlestat, graph and the old table).
+  `ds_query_pub_ts_<panel>` from `capture_pub_ts`), `tern-pub-frames` (a calculateField saved with empty
+  options, a query without series, table targets saved without a refId; `ds_query_pub_frames_<panel>` from
+  `capture_pub_frames`) and `tern-legacy` (schemaVersion 14 with top-level rows, singlestat, graph and the
+  old table).
 
 ## Credentials (local only)
 

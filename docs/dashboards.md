@@ -61,6 +61,12 @@ is cut at its Grafana height (a long logs panel or legend shows its first lines)
 of it. Clicking a panel focuses it, double-clicking expands it, clicking a row header collapses or expands the row, and
 clicking a variable chip opens its picker.
 
+Panels keep their gridPos widths, as Grafana's grid does: a 2-column stat beside a 10-column table stays 2 columns
+wide. Below Grafana's `md` breakpoint (a block narrower than 769 px) every panel takes the full width, one under
+the other. The dashboard's links (`dashboard.links`) are chips after the variables: a link opens in the browser pane
+(with the time range and variables when the link keeps them); a "dashboards" link lists the dashboards with its tags
+(a dropdown, or a chip per dashboard) and opens the picked one as a dashboard block.
+
 ## Variables
 
 Variables appear as chips under the title (hidden ones and constants are not shown). In a picker, typing filters
@@ -218,8 +224,10 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   soft min/max (`axisSoftMin`/`axisSoftMax`), axis placement, axis label and scale distribution. Any difference
   (typically a per-series unit override, or a legacy graph's right y axis) gives the series its own scale with its
   own ticks and unit: the first axis goes left, later ones right unless `axisPlacement` says otherwise, and a
-  `hidden` placement keeps the scale without drawing its axis. `axisLabel`, `axisCenteredZero`, `axisGridShow`
-  and log (base 2 or 10) and symlog scales are drawn; stacking is per scale and per `stacking.group` (an override
+  `hidden` placement keeps the scale without drawing its axis. The time axis follows the time field's own
+  `axisPlacement`, so defaults that hide every axis (a legacy graph with both y axes off) hide it too; a scale
+  with no number to range over (every sample null or NaN) draws no ticks or axis. `axisLabel`, `axisCenteredZero`,
+  `axisGridShow` and log (base 2 or 10) and symlog scales are drawn; stacking is per scale and per `stacking.group` (an override
   with `group: false` stacks its series alone, as Grafana keys the group). A stack's axis ranges over its stacked
   values, not the zero its first series fills down to (a stacked constant 4 reads 0..8, as in Grafana). The y
   ticks are spaced for the plot height Grafana gives the panel (15 px apart when its plot is at most 150 px
@@ -231,7 +239,8 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
 - **Time series drawing.** Every series is drawn with its own field config, from the defaults and overrides:
   `drawStyle` (line, bars, points), `lineWidth` (0 hides the line), `lineStyle` dash and dot, `lineInterpolation`
   (linear, smooth, step before/after), `fillOpacity` with `gradientMode` (see below), `showPoints` and
-  `pointSize` (auto shows points when the samples are at least two point sizes apart), `insertNulls` (Grafana's
+  `pointSize` (auto shows points when the samples are at least two point sizes apart; a lone sample between gaps
+  shows only as a point, as uPlot's butt-capped lines draw nothing for it), `insertNulls` (Grafana's
   null insertion: where samples are further apart than it, or than the time field's interval when it is off, as
   for Prometheus results, the line breaks; fields of one frame that disagree insert nothing, as in Grafana),
   `spanNulls` (true, or a gap in ms up to which the line is joined), `fillBelowTo` (the fill runs down to the
@@ -239,8 +248,9 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   axes are ranged as Grafana ranges them (uPlot's padded range: headroom above the data, a flat zero series on
   the floor of 0..100, soft bounds and whole numbers with decimals 0). Series colors follow Grafana's classic
   palette in Grafana's order: the position counts every number field of the graphable frames, hidden series
-  included. A fixed color, and a continuous scheme at the series' `seriesBy` value, color the series and its
-  legend swatch in Grafana's color; the thresholds mode uses the step's theme tone, like threshold lines. Every
+  included, and runs through the whole classic palette (series 11 on take its darker, lighter and literal colors,
+  not the first ten again). A fixed color, and a continuous scheme at the series' `seriesBy` value, color the
+  series and its legend swatch in Grafana's color; the thresholds mode uses the step's theme tone, like threshold lines. Every
   series is drawn, as in Grafana: Tern caps an SVG at 256 KiB, so the series share that byte budget and each
   is drawn with fewer samples; only series that would not fit even at 3 samples each are left out, counted
   under the legend ("N more series not shown (chart size limit)"). In a dashboard card a bottom legend gets at
@@ -275,9 +285,13 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   Grafana's box for the panel: stat has no panel padding, and the header is 40 px with `newPanelPadding` (a Grafana
   12.4 toggle, always on in 13) or 32 px, so a 2-row stat's value is as small as Grafana's (8 px on 12.4 and 13,
   15 px on 11.6) and never larger than the room under the card's head line (a 2-row tile drops its padding for it);
-  a wide tile too short for its name on a line of its own keeps name and value on one row, the name cut. A
-  sparkline that would leave the value less than a line is left out, as Grafana drops the chart from a short stat.
-  A `fixedColor` of `text` is Tern's own text color in both themes.
+  a wide tile too short for its name on a line of its own keeps name and value on one row, the name cut.
+  `graphMode` area draws BigValue's chart: a line with a 20% fill in the value's color (a white fill under a
+  brightened line on a filled tile) behind the value at the bottom of the tile, as tall as the room the text
+  leaves (half the box in the wide layout), across the panel's time range. Gaps break the line and a sample alone
+  between gaps draws nothing, as Grafana's sparkline draws no points; a flat series lies on the bottom edge. The
+  chart is drawn only where Grafana's layout has one: a box over 100 px tall (over 50 px when wide), so a 3-row stat
+  shows its value alone. A `fixedColor` of `text` is Tern's own text color in both themes.
 - **Gauge.** Grafana 12 with the `newGauge` feature toggle (read from Grafana's frontend settings; on in Grafana
   Cloud) draws the radial gauge: `shape` gauge (a 220 degree arc) or circle, `barWidthFactor`, `barShape`
   rounded, `segmentCount`/`segmentSpacing`, `neutral` (the bar runs between the neutral value and the value,
@@ -285,9 +299,11 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   default: the bar, its segments and the threshold ring blend through each threshold step's color at its value, or
   a continuous scheme's colors, as Grafana's conic gradient; other color modes keep the value's color),
   `showThresholdMarkers` (an outer ring of threshold bands), `showThresholdLabels` (min, each step, max and the
-  neutral value around the arc), `sparkline`, `textMode` and the text sizes. A gauge saved before the new gauge
-  gets no gradient or sparkline, as Grafana's migration decides (`parseFloat(pluginVersion)` below 13 without a
-  `shape`: a version such as `v13.0.0` is not migrated). Without the toggle (Grafana 11, Grafana 12 default) it is
+  neutral value around the arc; on a circle min and max stand side by side at twelve o'clock, and on an arc the end
+  labels keep inside its ends, as RadialScaleLabels places them), `sparkline`, `textMode` and the text sizes. A
+  gauge saved before the new gauge gets no gradient or sparkline, as Grafana's migration decides
+  (`parseFloat(pluginVersion)` below 13 without a `shape`: a version such as `v13.0.0` is not migrated). Without
+  the toggle (Grafana 11, Grafana 12 default) it is
   the classic 270 degree gauge with the value in its threshold color. Gauges and bar gauges are SVG pictures sized
   from the panel's grid size (no 320 px floor, so a small panel's names stay Grafana's size); colors follow the
   Tern theme. `effects.barGlow`/`centerGlow` and the `glow` endpoint marker are not drawn.
@@ -345,7 +361,10 @@ the obvious. In the grid every panel is cut at its Grafana height (gridPos rows)
   reducer; columns named like `Value (mean)`), limit (a number or a variable), rename by regex (`$1`
   replacements, `/.../g` for every match), series to rows (also an old table panel's "Time series to rows"),
   grouping to matrix (row, column and value fields; empty cells as empty, null, true, false or 0) and prepare
-  time series (multi, long and wide, plus the deprecated many). Values follow JavaScript as Grafana's code does:
+  time series (multi, long and wide, plus the deprecated many). Options a panel leaves out take the
+  transformation's defaults, as Grafana spreads them under the saved ones (an empty `calculateField` sums each
+  row into `Total`, an empty `reduce` takes Max), and a query without series reaches them as Grafana's frame
+  without fields. Values follow JavaScript as Grafana's code does:
   in a calculation a null counts as 0 and a gap a join created as NaN. Other transformations (partition by
   values, ...) and filters other than `byRefId` keep the panel on the ladder.
 

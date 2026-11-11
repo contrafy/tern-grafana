@@ -199,8 +199,9 @@ state, so one-shot effects (opening panes, posting annotations, creating silence
 ## Charts
 
 Time series are SVG documents built in `lib/render/svg_timeseries.luau` and shown in an `image` node. Tern does not
-resolve `var()` in SVG attributes or inline styles, so every stroke and fill is a class (`tg-s1` ... `tg-s10`,
-`tg-grid`, `tg-axis`, `tg-th-<tone>`) that `plugin/tern-grafana.css` binds to theme variables; a theme switch
+resolve `var()` in SVG attributes or inline styles, so every stroke and fill is a class (`tg-s1` ... `tg-s10` for the
+first ten palette colors, the `tg-gc<n>` color classes past them, `tg-grid`, `tg-axis`, `tg-th-<tone>`) that
+`plugin/tern-grafana.css` binds to theme variables; a theme switch
 recolors without a re-render. An SVG blob is capped at 256 KiB, so the renderer downsamples (LTTB) to a point
 budget and drops series beyond a cap with a legend note. Tern strips SVG `<title>`, and a plugin block knows its pane
 size only in terminal cells (`cx.cols`/`cx.rows`, which track the pane since Tern 0.9; 80x24 on 0.7), never in px, so:
@@ -209,8 +210,9 @@ size only in terminal cells (`cx.cols`/`cx.rows`, which track the pane since Ter
 - Point read-out is a keyboard cursor drawn as an overlay child of the `image` node (a flex spacer plus a 1-px
   line), which moves without a new blob; the legend shows values at the cursor.
 
-Native kinds cover the rest: `meter` for gauge and bargauge, `rate` and `text` for stat, `chart` spark for
-sparklines, `table`/`el` grids for tables, `text` for logs.
+Native kinds cover the rest: `meter` for gauge and bargauge, `rate` and `text` for stat, `chart` spark for lens
+sparklines (a stat's sparkline is an SVG behind its value, as BigValue's chart), `table`/`el` grids for tables,
+`text` for logs.
 
 ## Rendering ladder
 

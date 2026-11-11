@@ -17,6 +17,29 @@ versions may break).
 
 ### Fixed
 
+- Stat sparklines are drawn as Grafana's: a line over a light fill in the
+  value's color behind the value, as tall as the room the text leaves,
+  instead of a strip of bars under it. A sample alone between gaps draws
+  nothing and a flat series lies on the bottom edge (old singlestats on
+  9578 and 3662), and a stat too short for Grafana's chart (a 3-row stat
+  such as 17781's Panics) shows its value alone, at Grafana's size.
+- A circular gauge's threshold labels at twelve o'clock stand side by side
+  ("1" and "0" read "10", as in Grafana) instead of one over the other, and
+  an arc's end labels keep inside its ends.
+- Time series match Grafana on old public dashboards: series past the tenth
+  take the rest of Grafana's classic palette (11074's transmit series are
+  purple, not yellow again); table legends keep series names whole and
+  scroll sideways; a chart whose samples are all NaN draws no y axis; a lone
+  sample between gaps is not drawn as a dot unless points are on; a graph
+  with both y axes hidden hides its time axis too (13639 log volume).
+- Logs panels saved without `showTime` or `wrapLogMessage` show no time and
+  do not wrap, Grafana's defaults.
+- Dashboard panels keep their gridPos widths: narrow panels (2-column
+  stats) no longer wrap their band onto extra rows, and a repeat's
+  half-empty last row has panels as wide as a full row's. Panels stack at
+  the full width only below Grafana's 769 px breakpoint.
+- Dashboard links (`dashboard.links`) show after the variables: link
+  buttons and "dashboards" links (by tag, as a dropdown or one chip each).
 - Text in canvas, flame graph, geomap, heatmap, node graph and state timeline
   panels sits where Grafana draws it: Tern's SVG ignores dominant-baseline,
   so the labels were about a third of an em too high; their baseline is now
@@ -91,6 +114,16 @@ versions may break).
 - A text panel saved with a datasource that does not resolve draws natively
   instead of going to the image renderer: panels that run no queries ignore
   their datasource, as in Grafana.
+- Transformations saved without some options take Grafana's defaults: an
+  empty "Add field from calculation" sums each row into `Total` (was `math`;
+  Loki metrics dashboard 17781), an empty reduce takes Max.
+- A query that returns no series reaches the panel's transformations as
+  Grafana's empty frame, so a stat that adds a calculated field to it shows a
+  blank value, as Grafana does, instead of a large "No data".
+- Queries saved without a refId get A, B, ... on load, as Grafana's panel
+  model gives them: the node-exporter mixin's Disk Space Usage table (two
+  table-format queries grouped by `Value #A` and `Value #B`) showed
+  "No data".
 
 ## [0.6.0] - 2026-11-10
 

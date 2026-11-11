@@ -475,6 +475,8 @@ capture_all_panels() {
 	get search_recent "/api/search?dashboardUIDs=tern-all-panels&dashboardUIDs=tern-panels&limit=10"
 	get search_tag "/api/search?tag=fixtures&type=dash-db&limit=10"
 	get search_query_tag "/api/search?query=$(enc 'Tern')&tag=all-panels&type=dash-db&limit=10"
+	# tern-pub-grid's "dashboards" dashboard link: every dashboard tagged tern.
+	get search_tag_tern "/api/search?type=dash-db&tag=tern&limit=100"
 	# annolist: by tag, only this dashboard, only in the time range.
 	get annotations_annolist "/api/annotations?tags=tern-seed&limit=10&type=annotation"
 	get annotations_annolist_dashboard "/api/annotations?dashboardUID=tern-all-panels&limit=10&type=annotation"
@@ -571,6 +573,18 @@ capture_pub_ts() {
 		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
 			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
 		[ -z "$body" ] || req "ds_query_pub_ts_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_pub_frames: fixtures for dashboard tern-pub-frames (synthetic repro of public dashboards'
+# transformations: calculateField defaults, an empty result, targets without refId), each panel's
+# /api/ds/query as the frontend builds it.
+capture_pub_frames() {
+	dash=$ROOT/dev/grafana/dashboards/tern-pub-frames.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_pub_frames_$pid" POST /api/ds/query "$body"
 	done
 }
 
@@ -734,6 +748,7 @@ capture_cells
 capture_stat_fidelity
 capture_pub_gauges
 capture_pub_ts
+capture_pub_frames
 capture_legacy
 capture_fid2_table
 capture_v08_tsbar
@@ -747,6 +762,7 @@ capture_cells
 capture_stat_fidelity
 capture_pub_gauges
 capture_pub_ts
+capture_pub_frames
 capture_legacy
 capture_fid2_table
 capture_v08_tsbar
@@ -760,6 +776,7 @@ capture_cells
 capture_stat_fidelity
 capture_pub_gauges
 capture_pub_ts
+capture_pub_frames
 capture_legacy
 capture_fid2_table
 capture_v08_tsbar
