@@ -429,10 +429,11 @@ local function nullThreshold(fields: { FieldConfig.Item }, interval: number?, en
 	return if threshold and threshold > 0 then threshold else nil
 end
 
--- Inserted nulls by time column: a cursor move redraws with the same
--- frames, and the render memo compares value columns by identity. `times`
--- is nil when nothing was inserted: the entry must not hold its own key,
--- since a weak-keyed table is no ephemeron and would keep it alive.
+-- Inserted nulls by time column, kept with the render memo of the panel
+-- (below): a cursor move redraws with the same frames, and the render memo
+-- compares value columns by identity. Only the memo's few panels keep
+-- theirs: a filled copy of every series of every panel would double a
+-- dashboard's data. `times` is nil when nothing was inserted.
 type Nulled = {
 	threshold: number,
 	from: number?,
@@ -441,16 +442,23 @@ type Nulled = {
 	times: { number }?,
 	filled: { { any } },
 }
-local nulled: { [{ number }]: Nulled } = setmetatable({} :: any, { __mode = "k" })
+type NulledMap = { [{ number }]: Nulled }
 
-local function insertNulls(frame: Frame, threshold: number, from: number?, to: number?)
+local function insertNulls(
+	frame: Frame,
+	threshold: number,
+	from: number?,
+	to: number?,
+	prev: NulledMap?,
+	into: NulledMap
+)
 	local fields = frame.fields
 	local times = fields[1].values :: { number }
 	local columns: { { any } } = table.create(#fields - 1)
 	for i = 2, #fields do
 		columns[i - 1] = fields[i].values
 	end
-	local hit = nulled[times]
+	local hit = if prev then prev[times] else nil
 	local fresh = hit ~= nil and hit.threshold == threshold and hit.from == from and hit.to == to
 	if hit and fresh then
 		for i, c in columns do
@@ -470,9 +478,9 @@ local function insertNulls(frame: Frame, threshold: number, from: number?, to: n
 			times = if t == times then nil else t,
 			filled = filled,
 		}
-		nulled[times] = hit
 	end
 	local h = hit :: Nulled
+	into[times] = h
 	local inserted = h.times
 	if inserted == nil then
 		return
@@ -489,7 +497,12 @@ end
 -- pure function of (frames, options), so equal arguments reuse its result.
 -- Value columns compare by identity (frames are never mutated), everything
 -- else structurally. A handful of keys: one expanded panel is the case.
-type RenderMemo = { baked: { Frame }, render: SvgTimeseries.Options, result: SvgTimeseries.Result }
+type RenderMemo = {
+	baked: { Frame },
+	render: SvgTimeseries.Options,
+	result: SvgTimeseries.Result,
+	nulled: NulledMap,
+}
 
 local renders: { [string]: RenderMemo } = {}
 local renderCount = 0
@@ -515,9 +528,15 @@ local function same(a: any, b: any, key: any): boolean
 	return true
 end
 
-local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.Options): SvgTimeseries.Result
+local function renderMemo(
+	key: string,
+	baked: { Frame },
+	render: SvgTimeseries.Options,
+	nulled: NulledMap
+): SvgTimeseries.Result
 	local hit = renders[key]
 	if hit and same(hit.render, render, nil) and same(hit.baked, baked, nil) then
+		hit.nulled = nulled
 		return hit.result
 	end
 	local result = SvgTimeseries.render(baked, render)
@@ -528,7 +547,7 @@ local function renderMemo(key: string, baked: { Frame }, render: SvgTimeseries.O
 		end
 		renderCount += 1
 	end
-	renders[key] = { baked = baked, render = render, result = result }
+	renders[key] = { baked = baked, render = render, result = result, nulled = nulled }
 	return result
 end
 
@@ -569,11 +588,13 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		table.insert((out :: Frame).fields, FieldConfig.bake(item))
 		table.insert(visible, item)
 	end
+	local memo = renders[opts.key]
+	local nulled: NulledMap = {}
 	for src, out in byFrame do
 		local tf = out.fields[1]
 		local threshold = nullThreshold(frameItems[src], if tf.config then tf.config.interval else nil, env)
 		if threshold then
-			insertNulls(out, threshold, opts.from_ms, opts.to_ms)
+			insertNulls(out, threshold, opts.from_ms, opts.to_ms, if memo then memo.nulled else nil, nulled)
 		end
 	end
 	if #visible == 0 then
@@ -649,7 +670,7 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 		render.tick_height = M.grafanaPlotHeight(opts.size.w, opts.size.h, titled, legendRows, legendLook)
 			+ (if render.x_axis_hidden then M.GRAFANA_PX.x_axis else 0)
 	end
-	local result = renderMemo(opts.key, baked, render)
+	local result = renderMemo(opts.key, baked, render, nulled)
 	local drawn: { Drawn } = {}
 	for i, s in result.layout.series do
 		drawn[i] = { item = visible[i], class = s.class }

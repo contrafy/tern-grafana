@@ -265,11 +265,20 @@ local function scaleRange(
 			end
 		elseif bounds then
 			local times = shown[i].times
+			local a, b = lo or math.huge, hi or -math.huge
 			for j, v in shown[i].values do
 				local t = times[j]
-				if t >= t0 and t <= t1 then
-					see(v)
+				if t >= t0 and t <= t1 and type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+					if v < a then
+						a = v
+					end
+					if v > b then
+						b = v
+					end
 				end
+			end
+			if a <= b then
+				lo, hi = a, b
 			end
 		else
 			local c = if shown[i] == list[i] then calcs[i] else Series.calcs(shown[i].values)

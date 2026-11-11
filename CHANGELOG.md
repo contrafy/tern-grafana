@@ -122,6 +122,11 @@ versions may break).
   of hundreds of slices stays under the SVG size cap.
 - Time series render faster when a series has samples outside the range, and
   re-rendered time columns are no longer kept in memory.
+- A dashboard no longer keeps the null-filled copy of every time series it
+  drew (Grafana inserts nulls at gaps and at the range's ends): only the few
+  panels a redraw reuses keep theirs. A dashboard of 60 panels of 50 series
+  x 1000 points held twice its data, 290 MiB with its raw answers, over the
+  plugin's 256 MiB heap; it holds 195 MiB again, as 0.5.0 did.
 - Prometheus query variables whose query is a series selector or any other
   expression (`up{job=~"$jobs"}` with a regex picking the instance) resolve
   as Grafana's classic query does, from the series it matches; they were

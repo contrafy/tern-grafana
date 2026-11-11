@@ -265,6 +265,13 @@ local function refresh(h: Harness, c: Case, dashBody: string, variant: number, p
 	return n
 end
 
+-- What Tern holds for the open large dashboard (retained_open_kb plus the
+-- raw answers kept, which this harness shares with its answer cache): the
+-- plugin VM's heap is 256 MiB and a refresh needs room on top. 0.5.0 holds
+-- 192 MiB, 0.7.0 195-200 (its legends list all 50 series); keeping a filled
+-- copy of every series held 289.
+local LARGE_HELD_MAX_KB = 224 * 1024
+
 local M = {}
 
 function M.run(opts: any): { any }
@@ -329,6 +336,20 @@ function M.run(opts: any): { any }
 		local retainedOpen = Bench.retainedKb(if large then 3 else 5, function()
 			return open(c, dashBody, true)
 		end)
+		if large then
+			local held = retainedOpen + kept / 1024
+			assert(
+				held <= LARGE_HELD_MAX_KB,
+				string.format(
+					"%s: the open dashboard holds %.0f KiB (state %.0f + raw answers %.0f), over the %d KiB bound",
+					name,
+					held,
+					retainedOpen,
+					kept / 1024,
+					LARGE_HELD_MAX_KB
+				)
+			)
+		end
 		local hm = open(c, dashBody, true)
 		local rounds = if large then 10 else 50
 		refresh(hm, c, dashBody, 1, false)

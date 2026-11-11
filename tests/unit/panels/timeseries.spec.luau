@@ -2,6 +2,7 @@
 -- The time series panel (public/app/plugins/panel/timeseries/panelcfg.cue,
 -- packages/grafana-schema GraphFieldConfig, fieldColor.ts
 -- getFieldSeriesColor) mapped onto lib/render/svg_timeseries.
+local Bench = require("../../bench/lib/bench")
 local t = require("../../lib/test")
 local S = require("./support")
 local Timeseries = require("../../../plugin/lib/panels/timeseries")
@@ -594,6 +595,43 @@ for _, version in S.VERSIONS do
 
 		it("joins gaps up to the insertNulls threshold", function()
 			expect(runs(8)).toBe(1)
+		end)
+
+		-- A redraw reuses the nulls inserted for the panel's last render, but
+		-- only the few panels the render memo holds keep theirs: a filled copy
+		-- of every series of every panel doubled a dashboard's heap (a 60 x
+		-- 50 x 1000 dashboard went from 100 to 200 MB of the plugin VM's
+		-- 256 MiB).
+		it("keeps the inserted nulls of a few panels, not of every panel drawn", function()
+			local panel = cellsPanel(version, 7)
+			local function draw(frames: { any }, i: number)
+				Timeseries.view(panel, frames, env, {
+					key = "p" .. i,
+					from_ms = tonumber(req.from),
+					to_ms = tonumber(req.to),
+				})
+			end
+			-- Fill the render memo first, so what it evicts is this test's.
+			for i = 1, 8 do
+				draw(S.frames(version, "cells_7"), i)
+			end
+			local sets: { { any } } = {}
+			local sampleBytes = 0
+			for i = 1, 64 do
+				local frames = S.frames(version, "cells_7")
+				sets[i] = frames
+				for _, f in frames do
+					for _, field in f.fields do
+						sampleBytes += 16 * #field.values
+					end
+				end
+			end
+			local before = Bench.liveKb()
+			for i, frames in sets do
+				draw(frames, 8 + i)
+			end
+			local retainedBytes = (Bench.liveKb() - before) * 1024
+			expect(retainedBytes < sampleBytes / 2).toBe(true)
 		end)
 	end)
 end
