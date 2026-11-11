@@ -20,7 +20,7 @@ local SOURCES: { string } = {}
 for _, v in PROM do
 	table.insert(SOURCES, "prometheus/" .. v .. "/%s.json")
 end
-for _, v in { "11.6.16", "12.4.12", "13.3.0" } do
+for _, v in { "11.6.16", "12.4.12", "13.3.1" } do
 	table.insert(SOURCES, "grafana/" .. v .. "/ds_proxy_prom_%s.json")
 end
 

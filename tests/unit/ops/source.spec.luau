@@ -13,7 +13,7 @@ local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
 local PROM = { "2.53.5", "3.15.0" }
-local GRAFANA = { "11.6.16", "12.4.12", "13.3.0" }
+local GRAFANA = { "11.6.16", "12.4.12", "13.3.1" }
 
 local STATUS = { "buildinfo", "flags", "runtimeinfo", "config", "tsdb" }
 

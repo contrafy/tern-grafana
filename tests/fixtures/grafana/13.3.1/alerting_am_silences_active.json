@@ -1,0 +1,1 @@
+[{"comment":"Fixture capture silence","createdBy":"tern-grafana capture","endsAt":"2026-11-11T17:21:51.000Z","id":"16769a0b-0637-4b5f-8fbb-a2f4dda01899","matchers":[{"isEqual":true,"isRegex":false,"name":"alertname","value":"TernGrafanaAlwaysFiring"}],"startsAt":"2026-11-11T16:22:49.656Z","status":{"state":"active"},"updatedAt":"2026-11-11T16:22:49.656Z"}]

@@ -354,6 +354,12 @@ capture_grafana() {
 	get user_bad_token /api/user
 	TOKEN_FILE=$tok
 	get frontend_settings /api/frontend/settings
+	# Grafana 13's OpenFeature flags as its frontend evaluates them (OFREP at the app root, context
+	# targetingKey = namespace plus openFeatureContext); 11 and 12 have no such flags.
+	if [ "${ver%%.*}" -ge 13 ]; then
+		req ofrep_table_auto_column_widths POST /ofrep/v1/evaluate/flags/table.autoColumnWidths \
+			"$(jq -c '{context: ({targetingKey: .namespace} + .openFeatureContext)}' "$LAST")"
+	fi
 	get user /api/user
 	get org /api/org
 	get search "/api/search?type=dash-db"
@@ -406,6 +412,13 @@ capture_grafana() {
 	get ds_resource_prom_label_values "/api/datasources/uid/prom3/resources/api/v1/label/job/values?start=$START&end=$END"
 	get ds_proxy_prom_labels "/api/datasources/proxy/uid/prom3/api/v1/labels?start=$START&end=$END"
 	get ds_proxy_prom_label_values "/api/datasources/proxy/uid/prom3/api/v1/label/job/values?start=$START&end=$END"
+	# tern-pub-vars: the series query of a variable (Grafana's classic query fallback) and Loki's label
+	# lists as its variables read them, all through the datasource proxy.
+	get ds_proxy_prom_series "/api/datasources/proxy/uid/prom3/api/v1/series?match%5B%5D=$(enc 'up{job=~"node"}')&start=$START&end=$END"
+	get ds_proxy_prom_series_error "/api/datasources/proxy/uid/prom3/api/v1/series?match%5B%5D=$(enc 'sum(up)')&start=$START&end=$END"
+	get ds_proxy_loki_labels "/api/datasources/proxy/uid/loki/loki/api/v1/labels?start=$NS_START&end=$NS_END"
+	get ds_proxy_loki_label_values_app "/api/datasources/proxy/uid/loki/loki/api/v1/label/app/values?start=$NS_START&end=$NS_END"
+	get ds_proxy_loki_label_values_level "/api/datasources/proxy/uid/loki/loki/api/v1/label/level/values?start=$NS_START&end=$NS_END&query=$(enc '{app="checkout"}')"
 	get ds_proxy_prom_metadata "/api/datasources/proxy/uid/prom3/api/v1/metadata?limit=5&limit_per_metric=1"
 	get ds_proxy_prom_query_error "/api/datasources/proxy/uid/prom3/api/v1/query?query=$(enc 'sum(rate(up[5m])')"
 	get ds_proxy_tempo_search "/api/datasources/proxy/uid/tempo/api/search?q=$(enc '{resource.service.name="payments"}')&limit=10&start=$START&end=$END"
@@ -536,6 +549,44 @@ capture_stat_fidelity() {
 		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
 			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
 		[ -z "$body" ] || req "ds_query_stat_fidelity_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_pub_gauges: fixtures for dashboard tern-pub-gauges (synthetic repro of public dashboards'
+# small bar gauges, two-row stats and a 13.0 gauge), each panel's /api/ds/query as the frontend builds it.
+capture_pub_gauges() {
+	dash=$ROOT/dev/grafana/dashboards/tern-pub-gauges.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_pub_gauges_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_pub_ts: fixtures for dashboard tern-pub-ts (synthetic repro of public dashboards' time series
+# and tables), each panel's /api/ds/query as the frontend builds it.
+capture_pub_ts() {
+	dash=$ROOT/dev/grafana/dashboards/tern-pub-ts.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_pub_ts_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_legacy: dashboard tern-legacy (schemaVersion 14, top-level rows), as Grafana itself migrates it
+# (12+: the app platform's v1beta1 API answers it at the latest schema; 11.6 has no such API), and each
+# panel's /api/ds/query as the frontend builds it from that migrated model.
+capture_legacy() {
+	v1path=/apis/dashboard.grafana.app/v1beta1/namespaces/default/dashboards/tern-legacy
+	auth_conf | curl -fsS -K - -o /dev/null --max-time 10 "$BASE$v1path" 2>/dev/null || return 0
+	get dashboard_v1beta1_tern_legacy "$v1path"
+	dash=$TMP/tern-legacy-migrated.json
+	jq '.spec' "$LAST" >"$dash"
+	for pid in $(jq -r '.panels[] | select(.type != "row") | .id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_tern_legacy_$pid" POST /api/ds/query "$body"
 	done
 }
 
@@ -681,6 +732,9 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_pub_gauges
+capture_pub_ts
+capture_legacy
 capture_fid2_table
 capture_v08_tsbar
 capture_v08_pietable
@@ -691,6 +745,9 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_pub_gauges
+capture_pub_ts
+capture_legacy
 capture_fid2_table
 capture_v08_tsbar
 capture_v08_pietable
@@ -701,6 +758,9 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_pub_gauges
+capture_pub_ts
+capture_legacy
 capture_fid2_table
 capture_v08_tsbar
 capture_v08_pietable
@@ -873,20 +933,31 @@ leaks=$(printf '%s' "$leaks" | tr -s ' \n' '  ' | sed 's/^ *//; s/ *$//')
 
 # Install. A row's primary file (response body or CLI stdout) decides for its companions
 # (<name>.request.json|txt and <name>.stderr), so a request never pairs with another run's response.
+wants() {
+	[ ! -e "$OUT/$1" ] && return 0
+	[ -n "$REFRESH" ] || return 1
+	# shellcheck disable=SC2254 # PATTERN is a glob on purpose
+	case $1 in
+	$REFRESH) return 0 ;;
+	esac
+	return 1
+}
+# Dashboards imported by scripts/public-dashboards.py (folder uid "public") are not ours to commit; they
+# show up in the search and folder answers.
+public=
+while IFS="$(printf '\t')" read -r path _; do
+	wants "$path" || continue
+	case $path in *.json) ;; *) continue ;; esac
+	if grep -qE '"(folderUid|uid)": ?"public"' "$TMP/out/$path"; then
+		public="$public $path"
+	fi
+done <"$ROWS"
+[ -z "$public" ] || die "refusing to install: public dashboards in:$public; run 'python3 scripts/public-dashboards.py remove' and capture again"
 mkdir -p "$OUT"
 WRITTEN=$TMP/written
 : >"$WRITTEN"
 while IFS="$(printf '\t')" read -r path _ _ _ _ _ request; do
-	write=0
-	if [ ! -e "$OUT/$path" ]; then
-		write=1
-	elif [ -n "$REFRESH" ]; then
-		# shellcheck disable=SC2254 # PATTERN is a glob on purpose
-		case $path in
-		$REFRESH) write=1 ;;
-		esac
-	fi
-	[ "$write" = 1 ] || continue
+	wants "$path" || continue
 	mkdir -p "$(dirname "$OUT/$path")"
 	cp "$TMP/out/$path" "$OUT/$path"
 	if [ "$request" != - ]; then

@@ -12,9 +12,9 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
--- 15 minutes at 15 s steps, or as much history as the stack had when 13.3.0 was captured.
-local RANGE_POINTS = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 29 }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.1" }
+-- 15 minutes at 15 s steps.
+local RANGE_POINTS = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.1"] = 61 }
 
 local env: any = { now_ms = 0, decode = json.decode, encode = json.encode, null = json.null }
 

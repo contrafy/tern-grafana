@@ -12,7 +12,7 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.1" }
 
 local function url(request: any): string
 	return Http.url(S.grafana.endpoint, request)
@@ -95,12 +95,24 @@ for _, v in VERSIONS do
 					default = ds
 				end
 			end
-			-- PostgreSQL and TestData joined the stack after the 11 and 12 captures.
-			expect(uids).toEqual(
-				if v == "13.3.0"
-					then { "alertmanager", "loki", "postgres", "prom2", "prom3", "tempo", "testdata" }
-					else { "alertmanager", "loki", "prom2", "prom3", "tempo" }
-			)
+			-- PostgreSQL, TestData, the JSON APIs and Zabbix joined the stack after the 11 and 12
+			-- captures; Grafana sorts them by name.
+			expect(uids).toEqual(if v == "13.3.1"
+				then {
+					"alertmanager",
+					"loki",
+					"postgres",
+					"prom2",
+					"prom3",
+					"tempo",
+					"testdata",
+					"json-api",
+					"json-chicago",
+					"json-dallas",
+					"json-seattle",
+					"zabbix",
+				}
+				else { "alertmanager", "loki", "prom2", "prom3", "tempo" })
 			expect(default).toEqual({
 				uid = "prom3",
 				type = "prometheus",
@@ -114,7 +126,7 @@ end
 describe("frontend settings", function()
 	-- The dev stack runs the image renderer next to Grafana 12 and 13 only.
 	it("knows when the image renderer is available", function()
-		for _, v in { "12.4.12", "13.3.0" } do
+		for _, v in { "12.4.12", "13.3.1" } do
 			local g: any = Grafana.parseFrontendSettings(
 				S.grafana,
 				S.response("grafana/" .. v .. "/frontend_settings.json"),

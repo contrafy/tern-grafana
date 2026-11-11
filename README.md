@@ -516,7 +516,7 @@ the URLs you configure. See [SECURITY.md](SECURITY.md).
 
 | Backend | Versions |
 | --- | --- |
-| Grafana | 11, 12, 13 |
+| Grafana | 11, 12, 13 (dev stack: 11.6, 12.4, 13.3; 13.4 API shapes checked on Grafana Cloud) |
 | Prometheus | 2.53 LTS, 3.x |
 | Alertmanager | 0.27+ |
 | Loki | 3.x |

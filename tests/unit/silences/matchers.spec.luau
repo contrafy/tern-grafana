@@ -54,7 +54,7 @@ describe("from an alert", function()
 		)
 	end)
 
-	for _, v in { "11.6.16", "12.4.12", "13.3.0" } do
+	for _, v in { "11.6.16", "12.4.12", "13.3.1" } do
 		it(v .. ": keeps Grafana's rule uid, which scopes the silence to that rule", function()
 			local g = alerts("grafana/" .. v .. "/alerting_am_alerts.json", "grafana")
 			local list = Matchers.fromLabels(g.TernGrafanaAlwaysFiring)

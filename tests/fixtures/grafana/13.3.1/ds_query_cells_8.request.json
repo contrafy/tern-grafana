@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"node_load1 and on() (minute() % 10 < 5)","range":true,"instant":false,"editorMode":"code","legendFormat":"load1","intervalMs":10000,"maxDataPoints":960}],"from":"1794410511000","to":"1794414111000"}

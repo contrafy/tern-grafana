@@ -15,18 +15,19 @@ local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
 type Capture = {
-	tempo: string,
+	tempo: string?,
 	grafana: { string },
 	trace_id: string,
 	-- The id as spans carry it: 32 hex digits, Tempo's search may drop leading zeros.
 	span_trace_id: string,
 	start: number,
 	stop: number,
-	first_hit: string,
+	first_hit: string?,
 }
 
 -- One capture run each: the Grafanas proxied the Tempo of their run, so they
--- share its trace id and search range.
+-- share its trace id and search range. Grafana 13.3.1 was recorded in a later
+-- run than tempo/3.1.1/.
 local CAPTURES: { Capture } = {
 	{
 		tempo = "tempo/2.10.8/",
@@ -39,14 +40,32 @@ local CAPTURES: { Capture } = {
 	},
 	{
 		tempo = "tempo/3.1.1/",
-		grafana = { "13.3.0" },
+		grafana = {},
 		trace_id = "2e45191bf0545e5e1225ff9f8e4e468",
 		span_trace_id = "02e45191bf0545e5e1225ff9f8e4e468",
 		start = 1794238846,
 		stop = 1794239746,
 		first_hit = "164255f64ce38336a24e7554229ba384",
 	},
+	{
+		grafana = { "13.3.1" },
+		trace_id = "10c8f21cbcaf2b307224a3104e43bd64",
+		span_trace_id = "10c8f21cbcaf2b307224a3104e43bd64",
+		start = 1794413211,
+		stop = 1794414111,
+	},
 }
+
+local TEMPO: { Capture } = {}
+local VIA_GRAFANA: { Capture } = {}
+for _, c in CAPTURES do
+	if c.tempo then
+		table.insert(TEMPO, c)
+	end
+	if #c.grafana > 0 then
+		table.insert(VIA_GRAFANA, c)
+	end
+end
 
 local function endpoint(url: string): any
 	return { url = url, auth = { type = "none" }, headers = {}, path_prefix = "", timeout_ms = 15000 }
@@ -91,25 +110,27 @@ local function search(c: Capture, q: string): any
 end
 
 describe("tempo requests", function()
-	for _, c in CAPTURES do
-		it("asks " .. c.tempo .. " directly at the recorded trace, search and tag URLs", function()
+	for _, c in TEMPO do
+		local tempo = c.tempo :: string
+		it("asks " .. tempo .. " directly at the recorded trace, search and tag URLs", function()
 			expect(url(direct, Tempo.traceRequest(direct, "direct", c.trace_id, S.env))).toBe(
-				recorded(direct, c.tempo .. "trace.json")
+				recorded(direct, tempo .. "trace.json")
 			)
 			expect(
 				url(
 					direct,
 					Tempo.searchRequest(direct, "direct", search(c, '{resource.service.name="frontend"}'), S.env)
 				)
-			).toBe(recorded(direct, c.tempo .. "search.json"))
+			).toBe(recorded(direct, tempo .. "search.json"))
 			expect(url(direct, Tempo.tagsRequest(direct, "direct"))).toBe(
-				recorded(direct, c.tempo .. "search_tags_v2.json")
+				recorded(direct, tempo .. "search_tags_v2.json")
 			)
 			expect(url(direct, Tempo.tagValuesRequest(direct, "direct", "resource.service.name"))).toBe(
-				recorded(direct, c.tempo .. "search_tag_values_v2.json")
+				recorded(direct, tempo .. "search_tag_values_v2.json")
 			)
 		end)
-
+	end
+	for _, c in VIA_GRAFANA do
 		it(
 			"goes through Grafana " .. table.concat(c.grafana, ", ") .. "'s datasource proxy at the recorded URLs",
 			function()
@@ -177,11 +198,13 @@ end
 
 describe("tempo traces", function()
 	for _, c in CAPTURES do
-		it("reads the same three spans from " .. c.tempo .. ", the proxy and /api/ds/query", function()
-			local cases: { { any } } = {
-				{ "direct", c.tempo .. "trace.json" },
-				{ "direct", c.tempo .. "trace_v2.json" },
-			}
+		local where = if c.tempo then c.tempo else "Grafana " .. table.concat(c.grafana, ", ")
+		it("reads the same three spans from " .. where .. ", the proxy and /api/ds/query", function()
+			local cases: { { any } } = {}
+			if c.tempo then
+				table.insert(cases, { "direct", c.tempo .. "trace.json" })
+				table.insert(cases, { "direct", c.tempo .. "trace_v2.json" })
+			end
 			for _, v in c.grafana do
 				table.insert(cases, { "proxy", "grafana/" .. v .. "/ds_proxy_tempo_trace.json" })
 				table.insert(cases, { "dsquery", "grafana/" .. v .. "/ds_query_tempo_trace.json" })
@@ -198,9 +221,11 @@ describe("tempo traces", function()
 				end
 			end
 		end)
-
-		it("reports a trace " .. c.tempo .. " does not have as not found", function()
-			local r: any = Tempo.parseTrace("direct", text(c.tempo .. "trace_not_found.txt"), S.env)
+	end
+	for _, c in TEMPO do
+		local tempo = c.tempo :: string
+		it("reports a trace " .. tempo .. " does not have as not found", function()
+			local r: any = Tempo.parseTrace("direct", text(tempo .. "trace_not_found.txt"), S.env)
 			expect(r.ok).toBe(false)
 			expect(r.error.message).toBe("trace not found")
 			expect(Tempo.fallback("direct", r.error)).toBe(false)
@@ -209,13 +234,14 @@ describe("tempo traces", function()
 end)
 
 describe("tempo search", function()
-	for _, c in CAPTURES do
-		it("lists " .. c.tempo .. "'s traces newest first with matches and per-service errors", function()
-			local r: any = Tempo.parseSearch("direct", S.response(c.tempo .. "search.json"), S.env)
+	for _, c in TEMPO do
+		local tempo = c.tempo :: string
+		it("lists " .. tempo .. "'s traces newest first with matches and per-service errors", function()
+			local r: any = Tempo.parseSearch("direct", S.response(tempo .. "search.json"), S.env)
 			expect(r.ok).toBe(true)
 			expect(#r.hits).toBe(10)
 			local first = r.hits[1]
-			expect(first.trace_id).toBe(c.first_hit)
+			expect(first.trace_id).toBe(c.first_hit :: string)
 			expect(first.root_service).toBe("frontend")
 			expect(first.root_name).toBe("lets-go")
 			expect(first.duration_ms).toBe(120)
@@ -224,12 +250,12 @@ describe("tempo search", function()
 			for i = 2, #r.hits do
 				expect(r.hits[i - 1].start_ms >= r.hits[i].start_ms).toBe(true)
 			end
-			local errs: any = Tempo.parseSearch("direct", S.response(c.tempo .. "search_errors.json"), S.env)
+			local errs: any = Tempo.parseSearch("direct", S.response(tempo .. "search_errors.json"), S.env)
 			expect(errs.hits[1].errors).toBe(3)
 		end)
 
-		it("shows a broken TraceQL query as " .. c.tempo .. "'s own parse error", function()
-			local r: any = Tempo.parseSearch("direct", text(c.tempo .. "search_error.txt"), S.env)
+		it("shows a broken TraceQL query as " .. tempo .. "'s own parse error", function()
+			local r: any = Tempo.parseSearch("direct", text(tempo .. "search_error.txt"), S.env)
 			expect(r.ok).toBe(false)
 			expect(r.error.kind).toBe("query")
 			expect(r.error.message).toBe(
@@ -239,7 +265,7 @@ describe("tempo search", function()
 		end)
 	end
 
-	for _, v in { "12.4.12", "13.3.0" } do
+	for _, v in { "12.4.12", "13.3.1" } do
 		it("reads Grafana " .. v .. "'s Traces table frame from /api/ds/query", function()
 			local r: any =
 				Tempo.parseSearch("dsquery", S.response("grafana/" .. v .. "/ds_query_tempo_search.json"), S.env)
@@ -267,16 +293,17 @@ describe("tempo search", function()
 end)
 
 describe("tempo tags", function()
-	for _, c in CAPTURES do
-		it("reads " .. c.tempo .. "'s tag names by scope and a tag's values", function()
-			local tags: any = Tempo.parseTags(S.response(c.tempo .. "search_tags_v2.json"), S.env)
+	for _, c in TEMPO do
+		local tempo = c.tempo :: string
+		it("reads " .. tempo .. "'s tag names by scope and a tag's values", function()
+			local tags: any = Tempo.parseTags(S.response(tempo .. "search_tags_v2.json"), S.env)
 			expect(tags.ok).toBe(true)
 			expect(tags.tags).toContain({ scope = "resource", name = "service.name" })
 			expect(tags.tags).toContain({ scope = "span", name = "http.route" })
 			expect(tags.tags).toContain({ scope = "intrinsic", name = "status" })
-			local v1: any = Tempo.parseTags(S.response(c.tempo .. "search_tags.json"), S.env)
+			local v1: any = Tempo.parseTags(S.response(tempo .. "search_tags.json"), S.env)
 			expect(v1.tags).toContain({ scope = "", name = "service.name" })
-			local values: any = Tempo.parseTagValues(S.response(c.tempo .. "search_tag_values_v2.json"), S.env)
+			local values: any = Tempo.parseTagValues(S.response(tempo .. "search_tag_values_v2.json"), S.env)
 			expect(values.values).toEqual({ "frontend", "payments" })
 		end)
 	end
