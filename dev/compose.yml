@@ -230,7 +230,7 @@ services:
       POSTGRES_DB: zabbix
 
   zabbix-web:
-    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0.32@sha256:a54ce2e19aaf0a61609e4bbc7ec01c16bef504e6e1c51e3854120ac76d2dbaeb
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-8.0.0@sha256:ed54de937d313cabb653464d0b5356c03a325ab44ee67a1784e881962382b113
     profiles: [zabbix]
     depends_on: [zabbix-server]
     ports: ["127.0.0.1:18080:8080"]
