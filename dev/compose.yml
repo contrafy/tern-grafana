@@ -140,7 +140,7 @@ services:
 
   # Loki and Tempo images ship no shell; scripts/stack.sh probes their /ready endpoints from the host.
   loki:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     ports: ["127.0.0.1:3100:3100"]
     command: ["-config.file=/etc/loki/loki.yml"]
     volumes:
