@@ -82,7 +82,7 @@ services:
       AUTH_TOKEN: "-,tern-dev-renderer"
 
   prometheus3:
-    image: quay.io/prometheus/prometheus:v3.15.0
+    image: quay.io/prometheus/prometheus:v3.16.0
     ports: ["127.0.0.1:9090:9090"]
     command: &prom-args
       - --config.file=/etc/prometheus/prometheus.yml
@@ -100,7 +100,7 @@ services:
       retries: 30
 
   prometheus2:
-    image: quay.io/prometheus/prometheus:v2.53.5
+    image: quay.io/prometheus/prometheus:v3.16.0
     ports: ["127.0.0.1:9091:9090"]
     command: *prom-args
     volumes:
