@@ -125,7 +125,7 @@ services:
   # SQL datasource panels (dashboard tern-sql): seeded by dev/postgres/init.sql, reached by the
   # Grafanas on the stack network only.
   postgres:
-    image: postgres:17.6-alpine
+    image: postgres:18.0-alpine
     environment:
       POSTGRES_USER: tern
       POSTGRES_PASSWORD: tern-dev
