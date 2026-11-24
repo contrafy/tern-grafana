@@ -7,7 +7,7 @@ versions may break).
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-11-11
+## [0.7.0] - 2026-11-24
 
 ### Added
 
