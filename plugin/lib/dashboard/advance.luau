@@ -59,6 +59,16 @@ local function variableModule(
 	return mod, ds, loading
 end
 
+-- The datasource a built-in query variable reads, resolved like a panel's
+-- (uid, name or `${var}`, else the default): the uid its requests go to and
+-- what Variables.fetchFor needs of it.
+function M.variableSource(s: State, v: Variables.Variable, scope: Interpolate.Scope): (string?, Variables.FetchContext)
+	local key = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
+	local ds = if key then Queries.findDatasource(s.settings.datasources, key) else nil
+	return if ds then ds.uid else key,
+		{ ds = ds, ds_type = v.datasource_type or (if ds then ds.type else nil), major = s.settings.major }
+end
+
 -- Starts a module's variable job; true when it ended at once.
 local function startVariableJob(
 	s: State,
@@ -76,7 +86,7 @@ local function startVariableJob(
 		from_ms = r.from_ms,
 		to_ms = r.to_ms,
 		interval_ms = 0,
-		max_points = s.cfg.max_points,
+		max_points = Queries.DEFAULT_MAX_POINTS,
 		now_ms = env.now_ms,
 		datasources = s.settings.datasources,
 		ds = ds,
@@ -142,10 +152,14 @@ local function advanceVariables(s: State, env: Env, effects: { Effect })
 				end
 				continue
 			end
-			local fetch, err = Variables.fetchFor(v, scope, Core.builtinScope(s))
-			local uid = Variables.datasourceUid(v, scope) or Core.defaultDsUid(s)
+			local uid, source = M.variableSource(s, v, scope)
+			local fetch, err = Variables.fetchFor(v, scope, Core.builtinScope(s), source)
 			if fetch == nil then
-				Variables.setError(v, err or "unsupported variable query")
+				if err then
+					Variables.setError(v, err)
+				else
+					Variables.setOptions(v, {})
+				end
 				Core.changed(s)
 				progressed = true
 				break
@@ -301,7 +315,8 @@ local function queryPanel(
 )
 	local route = s.route :: Route
 	local pq, err = nil, nil
-	local qctx = Core.queryContext(s, scope, env, pt.range, resolved)
+	local width = Core.panelWidth(s, inst, env)
+	local qctx = Core.queryContext(s, scope, env, pt.range, resolved, ps.width_px or width)
 	if Registry.queries(inst.panel.json, env) then
 		pq, err = Queries.build(inst.panel.json, qctx, env)
 	end
@@ -320,6 +335,13 @@ local function queryPanel(
 	local p = pq :: Queries.PanelQuery
 	local signature = Queries.identity(p, env) .. "\31" .. pt.from .. "\31" .. pt.to
 	if again or signature ~= ps.signature then
+		-- A query sent anyway takes the panel's width now.
+		if ps.width_px ~= nil and ps.width_px ~= width then
+			qctx = Core.queryContext(s, scope, env, pt.range, resolved, width)
+			p = assert(Queries.build(inst.panel.json, qctx, env))
+			signature = Queries.identity(p, env) .. "\31" .. pt.from .. "\31" .. pt.to
+		end
+		ps.width_px = width
 		-- The answers in flight are read against the query with this
 		-- signature (the same queries and refIds, the same jobs).
 		ps.pq = p

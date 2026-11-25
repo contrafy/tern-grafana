@@ -291,12 +291,13 @@ describe("dynamictext panel", function()
 		expect((capped :: any).p.class).toBe(
 			"tgd dt-root " .. HtmlStyle.compile("height:300px;overflow:auto;padding:4px").class
 		)
-		-- Expanded (no card cap): Grafana's panel height less padding and the
-		-- title header.
+		-- Expanded (no card cap): Grafana's panel height less its 1 px border
+		-- and the title header; the plugin calls setNoPadding(), so PanelChrome
+		-- adds no padding.
 		p.title = "Alerts"
 		local expanded = Registry.view(p, { frame({}) }, env, { key = "k", size = { w = 400, h = 714 } })
 		expect((expanded :: any).p.class).toBe(
-			"tgd dt-root " .. HtmlStyle.compile("height:666px;overflow:auto;padding:4px").class
+			"tgd dt-root " .. HtmlStyle.compile("height:680px;overflow:auto;padding:4px").class
 		)
 	end)
 	it("fits a data: image into the box its CSS width and height give it", function()

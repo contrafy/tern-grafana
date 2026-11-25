@@ -108,6 +108,10 @@ function columns(items: { Item }, x0: number, x1: number, depth: number): { Node
 		end
 		cursor = math.max(cursor, hi)
 	end
+	-- Empty grid space after the last column: a panel at x=0 stays its width.
+	if cursor < x1 and #cs > 0 then
+		table.insert(out, { kind = "gap", basis = (x1 - cursor) / span })
+	end
 	return out
 end
 

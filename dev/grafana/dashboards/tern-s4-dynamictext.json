@@ -327,6 +327,52 @@
         "defaults": {},
         "overrides": []
       }
+    },
+    {
+      "id": 7,
+      "type": "marcusolsson-dynamictext-panel",
+      "title": "Narrow cards (nowrap header and pill overflow the card)",
+      "datasource": {
+        "type": "grafana-testdata-datasource",
+        "uid": "testdata"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 8,
+        "h": 6
+      },
+      "options": {
+        "afterRender": "",
+        "content": "<div style=\"width:100%;display:flex;gap:14px;\">\n  <div style=\"flex:1;min-width:0;background:#2d0000;border:1px solid #6b1d1d;border-radius:16px;padding:18px;\">\n    <div style=\"display:flex;justify-content:space-between;align-items:center;\">\n      <div style=\"font-size:13px;color:#d1d5db;font-weight:900;letter-spacing:.08em;\">LAST 60 MIN</div>\n      <div style=\"padding:6px 12px;border-radius:999px;background:#4a1515;border:1px solid #6b1d1d;font-size:14px;line-height:1;color:#f3f4f6;font-weight:900;white-space:nowrap;\">NET +{{net_hour}}</div>\n    </div>\n    <div style=\"font-size:40px;line-height:1;font-weight:950;color:#eab308;margin-top:14px;\">{{created_hour}}</div>\n  </div>\n  <div style=\"flex:1;min-width:0;background:#2d0000;border:1px solid #6b1d1d;border-radius:16px;padding:18px;\">\n    <div style=\"display:flex;justify-content:space-between;align-items:center;\">\n      <div style=\"font-size:13px;color:#d1d5db;font-weight:900;letter-spacing:.08em;white-space:nowrap;\">THIS WEEK ({{week_range}})</div>\n      <div style=\"padding:6px 12px;border-radius:999px;background:#4a1515;border:1px solid #6b1d1d;font-size:14px;line-height:1;color:#f3f4f6;font-weight:900;white-space:nowrap;\">NET +{{net_week}}</div>\n    </div>\n    <div style=\"font-size:40px;line-height:1;font-weight:950;color:#eab308;margin-top:14px;\">{{created_week}}</div>\n  </div>\n</div>\n",
+        "contentPartials": [],
+        "defaultContent": "The query didn't return any results.",
+        "editor": {
+          "format": "none",
+          "language": "html"
+        },
+        "editors": [],
+        "externalStyles": [],
+        "helpers": "",
+        "renderMode": "everyRow",
+        "styles": "",
+        "wrap": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "testdata"
+          },
+          "refId": "A",
+          "scenarioId": "csv_content",
+          "csvContent": "net_hour,created_hour,week_range,net_week,created_week\n12,13,Nov 09 - Nov 15,41,122\n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     }
   ]
 }

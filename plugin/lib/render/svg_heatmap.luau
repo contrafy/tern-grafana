@@ -230,7 +230,7 @@ function M.render(opts: Options): Result
 					out,
 					Kit.text(tx, yOf(t.v), t.label, {
 						anchor = if side == "left" then "end" else "start",
-						attrs = 'dominant-baseline="central"',
+						baseline = "middle",
 					})
 				)
 			end

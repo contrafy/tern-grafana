@@ -223,9 +223,11 @@ local function warnings(frames: { Frame }): { string }
 	return out
 end
 
--- A data frame with no fields is Grafana's placeholder on errors and empty
--- results; it renders as nothing and only hides "no data".
-local function nonEmpty(frames: { Frame }): { Frame }
+-- The frames that have fields. A data frame with no fields is Grafana's
+-- answer to an empty result (and to an error); Grafana's panels receive it
+-- like any frame, transformations included, while the series and table
+-- views outside dashboards have nothing to show for it.
+function M.withFields(frames: { Frame }): { Frame }
 	local out: { Frame } = {}
 	for _, f in frames do
 		if #f.fields > 0 then
@@ -262,7 +264,7 @@ function M.parseResults(doc: any, env: Env): { [string]: Frame.QueryResult }
 			}
 		else
 			local frames = M.frames(r.frames, env)
-			out[ref] = { ok = true, frames = nonEmpty(frames), warnings = warnings(frames) }
+			out[ref] = { ok = true, frames = frames, warnings = warnings(frames) }
 		end
 	end
 	return out

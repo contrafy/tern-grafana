@@ -49,6 +49,14 @@ describe("JSON documents", function()
 		expect(JP.stringify(doc)).toBe('{"2":"two","10":[],"b":true,"a":[1,{"y":2,"x":null}]}')
 	end)
 
+	it("decodes escapes in keys and strings next to plain ones", function()
+		local doc = assert(JP.decode('{ "k\\u0041" : "a\\"b\\\\c\\n\\ud83d\\ude00" ,\n\t"plain":"x", "e": ""}'))
+		expect(doc.keys).toEqual({ "kA", "plain", "e" })
+		expect(doc.values.kA).toBe('a"b\\c\n' .. utf8.char(0x1F600))
+		expect(doc.values.plain).toBe("x")
+		expect(doc.values.e).toBe("")
+	end)
+
 	it("rejects what JSON.parse rejects", function()
 		for _, text in { "", "{", "[1,]", "{'a': 1}", "01", "1 2", '"\t"', "NaN" } do
 			local v, err = JP.decode(text)

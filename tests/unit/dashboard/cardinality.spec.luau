@@ -42,8 +42,10 @@ local function load(selectors: { string }, held: { on: boolean }): S.Harness
 			return S.response("cardinality/dashboard_labels.json")
 		elseif string.match(e.tag, "^fs/") then
 			return S.response("cardinality/frontend_settings.json")
+		elseif string.match(e.tag, "^flag/") then
+			return S.response(S.grafana("13.3.1", "ofrep_table_auto_column_widths.json"))
 		elseif string.match(e.tag, "^user/") then
-			return S.response(S.grafana("13.3.0", "user.json"))
+			return S.response(S.grafana("13.3.1", "user.json"))
 		elseif string.match(e.tag, "^layer/") then
 			-- No annotations, no alert rules linked to the dashboard.
 			return S.body(200, "[]")

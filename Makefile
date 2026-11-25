@@ -25,12 +25,15 @@ tools:
 fixtures:
 	@if [ -f scripts/fixtures/embed.sh ]; then sh scripts/fixtures/embed.sh; fi
 
-# Zero specs is a valid state until the first pure module lands.
+# Zero specs is a valid state until the first pure module lands. Specs run twice: interpreted (Tern on iOS and dev
+# builds) and compiled to native code with --codegen, as release Tern runs every chunk; the pinned luau is Tern's
+# version, so a native-code miscompile shows here, not live (docs/testing.md).
 test: tools fixtures
 	@set -- $$( [ -d tests/unit ] && find tests/unit -name '*.spec.luau' | sort); \
 	if [ $$# -eq 0 ]; then echo "0 specs ran (no tests/unit/**/*.spec.luau yet)"; exit 0; fi; \
 	if [ -n "$(FILTER)" ]; then set -- "$(FILTER)" "$$@"; fi; \
-	$(LUAU) tests/run.luau -a "$$@"
+	echo "== interpreted"; $(LUAU) tests/run.luau -a "$$@" && \
+	echo "== native (--codegen)" && $(LUAU) --codegen tests/run.luau -a "$$@"
 
 test-runner-selfcheck: tools
 	@LUAU=$(LUAU) sh tests/selfcheck/check.sh

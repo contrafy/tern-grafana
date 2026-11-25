@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","expr":"sum(count_over_time({job=\"loggen\"}[$__interval]))","legendFormat":"","datasource":{"type":"loki","uid":"loki"},"intervalMs":2000,"maxDataPoints":1920}],"from":"1794416148000","to":"1794419748000"}

@@ -54,6 +54,8 @@ local function blockDecisions(version: string, uid: string, fs: string): { [stri
 				path = dashFixture(version, uid)
 			elseif string.match(tg, "^fs/") then
 				path = S.grafana(version, fs)
+			elseif string.match(tg, "^flag/") then
+				path = S.grafana(version, "ofrep_table_auto_column_widths.json")
 			elseif string.match(tg, "^user/") then
 				path = S.grafana(version, "user.json")
 			elseif string.match(tg, "^lib/") then

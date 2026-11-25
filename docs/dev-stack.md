@@ -30,7 +30,7 @@ All published ports bind to `127.0.0.1`.
 | --- | --- | --- | --- |
 | grafana12 | `grafana/grafana:12.4.12` | 3000 | Uses the image renderer. Feature toggle `newGauge` on (the 12.4 gauge: shape, segments, sparkline, effects). |
 | grafana11 | `grafana/grafana:11.6.16` | 3011 | Deliberately without a renderer, so the "no renderer" path is real. |
-| grafana13 | `grafana/grafana:13.3.0` | 3013 | Uses the image renderer (with a local renderer token: 13 refuses the default one). New gauge and new dashboard layouts are on by default. |
+| grafana13 | `grafana/grafana:13.3.1` (digest pinned) | 3013 | Uses the image renderer (with a local renderer token: 13 refuses the default one). New gauge and new dashboard layouts are on by default; feature toggle `table.autoColumnWidths` on (Grafana Cloud sizes table columns to their content). The latest stable 13.x (no 13.4 image is published yet; see "Grafana 13.4" below). |
 | renderer | `grafana/grafana-image-renderer:v5.12.7` | internal 8081 | Grafana 12 and 13; accepts the default token (12) and `tern-dev-renderer` (13). |
 | prometheus3 | `quay.io/prometheus/prometheus:v3.15.0` | 9090 | Exemplar storage, remote-write receiver. |
 | prometheus2 | `quay.io/prometheus/prometheus:v2.53.5` | 9091 | 2.53 LTS, same config and rules as prometheus3. |
@@ -194,8 +194,15 @@ Observed on the pinned versions; the plugin must handle these, and the fixtures 
   still answers schema v1 for them: tabs and rows become rows in reading order, auto-grid panels get
   a `gridPos`, a collapsed row keeps its panels (`dashboard_tern_v2_layouts` next to the stored
   `dashboard_v2_tern_v2_layouts`). `meta.apiVersion` says `v0alpha1` either way.
-- Grafana 13 drops the `newGauge` toggle from `featureToggles`: its gauge panel always draws the
-  radial gauge, with the same options, defaults and migration as 12.4's toggled one.
+- Grafana 13.3 drops the `newGauge` toggle from `featureToggles`: its gauge panel always draws the
+  radial gauge, with the same options, defaults and migration as 12.4's toggled one. Grafana Cloud's
+  13.4 lists it again (`newGauge: true`), which reads the same.
+- Grafana 13.4 (no image is published yet; compared read-only against a Grafana Cloud stack on
+  13.4.0) answers every API the plugin reads with the 13.3 shapes: frontend settings (datasources,
+  `buildInfo`, `rendererAvailable`), `/api/search`, `/api/dashboards/uid` (schema v1 view of schema
+  v2 dashboards, `meta.apiVersion` `v0alpha1`), `/api/ds/query` frames (Mimir adds
+  `schema.meta.stats`), the Prometheus-style and Alertmanager alerting APIs, silences, annotations
+  and the render API. Alert state-history annotations there carry `alertUID` and no `id` or `tags`.
 - Tempo 3.1 answers the HTTP API like 2.10 (search, tags v1 and v2, trace v1 and v2 envelopes,
   TraceQL metrics, the empty-bodied 404 for a missing trace); only the order of scopes in
   `/api/v2/search/tags` differs.
@@ -213,6 +220,55 @@ Observed on the pinned versions; the plugin must handle these, and the fixtures 
   succeeds; every other `tern-all-panels` panel renders.
 - logcli 3.7.x reports an empty version string (`logcli --version`); its fixture directory uses the
   pinned image tag.
+
+## Public dashboards
+
+`scripts/public-dashboards.py` brings widely used public dashboards onto the dev Grafanas, to check the
+Dashboard and Compatibility blocks against real-world JSON. They are fetched, never committed: their licenses
+belong to their authors.
+
+```sh
+python3 scripts/public-dashboards.py fetch              # download into dev/grafana/public/ (gitignored)
+python3 scripts/public-dashboards.py import [GRAFANA..] # into folder "Public" (uid public); default all three
+python3 scripts/public-dashboards.py remove [GRAFANA..] # delete that folder again
+```
+
+- Sources are pinned in the script: grafana.com dashboards by revision (Node Exporter Full 1860, Node
+  Exporter EN 11074, Prometheus 2.0 Overview 3662, cAdvisor 14282, Docker 193, Kubernetes 315, 13332,
+  15761, Loki/logs 13639, 12611, 17781, Blackbox 7587, Alertmanager 9578, Grafana Internals 3590, Redis 763,
+  PostgreSQL 9628, MySQL 7362, OpenTelemetry & Tempo 23242), the monitoring-mixins site by commit
+  (kubernetes compute resources cluster/namespace/pod and API server, node-exporter, Prometheus,
+  Alertmanager, Grafana, Loki) and tags of grafana/tempo (Tempo reads/writes) and grafana/grafana (devenv
+  panel test dashboards on TestData).
+- `fetch` rewrites what Grafana's import dialog would ask for: `${DS_*}` datasource inputs become the dev
+  datasources (Prometheus 3, Loki, Tempo, Alertmanager, TestData, PostgreSQL), constant inputs take their
+  default (a constant naming a datasource type becomes its dev uid), datasource variables select the dev
+  datasource, and every dashboard gets the uid `pub-<file>`. Datasources the stack lacks (MySQL, Redis,
+  ...) stay unresolved, as on a Grafana without them.
+- `import` goes through the API (`POST /api/dashboards/db`), not file provisioning, so the Grafana
+  containers need no extra mount. The dashboards live in the Grafana database: recreating a container drops
+  them; rerun `import`.
+- The e2e dashboard scenario searches the picker for "Tern " (every provisioned title starts with it, no public
+  one does), so it passes with or without them. Fixture capture (`scripts/fixtures/capture.sh`) refuses to
+  install a new or refreshed fixture that contains the Public folder (`"uid":"public"` or `"folderUid":"public"`,
+  e.g. search and folder captures): run `remove` first, then `import` again after capturing.
+- Legacy dashboards (schemaVersion below 16, top-level `rows`) are stored as uploaded; Grafana migrates them
+  when it loads them (12 and 13 in the backend: `/apis/dashboard.grafana.app/v1beta1/...` answers the migrated
+  model), and so does the plugin. `tern-legacy` reproduces one; capture records Grafana's migration of it
+  (`dashboard_v1beta1_tern_legacy`, 12+) and its panels' queries.
+- What they exposed is pinned by synthetic dashboards in `dev/grafana/dashboards/` (provisioned and captured
+  like the others, so their fixtures are committed): `tern-pub-chrome` (schemaVersion 18 shape: annotation
+  layers by `$ds` and by datasource name, horizontally repeated panels, links, a stat without data, a query
+  error), `tern-pub-vars` (Prometheus series-query variables with a regex, Loki `label_values` variables with
+  string, object and by-name datasources, a Loki logs panel, a text panel with an unresolved datasource;
+  fixtures `ds_proxy_prom_series*`, `ds_proxy_loki_labels`, `ds_proxy_loki_label_values_*`),
+  `tern-pub-gauges` (small bar gauges, two-row stats, a 13.0 gauge, stat sparklines over a series with gaps, on
+  a 3-row stat and in a fixed color; `ds_query_pub_gauges_<panel>` from
+  `capture_pub_gauges`), `tern-pub-ts` (five Prometheus time series and two tables, one on a TestData CSV;
+  `ds_query_pub_ts_<panel>` from `capture_pub_ts`), `tern-pub-frames` (a calculateField saved with empty
+  options, a query without series, table targets saved without a refId; `ds_query_pub_frames_<panel>` from
+  `capture_pub_frames`) and `tern-legacy` (schemaVersion 14 with top-level rows, singlestat, graph and the
+  old table).
 
 ## Credentials (local only)
 
@@ -266,8 +322,9 @@ panel that queries, `search_starred`, `search_recent`, `search_tag`, `search_que
 `alertlist_rules` and `news_feed.xml`. The request bodies come from `scripts/fixtures/panel_query.jq`,
 which builds what Grafana's frontend sends: dashboard range with the panel's `timeFrom`/`timeShift`
 applied as absolute epoch-ms strings, `maxDataPoints` from the panel or its width (gridPos.w * 80 px),
-`intervalMs` from Grafana's `calculateInterval` with the panel `interval` or the datasource minimum
-as the low limit, and `${trace_id}` set to a real Tempo trace.
+`intervalMs` from Grafana's `calculateInterval` with the panel `interval` or the interval of the panel's
+datasource (Prometheus 10s as provisioned, SQL 1m, none for `-- Mixed --`) as the low limit, and
+`${trace_id}` set to a real Tempo trace.
 
 ### Adding a fixture
 

@@ -11,6 +11,7 @@
 
 local Env = require("../env")
 local Frame = require("../frame/types")
+local FrameGrafana = require("../frame/grafana")
 local FrameLoki = require("../frame/loki")
 local FrameProm = require("../frame/prom")
 local Grafana = require("./grafana")
@@ -178,7 +179,7 @@ local function fromFrames(result: Frame.QueryResult, env: Env): Result
 	if not result.ok then
 		return { ok = false, error = (result :: any).error }
 	end
-	local frames: { Frame.Frame } = (result :: any).frames
+	local frames: { Frame.Frame } = FrameGrafana.withFields((result :: any).frames)
 	local lines = FrameLoki.fromFrames(frames, env)
 	local kind: "streams" | "matrix" | "vector" = "matrix"
 	for _, f in frames do

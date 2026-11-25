@@ -1,1 +1,0 @@
-{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"vector(0)","legendFormat":"Current Metrics Series Usage Cost","instant":true,"range":false,"editorMode":"code","intervalMs":10000,"maxDataPoints":480}],"from":"1794250687000","to":"1794254287000"}

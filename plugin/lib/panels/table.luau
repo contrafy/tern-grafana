@@ -17,17 +17,20 @@
 --   (`unsupported`). custom.align and custom.hidden apply;
 -- - options.sortBy sorts rows; the footer (options.footer.show with its
 --   reducer, or per-field custom.footer.reducers) adds a reduced row;
--- - columns are sized as TableNG does: custom.width exactly, the others to
---   their content (at least custom.minWidth, at most 400px) without
---   shrinking, so a wide table scrolls sideways instead of squeezing; with
---   no custom.width column the columns share the leftover width;
+-- - columns are sized as TableNG does by the server's table.autoColumnWidths
+--   flag: custom.width exactly; the others, with the flag on, to their
+--   content (at least custom.minWidth, at most 400px; a gauge column 150px)
+--   without shrinking, so a wide table scrolls sideways instead of
+--   squeezing, sharing the leftover width when no column has a fixed width;
+--   with it off, sharing the width evenly, at least custom.minWidth or 150px;
 -- - field data links (links, from the frame or fieldConfig) draw the cell
 --   as a link that opens the first one in the browser pane;
 -- - options.enablePagination (footer.enablePagination before Grafana 12.2)
 --   pages rows with usePaginatedRows' page size for the panel's Grafana
 --   height and cellHeight; the pager flips pages (`tpage`).
--- Grafana shows one frame at a time with a frame picker; Tern shows the
--- first and says how many more there are.
+-- - several frames: TablePanel shows one, options.frameIndex (0-based) or
+--   the one picked in the frame selector under it (`tframe`), else the
+--   first; the selector names each frame (getFrameDisplayName).
 
 local Common = require("./common")
 local Env = require("../env")
@@ -104,9 +107,12 @@ export type Table = {
 	columns: { Column },
 	rows: { { Cell } },
 	footer: { string }?,
-	-- Rows beyond the cap and frames beyond the first.
+	-- Rows beyond the cap.
 	more_rows: number,
-	more_frames: number,
+	-- The frame shown (1-based) and every frame's display name, when there
+	-- are several.
+	frame: number,
+	frame_names: { string }?,
 	-- Columns beyond the grid's limit.
 	more_columns: number,
 	pager: Pager?,
@@ -115,6 +121,9 @@ export type Table = {
 local M = {}
 
 M.MAX_ROWS = 500
+-- Columns drawn (panels.css tgp-table tg-cols-1..48); TableNG draws every
+-- column and scrolls sideways, as tg-wrap does.
+M.MAX_COLUMNS = 48
 
 -- panels.css has tgp-gw-0 .. tgp-gw-<MAX_VALUE_WIDTH>.
 M.MAX_VALUE_WIDTH = 24
@@ -122,6 +131,10 @@ M.MAX_VALUE_WIDTH = 24
 -- panels.css has tgp-cw-5 .. tgp-cw-<MAX_WIDTH_CLASS> (custom.width) and
 -- tgp-cmin-5 .. (custom.minWidth), in 10px steps.
 M.MAX_WIDTH_CLASS = 80
+
+-- TableNG COLUMN.DEFAULT_WIDTH: an auto column's floor when the columns
+-- share the width (table.autoColumnWidths off).
+M.DEFAULT_WIDTH = 150
 
 -- Cell types drawn natively; the others ladder with their reason.
 local UNSUPPORTED: { [string]: string } = {
@@ -599,11 +612,44 @@ local function compare(a: any, b: any): boolean
 	return tostring(a) < tostring(b)
 end
 
+-- getFrameDisplayName(frame) without an index: its name, its one value
+-- field's display name, else all of them joined.
+local function frameName(frame: Frame): string
+	if frame.name and frame.name ~= "" then
+		return frame.name
+	end
+	local names: { string } = {}
+	for _, f in frame.fields do
+		if f.type ~= "time" then
+			table.insert(names, FieldConfig.displayName(f, frame))
+		end
+	end
+	if #names > 0 or #frame.fields > 0 then
+		return table.concat(names, ", ")
+	end
+	return if frame.refId and frame.refId ~= "" then "Series (" .. frame.refId .. ")" else "Series (undefined)"
+end
+
+-- getCurrentFrameIndex: the picked frame, else options.frameIndex when it
+-- names a frame past the first, else the first.
+function M.frameIndex(panel: any, frames: { Frame }, env: Env, opts: Common.Options): number
+	local picked = opts.frame
+	if picked and picked >= 1 and picked <= #frames then
+		return picked
+	end
+	local option = Json.num(env, Json.path(env, panel, "options", "frameIndex"))
+	if option and option > 0 and option < #frames and option == math.floor(option) then
+		return option + 1
+	end
+	return 1
+end
+
 function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options): Table
-	-- Only the first frame becomes columns; the others still name and range
+	-- Only the shown frame becomes columns; the others still name and range
 	-- its fields.
 	local items = FieldConfig.resolve(panel, frames, env, { color_mode = "thresholds" }, true)
-	local first = frames[1]
+	local index = M.frameIndex(panel, frames, env, opts)
+	local first = frames[index]
 	local columns: { Column } = {}
 	-- Every field of the shown frame, hidden ones too: `${__data.fields.x}`.
 	local frameItems: { Item } = {}
@@ -627,8 +673,8 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 			)
 		end
 	end
-	local moreColumns = math.max(0, #columns - Grid.MAX_COLUMNS)
-	while #columns > Grid.MAX_COLUMNS do
+	local moreColumns = math.max(0, #columns - M.MAX_COLUMNS)
+	while #columns > M.MAX_COLUMNS do
 		table.remove(columns)
 	end
 	local n = 0
@@ -799,12 +845,21 @@ function M.build(panel: any, frames: { Frame }, env: Env, opts: Common.Options):
 		end
 		footer = f
 	end
+	local names: { string }? = nil
+	if #frames > 1 then
+		local list: { string } = table.create(#frames)
+		for i, f in frames do
+			list[i] = frameName(f)
+		end
+		names = list
+	end
 	return {
 		columns = columns,
 		rows = rows,
 		footer = footer,
 		more_rows = if pager then 0 else math.max(0, n - M.MAX_ROWS),
-		more_frames = math.max(0, #frames - 1),
+		frame = index,
+		frame_names = names,
 		more_columns = moreColumns,
 		pager = pager,
 	}
@@ -871,7 +926,8 @@ local function gaugeNode(cell: Cell, width: number): Node
 	return { k = "el", p = { tag = "div", class = "tgp-gc" }, c = children }
 end
 
-local function contentNode(cell: Cell, width: number): Node
+-- The cell's content; plain text as a string, written as its box's own text.
+local function contentNode(cell: Cell, width: number): Node | string
 	if cell.kind == "gauge" then
 		return gaugeNode(cell, width)
 	elseif cell.kind == "pill" then
@@ -893,9 +949,20 @@ local function contentNode(cell: Cell, width: number): Node
 			return { k = "el", p = { tag = "span", class = cell.class :: string, text = cell.text } }
 		end
 		local token = Common.token(cell.tone :: any)
-		return Grid.text(cell.text, if token ~= "" then token else nil)
+		if token ~= "" then
+			return Grid.text(cell.text, token)
+		end
 	end
-	return Grid.text(cell.text)
+	return cell.text
+end
+
+-- `content` in the cell box `box` (its props).
+local function boxed(box: { [string]: any }, content: Node | string): Node
+	if type(content) == "string" then
+		box.text = content
+		return { k = "el", p = box }
+	end
+	return { k = "el", p = box, c = { content } }
 end
 
 -- The content in a box at most MAX_AUTO_WIDTH wide (tgp-cv): an auto
@@ -908,10 +975,13 @@ local function cellNode(cell: Cell, width: number): Node
 		box.title = cell.href
 		box.actions = { click = "dlink=" .. Url.percentEncode(cell.href :: string) }
 	end
-	local content: Node = { k = "el", p = box, c = { contentNode(cell, width) } }
 	if cell.bg_tone == nil then
-		return content
+		return boxed(box, contentNode(cell, width))
 	end
+	-- An empty filled cell still fills the row's line (a no-break space keeps
+	-- the text line's height; an empty one collapses to the padding).
+	local content =
+		boxed(box, if cell.text == "" and cell.kind ~= "gauge" then "\194\160" else contentNode(cell, width))
 	-- getCellColorInlineStyles: the color, or a 120deg gradient from a
 	-- darker, hue-rotated copy of it, with contrasting text.
 	local class = "tgp-cbg "
@@ -993,32 +1063,72 @@ local function pagerNode(p: Pager, key: string): Node
 	return { k = "el", p = { tag = "div", key = "pager", class = "tgp-pager" }, c = children }
 end
 
+-- TablePanel's frame Select under the table: the shown frame's name, and
+-- the previous and next frames; clicks send `tframe=<frame>:<panel key>`.
+local function frameSelect(names: { string }, current: number, key: string): Node
+	local function step(id: string, label: string, target: number): Node
+		local on = target >= 1 and target <= #names
+		local props: { [string]: any } =
+			{ tag = "span", key = id, class = "tgp-pg-b" .. (if on then "" else " tgp-pg-off"), text = label }
+		if on then
+			props.actions = { click = "tframe=" .. target .. ":" .. key }
+		end
+		return { k = "el", p = props }
+	end
+	local box: Node = {
+		k = "el",
+		p = {
+			tag = "span",
+			key = "cur",
+			class = "tgp-fsel-v",
+			text = names[current],
+			title = string.format("frame %d of %d", current, #names),
+			actions = { click = "tframe=" .. (current % #names + 1) .. ":" .. key },
+		},
+	}
+	return {
+		k = "el",
+		p = { tag = "div", key = "fsel", class = "tgp-fsel" },
+		c = { step("fprev", "<", current - 1), box, step("fnext", ">", current + 1) },
+	}
+end
+
 -- No frame with fields is PanelDataErrorView; a frame with fields and no
 -- rows (say after filterByValue) keeps its header over Grafana 13's
 -- EmptyTablePlaceholder: the field defaults' noValue, else "No rows".
 function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): Node
 	local t = M.build(panel, frames, env, opts)
 	if #t.columns == 0 then
-		return Common.noData(panel, env, opts.key)
+		if t.frame_names == nil then
+			return Common.noData(panel, env, opts.key)
+		end
+		return ui.col({
+			Common.noData(panel, env, "nodata"),
+			frameSelect(t.frame_names :: { string }, t.frame, opts.key),
+		}, { key = opts.key })
 	end
 	local showHeader = Json.bool(env, Json.path(env, panel, "options", "showHeader")) ~= false
 	local columns: { Grid.Column } = table.create(#t.columns)
-	-- TableNG grows the auto columns into the leftover width; panels.css
-	-- does so only when no column has a fixed width (tgp-grow).
+	-- Grafana 13's TableNG sizes columns by the server's OpenFeature flag
+	-- table.autoColumnWidths (useColWidths): on, computeContentAwareColWidths
+	-- (tgp-fit: every auto column as wide as its content, a gauge column the
+	-- graphical default of 150px, growing into the leftover width when no
+	-- column has a fixed width, tgp-grow); off (the default, and every
+	-- Grafana before 13), computeColWidths (tgp-even: the auto columns share
+	-- the width left by the custom.width ones, each at least custom.minWidth,
+	-- else 150px, their text cut short).
+	local aware = opts.features ~= nil and (opts.features :: { [string]: boolean })["table.autoColumnWidths"] == true
 	local grow = true
 	for i, c in t.columns do
 		if c.width then
 			grow = false
 		end
 		local classes: { string } = {}
-		-- Gauge columns do not shrink below the bar's minimum and the value.
-		if c.value_width then
-			table.insert(classes, "tgp-gcw-" .. c.value_width)
-		end
 		if c.width then
 			table.insert(classes, "tgp-cw-" .. math.clamp(math.floor(c.width / 10 + 0.5), 5, M.MAX_WIDTH_CLASS))
-		elseif c.min_width then
-			table.insert(classes, "tgp-cmin-" .. math.clamp(math.floor(c.min_width / 10 + 0.5), 5, M.MAX_WIDTH_CLASS))
+		elseif c.min_width or not aware then
+			local floor = c.min_width or M.DEFAULT_WIDTH
+			table.insert(classes, "tgp-cmin-" .. math.clamp(math.floor(floor / 10 + 0.5), 5, M.MAX_WIDTH_CLASS))
 		end
 		columns[i] = {
 			head = if showHeader then c.head else "",
@@ -1044,8 +1154,14 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	local children: { Node } = {
 		{
 			k = "el",
-			p = { tag = "div", class = if grow then "tgp-table tgp-fit tgp-grow" else "tgp-table tgp-fit" },
-			c = { Grid.grid(opts.key .. ".grid", columns, gridRows, "tern-grafana.table") },
+			p = {
+				tag = "div",
+				class = if not aware
+					then "tgp-table tgp-even"
+					elseif grow then "tgp-table tgp-fit tgp-grow"
+					else "tgp-table tgp-fit",
+			},
+			c = { Grid.grid(opts.key .. ".grid", columns, gridRows, "tern-grafana.table", M.MAX_COLUMNS) },
 		},
 	}
 	if #t.rows == 0 then
@@ -1062,11 +1178,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	if t.more_columns > 0 then
 		table.insert(notes, string.format("%d more columns", t.more_columns))
 	end
-	if t.more_frames > 0 then
-		table.insert(notes, string.format("%d more frames (showing the first)", t.more_frames))
-	end
 	if #notes > 0 then
 		table.insert(children, ui.muted(table.concat(notes, ", "), { key = "more" }))
+	end
+	if t.frame_names then
+		table.insert(children, frameSelect(t.frame_names :: { string }, t.frame, opts.key))
 	end
 	return ui.col(children, { key = opts.key, gap = "xs" })
 end

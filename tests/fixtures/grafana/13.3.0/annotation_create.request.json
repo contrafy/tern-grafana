@@ -1,1 +1,0 @@
-{"dashboardUID":"tern-panels","panelId":2,"time":1794239746000,"tags":["tern-capture","deploy"],"text":"kubectl apply -f deploy.yaml"}

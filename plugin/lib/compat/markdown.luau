@@ -146,8 +146,8 @@ function M.report(meta: Meta, results: { Analyze.DashResult }, summary: Analyze.
 			line("Could not be analyzed: " .. cell(r.error :: string))
 			continue
 		end
-		if #r.panels == 0 then
-			line("No panels.")
+		if r.note or #r.panels == 0 then
+			line("No panels: " .. cell(r.note or Analyze.NO_PANELS) .. ".")
 			continue
 		end
 		line(string.format("native %d, Grafana PNG %d, browser %d", r.native, r.png, r.browser))

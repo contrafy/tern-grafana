@@ -74,9 +74,62 @@
 }
 
 [data-role="tern-grafana.panel-body"],
+[data-role="tern-grafana.panel-body-flush"],
 [data-role="tern-grafana.panel-body"] > [data-role="tern-grafana.stat"],
+[data-role="tern-grafana.panel-body-flush"] > [data-role="tern-grafana.stat"],
 [data-role="tern-grafana.stat"] > .tgp-stat-grid {
 	flex-grow: 1;
+}
+
+/* A panel whose plugin calls PanelPlugin.setNoPadding() (stat, canvas,
+   geomap, dynamic text; PanelChrome padding none) fills the card to its
+   border: its body is pulled over the card body's padding (0 12px 10px
+   under a head, 10px 12px without one; tgp2-plain 4px 6px). The head keeps
+   its padding. View.cardHeight sizes it. */
+[data-role="tern-grafana.dashboard"] .sf-card > .sf-card-body > [data-role="tern-grafana.panel-body-flush"] {
+	margin: 0 -12px -10px -12px;
+}
+
+[data-role="tern-grafana.dashboard"] .sf-card.nohead > .sf-card-body > [data-role="tern-grafana.panel-body-flush"] {
+	margin-top: -10px;
+}
+
+[data-role="tern-grafana.dashboard"] .tgp2-plain > [data-role="tern-grafana.panel-body-flush"] {
+	margin: 0 -6px -4px -6px;
+}
+
+[data-role="tern-grafana.dashboard"] .tgp2-plain.tgp2-flush-top > [data-role="tern-grafana.panel-body-flush"] {
+	margin-top: -4px;
+}
+
+/* PanelDataErrorView: "No data" centered in the panel's box, in the
+   secondary text color at the large text size. */
+.tg-nodata {
+	display: flex;
+	flex-grow: 1;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	min-height: 2em;
+	font-size: 1.25em;
+}
+
+/* Panel header title items: the query error (PanelStatus) and the panel
+   links (VizPanelLinks) icons. */
+.tgp2-err {
+	cursor: help;
+	flex-shrink: 0;
+}
+
+.tgp2-links {
+	cursor: pointer;
+	flex-shrink: 0;
+	padding: 0 2px;
+	border-radius: 4px;
+}
+
+.tgp2-links:hover {
+	background: var(--l2);
 }
 
 [data-role="tern-grafana.dashboard"] .sf-card .sf-image {

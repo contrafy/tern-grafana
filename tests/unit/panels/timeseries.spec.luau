@@ -2,6 +2,7 @@
 -- The time series panel (public/app/plugins/panel/timeseries/panelcfg.cue,
 -- packages/grafana-schema GraphFieldConfig, fieldColor.ts
 -- getFieldSeriesColor) mapped onto lib/render/svg_timeseries.
+local Bench = require("../../bench/lib/bench")
 local t = require("../../lib/test")
 local S = require("./support")
 local Timeseries = require("../../../plugin/lib/panels/timeseries")
@@ -10,12 +11,11 @@ local describe, it, expect = t.describe, t.it, t.expect
 local env = S.env
 
 -- The idle series' legend Last * / Max per prom_range capture, the end of
--- the 15m window each was captured in, and a sample near its middle (the
--- 13.3.0 stack had run only ~7m: 29 samples instead of 61).
-local LAST_IDLE = { ["11.6.16"] = "9.62", ["12.4.12"] = "9.45", ["13.3.0"] = "9.48" }
-local MAX_IDLE = { ["11.6.16"] = "9.69", ["12.4.12"] = "9.69", ["13.3.0"] = "9.58" }
-local TO_MS = { ["11.6.16"] = 1791577908000, ["12.4.12"] = 1791577908000, ["13.3.0"] = 1794239763000 }
-local MID_SAMPLE = { ["11.6.16"] = 30, ["12.4.12"] = 30, ["13.3.0"] = 15 }
+-- the 15m window each was captured in, and a sample near its middle.
+local LAST_IDLE = { ["11.6.16"] = "9.62", ["12.4.12"] = "9.45", ["13.3.1"] = "7.60" }
+local MAX_IDLE = { ["11.6.16"] = "9.69", ["12.4.12"] = "9.69", ["13.3.1"] = "9.46" }
+local TO_MS = { ["11.6.16"] = 1791577908000, ["12.4.12"] = 1791577908000, ["13.3.1"] = 1794414168000 }
+local MID_SAMPLE = { ["11.6.16"] = 30, ["12.4.12"] = 30, ["13.3.1"] = 30 }
 
 local function count(s: string, needle: string): number
 	local n, i = 0, 1
@@ -595,6 +595,182 @@ for _, version in S.VERSIONS do
 
 		it("joins gaps up to the insertNulls threshold", function()
 			expect(runs(8)).toBe(1)
+		end)
+
+		-- A redraw reuses the nulls inserted for the panel's last render, but
+		-- only the few panels the render memo holds keep theirs: a filled copy
+		-- of every series of every panel doubled a dashboard's heap (a 60 x
+		-- 50 x 1000 dashboard went from 100 to 200 MB of the plugin VM's
+		-- 256 MiB).
+		it("keeps the inserted nulls of a few panels, not of every panel drawn", function()
+			local panel = cellsPanel(version, 7)
+			local function draw(frames: { any }, i: number)
+				Timeseries.view(panel, frames, env, {
+					key = "p" .. i,
+					from_ms = tonumber(req.from),
+					to_ms = tonumber(req.to),
+				})
+			end
+			-- Fill the render memo first, so what it evicts is this test's.
+			for i = 1, 8 do
+				draw(S.frames(version, "cells_7"), i)
+			end
+			local sets: { { any } } = {}
+			local sampleBytes = 0
+			for i = 1, 64 do
+				local frames = S.frames(version, "cells_7")
+				sets[i] = frames
+				for _, f in frames do
+					for _, field in f.fields do
+						sampleBytes += 16 * #field.values
+					end
+				end
+			end
+			local before = Bench.liveKb()
+			for i, frames in sets do
+				draw(frames, 8 + i)
+			end
+			local retainedBytes = (Bench.liveKb() - before) * 1024
+			expect(retainedBytes < sampleBytes / 2).toBe(true)
+		end)
+	end)
+end
+
+-- tern-pub-ts: synthetic repros of public dashboards' time series (1860
+-- Network Traffic Basic and Memory Basic), drawn in a 7-row dashboard card.
+for _, version in S.VERSIONS do
+	describe("timeseries public repros on tern-pub-ts, Grafana " .. version, function()
+		local function pubPanel(id: number): any
+			for _, p in S.decode("grafana/" .. version .. "/dashboard_tern_pub_ts.json").dashboard.panels do
+				if p.id == id then
+					return p
+				end
+			end
+			error("no panel " .. id)
+		end
+		local CARD = { key = "p", size = { w = 800, h = 258 }, card_height = 228 }
+
+		-- Grafana draws all 22 Rx and Tx series; the byRegexp /.*Tx.*/
+		-- negative-Y override draws the Tx ones below zero.
+		it("draws every series, Tx below zero", function()
+			local frames = S.frames(version, "pub_ts_1")
+			expect(#frames).toBe(22)
+			local node, assets = Timeseries.view(pubPanel(1), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(count(svg, "tg-line")).toBe(22)
+			local negative = 0
+			for _, label in ticks(svg, "end") do
+				if string.sub(label, 1, 1) == "-" then
+					negative += 1
+				end
+			end
+			expect(negative > 0).toBe(true)
+			local legend = S.text(S.find(node, function(n)
+				return n.p and n.p.key == "p.legend"
+			end))
+			expect(legend).toContain("Tx eth0")
+			expect((string.find(legend, "not shown", 1, true))).toBeNil()
+		end)
+
+		-- The Total override's stacking {group: false} stacks it alone, so
+		-- the axis tops out near Total, not at Total plus the stack (2x).
+		it("takes a {group: false} series off the stack", function()
+			local frames = S.frames(version, "pub_ts_2")
+			local total = 0
+			for _, f in frames do
+				if f.refId == "A" then
+					for _, v in f.fields[2].values do
+						if type(v) == "number" then
+							total = math.max(total, v)
+						end
+					end
+				end
+			end
+			expect(total > 0).toBe(true)
+			local _, assets = Timeseries.view(pubPanel(2), frames, env, CARD)
+			local top = 0
+			for _, label in ticks(assets.p.bytes, "end") do
+				local n = tonumber(string.match(label, "^([%d%.]+) GiB$"))
+				if n then
+					top = math.max(top, n)
+				end
+			end
+			expect(top >= total / 2 ^ 30 * 0.75).toBe(true)
+			expect(top < total / 2 ^ 30 * 1.5).toBe(true)
+		end)
+
+		-- Old graphs from 11074 and 9578, as the dashboard migrates them.
+		local Migrate = require("../../../plugin/lib/panels/migrate")
+		local TsGradient = require("../../../plugin/lib/render/ts_gradient")
+		local function graph(id: number): any
+			return (Migrate.migrate(S.clone(pubPanel(id)), env))
+		end
+
+		-- 10 receive then 10 transmit series: the classic palette runs on
+		-- past its first ten colors, so transmit eth0 (series 12) is
+		-- dark-purple as in Grafana, and only receive eth0 is yellow.
+		it("colors series past the tenth from the rest of the classic palette", function()
+			local frames = S.frames(version, "pub_ts_8")
+			expect(#frames).toBe(20)
+			local _, assets = Timeseries.view(graph(8), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(pathTag(svg, TsGradient.stopClass("dark-purple"), "tg-line") ~= nil).toBe(true)
+			expect(count(svg, 'class="tg-s2 tg-line"')).toBe(1)
+		end)
+
+		-- Every sample NaN: uPlot leaves the scale unset, so Grafana draws
+		-- no y ticks (9578 and Alertmanager overview Notification durations).
+		-- A capture where the query matched no series is one frame without
+		-- values: prepareGraphableFields finds nothing to graph and Grafana
+		-- shows PanelDataErrorView's "No data".
+		it("draws no y axis when no sample is a number", function()
+			local frames = S.frames(version, "pub_ts_9")
+			expect(#frames > 0).toBe(true)
+			local node, assets = Timeseries.view(graph(9), frames, env, CARD)
+			local rows = 0
+			for _, f in frames do
+				for _, field in f.fields do
+					rows = math.max(rows, #field.values)
+				end
+			end
+			if rows == 0 then
+				expect((node.p :: { [string]: any }).class).toBe("tg-nodata")
+				return
+			end
+			local svg = assets.p.bytes
+			expect(#ticks(svg, "end")).toBe(0)
+			expect(#ticks(svg, "start")).toBe(0)
+			expect(#ticks(svg, "middle") > 0).toBe(true)
+		end)
+
+		it("shows No data for a lone empty frame", function()
+			local node, assets = Timeseries.view(graph(9), { { refId = "A", fields = {} } }, env, CARD)
+			expect((node.p :: { [string]: any }).class).toBe("tg-nodata")
+			expect((next(assets))).toBeNil()
+		end)
+
+		-- Lone increase samples seven minutes apart, lines without points:
+		-- Grafana draws nothing for them (9578 Received alerts).
+		it("leaves lone samples undrawn when points are off", function()
+			local frames = S.frames(version, "pub_ts_10")
+			local _, assets = Timeseries.view(graph(10), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(pathTag(svg, "tg-dots")).toBeNil()
+			local line = pathTag(svg, "tg-line") :: string
+			expect(line).toContain('stroke-linecap="butt"')
+		end)
+
+		-- Both y axes hidden: the migrated defaults' axisPlacement hidden
+		-- reaches the time field, so the log volume has no time axis either
+		-- and its bars reach the bottom (13639).
+		it("hides the time axis with the time field's axisPlacement", function()
+			local frames = S.frames(version, "pub_ts_11")
+			local _, assets = Timeseries.view(graph(11), frames, env, CARD)
+			local svg = assets.p.bytes
+			expect(#ticks(svg, "middle")).toBe(0)
+			expect((string.find(svg, "tg-axis", 1, true))).toBeNil()
+			local _, plain = Timeseries.view(pubPanel(1), S.frames(version, "pub_ts_1"), env, CARD)
+			expect(#ticks(plain.p.bytes, "middle") > 0).toBe(true)
 		end)
 	end)
 end

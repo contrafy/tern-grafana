@@ -13,10 +13,8 @@ local OPTS = { key = "s" }
 
 local JOBS = { "alertmanager", "down", "loki", "node", "prometheus", "tempo" }
 
--- Samples of prom_range refId B (sum(up) over 15m): the 13.3.0 stack was
--- captured ~7m after it started.
-local B_SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.0"] = 30 }
-local SPARK_POINTS = 60
+-- Samples of prom_range refId B (sum(up) over 15m at 15 s).
+local B_SAMPLES = { ["11.6.16"] = 61, ["12.4.12"] = 61, ["13.3.1"] = 61 }
 
 for _, version in S.VERSIONS do
 	describe("stat on tern-panels, Grafana " .. version, function()
@@ -32,14 +30,23 @@ for _, version in S.VERSIONS do
 			expect(tiles[1].title).toBeNil()
 		end)
 
-		it("draws the field as a sparkline in graphMode area", function()
-			local tiles = Stat.tiles(S.panel(version, 5), S.refFrames(version, "prom_range", "B"), env, OPTS)
-			local spark: any = tiles[1].spark
-			assert(spark, "spark")
-			expect(spark.k).toBe("chart")
-			expect(spark.p.kind).toBe("spark")
-			expect(spark.p.token).toBe("success")
-			expect(#spark.p.series).toBe(math.min(B_SAMPLES[version], SPARK_POINTS))
+		-- BigValueLayout renderChart: on a filled tile the sparkline is a
+		-- white fill at 40% under a line in the value's color brightened.
+		it("plots the field as BigValue's sparkline in graphMode area", function()
+			local panel, frames = S.panel(version, 5), S.refFrames(version, "prom_range", "B")
+			local tiles = Stat.tiles(panel, frames, env, OPTS)
+			local spark = assert(tiles[1].spark, "spark")
+			expect(#spark.x).toBe(B_SAMPLES[version])
+			expect({ spark.x[1], spark.x[#spark.x] }).toEqual({ 0, 1 })
+			local _, assets = Stat.view(panel, frames, env, OPTS)
+			local svg = assets["s.v1k"].bytes
+			expect(string.find(svg, '<path class="tgp-stat-spark-on tg-area" fill-opacity="0.4"', 1, true) ~= nil).toBe(
+				true
+			)
+			local line = (tiles[1].color_class :: string) .. " tgp-stat-spark-hi tg-line"
+			expect(string.find(svg, '<path class="' .. line .. '" fill="none" stroke-width="1"', 1, true) ~= nil).toBe(
+				true
+			)
 		end)
 
 		-- Panel 6 "Down targets": graphMode none, colorMode value; fed the
@@ -279,10 +286,11 @@ for _, version in S.VERSIONS do
 
 		-- The tile's padding stands in for BigValue's inside a capped card, so
 		-- the value gets the whole room (6x3 with a description: card body
-		-- 32 px, 20 px in the tile, a 16 px value); a sparkline that would
-		-- leave the value less than a line is left out, as BigValue drops its
-		-- chart from a short box.
-		it("fills a short capped card's room with the value, without a sparkline that leaves none", function()
+		-- 32 px, 20 px in the tile, a 16 px value). BigValue draws its chart
+		-- where its own box has room (buildLayout: a wide box over 50 px, a
+		-- stacked one over 100 px), behind the value, so a capped card keeps
+		-- it and its value's room; a 3x3 stat (public 17781 Panics) has none.
+		it("fills a short capped card's room with the value, the sparkline behind it where Grafana has one", function()
 			local series, sframes = fidelity(12)
 			local node, assets =
 				Stat.view(series, sframes, env, { key = "s", size = { w = 400, h = 106 }, card_height = 32 })
@@ -292,19 +300,13 @@ for _, version in S.VERSIONS do
 				return n.k == "image"
 			end).p.h).toBe(20)
 			local requests, rframes = fidelity(13)
-			local function sparks(cardHeight: number): boolean
-				local n = Stat.view(
-					requests,
-					rframes,
-					env,
-					{ key = "s", size = { w = 400, h = 144 }, card_height = cardHeight }
-				)
-				return S.find(n, function(x)
-					return x.k == "chart"
-				end) ~= nil
+			local function chart(size: { w: number, h: number }, cardHeight: number): boolean
+				local _, a = Stat.view(requests, rframes, env, { key = "s", size = size, card_height = cardHeight })
+				return a["s.v1k"] ~= nil
 			end
-			expect(sparks(80)).toBe(true)
-			expect(sparks(32)).toBe(false)
+			expect(chart({ w = 400, h = 144 }, 80)).toBe(true)
+			expect(chart({ w = 400, h = 144 }, 32)).toBe(true)
+			expect(chart({ w = 154, h = 106 }, 64)).toBe(false)
 		end)
 	end)
 end
@@ -330,30 +332,41 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 		return assert(tonumber(string.match(svg, 'font%-size="(%d+)"')))
 	end
 
-	-- Grafana's 1000x500 render of panel 17 draws the lone "5" about 356 px
-	-- tall: the box height (452 px less 12 px padding twice) over the line
-	-- height 1.2. A fixed size would look tiny next to it.
+	-- Stat is a no-padding panel (PanelPlugin.setNoPadding): BigValue's box
+	-- is the panel less its 1 px border and header, 40 px with Grafana
+	-- 12.4's newPanelPadding (32 without). Grafana 12.4's 1000x500 d-solo
+	-- render of panel 17 draws the lone "5" at 361.667 px: the 458 px box
+	-- less 12 px padding twice, over the line height 1.2 (11.6: 368.333 px
+	-- in its 466 px box). A fixed size would look tiny next to it.
+	local G12 = { newPanelPadding = true, newGauge = true }
 	it("grows a lone value to the box height and centers it", function()
 		local node, assets = Stat.view(
 			S.panel("12.4.12", 17),
 			S.refFrames("12.4.12", "prom_range", "B"),
 			env,
-			{ key = "s", size = { w = 1000, h = 500 } }
+			{ key = "s", size = { w = 1000, h = 500 }, features = G12 }
 		)
-		expect(valuePx(node, assets)).toBe(357)
+		expect(valuePx(node, assets)).toBe(362)
 		expect(has(classOf(node, "l"), "tgp-stat-center")).toBe(true)
 		expect(has(classOf(node, "s1"), "tgp-stat-fit")).toBe(true)
+		node, assets = Stat.view(
+			S.panel("12.4.12", 17),
+			S.refFrames("12.4.12", "prom_range", "B"),
+			env,
+			{ key = "s", size = { w = 1000, h = 500 } }
+		)
+		expect(valuePx(node, assets)).toBe(368)
 	end)
 
 	-- Panel 6 at its gridPos 4x4 (267x144 px) with six named values:
-	-- autoGrid puts them 3 by 2, each box 81.7x46.5; the title takes 15% of
-	-- the box height and the value the rest.
+	-- autoGrid puts them 3 by 2 in the 265x102 box, each 86.3x49.5; the
+	-- title takes 15% of the box height and the value the rest.
 	it("lays many values in VizRepeater's grid and sizes them alike", function()
 		local node, assets = Stat.view(
 			S.panel("12.4.12", 6),
 			S.frames("12.4.12", "prom2_range"),
 			env,
-			{ key = "s", size = { w = 267, h = 144 } }
+			{ key = "s", size = { w = 267, h = 144 }, features = G12 }
 		)
 		expect(has(classOf(node, "g"), "tgp-stat-g3")).toBe(true)
 		local sizes: { number } = {}
@@ -365,20 +378,38 @@ describe("stat sizing (BigValueLayout.tsx, VizRepeater.tsx)", function()
 			expect(has(classOf(tile, "t"), "tgp-stat-fs10")).toBe(true)
 		end
 		-- The box height less its padding and the title line, over 1.2.
-		expect(sizes).toEqual({ 20, 20 })
+		expect(sizes).toEqual({ 22, 22 })
 	end)
 
-	-- A wide box (w/h > 2.5) with a sparkline gives the value 40% of the
-	-- width and half the height (WideWithChartLayout).
+	-- A wide box (w/h > 2.5: 265x102) with a sparkline gives the value 40%
+	-- of the width and half the height less 12 px padding twice: 32.5 px
+	-- (WideWithChartLayout).
 	it("uses the wide layout for wide panels", function()
 		local node, assets = Stat.view(
 			S.panel("12.4.12", 5),
 			S.refFrames("12.4.12", "prom_range", "B"),
 			env,
-			{ key = "s", size = { w = 267, h = 144 } }
+			{ key = "s", size = { w = 267, h = 144 }, features = G12 }
 		)
 		expect(has(classOf(node, "l"), "tgp-stat-wide")).toBe(true)
 		expect(valuePx(node, assets)).toBe(33)
+	end)
+
+	-- The 2-row stats of public dashboards (11074 Uptime, Blackbox HTTP
+	-- Status Code): Grafana 12.4 and 13 leave BigValue a 26 px box under the
+	-- 40 px header, so the value is 10 px of line at 8.333 px (measured);
+	-- 11.6's 32 px header leaves 34 px and a 15 px value.
+	it("keeps a 2-row stat's value as small as Grafana draws it", function()
+		local panel = S.json([[{"type": "stat", "title": "Uptime",
+			"fieldConfig": {"defaults": {"unit": "s", "decimals": 0}, "overrides": []},
+			"options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "textMode": "auto",
+				"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}}]])
+		local frame = { fields = { { name = "v", type = "number", values = { 82800 }, config = {} } } }
+		local size = { w = 133, h = 68 }
+		local node, assets = Stat.view(panel, { frame :: any }, env, { key = "s", size = size, features = G12 })
+		expect(valuePx(node, assets)).toBe(8)
+		node, assets = Stat.view(panel, { frame :: any }, env, { key = "s", size = size })
+		expect(valuePx(node, assets)).toBe(15)
 	end)
 
 	it("honors text.valueSize and text.titleSize", function()

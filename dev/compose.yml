@@ -61,7 +61,7 @@ services:
 
   # Shares the image renderer with grafana12, so the render ladder step is capturable on 13 too.
   grafana13:
-    image: grafana/grafana:13.3.0
+    image: grafana/grafana:13.3.1@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf
     depends_on: [renderer]
     ports: ["127.0.0.1:3013:3000"]
     environment:
@@ -71,6 +71,8 @@ services:
       GF_RENDERING_CALLBACK_URL: http://grafana13:3000/
       # Grafana 13 refuses to start with the default renderer token "-" (12.4 still uses it).
       GF_RENDERING_RENDERER_TOKEN: tern-dev-renderer
+      # Table columns sized to their content (Grafana Cloud has it on); grafana12 keeps the default.
+      GF_FEATURE_TOGGLES_ENABLE: table.autoColumnWidths
     volumes: *grafana-volumes
     healthcheck: *grafana-health
 

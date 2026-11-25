@@ -292,7 +292,7 @@ function M.render(opts: Options): string
 					Kit.text(x + M.BAR_TEXT_PADDING_LEFT, y + M.PIXELS_PER_LEVEL / 2 + 2, text, {
 						anchor = "start",
 						class = "tgf-text",
-						attrs = 'dominant-baseline="central"',
+						baseline = "middle",
 					})
 				)
 			end

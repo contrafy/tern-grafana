@@ -26,6 +26,8 @@ local function loading(version: string, dashboard: string?): (e: any) -> any
 				else S.response(S.grafana(version, "dashboard_tern_sql.json"))
 		elseif string.match(e.tag, "^fs/") then
 			return S.response(S.grafana(version, "frontend_settings_sql.json"))
+		elseif string.match(e.tag, "^flag/") then
+			return S.response(S.grafana(version, "ofrep_table_auto_column_widths.json"))
 		elseif string.match(e.tag, "^user/") then
 			return S.response(S.grafana(version, "user.json"))
 		end

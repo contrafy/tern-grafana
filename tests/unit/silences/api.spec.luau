@@ -106,8 +106,8 @@ describe("create", function()
 		expect(Api.parseCreated(env, Fixtures.read("grafana/11.6.16/alerting_am_silence_create.json"))).toBe(
 			"055ee28b-5294-4101-957d-8d742de35e7c"
 		)
-		expect(Api.parseCreated(env, Fixtures.read("grafana/13.3.0/alerting_am_silence_create.json"))).toBe(
-			"8ac8139a-aad1-4cce-a65a-4ff1cc4674ae"
+		expect(Api.parseCreated(env, Fixtures.read("grafana/13.3.1/alerting_am_silence_create.json"))).toBe(
+			"16769a0b-0637-4b5f-8fbb-a2f4dda01899"
 		)
 		expect(Api.parseCreated(env, "")).toBeNil()
 	end)
@@ -135,8 +135,8 @@ describe("list", function()
 
 	-- The 11 and 12 stacks kept the expired silences of two earlier capture
 	-- runs; Grafana 13's was fresh.
-	local SILENCES = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.0"] = 1 }
-	for _, v in { "11.6.16", "12.4.12", "13.3.0" } do
+	local SILENCES = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.1"] = 1 }
+	for _, v in { "11.6.16", "12.4.12", "13.3.1" } do
 		it(v .. ": reads Grafana's silences the same way", function()
 			local list =
 				assert(Api.parseList(env, Fixtures.read("grafana/" .. v .. "/alerting_am_silences_active.json")))

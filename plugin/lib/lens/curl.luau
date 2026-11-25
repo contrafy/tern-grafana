@@ -677,7 +677,7 @@ local function readGrafana(doc: any, env: Env): { Section }
 		else
 			section.warnings = r.warnings
 			local seriesFrames: { Frame.Frame } = {}
-			for _, frame in r.frames do
+			for _, frame in FrameGrafana.withFields(r.frames) do
 				if isSeriesFrame(frame) then
 					table.insert(seriesFrames, frame)
 				else

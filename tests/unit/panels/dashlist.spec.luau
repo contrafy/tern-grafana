@@ -14,15 +14,20 @@ local describe, it, expect = t.describe, t.it, t.expect
 local CTX = { time = { from_ms = 1791840751000, to_ms = 1791844351000 }, dashboard_uid = "tern-all-panels" }
 
 -- The fixtures-tagged dashboards each stack held at capture time: Grafana 13's
--- later stack also had the SQL dashboard and the v2-schema layouts one.
+-- later stack also had the ones added since (SQL, v2-schema layouts, alert
+-- states, fidelity, cells).
 local SEARCH_TITLES = {
 	["11.6.16"] = { "Tern All Panels", "Tern Logs and Traces", "Tern Panels", "Tern Variables" },
 	["12.4.12"] = { "Tern All Panels", "Tern Logs and Traces", "Tern Panels", "Tern Variables" },
-	["13.3.0"] = {
+	["13.3.1"] = {
+		"Tern Alert States",
 		"Tern All Panels",
+		"Tern Fidelity Bars",
 		"Tern Logs and Traces",
 		"Tern Panels",
 		"Tern SQL",
+		"Tern Table Cells",
+		"Tern v08 time series and bars",
 		"Tern V2 Layouts",
 		"Tern Variables",
 	},

@@ -9,13 +9,17 @@ PANEL="Scrape duration symlog heatmap"
 
 open_block dashboard dashboard || return
 bwait dashboard "Open a Grafana dashboard" || return
-# Grafana's search sorts titles case-insensitively.
+# Every provisioned title starts with "Tern " and no public dashboard imported
+# by scripts/public-dashboards.py does, so Grafana's search for "Tern " lists
+# exactly the provisioned dashboards, sorted case-insensitively.
 want=$(jq -sc 'map(.title) | sort_by(ascii_downcase)' "$E2E_REPO"/dev/grafana/dashboards/*.json)
-E2E_WAIT=15 wait_for "the dashboard list" has "$D .pk-row" "$(printf '%s' "$want" | jq length)" || return
-eq "picker lists the provisioned dashboards" "$(texts "$D .pk-row .pk-label")" "$want"
+picker_is() { [ "$(texts "$D .pk-row .pk-label")" = "$1" ]; }
+type_text 'Tern '
+E2E_WAIT=15 wait_for "the provisioned dashboards in the picker" picker_is "$want" ||
+	{ eq "picker lists the provisioned dashboards" "$(texts "$D .pk-row .pk-label")" "$want"; return; }
 shot picker
 
-type_text 'Tern Panels'
+type_text 'Panels'
 sleep 0.5
 ctl key enter >/dev/null
 bwait dashboard "Down targets" || return

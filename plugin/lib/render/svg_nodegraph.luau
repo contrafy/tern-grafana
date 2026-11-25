@@ -187,10 +187,7 @@ function M.render(opts: Options): string
 		end
 		for i, l in lines do
 			local y = n.y + (i - (#lines + 1) / 2) * 15
-			table.insert(
-				out,
-				Kit.text(n.x, y, l, { size = 10, class = "tgc-text", attrs = 'dominant-baseline="central"' })
-			)
+			table.insert(out, Kit.text(n.x, y, l, { size = 10, class = "tgc-text", baseline = "middle" }))
 		end
 		local ly = n.y + r + 15
 		if n.title and n.title ~= "" then

@@ -8,10 +8,11 @@
 -- (`tg-line`, `tg-area`, `tg-bar`, `tg-tharea`) switch off the half a shape
 -- does not paint. A theme switch then recolors without a new blob.
 --
--- Tern refuses SVGs over 256 KiB, so the renderer downsamples each series
--- (LTTB) to a point budget derived from a byte budget, drops series beyond
--- the cap (reported as `dropped`), and shrinks the budget until the document
--- fits.
+-- Tern refuses SVGs over 256 KiB. Every series is drawn, as Grafana does:
+-- the renderer downsamples each one (LTTB) to a point budget derived from a
+-- byte budget shared by all of them, and shrinks the budget until the
+-- document fits. Only series that would not fit even at MIN_POINTS samples
+-- each are left out (reported as `dropped`).
 --
 -- Y scales follow Grafana's time series config (public/app/core/components/
 -- TimeSeries/utils.ts preparePlotConfigBuilder): series share a scale when
@@ -85,7 +86,6 @@ export type Options = {
 	-- 0..100, Grafana's fillOpacity.
 	fill_opacity: number?,
 	null_mode: ("gap" | "connect")?,
-	series_cap: number?,
 	-- Most samples drawn per series (default: one per plot pixel).
 	point_budget: number?,
 	-- Visible time range (default: the data's extent).
@@ -93,6 +93,13 @@ export type Options = {
 	to_ms: number?,
 	-- Tick labels' timezone (Range.Offset).
 	offset_min: Axis.Offset?,
+	-- The plot height Grafana gives this chart, in px: uPlot picks the y
+	-- tick spacing (15 px up to 150 px, else 30) and increments from it, so
+	-- the axis keeps Grafana's tick count (default: the SVG's plot height).
+	tick_height: number?,
+	-- No time axis: the plot runs to the bottom edge (the time field's
+	-- custom.axisPlacement hidden).
+	x_axis_hidden: boolean?,
 	-- Grafana legendFormat for series names.
 	legend: string?,
 	-- Exemplar markers (any order); those in the time range are drawn, at
@@ -141,6 +148,10 @@ local BYTES_EXEMPLAR = 32
 -- A gradient definition without its stops, and one `<stop>`.
 local BYTES_GRADIENT = 140
 local BYTES_STOP = 40
+-- One series `<path>` without its data (classes and stroke attributes).
+local BYTES_PATH = 160
+-- Fewest samples a series is drawn with.
+local MIN_POINTS = 3
 
 function M.seriesClass(i: number): string
 	return "tg-s" .. tostring((i - 1) % M.PALETTE + 1)
@@ -210,12 +221,14 @@ local function scaleSpecs(styles: { SeriesStyle }): ({ ScaleSpec }, { number })
 	return specs, scaleOf
 end
 
--- The data extent of each scale: stacked tops and bases, or the full-
--- resolution values (so downsampling never moves an axis), of the samples
--- in view (uPlot ranges its y scales over i0..i1 only). `calcs` holds the
--- calcs of `list`, which a series drawn untransformed and wholly in view
--- shares; `view[i]` bounds the times in view of a series that has samples
--- outside them.
+-- The data extent of each scale: stacked tops (the accumulated values
+-- uPlot ranges over; the base a stack fills down to is not data, so a
+-- stack of 3..4 ranges 2.9..4.1 as in Grafana), or the full-resolution
+-- values (so downsampling never moves an axis), of the samples in view
+-- (uPlot ranges its y scales over i0..i1 only). `calcs` holds the calcs of
+-- `list`, which a series drawn untransformed and wholly in view shares;
+-- `view[i]` bounds the times in view of a series that has samples outside
+-- them.
 local function scaleRange(
 	shown: { Series.Series },
 	list: { Series.Series },
@@ -242,24 +255,23 @@ local function scaleRange(
 		if bounds then
 			t0, t1 = bounds[1], bounds[2]
 		end
-		if plot.stacked[i] then
-			local times, b = plot.times[i], plot.bottoms[i]
-			for j, v in plot.tops[i] do
+		if plot.stacked[i] or bounds then
+			local times: { number } = if plot.stacked[i] then plot.times[i] else shown[i].times
+			local values: { any } = if plot.stacked[i] then plot.tops[i] else shown[i].values
+			local a, b = lo or math.huge, hi or -math.huge
+			for j, v in values do
 				local t = times[j]
-				if t >= t0 and t <= t1 then
-					see(v)
-					if b then
-						see(b[j])
+				if t >= t0 and t <= t1 and type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+					if v < a then
+						a = v
+					end
+					if v > b then
+						b = v
 					end
 				end
 			end
-		elseif bounds then
-			local times = shown[i].times
-			for j, v in shown[i].values do
-				local t = times[j]
-				if t >= t0 and t <= t1 then
-					see(v)
-				end
+			if a <= b then
+				lo, hi = a, b
 			end
 		else
 			local c = if shown[i] == list[i] then calcs[i] else Series.calcs(shown[i].values)
@@ -401,6 +413,26 @@ local function lookOf(i: number, st: SeriesStyle, opts: Options, count: number):
 		bar_width_factor = st.bar_width_factor or 0.6,
 		bar_max_width = st.bar_max_width or 200,
 	}
+end
+
+-- Bytes per drawn sample of one series, by how it is drawn.
+local function sampleBytes(look: Look): number
+	local e = if look.draw == "bars" then BYTES_BAR else BYTES_LINE
+	if look.interpolation == "smooth" then
+		e *= 3
+	end
+	if look.fill > 0 then
+		e *= 2
+	end
+	if look.points ~= "never" then
+		e += BYTES_LINE
+	end
+	return e
+end
+
+-- The bytes of one series' paths besides their data: line, area, points.
+local function seriesBytes(look: Look): number
+	return BYTES_PATH * (1 + (if look.fill > 0 then 1 else 0) + (if look.points ~= "never" then 1 else 0))
 end
 
 type Ctx = {
@@ -573,7 +605,10 @@ local function build(ctx: Ctx): (string, number)
 	end
 
 	-- Grid and axis labels.
-	local ticks = Axis.timeTicks(layout.t_from, layout.t_to, layout.plot_right - layout.plot_left, opts.offset_min)
+	-- A hidden x axis (the time field's axisPlacement) has no ticks, grid or labels.
+	local ticks: Axis.TimeTicks = if opts.x_axis_hidden
+		then { incr = 0, format = "", ticks = {}, labels = {} }
+		else Axis.timeTicks(layout.t_from, layout.t_to, layout.plot_right - layout.plot_left, opts.offset_min)
 	local grid: { string } = {}
 	for k, a in axes do
 		local scale = ctx.scales[k]
@@ -591,15 +626,17 @@ local function build(ctx: Ctx): (string, number)
 	if #grid > 0 then
 		table.insert(out, '<path class="tg-grid" fill="none" stroke-width="1" d="' .. table.concat(grid) .. '"/>')
 	end
-	table.insert(
-		out,
-		fmt(
-			'<path class="tg-axis" fill="none" stroke-width="1" d="M%.1f %.1fH%.1f"/>',
-			layout.plot_left,
-			bottom,
-			layout.plot_right
+	if not opts.x_axis_hidden then
+		table.insert(
+			out,
+			fmt(
+				'<path class="tg-axis" fill="none" stroke-width="1" d="M%.1f %.1fH%.1f"/>',
+				layout.plot_left,
+				bottom,
+				layout.plot_right
+			)
 		)
-	)
+	end
 	for k, a in axes do
 		if a.side == "hidden" then
 			continue
@@ -664,28 +701,52 @@ local function build(ctx: Ctx): (string, number)
 		return math.clamp(0, s.min, s.max)
 	end
 	local plotW = layout.plot_right - layout.plot_left
-	local slots = 1
-	for i = 1, #list do
-		if looks[i].draw == "bars" then
-			slots = math.max(slots, #plot.times[i])
-		end
-	end
-	-- A bar series' fill and outline share one path.
+	-- uPlot's bars path builder (findColWidth, bars): a series' column is
+	-- the smallest distance between two of its adjacent samples (the whole
+	-- plot for one sample); barWidthFactor of it is the bar and the rest the
+	-- gap, dropped below 1 px. The outline (lineWidth) is inset into the
+	-- column, and not drawn at all once it would take half the bar; the bar
+	-- is clamped to 1 px .. barMaxWidth and snapped to whole pixels once the
+	-- gap reaches 5 px. Grafana's renderer and Tern's viewBox both count
+	-- Grafana px (pxRatio 1); the drawn outline is LINE_SCALE wider, so it is
+	-- inset by that width.
 	local barPaths: { [number]: string } = {}
 	local barLegacy: { [number]: number } = {}
+	local barStroke: { [number]: number } = {}
 	local function bars(i: number): string
 		if barPaths[i] == nil then
 			local look = looks[i]
-			local barW = math.max(1, math.min(look.bar_max_width, plotW / slots * look.bar_width_factor))
-			barPaths[i], barLegacy[i] = Paths.bars(
-				geo[ctx.scaleOf[i]],
-				plot.times[i],
-				plot.tops[i],
-				plot.bottoms[i],
-				baseOf(i),
-				barW,
-				look.bar_alignment
-			)
+			local g = geo[ctx.scaleOf[i]]
+			local times = list[i].times
+			local col = g.width
+			local minDelta = math.huge
+			for j = 2, #times do
+				local delta = math.abs(times[j] - times[j - 1])
+				if delta < minDelta then
+					minDelta = delta
+					col = math.abs(Paths.x(g, times[j]) - Paths.x(g, times[j - 1]))
+				end
+			end
+			local gap = col * (1 - look.bar_width_factor)
+			if gap < 1 then
+				gap = 0
+			end
+			local stroke = math.floor(look.line_width + 0.5)
+			if stroke >= (col - gap) / 2 then
+				stroke = 0
+			end
+			local drawn = stroke * M.LINE_SCALE
+			local inset = if gap > 0 then drawn else 0
+			local raw = col - gap - inset
+			local barW = if raw < 1 then 1 elseif raw > look.bar_max_width then look.bar_max_width else raw
+			if gap >= 5 then
+				barW = math.floor(barW + 0.5)
+			end
+			local align = look.bar_alignment
+			local shift = if align == 1 then inset / 2 elseif align == -1 then -barW - inset / 2 else -barW / 2
+			barStroke[i] = drawn
+			barPaths[i], barLegacy[i] =
+				Paths.bars(g, plot.times[i], plot.tops[i], plot.bottoms[i], baseOf(i), barW, shift)
 		end
 		return seriesPath(barPaths[i], barLegacy[i])
 	end
@@ -775,11 +836,15 @@ local function build(ctx: Ctx): (string, number)
 	for i = 1, #list do
 		local look = looks[i]
 		local g = geo[ctx.scaleOf[i]]
+		local d = ""
 		local stroke = look.line_width * M.LINE_SCALE
-		if look.draw ~= "points" and stroke > 0 then
-			local d = if look.draw == "bars"
-				then bars(i)
-				else seriesPath(Paths.line(g, plot.times[i], plot.tops[i], look.interpolation))
+		if look.draw == "bars" then
+			d = bars(i)
+			stroke = barStroke[i]
+		elseif look.draw ~= "points" and stroke > 0 then
+			d = seriesPath(Paths.line(g, plot.times[i], plot.tops[i], look.interpolation))
+		end
+		if stroke > 0 then
 			if d ~= "" then
 				local dash = ""
 				if look.dash then
@@ -789,9 +854,9 @@ local function build(ctx: Ctx): (string, number)
 					end
 					dash = ' stroke-dasharray="' .. table.concat(parts, " ") .. '"'
 				end
-				-- uPlot strokes with butt caps; dotted lines get round ones.
-				-- Solid lines keep round caps so a lone sample shows as a dot.
-				local cap = if look.dash and not look.dot then "butt" else "round"
+				-- uPlot strokes with butt caps (a lone sample between gaps
+				-- draws nothing unless points show it); dotted lines get round ones.
+				local cap = if look.dot then "round" else "butt"
 				table.insert(
 					out,
 					fmt(
@@ -827,15 +892,15 @@ local function build(ctx: Ctx): (string, number)
 		if not all and look.span == true then
 			continue
 		end
-		local d = seriesPath(Paths.dots(g, plot.times[i], plot.tops[i], not all))
-		if d ~= "" then
+		local dots = seriesPath(Paths.dots(g, plot.times[i], plot.tops[i], not all))
+		if dots ~= "" then
 			table.insert(
 				out,
 				fmt(
 					'<path class="%s" fill="none" stroke-width="%s" stroke-linecap="round" d="%s"/>',
 					strokeClass(look.class, "tg-dots", paint[i]),
 					fmt("%g", look.point_size * M.LINE_SCALE),
-					d
+					dots
 				)
 			)
 		end
@@ -933,15 +998,12 @@ function M.render(frames: { Frame }, options: Options?): Result
 	local W = opts.width or 960
 	local H = opts.height or 300
 	local all = Series.extract(frames, opts.legend)
-	local cap = opts.series_cap or M.PALETTE
-	local list: { Series.Series } = table.move(all, 1, math.min(cap, #all), 1, {})
-	local dropped = #all - #list
 
 	-- Time domain.
 	local tFrom, tTo = opts.from_ms, opts.to_ms
 	if tFrom == nil or tTo == nil then
 		local lo, hi = math.huge, -math.huge
-		for _, s in list do
+		for _, s in all do
 			if #s.times > 0 then
 				lo = math.min(lo, s.times[1])
 				hi = math.max(hi, s.times[#s.times])
@@ -959,7 +1021,37 @@ function M.render(frames: { Frame }, options: Options?): Result
 		tFrom_, tTo_ = tFrom_ - 30000, tTo_ + 30000
 	end
 
-	local styles = stylesFor(list, opts)
+	local marks: { FrameProm.Exemplar }?, marksDropped = nil, 0
+	if opts.exemplars then
+		marks, marksDropped = M.drawnExemplars(opts.exemplars, tFrom_, tTo_)
+	end
+	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
+	if opts.annotations then
+		fixed += math.min(#opts.annotations.marks, Annotations.CAP) * Annotations.BYTES
+	end
+
+	-- Every series is drawn, as in Grafana: the point budget shrinks with
+	-- their number. Only series that would not fit the size cap even at
+	-- MIN_POINTS samples each are left out (reported as `dropped`).
+	local allStyles = stylesFor(all, opts)
+	local keep, minBytes = #all, 0
+	for i = 1, #all do
+		local look = lookOf(i, allStyles[i], opts, #all)
+		local cost = seriesBytes(look) + MIN_POINTS * sampleBytes(look)
+		if minBytes + cost > M.TARGET - fixed then
+			keep = i - 1
+			break
+		end
+		minBytes += cost
+	end
+	local list = all
+	local styles = allStyles
+	if keep < #all then
+		list = table.move(all, 1, keep, 1, {})
+		styles = table.move(allStyles, 1, math.max(1, keep), 1, {})
+	end
+	local dropped = #all - #list
+
 	local specs, scaleOf = scaleSpecs(styles)
 	-- An empty chart still has its (empty) first scale.
 	for _, spec in specs do
@@ -972,10 +1064,13 @@ function M.render(frames: { Frame }, options: Options?): Result
 	-- The samples in view plus the nearest one beyond each end (Data.window):
 	-- `view` bounds the samples in view of a series with others outside
 	-- them, `outside` is set when a drawn sample lies outside the time range.
+	-- `plain`: a series drawn from its own samples (Data.ownValues).
 	local view: { [number]: { number } } = {}
+	local plain: { boolean } = table.create(#list)
 	local outside = false
 	for i, s in shown do
-		local cut, t0, t1 = Data.window(s, tFrom_, tTo_)
+		local cut, t0, t1, asc = Data.window(s, tFrom_, tTo_)
+		plain[i] = asc and s == list[i]
 		local times = cut.times
 		local n = #times
 		if t0 and t1 and (t0 > s.times[1] or t1 < s.times[#s.times]) then
@@ -993,30 +1088,13 @@ function M.render(frames: { Frame }, options: Options?): Result
 		spans[i] = looks[i].span
 	end
 
-	local plotTop, plotBottom = PAD_TOP, H - X_AXIS_H
+	local plotTop, plotBottom = PAD_TOP, H - (if opts.x_axis_hidden then 1 else X_AXIS_H)
 	local plotH = plotBottom - plotTop
-	-- Bytes per drawn sample over all series, by how each is drawn.
+	-- Bytes per drawn sample over all series, and the series' own elements.
 	local estimate = 0
 	for _, look in looks do
-		local e = if look.draw == "bars" then BYTES_BAR else BYTES_LINE
-		if look.interpolation == "smooth" then
-			e *= 3
-		end
-		if look.fill > 0 then
-			e *= 2
-		end
-		if look.points ~= "never" then
-			e += BYTES_LINE
-		end
-		estimate += e
-	end
-	local marks: { FrameProm.Exemplar }?, marksDropped = nil, 0
-	if opts.exemplars then
-		marks, marksDropped = M.drawnExemplars(opts.exemplars, tFrom_, tTo_)
-	end
-	local fixed = FIXED_BYTES + (if marks then #marks * BYTES_EXEMPLAR else 0)
-	if opts.annotations then
-		fixed += math.min(#opts.annotations.marks, Annotations.CAP) * Annotations.BYTES
+		estimate += sampleBytes(look)
+		fixed += seriesBytes(look)
 	end
 	-- Gradient definitions: their stops, doubled for discrete edges.
 	for _, look in looks do
@@ -1031,7 +1109,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 	if #list > 0 then
 		perSeries = math.min(perSeries, math.floor((M.TARGET - fixed) / estimate))
 	end
-	perSeries = math.max(3, perSeries)
+	perSeries = math.max(MIN_POINTS, perSeries)
 
 	-- What is drawn; `list` keeps the samples the legend calcs read.
 	local barList: { Series.Series } = {}
@@ -1048,6 +1126,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 			if s ~= barList[k] then
 				-- Buckets hold only the samples in the range.
 				view[barAt[k]] = nil
+				plain[barAt[k]] = false
 			end
 			shown[barAt[k]] = s
 		end
@@ -1076,8 +1155,22 @@ function M.render(frames: { Frame }, options: Options?): Result
 				hi = if hi == nil then e.value else math.max(hi :: number, e.value)
 			end
 		end
-		scales[k] = buildScale(spec, lo, hi, plotH)
 		local st = spec.style
+		if
+			lo == nil
+			and hi == nil
+			and not spec.percent
+			and st.min == nil
+			and st.max == nil
+			and st.soft_min == nil
+			and st.soft_max == nil
+		then
+			-- Nothing finite to range over (all null or NaN): uPlot leaves
+			-- the scale unset, so its axis has no ticks, grid or width.
+			scales[k] = { min = 0, max = 1, step = 1, ticks = {} }
+		else
+			scales[k] = buildScale(spec, lo, hi, opts.tick_height or plotH)
+		end
 		local unit = if spec.percent then "percentunit" else st.unit
 		labels[k] = yLabels(scales[k], unit, st.decimals)
 		if spec.side ~= "hidden" then
@@ -1085,7 +1178,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 			for _, label in labels[k] do
 				chars = math.max(chars, utf8.len(label) or #label)
 			end
-			local w = math.max(AXIS_MIN_W, chars * Axis.CHAR_PX + 12)
+			local w = if #labels[k] == 0 then 0 else math.max(AXIS_MIN_W, chars * Axis.CHAR_PX + 12)
 			if st.label ~= nil and st.label ~= "" then
 				w += AXIS_LABEL_W
 			end
@@ -1169,10 +1262,10 @@ function M.render(frames: { Frame }, options: Options?): Result
 			scaleOf = scaleOf,
 		})
 		local size = #svg + extra
-		if size <= M.TARGET or perSeries <= 3 then
+		if size <= M.TARGET or perSeries <= MIN_POINTS then
 			break
 		end
-		perSeries = math.max(3, math.floor(perSeries * M.TARGET / size * 0.9))
+		perSeries = math.max(MIN_POINTS, math.floor(perSeries * M.TARGET / size * 0.9))
 	end
 	assert(#svg <= M.CAP, "svg_timeseries: chart exceeds the 256 KiB SVG cap")
 	local drawn: { DrawnSeries } = table.create(#list)
@@ -1184,7 +1277,7 @@ function M.render(frames: { Frame }, options: Options?): Result
 			class = looks[i].class,
 			labels = s.labels,
 			times = plot.times[i],
-			values = Data.ownValues(s, shown[i], st, plot, i, spans),
+			values = Data.ownValues(s, plain[i], st, plot, i, spans),
 			calcs = calcs[i],
 			axis = scaleOf[i],
 			unit = st.unit,

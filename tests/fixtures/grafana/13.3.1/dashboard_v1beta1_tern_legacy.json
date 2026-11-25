@@ -1,0 +1,607 @@
+{
+  "kind": "Dashboard",
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "metadata": {
+    "name": "tern-legacy",
+    "namespace": "default",
+    "uid": "c5cd9a32-8d3b-4bf1-a756-8d756843ed0c",
+    "resourceVersion": "1794416490827000",
+    "generation": 2,
+    "creationTimestamp": "2026-11-11T17:00:17Z",
+    "labels": {
+      "grafana.app/deprecatedInternalID": "3870443969531904"
+    },
+    "annotations": {
+      "grafana.app/createdBy": "access-policy:service",
+      "grafana.app/folder": "tern-fixtures",
+      "grafana.app/managedBy": "classic-file-provisioning",
+      "grafana.app/managerId": "tern-fixtures",
+      "grafana.app/sourceChecksum": "be4d74227c2300d0eb036b4b515107c0",
+      "grafana.app/sourcePath": "/var/lib/grafana-dashboards/tern-legacy.json",
+      "grafana.app/sourceTimestamp": "1794416444000",
+      "grafana.app/updatedBy": "access-policy:service",
+      "grafana.app/updatedTimestamp": "2026-11-11T17:01:30Z"
+    },
+    "managedFields": [
+      {
+        "manager": "grafana",
+        "operation": "Update",
+        "apiVersion": "dashboard.grafana.app/v0alpha1",
+        "time": "2026-11-11T17:01:30Z",
+        "fieldsType": "FieldsV1",
+        "fieldsV1": {
+          "f:metadata": {
+            "f:annotations": {
+              ".": {},
+              "f:grafana.app/folder": {},
+              "f:grafana.app/managedBy": {},
+              "f:grafana.app/managerId": {},
+              "f:grafana.app/sourceChecksum": {},
+              "f:grafana.app/sourcePath": {},
+              "f:grafana.app/sourceTimestamp": {}
+            }
+          },
+          "f:spec": {
+            "f:annotations": {
+              ".": {},
+              "f:list": {}
+            },
+            "f:editable": {},
+            "f:id": {},
+            "f:links": {},
+            "f:refresh": {},
+            "f:rows": {},
+            "f:schemaVersion": {},
+            "f:sharedCrosshair": {},
+            "f:tags": {},
+            "f:templating": {
+              ".": {},
+              "f:list": {}
+            },
+            "f:time": {
+              ".": {},
+              "f:from": {},
+              "f:to": {}
+            },
+            "f:timezone": {},
+            "f:title": {},
+            "f:uid": {},
+            "f:version": {}
+          }
+        }
+      }
+    ]
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations \u0026 Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "collapsed": false,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 10,
+        "panels": [],
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "refId": "A"
+          }
+        ],
+        "title": "Single stats and an old table",
+        "type": "row"
+      },
+      {
+        "autoMigrateFrom": "singlestat",
+        "colorBackground": false,
+        "colorValue": false,
+        "colors": [
+          "#299c46",
+          "rgba(237, 129, 40, 0.89)",
+          "#d44a3a"
+        ],
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "decimals": 0,
+        "format": "none",
+        "gridPos": {
+          "h": 7,
+          "w": 4,
+          "x": 0,
+          "y": 1
+        },
+        "id": 1,
+        "mappingType": 1,
+        "nullPointMode": "connected",
+        "sparkline": {
+          "fillColor": "rgba(244, 213, 152, 0.12)",
+          "full": false,
+          "lineColor": "#f4d598",
+          "show": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "vector(1)",
+            "intervalFactor": 1,
+            "refId": "A"
+          }
+        ],
+        "thresholds": "",
+        "title": "Flat one",
+        "type": "stat",
+        "valueMaps": [
+          {
+            "op": "=",
+            "text": "N/A",
+            "value": "null"
+          }
+        ],
+        "valueName": "avg"
+      },
+      {
+        "autoMigrateFrom": "singlestat",
+        "colorValue": true,
+        "colors": [
+          "#299c46",
+          "rgba(237, 129, 40, 0.89)",
+          "#d44a3a"
+        ],
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "format": "none",
+        "gridPos": {
+          "h": 7,
+          "w": 4,
+          "x": 4,
+          "y": 1
+        },
+        "id": 2,
+        "nullPointMode": "connected",
+        "sparkline": {
+          "fillColor": "rgba(31, 118, 189, 0.18)",
+          "full": true,
+          "lineColor": "rgb(31, 120, 193)",
+          "show": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "vector(0)",
+            "intervalFactor": 1,
+            "refId": "A"
+          }
+        ],
+        "thresholds": "1,2",
+        "title": "Flat zero",
+        "type": "stat",
+        "valueName": "current"
+      },
+      {
+        "autoMigrateFrom": "singlestat",
+        "colorValue": false,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "decimals": 2,
+        "format": "reqps",
+        "gridPos": {
+          "h": 7,
+          "w": 4,
+          "x": 8,
+          "y": 1
+        },
+        "id": 3,
+        "nullPointMode": "connected",
+        "sparkline": {
+          "fillColor": "rgba(31, 118, 189, 0.18)",
+          "full": false,
+          "lineColor": "rgb(31, 120, 193)",
+          "show": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "sum(rate(prometheus_http_requests_total[1m]))",
+            "intervalFactor": 1,
+            "refId": "A"
+          }
+        ],
+        "title": "Requests",
+        "type": "stat",
+        "valueName": "current"
+      },
+      {
+        "autoMigrateFrom": "table-old",
+        "columns": [],
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 12,
+          "x": 12,
+          "y": 1
+        },
+        "id": 4,
+        "sort": {
+          "col": 0,
+          "desc": true
+        },
+        "styles": [
+          {
+            "alias": "Time",
+            "align": "auto",
+            "dateFormat": "YYYY-MM-DD HH:mm:ss",
+            "pattern": "Time",
+            "type": "hidden"
+          },
+          {
+            "align": "auto",
+            "pattern": "__name__",
+            "type": "hidden"
+          },
+          {
+            "alias": "Up",
+            "align": "auto",
+            "colorMode": "cell",
+            "colors": [
+              "rgba(245, 54, 54, 0.9)",
+              "rgba(237, 129, 40, 0.89)",
+              "rgba(50, 172, 45, 0.97)"
+            ],
+            "decimals": 0,
+            "pattern": "Value #A",
+            "thresholds": [
+              "0",
+              "0.5",
+              "1"
+            ],
+            "type": "number"
+          },
+          {
+            "alias": "Scrape",
+            "align": "auto",
+            "decimals": 3,
+            "pattern": "Value #B",
+            "type": "number",
+            "unit": "s"
+          },
+          {
+            "align": "auto",
+            "pattern": "/.*/",
+            "type": "string",
+            "unit": "short"
+          }
+        ],
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "up",
+            "format": "table",
+            "instant": true,
+            "intervalFactor": 1,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "scrape_duration_seconds",
+            "format": "table",
+            "instant": true,
+            "intervalFactor": 1,
+            "refId": "B"
+          }
+        ],
+        "title": "Targets (old table styles)",
+        "transform": "table",
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
+        "id": 11,
+        "panels": [],
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "refId": "A"
+          }
+        ],
+        "title": "Graphs with hideZero and hideEmpty",
+        "type": "row"
+      },
+      {
+        "autoMigrateFrom": "graph",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "fill": 1,
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 9
+        },
+        "id": 5,
+        "legend": {
+          "alignAsTable": true,
+          "avg": true,
+          "current": false,
+          "hideEmpty": true,
+          "hideZero": true,
+          "rightSide": true,
+          "show": true,
+          "total": true,
+          "values": true
+        },
+        "lines": true,
+        "linewidth": 1,
+        "links": [
+          {
+            "title": "Tern Panels",
+            "url": "dashboard/db/tern-panels?$__url_time_range"
+          }
+        ],
+        "nullPointMode": "null",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "sum by (job) (up)",
+            "intervalFactor": 1,
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Up by job (zeros hidden from the legend)",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "timeseries",
+        "xaxis": {
+          "mode": "time",
+          "show": true
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          },
+          {
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          }
+        ]
+      },
+      {
+        "autoMigrateFrom": "graph",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "fill": 1,
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 9
+        },
+        "id": 6,
+        "legend": {
+          "alignAsTable": true,
+          "avg": true,
+          "hideEmpty": true,
+          "hideZero": true,
+          "rightSide": true,
+          "show": true,
+          "total": true,
+          "values": true
+        },
+        "lines": true,
+        "linewidth": 1,
+        "maxPerRow": 4,
+        "nullPointMode": "null",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "expr": "sum by (job) (up) * 0",
+            "intervalFactor": 1,
+            "legendFormat": "{{job}}",
+            "refId": "A"
+          }
+        ],
+        "title": "All zero (no legend)",
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "type": "timeseries",
+        "xaxis": {
+          "mode": "time",
+          "show": true
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          },
+          {
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          }
+        ]
+      },
+      {
+        "collapsed": true,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prom3"
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 24,
+          "x": 0,
+          "y": 25
+        },
+        "id": 12,
+        "panels": [
+          {
+            "content": "A collapsed row of a dashboard saved before Grafana 5 (schemaVersion 14, top-level `rows`).",
+            "gridPos": {
+              "h": 4,
+              "w": 24,
+              "x": 0,
+              "y": 26
+            },
+            "height": 150,
+            "id": 8,
+            "mode": "markdown",
+            "title": "Notes",
+            "type": "text"
+          }
+        ],
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prom3"
+            },
+            "refId": "A"
+          }
+        ],
+        "title": "Collapsed notes",
+        "type": "row"
+      }
+    ],
+    "refresh": "",
+    "schemaVersion": 42,
+    "sharedCrosshair": true,
+    "tags": [
+      "tern"
+    ],
+    "templating": {
+      "list": [
+        {
+          "current": {
+            "text": "prometheus",
+            "value": "prometheus"
+          },
+          "includeAll": false,
+          "label": "Job",
+          "multi": false,
+          "name": "job",
+          "options": [],
+          "query": "prometheus,node",
+          "type": "custom"
+        },
+        {
+          "current": {
+            "selected": true,
+            "text": "eu-west",
+            "value": "eu-west"
+          },
+          "hide": 0,
+          "name": "region",
+          "options": [
+            {
+              "selected": true,
+              "text": "eu-west",
+              "value": "eu-west"
+            }
+          ],
+          "query": "eu-west",
+          "type": "textbox"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Tern Legacy",
+    "weekStart": ""
+  },
+  "status": {
+    "conversion": {
+      "failed": false,
+      "storedVersion": "v0alpha1"
+    }
+  }
+}

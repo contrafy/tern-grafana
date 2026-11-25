@@ -72,9 +72,11 @@ describe("piechart", function()
 	it("draws a donut with percent labels and a value/percent legend table", function()
 		local node, assets = Piechart.view(S.json(PANEL), frames(), env, { key = "p", size = { w = 480, h = 300 } })
 		local svg = (assets :: any).p.bytes
-		expect(count(svg, "tg-bar")).toBe(4 * 2 * 8) -- 8 gradient bands per theme per slice
-		-- A donut slice closes along its inner arc: two arcs per slice.
-		expect(count(svg, "A")).toBe(8 * 2 * 8)
+		-- One gradient band per color step, per theme, per slice.
+		local bands = count(svg, "tg-bar")
+		expect(bands > 4 * 2 * 16).toBe(true)
+		-- A donut slice closes along its inner arc: two arcs per band.
+		expect(count(svg, "A")).toBe(2 * bands)
 		expect(string.find(svg, ">56%<", 1, true) ~= nil).toBe(true)
 		expect(string.find(svg, ">8%<", 1, true) ~= nil).toBe(true)
 		expect(#svg <= 262144).toBe(true)
@@ -117,7 +119,8 @@ describe("piechart", function()
 		panel.fieldConfig.overrides = S.json([[ [{"matcher": {"id": "byName", "options": "requests"},
 			"properties": [{"id": "custom.hideFrom", "value": {"legend": true, "viz": false, "tooltip": false}}]}] ]])
 		local node, assets = Piechart.view(panel, frames(), env, { key = "p" })
-		expect(count((assets :: any).p.bytes, "tg-bar")).toBe(2 * 8)
+		local svg = (assets :: any).p.bytes
+		expect(count(svg, "tgv-dark") > 0 and count(svg, "tgv-light") > 0).toBe(true)
 		local legend = S.find(node, function(n)
 			return n.p and n.p.role == "tern-grafana.legend"
 		end)
@@ -150,20 +153,22 @@ describe("piechart", function()
 	-- with a purple rim.
 	it("draws a fixed color's slice in Grafana's gradient of that exact color per theme", function()
 		local panel
-		for _, p in S.decode("grafana/13.3.0/dashboard_tern_v08_pietable.json").dashboard.panels do
+		for _, p in S.decode("grafana/13.3.1/dashboard_tern_v08_pietable.json").dashboard.panels do
 			if p.id == 1 then
 				panel = p
 			end
 		end
-		local zabbix = S.frames("13.3.0", "v08_pietable_1")
+		local zabbix = S.frames("13.3.1", "v08_pietable_1")
 		local node, assets = Piechart.view(panel, zabbix, env, { key = "p", size = { w = 480, h = 300 } })
 		local svg = (assets :: any).p.bytes
 		-- Innermost and outermost bands: from (192,203,209) to (172,188,194)
-		-- light, from (96,118,132) to (122,148,157) dark.
-		expect(string.find(svg, 'class="tg-bar tgv-light" fill="#bfcad0"', 1, true) ~= nil).toBe(true)
-		expect(string.find(svg, 'class="tg-bar tgv-light" fill="#adbdc3"', 1, true) ~= nil).toBe(true)
-		expect(string.find(svg, 'class="tg-bar tgv-dark" fill="#627886"', 1, true) ~= nil).toBe(true)
-		expect(string.find(svg, 'class="tg-bar tgv-dark" fill="#78929b"', 1, true) ~= nil).toBe(true)
+		-- light, from (96,118,132) to (122,148,157) dark, one band per level
+		-- of the widest channel (21 light, 31 dark), so no band edge shows
+		-- (Grafana 12's render: #c0cbd1 and #607684 at the inner edge).
+		expect(count(svg, 'class="tg-bar tgv-light" fill="#c0cbd1"')).toBe(1)
+		expect(count(svg, 'class="tg-bar tgv-light" fill="#acbcc2"')).toBe(1)
+		expect(count(svg, 'class="tg-bar tgv-dark" fill="#607684"')).toBe(1)
+		expect(count(svg, 'class="tg-bar tgv-dark" fill="#7a949d"')).toBe(1)
 		expect(string.find(svg, ">Count Not Classified<", 1, true) ~= nil).toBe(true)
 		-- showLegend false: no legend, as in Grafana.
 		expect(S.find(node, function(n)

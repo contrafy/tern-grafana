@@ -37,6 +37,14 @@ local PROBES: { { any } } = {
 	{ "logs/tail", { "merge" }, "logs: tail merge" },
 	{ "compat/analyze", { "panels" }, "compat: analyze panels" },
 	{ "dashboard/model", { "parseResponse" }, "dashboard: model parse" },
+	{ "dashboard/layers", { "advance", "answer", "marks", "alertState" }, "dashboard: layers" },
+	{ "dashboard/annotations", { "defs", "parse", "promEvents", "marks" }, "dashboard: annotations" },
+	{ "dashboard/alert_states", { "parse" }, "dashboard: alert states parse" },
+	{ "dashboard/adhoc", { "promApply", "lokiApply", "applied" }, "dashboard: ad hoc apply" },
+	{ "render/svg_annotations", { "layer", "draw" }, "render: svg annotations" },
+	{ "datasources/jsonpath", { "decode", "query" }, "json api: jsonpath decode/query" },
+	{ "panels/handlebars", { "compile", "render" }, "dynamictext: handlebars" },
+	{ "panels/html", { "parse", "view" }, "dynamictext: html" },
 	{ "irm/poll", { "step", "payload" }, "irm: poll step/payload" },
 }
 

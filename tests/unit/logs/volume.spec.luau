@@ -44,7 +44,7 @@ describe("buckets", function()
 		expect(v.buckets[1].levels.debug).toBe(23)
 	end)
 
-	for _, ver in { "11.6.16", "12.4.12", "13.3.0" } do
+	for _, ver in { "11.6.16", "12.4.12", "13.3.1" } do
 		it("counts Grafana " .. ver .. "'s frames the same way", function()
 			local r: any = Loki.parse(grafana, S.response("grafana/" .. ver .. "/ds_query_loki_metric.json"), S.env)
 			local first = r.frames[1].fields[1].values[1]

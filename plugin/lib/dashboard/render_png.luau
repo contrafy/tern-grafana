@@ -19,6 +19,7 @@ M.ROW_PX = 30
 M.MARGIN_PX = 8
 -- The dashboard width panels are rendered for (a typical desktop dashboard).
 M.DESIGN_WIDTH = 1600
+-- The narrowest image the render API is asked for.
 M.MIN_WIDTH = 320
 
 export type Spec = {
@@ -37,11 +38,18 @@ export type Spec = {
 }
 
 -- The pixel size Grafana gives a panel of this grid size on a dashboard
--- `design_width` wide.
-function M.size(w: number, h: number, design_width: number?): (number, number)
-	local width = math.max(M.MIN_WIDTH, math.floor((design_width or M.DESIGN_WIDTH) * w / 24 + 0.5))
+-- `design_width` wide: the size native panels lay out for.
+function M.gridSize(w: number, h: number, design_width: number?): (number, number)
+	local width = math.floor((design_width or M.DESIGN_WIDTH) * w / 24 + 0.5)
 	local height = h * M.ROW_PX + math.max(0, h - 1) * M.MARGIN_PX
 	return width, height
+end
+
+-- The image size the render API is asked for: the grid size, at least
+-- MIN_WIDTH wide.
+function M.size(w: number, h: number, design_width: number?): (number, number)
+	local width, height = M.gridSize(w, h, design_width)
+	return math.max(M.MIN_WIDTH, width), height
 end
 
 -- The render API's `tz` for a dashboard timezone: "utc" -> "UTC", an IANA

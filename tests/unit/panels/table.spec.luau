@@ -7,6 +7,7 @@
 -- the same panels.
 local t = require("../../lib/test")
 local S = require("./support")
+local Frame = require("../../../plugin/lib/frame/types")
 local Table = require("../../../plugin/lib/panels/table")
 local Transform = require("../../../plugin/lib/panels/transform")
 local TsGradient = require("../../../plugin/lib/render/ts_gradient")
@@ -17,8 +18,8 @@ local OPTS = { key = "t" }
 
 -- Row order follows the series order of each prom_table capture: the `down`
 -- target's row and a row of an up target.
-local DOWN_ROW = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.0"] = 1 }
-local UP_ROW = { ["11.6.16"] = 1, ["12.4.12"] = 1, ["13.3.0"] = 2 }
+local DOWN_ROW = { ["11.6.16"] = 3, ["12.4.12"] = 3, ["13.3.1"] = 1 }
+local UP_ROW = { ["11.6.16"] = 1, ["12.4.12"] = 1, ["13.3.1"] = 2 }
 
 local function build(panel: any, version: string): Table.Table
 	return Table.build(panel, Transform.prepare(panel, S.frames(version, "prom_table"), env), env, OPTS)
@@ -119,15 +120,35 @@ for _, version in S.VERSIONS do
 			expect(up.p.spans[1].s).toBe("error")
 		end)
 
-		-- Without format=table each series is its own frame; Grafana shows
-		-- the first with a frame picker.
-		it("shows the first frame and counts the rest", function()
+		-- Without format=table each series is its own frame; Grafana's
+		-- TablePanel shows one (options.frameIndex, else the first) with a
+		-- frame Select under it naming every frame.
+		it("shows one frame with a selector naming every frame", function()
 			local panel = S.clone(S.panel(version, 9))
 			panel.targets[1].format = "time_series"
 			panel.transformations = {}
-			local tbl = Table.build(panel, Transform.prepare(panel, S.frames(version, "prom_table"), env), env, OPTS)
-			expect(tbl.more_frames).toBe(5)
+			local frames = Transform.prepare(panel, S.frames(version, "prom_table"), env)
+			local tbl = Table.build(panel, frames, env, OPTS)
+			expect(tbl.frame).toBe(1)
+			expect(#(tbl.frame_names :: { string })).toBe(6)
 			expect(#tbl.rows).toBe(1)
+			panel.options.frameIndex = 2
+			expect(Table.build(panel, frames, env, OPTS).frame).toBe(3)
+			local picked = S.clone(OPTS)
+			picked.frame = 5
+			expect(Table.build(panel, frames, env, picked).frame).toBe(5)
+			local node = Table.view(panel, frames, env, picked)
+			local next = S.find(node, function(n)
+				return n.p ~= nil and n.p.key == "fnext"
+			end)
+			expect(next.p.actions.click).toBe("tframe=6:" .. OPTS.key)
+			local cur = S.find(node, function(n)
+				return n.p ~= nil and n.p.key == "cur"
+			end)
+			expect(cur.p.text).toBe((tbl.frame_names :: { string })[5])
+			expect(S.find(node, function(n)
+				return n.p ~= nil and n.p.key == "more"
+			end)).toBe(nil)
 		end)
 	end)
 end
@@ -235,10 +256,6 @@ for _, version in S.VERSIONS do
 				return n.p and n.p.class == "tgp-gc-v tgp-gw-5"
 			end)
 			expect(#load).toBe(5)
-			local reserved = S.findAll(node, function(n)
-				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "^tg%-c .*tgp%-gcw%-[45]$") ~= nil
-			end)
-			expect(#reserved).toBe(10)
 		end)
 
 		-- Panel 4 is the user's MDU table: the gauge column sits between
@@ -356,7 +373,7 @@ for _, version in S.VERSIONS do
 				expect(#frames[1].fields).toBe(2)
 				local node = Table.view(panel, frames, env, OPTS)
 				local headers = S.findAll(node, function(n)
-					return n.p and (n.p.class == "tg-h" or n.p.class == "tg-h tg-num")
+					return n.p and type(n.p.class) == "string" and string.find(n.p.class, "^tg%-h") ~= nil
 				end)
 				expect(#headers).toBe(2)
 				expect(headers[1].p.text).toBe("Label")
@@ -417,25 +434,56 @@ describe("table cell options", function()
 		expect(tbl.rows[1][col(tbl, "Remaining")].kind).toBe("auto")
 	end)
 
-	-- TableNG sizes every column to its content and scrolls a table wider
-	-- than the panel (panels.css tgp-fit: max-content tracks); the incident
-	-- list (custom.width 300 Title, 170 dates, dev dashboard tern-v08-pietable
-	-- panel 2) squeezed its auto columns to 'Resol...' and 'Criti...'
-	-- instead. Only a table without a custom.width column (panel 3) grows its
-	-- columns into the leftover width (tgp-grow): a stretched fixed track
-	-- would leave a gap beside its cells.
-	it("sizes columns to content and grows them only without a fixed width", function()
+	-- tern-legacy panel 4: the Up column (colorMode cell, base red) has no
+	-- value on the scrape_duration rows; Grafana still fills the whole cell
+	-- with the base color instead of a padding-high strip.
+	it("fills an empty color-background cell to the row's height", function()
+		local panel = S.json([[{"type": "table", "fieldConfig": {"defaults": {
+			"custom": {"cellOptions": {"type": "color-background", "mode": "basic"}},
+			"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+		}, "overrides": []}}]])
+		local frames = {
+			{
+				refId = "A",
+				fields = { Frame.field("up", "number", { 1, Frame.NULL }) },
+			},
+		}
+		local tbl = Table.build(panel, frames, env, OPTS)
+		expect(tbl.rows[2][1].text).toBe("")
+		expect(tbl.rows[2][1].bg_tone).toBe("error")
+		local fills = S.findAll(Table.view(panel, frames, env, OPTS), function(n)
+			return n.p and n.p.class == "tgp-cbg tgp-error"
+		end)
+		expect(#fills).toBe(1)
+		expect(S.text(fills[1])).toBe("\194\160")
+	end)
+
+	-- TableNG sizes columns by the server's table.autoColumnWidths flag
+	-- (useColWidths). On (Grafana Cloud), computeContentAwareColWidths: every
+	-- column to its content, a table wider than the panel scrolls (panels.css
+	-- tgp-fit: max-content tracks); the incident list (custom.width 300 Title,
+	-- 170 dates, dev dashboard tern-v08-pietable panel 2) squeezed its auto
+	-- columns to 'Resol...' and 'Criti...' instead, and its gauge columns took
+	-- 228px where Grafana gives the graphical default (150px, panels.css).
+	-- Only a table without a custom.width column (panel 3) grows its columns
+	-- into the leftover width (tgp-grow): a stretched fixed track would leave
+	-- a gap beside its cells. Off (Grafana's default), computeColWidths: the
+	-- auto columns share the width at least 150px or custom.minWidth (the
+	-- Labels column's 300) each (tgp-even).
+	describe("column widths", function()
 		local panels: { [number]: any } = {}
-		for _, p in S.decode("grafana/13.3.0/dashboard_tern_v08_pietable.json").dashboard.panels do
+		for _, p in S.decode("grafana/13.3.1/dashboard_tern_v08_pietable.json").dashboard.panels do
 			panels[p.id] = p
 		end
-		local function view(id: number): any
-			local frames = Transform.prepare(panels[id], S.frames("13.3.0", "v08_pietable_" .. id), env)
-			return Table.view(panels[id], frames, env, OPTS)
+		local function view(id: number, aware: boolean): any
+			local frames = Transform.prepare(panels[id], S.frames("13.3.1", "v08_pietable_" .. id), env)
+			local opts = table.clone(OPTS)
+			opts.features = { ["table.autoColumnWidths"] = aware }
+			return Table.view(panels[id], frames, env, opts)
 		end
 		local function wrapper(node: any): string
 			return S.find(node, function(n)
-				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-fit", 1, true) ~= nil
+				return n.p and type(n.p.class) == "string" and string.find(n.p.class, "tgp-table", 1, true) ~= nil
 			end).p.class
 		end
 		local function headClass(node: any, text: string): string
@@ -443,12 +491,27 @@ describe("table cell options", function()
 				return n.p and n.p.text == text
 			end).p.class
 		end
-		local list = view(2)
-		expect(wrapper(list)).toBe("tgp-table tgp-fit")
-		expect(headClass(list, "Title")).toBe("tg-h tgp-cw-30")
-		expect(headClass(list, "Start date")).toBe("tg-h tgp-cw-17")
-		expect(headClass(list, "Status")).toBe("tg-h")
-		expect(wrapper(view(3))).toBe("tgp-table tgp-fit tgp-grow")
+
+		it("sizes columns to content and grows them only without a fixed width with the flag on", function()
+			local list = view(2, true)
+			expect(wrapper(list)).toBe("tgp-table tgp-fit")
+			expect(headClass(list, "Title")).toBe("tg-h tgp-cw-30")
+			expect(headClass(list, "Start date")).toBe("tg-h tgp-cw-17")
+			expect(headClass(list, "Status")).toBe("tg-h")
+			expect(headClass(list, "Time to discovery")).toBe("tg-h")
+			expect(headClass(list, "Labels")).toBe("tg-h tgp-cmin-30")
+			expect(wrapper(view(3, true))).toBe("tgp-table tgp-fit tgp-grow")
+		end)
+
+		it("shares the width with a 150px floor per auto column with the flag off", function()
+			local list = view(2, false)
+			expect(wrapper(list)).toBe("tgp-table tgp-even")
+			expect(headClass(list, "Title")).toBe("tg-h tgp-cw-30")
+			expect(headClass(list, "Status")).toBe("tg-h tgp-cmin-15")
+			expect(headClass(list, "Time to discovery")).toBe("tg-h tgp-cmin-15")
+			expect(headClass(list, "Labels")).toBe("tg-h tgp-cmin-30")
+			expect(wrapper(view(3, false))).toBe("tgp-table tgp-even")
+		end)
 	end)
 end)
 

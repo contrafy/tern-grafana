@@ -75,6 +75,8 @@ local SCENARIOS = {
 	"./scenarios/compat",
 	"./scenarios/irm",
 	"./scenarios/settings",
+	"./scenarios/dashboard_layers",
+	"./scenarios/panels",
 	"./scenarios/window",
 	"./scenarios/panel_cursor",
 }

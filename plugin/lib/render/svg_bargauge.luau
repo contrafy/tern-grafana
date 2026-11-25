@@ -21,6 +21,7 @@
 -- carry the stop classes.
 
 local Kit = require("./svg_kit")
+local Stat = require("../panels/stat")
 
 local M = {}
 
@@ -70,11 +71,10 @@ M.RADIUS = 2
 
 local fmt = string.format
 
--- measureText, at Grafana's Inter: about 0.55 em per glyph.
-local EM = 0.55
-
+-- measureText: the advance widths of the SVG's font (.tgg, Tern's Geist),
+-- which stand in for Grafana's Inter.
 local function measure(s: string, size: number): number
-	return (utf8.len(s) or #s) * EM * size
+	return Stat.textEm(s) * size
 end
 
 -- calculateFontSize (lineHeight 1 for values).
@@ -128,16 +128,18 @@ end
 
 -- `s` cut with an ellipsis to fit `width` px at `size`.
 local function fit(s: string, size: number, width: number): string
-	local len = utf8.len(s) or #s
-	local max = math.floor(width / (EM * size))
-	if len <= max then
+	if measure(s, size) <= width or utf8.len(s) == nil then
 		return s
 	end
-	if max <= 1 then
-		return ""
+	local budget = width - measure("…", size)
+	local used = 0
+	for pos, c in utf8.codes(s) do
+		used += measure(utf8.char(c), size)
+		if used > budget then
+			return if pos == 1 then "" else string.sub(s, 1, pos - 1) .. "…"
+		end
 	end
-	local stop = utf8.offset(s, max) or (#s + 1)
-	return string.sub(s, 1, stop - 1) .. "…"
+	return s
 end
 
 -- The SVG and its size: the bars laid out over width x height (taller when
@@ -159,11 +161,12 @@ function M.render(bars: { Bar }, o: Options): (string, number, number)
 	local overflow = not o.vertical and totalH > H + 0.5
 
 	-- getDisplayValueAlignmentFactors: the longest title and value size
-	-- every bar.
+	-- every bar; the title by its drawn width, so no name is wider than
+	-- the column it sets.
 	local alignTitle: string? = nil
 	local alignValue = ""
 	for _, b in bars do
-		if b.title and (alignTitle == nil or #(b.title :: string) > #(alignTitle :: string)) then
+		if b.title and (alignTitle == nil or Stat.textEm(b.title :: string) > Stat.textEm(alignTitle :: string)) then
 			alignTitle = b.title
 		end
 		if #joined(b) > #alignValue then
@@ -204,14 +207,16 @@ function M.render(bars: { Bar }, o: Options): (string, number, number)
 			)
 		)
 	end
+	-- `y` is the line's middle: Tern's SVG ignores dominant-baseline, so the
+	-- baseline that centers a cap-height line there (as stat's value).
 	local function text(class: string, x: number, y: number, s: string, size: number, anchor: string)
 		table.insert(
 			out,
 			fmt(
-				'<text class="%s" x="%.1f" y="%.1f" font-size="%.1f" text-anchor="%s" dominant-baseline="central">%s</text>',
+				'<text class="%s" x="%.1f" y="%.1f" font-size="%.1f" text-anchor="%s">%s</text>',
 				class,
 				x,
-				y,
+				y + size * 0.36,
 				size,
 				anchor,
 				Kit.escape(s)

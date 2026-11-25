@@ -4,8 +4,15 @@
 -- AnnotationsDataLayer, standardAnnotationQuery executeAnnotationQuery,
 -- layers/annotations/utils.ts postProcessQueryResult, filterAnnotations.ts;
 -- the datasources' annotation support):
---
--- - enabled layers only, over the dashboard's range;
+-- - enabled layers only, over the dashboard's range: a layer is on with
+--   `enable` true unless the variable bar's toggle (M.toggles) overrides it;
+--   layers with `hide` true have no toggle (DashboardDataLayerControls);
+--   the legacy `showIn` is read by nothing in Grafana 12 and 13: such a
+--   layer shows on every panel;
+-- - the layer's datasource as DashboardMigrator's schema 36 step and the
+--   datasource service resolve it: a reference, a uid or name string, a
+--   variable ("$datasource") interpolated, or nil/"default" the default
+--   datasource; its type picks the layer kind;
 -- - Grafana's built-in "Annotations & Alerts" and other `-- Grafana --`
 --   layers of type dashboard (public/app/plugins/datasource/grafana/
 --   datasource.ts getAnnotations): `GET /api/annotations` with from, to,
@@ -91,9 +98,31 @@ local function grafanaDatasource(env: Env, a: { [any]: any }): boolean
 	return false
 end
 
-local function prometheusDatasource(env: Env, a: { [any]: any }): boolean
-	local ds = Env.value(env, a.datasource)
-	return type(ds) == "table" and Json.str(env, ds.type) == "prometheus"
+-- Resolves a layer's datasource reference (table, string or nil) to the
+-- datasource type; nil when it is unknown.
+export type TypeOf = (raw: any) -> string?
+
+-- The layers the variable bar shows a toggle for, in dashboard order, with
+-- whether each is on (`on`: the user's toggles by layer name).
+export type Toggle = { name: string, on: boolean }
+
+local function isOn(env: Env, a: { [any]: any }, on: { [string]: boolean }): boolean
+	local override = on[Json.str(env, a.name) or ""]
+	if override ~= nil then
+		return override
+	end
+	return Json.bool(env, a.enable) == true
+end
+
+function M.toggles(list: { any }, env: Env, on: { [string]: boolean }): { Toggle }
+	local out: { Toggle } = {}
+	for _, raw in list do
+		local a = Json.tbl(env, raw)
+		if a and Json.bool(env, a.hide) ~= true then
+			table.insert(out, { name = Json.str(env, a.name) or "", on = isOn(env, a, on) })
+		end
+	end
+	return out
 end
 
 local function filterOf(env: Env, a: { [any]: any }): Filter?
@@ -123,9 +152,10 @@ M.BUILT_IN = table.freeze({
 	builtIn = 1,
 })
 
--- The enabled layers this module runs, in dashboard order (a layer is on
--- only with `enable` true: transformSaveModelToScene isEnabled).
-function M.defs(list: { any }, env: Env): { Def }
+-- The layers this module runs that are on, in dashboard order (a layer is
+-- on with `enable` true: transformSaveModelToScene isEnabled, or by its
+-- toggle in `on`).
+function M.defs(list: { any }, env: Env, on: { [string]: boolean }, typeOf: TypeOf): { Def }
 	local all: { any } = {}
 	for _, raw in list do
 		local a = Json.tbl(env, raw)
@@ -141,7 +171,7 @@ function M.defs(list: { any }, env: Env): { Def }
 	local out: { Def } = {}
 	for _, raw in all do
 		local a = Json.tbl(env, raw)
-		if a == nil or Json.bool(env, a.enable) ~= true then
+		if a == nil or not isOn(env, a, on) then
 			continue
 		end
 		local target = Json.obj(env, a.target)
@@ -165,7 +195,7 @@ function M.defs(list: { any }, env: Env): { Def }
 			if kind ~= "dashboard" then
 				continue
 			end
-		elseif prometheusDatasource(env, a) then
+		elseif typeOf(a.datasource) == "prometheus" then
 			-- PrometheusAnnotationSupport prepareAnnotation; the query runs as
 			-- refId "Anno" (executeAnnotationQuery).
 			local t = Tbl.copy(target)

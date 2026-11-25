@@ -91,6 +91,7 @@ M.pngError = Png.err
 M.link = Links.link
 M.grafanaUrl = Links.grafanaUrl
 M.panelLinks = Links.panelLinks
+M.dashboardLinks = Links.dashboardLinks
 M.pickerItems = Picker.items
 M.pickerItemsFor = Picker.itemsFor
 M.focusedExemplars = Keys.focusedExemplars
@@ -133,6 +134,13 @@ function M.initWith(args: { string }, saved: any, env: Env, solo: boolean): (Sta
 		s.sync.on = true
 		-- The first poll adopts what the other blocks share.
 		table.insert(effects, Shared.timer(s.sync))
+	end
+	if type(saved) == "table" and type(saved.layers) == "table" then
+		for name, on in saved.layers do
+			if type(name) == "string" and type(on) == "boolean" then
+				s.layer_on[name] = on
+			end
+		end
 	end
 	local raw = if type(saved) == "table" and type(saved.link) == "string" then saved.link else args[1]
 	if raw and raw ~= "" then
@@ -231,16 +239,30 @@ local function event(s: State, ev: UiEvent, env: Env, effects: { Effect })
 		end
 	elseif act == "var" then
 		Picker.openVar(s, value)
+	elseif act == "layer" then
+		Picker.toggleLayer(s, value, env, effects)
+	elseif act == "plinks" then
+		Picker.openLinks(s, value, env)
 	elseif act == "browser" then
 		Links.openPanelInBrowser(s, value, effects)
 	elseif act == "plink" then
 		Links.openPanelLink(s, value, env, effects)
 	elseif act == "dlink" then
 		Links.openDataLink(value, effects)
+	elseif act == "dl" then
+		Links.openDashboardLink(s, value, env, effects)
+	elseif act == "dls" then
+		Picker.openDashboardLinks(s, value)
 	elseif act == "tpage" then
 		local page, key = string.match(value, "^(%d+):(.+)$")
 		if page and key and Core.find(s, key) then
 			s.pages[key] = tonumber(page) :: number
+		end
+	elseif act == "tframe" then
+		local frame, key = string.match(value, "^(%d+):(.+)$")
+		if frame and key and Core.find(s, key) then
+			s.frames[key] = tonumber(frame) :: number
+			s.pages[key] = nil
 		end
 	elseif act == "dashboard" then
 		local url = Links.grafanaUrl(s, env)
@@ -286,6 +308,8 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		Answers.onDashboard(s, msg.response, env, effects)
 	elseif kind == "fs" then
 		Answers.onSettings(s, msg.response, env, effects)
+	elseif kind == "flag" then
+		return Answers.onFlag(s, table.concat(parts, "/", 3), msg.response, env, effects)
 	elseif kind == "user" then
 		Answers.onUser(s, msg.response, env, effects)
 	elseif kind == "lib" then
@@ -308,6 +332,8 @@ local function answer(s: State, msg: any, env: Env, effects: { Effect }): boolea
 		return Answers.onJob(s, parts, msg.response, env, effects)
 	elseif kind == "dsv" then
 		return Answers.onVariableJob(s, parts, msg.response, env, effects)
+	elseif kind == "dlinks" then
+		return Links.onDashboardLinks(s, parts[3] or "", msg.response, env)
 	elseif kind == "png" then
 		return Answers.onPng(s, msg.tag, msg.response, env, effects)
 	elseif kind == "adhoc" then
@@ -398,7 +424,11 @@ function M.save(s: State): any
 	if encoded == nil then
 		return nil
 	end
-	return { link = encoded, sync = if s.sync.on then true else nil }
+	return {
+		link = encoded,
+		sync = if s.sync.on then true else nil,
+		layers = if next(s.layer_on) then s.layer_on else nil,
+	}
 end
 
 return M

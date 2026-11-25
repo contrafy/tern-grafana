@@ -307,6 +307,85 @@
           "sort": "none"
         }
       }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Minute counts as hairline bars (adjacent minutes)",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "timeFrom": "6h",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('minute', now()) - make_interval(mins => m) AS time,\n  (m % 3 = 0)::int AS blank, (m % 2 = 1)::int + (m % 7 = 0)::int AS email, 1 - (m % 2) AS web\nFROM unnest(ARRAY[3, 4, 40, 41, 95, 170, 171, 172, 250, 330]) AS m\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic",
+            "seriesBy": "last"
+          },
+          "decimals": 0,
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "insertNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "barAlignment": 0,
+            "barWidthFactor": 0.3,
+            "axisSoftMin": 0,
+            "axisSoftMax": 3,
+            "axisGridShow": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
     }
   ]
 }

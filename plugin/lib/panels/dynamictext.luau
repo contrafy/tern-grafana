@@ -51,13 +51,16 @@ type Node = ui.Node
 local M = {}
 
 M.types = { "marcusolsson-dynamictext-panel" }
+-- module.ts setNoPadding().
+M.no_padding = true
 
 -- Tern blob limit.
 local MAX_IMAGE_BYTES = 256 * 1024
 
--- PanelChrome: content padding on each side (theme.components.panel.padding)
--- and the title header's height (panel.headerHeight grid units).
-local PANEL_PADDING_PX = 8
+-- PanelChrome getContentStyle with the plugin's setNoPadding(): the panel's
+-- 1 px border on each side, no padding, and the title header's height
+-- (panel.headerHeight grid units).
+local PANEL_BORDER_PX = 1
 local PANEL_HEADER_PX = 32
 
 local IMAGE_MIME: { [string]: boolean } = {
@@ -538,11 +541,11 @@ function M.view(panel: any, frames: { Frame }, env: Env, opts: Common.Options): 
 	-- scrolls inside it, so a row is a flex item of a column with a definite
 	-- height and a template's `height: 100%` resolves against the row. Tern's
 	-- capped card body stands for that box; an expanded panel takes Grafana's
-	-- (gridPos height less PanelChrome's padding and title header).
+	-- (gridPos height less PanelChrome's border and title header).
 	local box = opts.card_height
 	if box == nil and opts.size then
 		local header = if (Json.str(env, panel.title) or "") ~= "" then PANEL_HEADER_PX else 0
-		box = opts.size.h - 2 * PANEL_PADDING_PX - header
+		box = opts.size.h - 2 * PANEL_BORDER_PX - header
 	end
 	local css = if box then string.format("height:%dpx;overflow:auto", math.max(0, math.floor(box))) else ""
 	local styles = Json.str(env, o.styles)

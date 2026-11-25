@@ -149,6 +149,10 @@ describe("dashboard panel", function()
 					local path = if string.match(e.tag, "^dash/")
 						then DS.grafana(version, "dashboard_tern_panels.json")
 						elseif string.match(e.tag, "^fs/") then DS.grafana(version, "frontend_settings.json")
+						elseif string.match(e.tag, "^flag/") then DS.grafana(
+							version,
+							"ofrep_table_auto_column_widths.json"
+						)
 						elseif string.match(e.tag, "^user/") then DS.grafana(version, "user.json")
 						elseif string.match(e.tag, "^lib/") then DS.grafana(version, "library_element.json")
 						else nil

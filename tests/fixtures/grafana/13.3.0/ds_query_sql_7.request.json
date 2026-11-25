@@ -1,1 +1,0 @@
-{"queries":[{"refId":"A","datasource":{"type":"grafana-postgresql-datasource","uid":"postgres"},"rawSql":"SELECT time, service, rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('frontend','checkout')\nORDER BY 1","format":"table","intervalMs":5000,"maxDataPoints":960}],"from":"1794236146000","to":"1794239746000"}

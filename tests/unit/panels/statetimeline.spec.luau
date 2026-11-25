@@ -42,13 +42,11 @@ end
 -- Panel 25's capture per version: how many samples at least, how many
 -- columns lie off the plot, and the down job's column text. 11/12: 31
 -- samples over the hour, the first before the panel range and the second
--- straddling its start, columns 26 px wide, so "dow". 13.3.0: the stack had
--- run ~7m, 3 samples inside the range, so the x range shrinks to them
--- (wide columns) and "down" prints in full.
+-- straddling its start, columns 26 px wide, so "dow" (13.3.1 alike).
 local STATUS = {
 	["11.6.16"] = { min_samples = 21, off_plot = 2, cut = "dow" },
 	["12.4.12"] = { min_samples = 21, off_plot = 2, cut = "dow" },
-	["13.3.0"] = { min_samples = 3, off_plot = 0, cut = "down" },
+	["13.3.1"] = { min_samples = 21, off_plot = 2, cut = "dow" },
 }
 
 for _, version in S.VERSIONS do

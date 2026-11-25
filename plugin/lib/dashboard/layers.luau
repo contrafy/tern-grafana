@@ -12,7 +12,11 @@ local Annotations = require("./annotations")
 local Core = require("./core")
 local Effect = require("../effect")
 local Env = require("../env")
+local Interpolate = require("./interpolate")
+local Json = require("../panels/json")
+local Model = require("./model")
 local Queries = require("./queries")
+local Range = require("../time/range")
 local Route = require("../config/route")
 local SvgAnnotations = require("../render/svg_annotations")
 local TransportTypes = require("../transport/types")
@@ -72,19 +76,48 @@ local function sameStates(a: { [number]: AlertStates.State }?, b: { [number]: Al
 	return true
 end
 
--- Sends the layer requests when they changed (or `force`, a refresh).
--- Runs once the variables have settled (a Prometheus layer's expression
--- may use them).
-function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
-	local d, route, r = s.dashboard, s.route, s.range
-	if d == nil or route == nil or r == nil then
-		return
+-- The datasource type of an annotation layer's reference under `qctx`
+-- (DashboardMigrator migrateDatasourceNameToRef, then the datasource
+-- service's lookup by uid or name with variables interpolated).
+local function typeOf(qctx: Queries.Context, env: Env): Annotations.TypeOf
+	return function(raw: any): string?
+		raw = Env.value(env, raw)
+		local uid: string? = nil
+		if type(raw) == "table" then
+			local typ = Json.str(env, raw.type)
+			if typ then
+				return typ
+			end
+			uid = Json.str(env, raw.uid)
+		elseif type(raw) == "string" then
+			uid = raw
+		end
+		if uid == nil or uid == "" or uid == "default" then
+			for _, ds in qctx.datasources do
+				if ds.is_default then
+					return ds.type
+				end
+			end
+			return nil
+		end
+		local ds = Queries.findDatasource(qctx.datasources, Interpolate.replace(uid :: string, qctx.scope))
+		return if ds then ds.type else nil
 	end
+end
+
+-- The layer requests for a dashboard `width` px wide.
+local function batch(
+	s: State,
+	env: Env,
+	width: number
+): ({ Types.AnnotationLayer }, { TransportTypes.Request }, boolean)
+	local d, route, r = s.dashboard :: Model.Dashboard, s.route :: Route, s.range :: Range.Range
 	local ls = s.layers
-	local qctx = Core.queryContext(s, Core.scopeOf(s), env, r, nil)
+	local qctx = Core.queryContext(s, Core.scopeOf(s), env, r, nil, width)
 	local layers: { Types.AnnotationLayer } = {}
 	local requests: { TransportTypes.Request } = {}
-	for _, def in Annotations.defs(d.annotations, env) do
+	ls.toggles = Annotations.toggles(d.annotations, env, s.layer_on)
+	for _, def in Annotations.defs(d.annotations, env, s.layer_on, typeOf(qctx, env)) do
 		local request: TransportTypes.Request
 		local pq: Queries.PanelQuery? = nil
 		if def.kind == "prometheus" then
@@ -106,10 +139,30 @@ function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
 	if alerts then
 		table.insert(requests, AlertStates.request(d.uid))
 	end
+	return layers, requests, alerts
+end
+
+-- Sends the layer requests when they changed (or `force`, a refresh).
+-- Runs once the variables have settled (a Prometheus layer's expression
+-- and datasource may use them).
+function M.advance(s: State, env: Env, force: boolean, effects: { Effect })
+	local d, route, r = s.dashboard, s.route, s.range
+	if d == nil or route == nil or r == nil then
+		return
+	end
+	local ls = s.layers
+	local width = Core.designWidth(env)
+	local layers, requests, alerts = batch(s, env, ls.width_px or width)
 	local sig = env.encode(requests)
 	if not force and sig == ls.sig then
 		return
 	end
+	-- A batch sent anyway takes the dashboard's width now.
+	if ls.width_px ~= nil and ls.width_px ~= width then
+		layers, requests, alerts = batch(s, env, width)
+		sig = env.encode(requests)
+	end
+	ls.width_px = width
 	ls.sig = sig
 	ls.gen += 1
 	-- What is shown stays until the new answers replace it.

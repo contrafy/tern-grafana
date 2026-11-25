@@ -1,18 +1,22 @@
 --!strict
 -- The dashboard JSON model from `/api/dashboards/uid/<uid>` (Grafana 11 to
 -- 13, schema v1; 13 answers schema v2 dashboards here converted to v1, tabs
--- and rows as rows) as sections of panels. Rows are flattened the way Grafana's
+-- and rows as rows) as sections of panels, after Grafana's schema migration
+-- (./migrate_schema: dashboards saved by older Grafanas, top-level `rows`
+-- among them, as Grafana loads them). Rows are flattened the way Grafana's
 -- classic dashboard model lays them out: an open row owns the top-level
 -- panels after it up to the next row; a collapsed row keeps its own panels in
 -- `row.panels`, and top-level panels after a collapsed row are not part of it.
 --
--- Panels keep their decoded JSON as is (`json`): the panel registry and the
--- query builder read Grafana's own option shapes. Library panels arrive as a
--- bare reference and are merged with the element's model once fetched
+-- Panels keep their (migrated) JSON (`json`): the panel registry and the
+-- query builder read Grafana's own option shapes. A panel without a gridPos
+-- takes PanelModel's defaults (6 x 3 at the top left). Library panels arrive
+-- as a bare reference and are merged with the element's model once fetched
 -- (`applyLibrary`), the way Grafana's LibraryPanelBehavior does: the model
 -- wins except for the dashboard's id and gridPos.
 
 local Env = require("../env")
+local MigrateSchema = require("./migrate_schema")
 local Response = require("../source/response")
 local TransportTypes = require("../transport/types")
 local Tbl = require("../tbl")
@@ -84,8 +88,8 @@ local function grid(env: Env, raw: any): GridPos
 	return {
 		x = num(Env.value(env, g.x), 0),
 		y = num(Env.value(env, g.y), 0),
-		w = math.clamp(num(Env.value(env, g.w), 12), 1, 24),
-		h = math.max(1, num(Env.value(env, g.h), 8)),
+		w = math.clamp(num(Env.value(env, g.w), 6), 1, 24),
+		h = math.max(1, num(Env.value(env, g.h), 3)),
 	}
 end
 
@@ -179,11 +183,12 @@ function M.parse(doc: any, env: Env): (Dashboard?, string?)
 	if type(doc) ~= "table" then
 		return nil, "not a dashboard response"
 	end
-	local d = Env.value(env, doc.dashboard)
-	if type(d) ~= "table" then
+	local raw = Env.value(env, doc.dashboard)
+	if type(raw) ~= "table" then
 		local message = str(env, doc.message)
 		return nil, message or "the response has no dashboard"
 	end
+	local d = MigrateSchema.migrate(raw, env)
 	local meta = Env.value(env, doc.meta)
 	meta = if type(meta) == "table" then meta else {}
 	local uid = str(env, d.uid)
@@ -316,7 +321,7 @@ function M.applyLibrary(d: Dashboard, uid: string, model: { [string]: any }?, en
 			merged.id = p.json.id
 			merged.gridPos = p.json.gridPos
 			merged.libraryPanel = p.json.libraryPanel
-			local resolved = panelOf(env, merged)
+			local resolved = panelOf(env, MigrateSchema.ensureQueryIds(env, merged))
 			if resolved then
 				s.panels[i] = resolved
 			end

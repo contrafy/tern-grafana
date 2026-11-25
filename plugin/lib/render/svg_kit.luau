@@ -66,12 +66,31 @@ export type TextOptions = {
 	class: string?,
 	-- Degrees, around (x, y).
 	rotate: number?,
-	-- Extra attributes, verbatim (dominant-baseline, font-weight).
+	-- Where `y` sits on the line; Tern's SVG ignores dominant-baseline, so
+	-- the baseline is placed by hand: "middle" centers the cap height on
+	-- `y`, "top" hangs the caps from it, "bottom" puts the descenders on it
+	-- (nil: `y` is the baseline).
+	baseline: ("middle" | "top" | "bottom")?,
+	-- Extra attributes, verbatim (fill, font-weight).
 	attrs: string?,
 }
 
+-- Baseline offset from `y` for `baseline` at `size` px.
+function M.baselineShift(baseline: string?, size: number): number
+	if baseline == "middle" then
+		return size * 0.36
+	elseif baseline == "top" then
+		return size * 0.72
+	elseif baseline == "bottom" then
+		return -size * 0.22
+	end
+	return 0
+end
+
 function M.text(x: number, y: number, s: string, o: TextOptions?): string
 	local opts: TextOptions = o or {}
+	local size = opts.size or M.FONT
+	y += M.baselineShift(opts.baseline, size)
 	local rot = opts.rotate
 	local transform = if rot and rot ~= 0 then fmt(' transform="rotate(%d %.1f %.1f)"', rot, x, y) else ""
 	return fmt(
@@ -79,7 +98,7 @@ function M.text(x: number, y: number, s: string, o: TextOptions?): string
 		opts.class or "tg-label",
 		x,
 		y,
-		math.floor((opts.size or M.FONT) + 0.5),
+		math.floor(size + 0.5),
 		opts.anchor or "middle",
 		transform,
 		if opts.attrs then " " .. opts.attrs else "",

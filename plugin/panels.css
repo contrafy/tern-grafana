@@ -61,7 +61,10 @@
 /* Gauge cells (BarGaugeCell): the bar needs a width in a content-sized
    column; the value sits after it. */
 .tgp-gc { display: flex; align-items: center; gap: 8px; }
-.tgp-gc .sf-meter { flex: 1 1 auto; width: 10em; min-width: 3em; }
+.tgp-gc .sf-meter { flex: 1 1 0; width: 0; min-width: 3em; }
+/* Content-aware widths (tgp-fit): a gauge column is TableNG's graphical
+   default, 150px with the cell's padding (tg-c: 20px), or its header. */
+.tgp-fit .tgp-gc { min-width: 130px; }
 .tgp-gc .sf-meter,
 .tgp-gc .sf-mt-track { height: 14px; border-radius: 3px; }
 /* The value box is at least the column's longest value wide (0.6em a character:
@@ -114,12 +117,44 @@
 .tgp-table .tg-cols-14 { grid-template-columns: repeat(14, minmax(auto, max-content)); }
 .tgp-table .tg-cols-15 { grid-template-columns: repeat(15, minmax(auto, max-content)); }
 .tgp-table .tg-cols-16 { grid-template-columns: repeat(16, minmax(auto, max-content)); }
+.tgp-table .tg-cols-17 { grid-template-columns: repeat(17, minmax(auto, max-content)); }
+.tgp-table .tg-cols-18 { grid-template-columns: repeat(18, minmax(auto, max-content)); }
+.tgp-table .tg-cols-19 { grid-template-columns: repeat(19, minmax(auto, max-content)); }
+.tgp-table .tg-cols-20 { grid-template-columns: repeat(20, minmax(auto, max-content)); }
+.tgp-table .tg-cols-21 { grid-template-columns: repeat(21, minmax(auto, max-content)); }
+.tgp-table .tg-cols-22 { grid-template-columns: repeat(22, minmax(auto, max-content)); }
+.tgp-table .tg-cols-23 { grid-template-columns: repeat(23, minmax(auto, max-content)); }
+.tgp-table .tg-cols-24 { grid-template-columns: repeat(24, minmax(auto, max-content)); }
+.tgp-table .tg-cols-25 { grid-template-columns: repeat(25, minmax(auto, max-content)); }
+.tgp-table .tg-cols-26 { grid-template-columns: repeat(26, minmax(auto, max-content)); }
+.tgp-table .tg-cols-27 { grid-template-columns: repeat(27, minmax(auto, max-content)); }
+.tgp-table .tg-cols-28 { grid-template-columns: repeat(28, minmax(auto, max-content)); }
+.tgp-table .tg-cols-29 { grid-template-columns: repeat(29, minmax(auto, max-content)); }
+.tgp-table .tg-cols-30 { grid-template-columns: repeat(30, minmax(auto, max-content)); }
+.tgp-table .tg-cols-31 { grid-template-columns: repeat(31, minmax(auto, max-content)); }
+.tgp-table .tg-cols-32 { grid-template-columns: repeat(32, minmax(auto, max-content)); }
+.tgp-table .tg-cols-33 { grid-template-columns: repeat(33, minmax(auto, max-content)); }
+.tgp-table .tg-cols-34 { grid-template-columns: repeat(34, minmax(auto, max-content)); }
+.tgp-table .tg-cols-35 { grid-template-columns: repeat(35, minmax(auto, max-content)); }
+.tgp-table .tg-cols-36 { grid-template-columns: repeat(36, minmax(auto, max-content)); }
+.tgp-table .tg-cols-37 { grid-template-columns: repeat(37, minmax(auto, max-content)); }
+.tgp-table .tg-cols-38 { grid-template-columns: repeat(38, minmax(auto, max-content)); }
+.tgp-table .tg-cols-39 { grid-template-columns: repeat(39, minmax(auto, max-content)); }
+.tgp-table .tg-cols-40 { grid-template-columns: repeat(40, minmax(auto, max-content)); }
+.tgp-table .tg-cols-41 { grid-template-columns: repeat(41, minmax(auto, max-content)); }
+.tgp-table .tg-cols-42 { grid-template-columns: repeat(42, minmax(auto, max-content)); }
+.tgp-table .tg-cols-43 { grid-template-columns: repeat(43, minmax(auto, max-content)); }
+.tgp-table .tg-cols-44 { grid-template-columns: repeat(44, minmax(auto, max-content)); }
+.tgp-table .tg-cols-45 { grid-template-columns: repeat(45, minmax(auto, max-content)); }
+.tgp-table .tg-cols-46 { grid-template-columns: repeat(46, minmax(auto, max-content)); }
+.tgp-table .tg-cols-47 { grid-template-columns: repeat(47, minmax(auto, max-content)); }
+.tgp-table .tg-cols-48 { grid-template-columns: repeat(48, minmax(auto, max-content)); }
 
 /* The table panel's grid (tgp-fit) as TableNG sizes it
    (computeContentAwareColWidths): every column is as wide as its content and
    header (max-content: an auto column's text is capped at 400px by tgp-cv,
    custom.width and custom.minWidth are set on its cells below, a gauge cell
-   keeps the bar's minimum and its tgp-gcw value room), never squeezed into
+   is 150px or its header), never squeezed into
    the card: a table wider than the card scrolls sideways in tg-wrap. Tern's
    grid shrinks a minmax(auto, max-content) track to 0 whatever min-width
    its cells ask for, so the tracks are plain max-content. Without
@@ -143,6 +178,38 @@
 .tgp-fit .tg-cols-14 { grid-template-columns: repeat(14, max-content); }
 .tgp-fit .tg-cols-15 { grid-template-columns: repeat(15, max-content); }
 .tgp-fit .tg-cols-16 { grid-template-columns: repeat(16, max-content); }
+.tgp-fit .tg-cols-17 { grid-template-columns: repeat(17, max-content); }
+.tgp-fit .tg-cols-18 { grid-template-columns: repeat(18, max-content); }
+.tgp-fit .tg-cols-19 { grid-template-columns: repeat(19, max-content); }
+.tgp-fit .tg-cols-20 { grid-template-columns: repeat(20, max-content); }
+.tgp-fit .tg-cols-21 { grid-template-columns: repeat(21, max-content); }
+.tgp-fit .tg-cols-22 { grid-template-columns: repeat(22, max-content); }
+.tgp-fit .tg-cols-23 { grid-template-columns: repeat(23, max-content); }
+.tgp-fit .tg-cols-24 { grid-template-columns: repeat(24, max-content); }
+.tgp-fit .tg-cols-25 { grid-template-columns: repeat(25, max-content); }
+.tgp-fit .tg-cols-26 { grid-template-columns: repeat(26, max-content); }
+.tgp-fit .tg-cols-27 { grid-template-columns: repeat(27, max-content); }
+.tgp-fit .tg-cols-28 { grid-template-columns: repeat(28, max-content); }
+.tgp-fit .tg-cols-29 { grid-template-columns: repeat(29, max-content); }
+.tgp-fit .tg-cols-30 { grid-template-columns: repeat(30, max-content); }
+.tgp-fit .tg-cols-31 { grid-template-columns: repeat(31, max-content); }
+.tgp-fit .tg-cols-32 { grid-template-columns: repeat(32, max-content); }
+.tgp-fit .tg-cols-33 { grid-template-columns: repeat(33, max-content); }
+.tgp-fit .tg-cols-34 { grid-template-columns: repeat(34, max-content); }
+.tgp-fit .tg-cols-35 { grid-template-columns: repeat(35, max-content); }
+.tgp-fit .tg-cols-36 { grid-template-columns: repeat(36, max-content); }
+.tgp-fit .tg-cols-37 { grid-template-columns: repeat(37, max-content); }
+.tgp-fit .tg-cols-38 { grid-template-columns: repeat(38, max-content); }
+.tgp-fit .tg-cols-39 { grid-template-columns: repeat(39, max-content); }
+.tgp-fit .tg-cols-40 { grid-template-columns: repeat(40, max-content); }
+.tgp-fit .tg-cols-41 { grid-template-columns: repeat(41, max-content); }
+.tgp-fit .tg-cols-42 { grid-template-columns: repeat(42, max-content); }
+.tgp-fit .tg-cols-43 { grid-template-columns: repeat(43, max-content); }
+.tgp-fit .tg-cols-44 { grid-template-columns: repeat(44, max-content); }
+.tgp-fit .tg-cols-45 { grid-template-columns: repeat(45, max-content); }
+.tgp-fit .tg-cols-46 { grid-template-columns: repeat(46, max-content); }
+.tgp-fit .tg-cols-47 { grid-template-columns: repeat(47, max-content); }
+.tgp-fit .tg-cols-48 { grid-template-columns: repeat(48, max-content); }
 .tgp-fit.tgp-grow .tg-table { justify-content: normal; }
 .tgp-fit.tgp-grow .tg-cols-1 { grid-template-columns: repeat(1, minmax(max-content, auto)); }
 .tgp-fit.tgp-grow .tg-cols-2 { grid-template-columns: repeat(2, minmax(max-content, auto)); }
@@ -160,6 +227,93 @@
 .tgp-fit.tgp-grow .tg-cols-14 { grid-template-columns: repeat(14, minmax(max-content, auto)); }
 .tgp-fit.tgp-grow .tg-cols-15 { grid-template-columns: repeat(15, minmax(max-content, auto)); }
 .tgp-fit.tgp-grow .tg-cols-16 { grid-template-columns: repeat(16, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-17 { grid-template-columns: repeat(17, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-18 { grid-template-columns: repeat(18, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-19 { grid-template-columns: repeat(19, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-20 { grid-template-columns: repeat(20, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-21 { grid-template-columns: repeat(21, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-22 { grid-template-columns: repeat(22, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-23 { grid-template-columns: repeat(23, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-24 { grid-template-columns: repeat(24, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-25 { grid-template-columns: repeat(25, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-26 { grid-template-columns: repeat(26, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-27 { grid-template-columns: repeat(27, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-28 { grid-template-columns: repeat(28, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-29 { grid-template-columns: repeat(29, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-30 { grid-template-columns: repeat(30, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-31 { grid-template-columns: repeat(31, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-32 { grid-template-columns: repeat(32, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-33 { grid-template-columns: repeat(33, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-34 { grid-template-columns: repeat(34, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-35 { grid-template-columns: repeat(35, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-36 { grid-template-columns: repeat(36, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-37 { grid-template-columns: repeat(37, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-38 { grid-template-columns: repeat(38, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-39 { grid-template-columns: repeat(39, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-40 { grid-template-columns: repeat(40, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-41 { grid-template-columns: repeat(41, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-42 { grid-template-columns: repeat(42, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-43 { grid-template-columns: repeat(43, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-44 { grid-template-columns: repeat(44, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-45 { grid-template-columns: repeat(45, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-46 { grid-template-columns: repeat(46, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-47 { grid-template-columns: repeat(47, minmax(max-content, auto)); }
+.tgp-fit.tgp-grow .tg-cols-48 { grid-template-columns: repeat(48, minmax(max-content, auto)); }
+
+/* The table panel's grid with table.autoColumnWidths off (tgp-even,
+   computeColWidths): the columns share the card's width, a custom.width one
+   at its width, the others at least custom.minWidth or 150px (tgp-cmin-N on
+   their cells), their text cut short; past the floors the table scrolls
+   sideways. */
+.tgp-even .tg-table { justify-content: normal; }
+.tgp-even .tg-cols-1 { grid-template-columns: repeat(1, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-2 { grid-template-columns: repeat(2, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-3 { grid-template-columns: repeat(3, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-4 { grid-template-columns: repeat(4, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-5 { grid-template-columns: repeat(5, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-6 { grid-template-columns: repeat(6, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-7 { grid-template-columns: repeat(7, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-8 { grid-template-columns: repeat(8, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-9 { grid-template-columns: repeat(9, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-10 { grid-template-columns: repeat(10, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-11 { grid-template-columns: repeat(11, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-12 { grid-template-columns: repeat(12, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-13 { grid-template-columns: repeat(13, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-14 { grid-template-columns: repeat(14, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-15 { grid-template-columns: repeat(15, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-16 { grid-template-columns: repeat(16, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-17 { grid-template-columns: repeat(17, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-18 { grid-template-columns: repeat(18, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-19 { grid-template-columns: repeat(19, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-20 { grid-template-columns: repeat(20, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-21 { grid-template-columns: repeat(21, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-22 { grid-template-columns: repeat(22, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-23 { grid-template-columns: repeat(23, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-24 { grid-template-columns: repeat(24, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-25 { grid-template-columns: repeat(25, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-26 { grid-template-columns: repeat(26, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-27 { grid-template-columns: repeat(27, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-28 { grid-template-columns: repeat(28, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-29 { grid-template-columns: repeat(29, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-30 { grid-template-columns: repeat(30, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-31 { grid-template-columns: repeat(31, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-32 { grid-template-columns: repeat(32, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-33 { grid-template-columns: repeat(33, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-34 { grid-template-columns: repeat(34, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-35 { grid-template-columns: repeat(35, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-36 { grid-template-columns: repeat(36, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-37 { grid-template-columns: repeat(37, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-38 { grid-template-columns: repeat(38, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-39 { grid-template-columns: repeat(39, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-40 { grid-template-columns: repeat(40, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-41 { grid-template-columns: repeat(41, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-42 { grid-template-columns: repeat(42, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-43 { grid-template-columns: repeat(43, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-44 { grid-template-columns: repeat(44, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-45 { grid-template-columns: repeat(45, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-46 { grid-template-columns: repeat(46, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-47 { grid-template-columns: repeat(47, minmax(auto, 1fr)); }
+.tgp-even .tg-cols-48 { grid-template-columns: repeat(48, minmax(auto, 1fr)); }
 
 /* EmptyTablePlaceholder: centered under the header in text.secondary. */
 .tgp-table-empty { padding: 2em 0; text-align: center; color: var(--sf-c-muted); }
@@ -295,7 +449,7 @@
 
 /* Gradient gauge cells (BarGauge getBarGradient): runs fading from their own
    stop class color (--tgp-from) to their child's; transparent steps fade out. */
-.tgp-gbar { flex: 1 1 auto; width: 10em; min-width: 3em; height: 14px; border-radius: 3px; overflow: hidden; display: flex; background: var(--l2); }
+.tgp-gbar { flex: 1 1 0; width: 0; min-width: 3em; height: 14px; border-radius: 3px; overflow: hidden; display: flex; background: var(--l2); }
 .tgp-gfill { display: flex; height: 100%; }
 .tgp-gseg { flex: none; height: 100%; --tgp-from: var(--tg-c); }
 .tgp-gseg.tgp-gseg-last { flex: 1 1 auto; }
@@ -310,6 +464,11 @@
 .tgp-pg-b.tgp-pg-off { opacity: 0.5; cursor: default; }
 .tgp-pg-e { color: var(--t3); }
 .tgp-pg-sum { color: var(--t3); margin-left: 8px; }
+
+/* Table frame Select (TablePanel, several frames): full width under the
+   table, the shown frame's name between previous and next. */
+.tgp-fsel { display: flex; align-items: center; gap: 6px; padding: 8px 0 0 0; }
+.tgp-fsel-v { flex-grow: 1; min-width: 0; padding: 2px 8px; border: 1px solid var(--l2); border-radius: 3px; overflow-x: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
 
 .tgp-w-0 { width: 0%; }
 .tgp-w-1 { width: 1%; }
@@ -564,3 +723,31 @@
 .tg-table .tgp-cmin-78 { min-width: 780px; }
 .tg-table .tgp-cmin-79 { min-width: 790px; }
 .tg-table .tgp-cmin-80 { min-width: 800px; }
+
+/* A bottom legend cut after n whole list lines (16 px, 10 apart) or n table
+   rows (22 px head, 21 px rows), the rest scrolled (lib/render/legend
+   capClass: Grafana's VizLayout caps it at 35% of the viz). */
+.tgp-lgcap-l1 { max-height: 16px; overflow-y: auto; }
+.tgp-lgcap-l2 { max-height: 42px; overflow-y: auto; }
+.tgp-lgcap-l3 { max-height: 68px; overflow-y: auto; }
+.tgp-lgcap-l4 { max-height: 94px; overflow-y: auto; }
+.tgp-lgcap-l5 { max-height: 120px; overflow-y: auto; }
+.tgp-lgcap-l6 { max-height: 146px; overflow-y: auto; }
+.tgp-lgcap-l7 { max-height: 172px; overflow-y: auto; }
+.tgp-lgcap-l8 { max-height: 198px; overflow-y: auto; }
+.tgp-lgcap-l9 { max-height: 224px; overflow-y: auto; }
+.tgp-lgcap-l10 { max-height: 250px; overflow-y: auto; }
+.tgp-lgcap-l11 { max-height: 276px; overflow-y: auto; }
+.tgp-lgcap-l12 { max-height: 302px; overflow-y: auto; }
+.tgp-lgcap-t1 { max-height: 43px; overflow-y: auto; }
+.tgp-lgcap-t2 { max-height: 64px; overflow-y: auto; }
+.tgp-lgcap-t3 { max-height: 85px; overflow-y: auto; }
+.tgp-lgcap-t4 { max-height: 106px; overflow-y: auto; }
+.tgp-lgcap-t5 { max-height: 127px; overflow-y: auto; }
+.tgp-lgcap-t6 { max-height: 148px; overflow-y: auto; }
+.tgp-lgcap-t7 { max-height: 169px; overflow-y: auto; }
+.tgp-lgcap-t8 { max-height: 190px; overflow-y: auto; }
+.tgp-lgcap-t9 { max-height: 211px; overflow-y: auto; }
+.tgp-lgcap-t10 { max-height: 232px; overflow-y: auto; }
+.tgp-lgcap-t11 { max-height: 253px; overflow-y: auto; }
+.tgp-lgcap-t12 { max-height: 274px; overflow-y: auto; }

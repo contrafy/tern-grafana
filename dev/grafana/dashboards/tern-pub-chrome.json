@@ -1,0 +1,252 @@
+{
+  "uid": "tern-pub-chrome",
+  "title": "Tern Pub Chrome",
+  "tags": [
+    "tern"
+  ],
+  "timezone": "utc",
+  "editable": false,
+  "schemaVersion": 18,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "links": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "$ds",
+        "enable": true,
+        "expr": "(minute() % 15 == bool 0) > 0",
+        "hide": false,
+        "iconColor": "#bf1b00",
+        "name": "Restarts",
+        "showIn": 0,
+        "step": "1m",
+        "titleFormat": "Restart"
+      },
+      {
+        "datasource": "Prometheus 3",
+        "enable": false,
+        "expr": "(minute() % 20 == bool 5) > 0",
+        "hide": false,
+        "iconColor": "#73BF69",
+        "name": "Deploys",
+        "showIn": 0,
+        "step": "1m",
+        "titleFormat": "Deploy"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "ds",
+        "label": "Data Source",
+        "query": "prometheus",
+        "regex": "",
+        "refresh": 1,
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "Prometheus 3",
+          "value": "prom3"
+        },
+        "options": []
+      },
+      {
+        "type": "custom",
+        "name": "integration",
+        "label": "integration",
+        "query": "email,pagerduty,slack,webhook,wechat",
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "$integration: Notifications Send Rate",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": "$ds",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "vector(1)"
+        }
+      ],
+      "repeat": "integration"
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "$integration: Notification Duration",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": "$ds",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "vector(2)"
+        }
+      ],
+      "repeat": "integration"
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Restarts",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": "$ds",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"prometheus\"}"
+        }
+      ],
+      "links": [
+        {
+          "title": "Runbook",
+          "url": "https://grafana.com/docs/grafana/latest/"
+        },
+        {
+          "title": "Explore",
+          "url": "/explore"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "",
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": "$ds",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"tern-no-such-job\"}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "No data",
+      "gridPos": {
+        "x": 18,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": "$ds",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"tern-no-such-job\"}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Broken query",
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 3
+      },
+      "datasource": "$ds",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(up[5m])"
+        }
+      ]
+    }
+  ]
+}

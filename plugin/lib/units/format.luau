@@ -41,6 +41,12 @@ end
 local function jsString(n: number): string
 	if n == 0 then
 		return "0"
+	elseif n ~= n then
+		return "NaN"
+	elseif n == math.huge then
+		return "Infinity"
+	elseif n == -math.huge then
+		return "-Infinity"
 	end
 	local s = tostring(n)
 	if not string.find(s, "e", 1, true) then

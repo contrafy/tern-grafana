@@ -411,6 +411,25 @@
 .tg-cols-15 { grid-template-columns: repeat(15, minmax(0, max-content)); }
 .tg-cols-16 { grid-template-columns: repeat(16, minmax(0, max-content)); }
 
+/* A table legend keeps every column at its natural width and scrolls
+   sideways when it is wider than the panel (VizLegendTable in Grafana's
+   ScrollContainer): series names are never cut. */
+[data-role="tern-grafana.legend"].tg-cols-2 { grid-template-columns: repeat(2, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-3 { grid-template-columns: repeat(3, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-4 { grid-template-columns: repeat(4, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-5 { grid-template-columns: repeat(5, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-6 { grid-template-columns: repeat(6, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-7 { grid-template-columns: repeat(7, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-8 { grid-template-columns: repeat(8, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-9 { grid-template-columns: repeat(9, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-10 { grid-template-columns: repeat(10, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-11 { grid-template-columns: repeat(11, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-12 { grid-template-columns: repeat(12, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-13 { grid-template-columns: repeat(13, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-14 { grid-template-columns: repeat(14, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-15 { grid-template-columns: repeat(15, max-content); }
+[data-role="tern-grafana.legend"].tg-cols-16 { grid-template-columns: repeat(16, max-content); }
+
 .tg-table .tg-h {
 	color: var(--t3);
 	padding: 2px 14px 4px 6px;

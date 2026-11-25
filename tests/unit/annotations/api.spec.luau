@@ -15,7 +15,7 @@ local Support = require("../../lib/support")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.1" }
 
 local function list(...: any): { any }
 	return { ... }
@@ -38,7 +38,7 @@ local function sortedKeys(t_: { [string]: any }): { string }
 end
 
 -- Ids are whatever each stack's annotation table had reached at capture time.
-local CREATED_ID = { ["11.6.16"] = 9, ["12.4.12"] = 9, ["13.3.0"] = 8 }
+local CREATED_ID = { ["11.6.16"] = 9, ["12.4.12"] = 9, ["13.3.1"] = 10 }
 
 describe("annotations api body", function()
 	for _, v in VERSIONS do

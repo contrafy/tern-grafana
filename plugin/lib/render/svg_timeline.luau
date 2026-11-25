@@ -234,10 +234,7 @@ function M.render(opts: Options): Result
 		end
 		local s = cut(text :: string, math.max(maxChars, 0))
 		if s ~= "" then
-			table.insert(
-				texts,
-				Kit.text(tx, yMid, s, { anchor = anchor, class = "tgc-text", attrs = 'dominant-baseline="central"' })
-			)
+			table.insert(texts, Kit.text(tx, yMid, s, { anchor = anchor, class = "tgc-text", baseline = "middle" }))
 		end
 	end
 	for li, lane in lanes do
@@ -247,10 +244,7 @@ function M.render(opts: Options): Result
 		local yMid = math.floor(top + (off + dim / 2) * plotH + 0.5)
 		local boxes = lane.boxes
 		if not opts.hide_y then
-			table.insert(
-				out,
-				Kit.text(left - 8, yMid, lane.label, { anchor = "end", attrs = 'dominant-baseline="central"' })
-			)
+			table.insert(out, Kit.text(left - 8, yMid, lane.label, { anchor = "end", baseline = "middle" }))
 		end
 		if opts.mode == "samples" then
 			if #boxes == 0 then

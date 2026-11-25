@@ -63,13 +63,21 @@ M.arrayIndex = arrayIndex
 -- JavaScript's own-key order: array indexes ascending, then the rest in
 -- insertion order.
 local function jsKeyOrder(keys: { string }): { string }
+	local any = false
+	for _, k in keys do
+		local b = string.byte(k, 1)
+		if b and b >= 48 and b <= 57 and arrayIndex(k) then
+			any = true
+			break
+		end
+	end
+	if not any then
+		return keys
+	end
 	local idx: { string } = {}
 	local rest: { string } = {}
 	for _, k in keys do
 		table.insert(if arrayIndex(k) then idx else rest, k)
-	end
-	if #idx == 0 then
-		return keys
 	end
 	table.sort(idx, function(a, b): boolean
 		return (arrayIndex(a) :: number) < (arrayIndex(b) :: number)
@@ -193,16 +201,27 @@ local function fail(what: string, pos: number): never
 	error({ json_error = string.format("%s in JSON at position %d", what, pos - 1) }, 0)
 end
 
+local QUOTE, COMMA, COLON = 34, 44, 58
+local LBRACKET, RBRACKET, LBRACE, RBRACE = 91, 93, 123, 125
+
 local function skipWs(s: string, i: number): number
-	local _, e = string.find(s, "^[ \t\r\n]*", i)
+	local b = string.byte(s, i)
+	if b ~= 32 and b ~= 10 and b ~= 13 and b ~= 9 then
+		return i
+	end
+	local _, e = string.find(s, "^[ \t\r\n]*", i + 1)
 	return (e :: number) + 1
 end
 
 local parseValue: (string, number) -> (any, number)
 
 local function parseString(s: string, i: number): (string, number)
-	local out: { string } = {}
 	i += 1
+	local first = string.find(s, '[\1-\31"\\]', i)
+	if first and string.byte(s, first) == QUOTE then
+		return string.sub(s, i, first - 1), first + 1
+	end
+	local out: { string } = {}
 	while true do
 		local j = string.find(s, '[\1-\31"\\]', i)
 		if j == nil then
@@ -246,22 +265,22 @@ end
 
 parseValue = function(s: string, i: number): (any, number)
 	i = skipWs(s, i)
-	local c = string.sub(s, i, i)
-	if c == "{" then
+	local c = string.byte(s, i)
+	if c == LBRACE then
 		local keys: { string } = {}
 		local values: { [string]: any } = {}
 		i = skipWs(s, i + 1)
-		if string.sub(s, i, i) == "}" then
+		if string.byte(s, i) == RBRACE then
 			return M.object(keys, values), i + 1
 		end
 		while true do
-			if string.sub(s, i, i) ~= '"' then
+			if string.byte(s, i) ~= QUOTE then
 				fail("Expected property name", i)
 			end
 			local key
 			key, i = parseString(s, i)
 			i = skipWs(s, i)
-			if string.sub(s, i, i) ~= ":" then
+			if string.byte(s, i) ~= COLON then
 				fail("Expected ':' after property name", i)
 			end
 			local v
@@ -271,19 +290,19 @@ parseValue = function(s: string, i: number): (any, number)
 			end
 			values[key] = v
 			i = skipWs(s, i)
-			local d = string.sub(s, i, i)
-			if d == "," then
+			local d = string.byte(s, i)
+			if d == COMMA then
 				i = skipWs(s, i + 1)
-			elseif d == "}" then
+			elseif d == RBRACE then
 				return M.object(jsKeyOrder(keys), values), i + 1
 			else
 				fail("Expected ',' or '}' after property value", i)
 			end
 		end
-	elseif c == "[" then
+	elseif c == LBRACKET then
 		local items: { any } = {}
 		i = skipWs(s, i + 1)
-		if string.sub(s, i, i) == "]" then
+		if string.byte(s, i) == RBRACKET then
 			return M.array(items), i + 1
 		end
 		while true do
@@ -291,16 +310,16 @@ parseValue = function(s: string, i: number): (any, number)
 			v, i = parseValue(s, i)
 			table.insert(items, v)
 			i = skipWs(s, i)
-			local d = string.sub(s, i, i)
-			if d == "," then
+			local d = string.byte(s, i)
+			if d == COMMA then
 				i += 1
-			elseif d == "]" then
+			elseif d == RBRACKET then
 				return M.array(items), i + 1
 			else
 				fail("Expected ',' or ']' after array element", i)
 			end
 		end
-	elseif c == '"' then
+	elseif c == QUOTE then
 		return parseString(s, i)
 	elseif string.sub(s, i, i + 3) == "true" then
 		return true, i + 4
@@ -313,10 +332,10 @@ parseValue = function(s: string, i: number): (any, number)
 	if
 		num
 		and (
-			string.match(num, "^%-?0$")
-			or string.match(num, "^%-?[1-9]%d*$")
-			or string.match(num, "^%-?0%.%d+$")
+			string.match(num, "^%-?[1-9]%d*$")
 			or string.match(num, "^%-?[1-9]%d*%.%d+$")
+			or string.match(num, "^%-?0$")
+			or string.match(num, "^%-?0%.%d+$")
 			or string.match(num, "^%-?0[eE][%+%-]?%d+$")
 			or string.match(num, "^%-?[1-9]%d*[eE][%+%-]?%d+$")
 			or string.match(num, "^%-?0%.%d+[eE][%+%-]?%d+$")
@@ -325,7 +344,7 @@ parseValue = function(s: string, i: number): (any, number)
 	then
 		return tonumber(num) :: number, i + #num
 	end
-	if c == "" then
+	if c == nil then
 		fail("Unexpected end of JSON input", i)
 	end
 	fail("Unexpected token", i)

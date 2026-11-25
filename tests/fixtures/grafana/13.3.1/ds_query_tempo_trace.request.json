@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"tempo","uid":"tempo"},"queryType":"traceId","query":"10c8f21cbcaf2b307224a3104e43bd64"}],"from":"now-15m","to":"now"}

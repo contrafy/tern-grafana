@@ -70,7 +70,7 @@ describe("rules normalization", function()
 	local versions = {
 		{ grafana = "11.6.16", prometheus = "2.53.5" },
 		{ grafana = "12.4.12", prometheus = "3.15.0" },
-		{ grafana = "13.3.0", prometheus = "3.15.0" },
+		{ grafana = "13.3.1", prometheus = "3.15.0" },
 	}
 	for _, v in versions do
 		it(string.format("Grafana %s and Prometheus %s read the same way", v.grafana, v.prometheus), function()

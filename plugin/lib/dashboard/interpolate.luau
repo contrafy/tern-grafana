@@ -243,15 +243,24 @@ function M.prometheus(values: { string }, var: Var, list: boolean): string
 	return "(" .. mapJoin(values, promSpecial, "|") .. ")"
 end
 
--- The Loki datasource: the same regex escaping, alternatives without parentheses.
+-- The Loki datasource's interpolateQueryExpr (Grafana 11.6 to 13): a plain
+-- value as it is; multi-value and include-all variables regex-escaped
+-- (lokiSpecialRegexEscape: Prometheus' set without the quote) and joined by
+-- `|`, without parentheses.
+local function lokiSpecial(s: string): string
+	local out = string.gsub(s, "\\", "\\\\\\\\")
+	out = string.gsub(out, "[%$%^%*{}%[%]%+%?%.%(%)|]", "\\\\%0")
+	return out
+end
+
 function M.loki(values: { string }, var: Var, list: boolean): string
 	if not var.multi and not var.include_all then
-		return (string.gsub(table.concat(values, ","), "\\", "\\\\"))
+		return table.concat(values, ",")
 	end
 	if not list then
-		return promSpecial(single(values))
+		return lokiSpecial(single(values))
 	end
-	return mapJoin(values, promSpecial, "|")
+	return mapJoin(values, lokiSpecial, "|")
 end
 
 local function sqlQuote(s: string): string

@@ -14,7 +14,7 @@ local json = require("../../lib/json")
 local t = require("../../lib/test")
 local describe, it, expect = t.describe, t.it, t.expect
 
-local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.1" }
 local FROM_MS = S.START * 1000
 local TO_MS = S.END * 1000
 

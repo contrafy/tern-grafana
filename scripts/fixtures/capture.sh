@@ -354,6 +354,12 @@ capture_grafana() {
 	get user_bad_token /api/user
 	TOKEN_FILE=$tok
 	get frontend_settings /api/frontend/settings
+	# Grafana 13's OpenFeature flags as its frontend evaluates them (OFREP at the app root, context
+	# targetingKey = namespace plus openFeatureContext); 11 and 12 have no such flags.
+	if [ "${ver%%.*}" -ge 13 ]; then
+		req ofrep_table_auto_column_widths POST /ofrep/v1/evaluate/flags/table.autoColumnWidths \
+			"$(jq -c '{context: ({targetingKey: .namespace} + .openFeatureContext)}' "$LAST")"
+	fi
 	get user /api/user
 	get org /api/org
 	get search "/api/search?type=dash-db"
@@ -406,6 +412,13 @@ capture_grafana() {
 	get ds_resource_prom_label_values "/api/datasources/uid/prom3/resources/api/v1/label/job/values?start=$START&end=$END"
 	get ds_proxy_prom_labels "/api/datasources/proxy/uid/prom3/api/v1/labels?start=$START&end=$END"
 	get ds_proxy_prom_label_values "/api/datasources/proxy/uid/prom3/api/v1/label/job/values?start=$START&end=$END"
+	# tern-pub-vars: the series query of a variable (Grafana's classic query fallback) and Loki's label
+	# lists as its variables read them, all through the datasource proxy.
+	get ds_proxy_prom_series "/api/datasources/proxy/uid/prom3/api/v1/series?match%5B%5D=$(enc 'up{job=~"node"}')&start=$START&end=$END"
+	get ds_proxy_prom_series_error "/api/datasources/proxy/uid/prom3/api/v1/series?match%5B%5D=$(enc 'sum(up)')&start=$START&end=$END"
+	get ds_proxy_loki_labels "/api/datasources/proxy/uid/loki/loki/api/v1/labels?start=$NS_START&end=$NS_END"
+	get ds_proxy_loki_label_values_app "/api/datasources/proxy/uid/loki/loki/api/v1/label/app/values?start=$NS_START&end=$NS_END"
+	get ds_proxy_loki_label_values_level "/api/datasources/proxy/uid/loki/loki/api/v1/label/level/values?start=$NS_START&end=$NS_END&query=$(enc '{app="checkout"}')"
 	get ds_proxy_prom_metadata "/api/datasources/proxy/uid/prom3/api/v1/metadata?limit=5&limit_per_metric=1"
 	get ds_proxy_prom_query_error "/api/datasources/proxy/uid/prom3/api/v1/query?query=$(enc 'sum(rate(up[5m])')"
 	get ds_proxy_tempo_search "/api/datasources/proxy/uid/tempo/api/search?q=$(enc '{resource.service.name="payments"}')&limit=10&start=$START&end=$END"
@@ -462,6 +475,8 @@ capture_all_panels() {
 	get search_recent "/api/search?dashboardUIDs=tern-all-panels&dashboardUIDs=tern-panels&limit=10"
 	get search_tag "/api/search?tag=fixtures&type=dash-db&limit=10"
 	get search_query_tag "/api/search?query=$(enc 'Tern')&tag=all-panels&type=dash-db&limit=10"
+	# tern-pub-grid's "dashboards" dashboard link: every dashboard tagged tern.
+	get search_tag_tern "/api/search?type=dash-db&tag=tern&limit=100"
 	# annolist: by tag, only this dashboard, only in the time range.
 	get annotations_annolist "/api/annotations?tags=tern-seed&limit=10&type=annotation"
 	get annotations_annolist_dashboard "/api/annotations?dashboardUID=tern-all-panels&limit=10&type=annotation"
@@ -477,13 +492,16 @@ capture_all_panels() {
 # (they are what Tern's query builder is checked against):
 # - SqlDatasource.applyTemplateVariables keeps refId, datasource, rawSql and format; rawSql has the
 #   variables interpolated with the SQL quoting ($service and $team are multi-value: quoted lists;
-#   $region is a textbox: quotes doubled) and $__interval with the panel interval; $__timeFilter and
+#   $region is a textbox: quotes doubled) and $__interval with the request's interval; $__timeFilter and
 #   the other macros are left to the backend. DataSourceWithBackend adds intervalMs and maxDataPoints
 #   (and the deprecated datasourceId, not sent here).
 # - With an expression the expression datasource sends every target, the hidden one too, each through
 #   its datasource's interpolateVariablesInQueries (SQL: the whole target, rawQuery true); expression
 #   targets go as written with Grafana's expression datasource reference.
-# - Range now-1h; maxDataPoints gridPos.w * 80 as in panel_query.jq, so intervalMs is 5000 ("5s").
+# - Range now-1h; maxDataPoints gridPos.w * 80 as in panel_query.jq. intervalMs is calculateInterval's 5s
+#   raised to the panel datasource's interval, SqlDatasource's default 1m (60000); panel 5 runs on
+#   -- Mixed --, which has none: 5000 ("5s"). Checked against the requests Grafana 11.6, 12.4 and 13.3
+#   frontends send for this dashboard.
 # Panel 6 (-- Dashboard --) reuses panel 4's results: the frontend sends no query for it.
 capture_sql() {
 	get frontend_settings_sql /api/frontend/settings
@@ -496,17 +514,17 @@ capture_sql() {
 			'{queries: $q, from: $f, to: $t}')"
 	}
 	sql_req 1 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
-		rawSql: "SELECT $__timeGroupAlias(time, 5s), service AS metric, avg(rps) AS rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nGROUP BY 1, 2\nORDER BY 1",
-		format: "time_series", intervalMs: 5000, maxDataPoints: 960}]')"
+		rawSql: "SELECT $__timeGroupAlias(time, 1m), service AS metric, avg(rps) AS rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nGROUP BY 1, 2\nORDER BY 1",
+		format: "time_series", intervalMs: 60000, maxDataPoints: 960}]')"
 	sql_req 2 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT $__timeGroupAlias(time, '"'"'5m'"'"'),\n  avg(rps) FILTER (WHERE service = '"'"'frontend'"'"') AS frontend,\n  avg(rps) FILTER (WHERE service = '"'"'checkout'"'"') AS checkout\nFROM service_load\nWHERE $__timeFilter(time)\nGROUP BY 1\nORDER BY 1",
-		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 960}]')"
 	sql_req 3 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT team, avg(error_rate) AS error_rate\nFROM services\nWHERE team IN ('"'"'web'"'"','"'"'payments'"'"') AND region <> '"'"'ap'"'"'\nGROUP BY team\nORDER BY team",
-		format: "table", intervalMs: 5000, maxDataPoints: 640}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 640}]')"
 	sql_req 4 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT name, team, region, replicas, error_rate\nFROM services\nORDER BY name",
-		format: "table", intervalMs: 5000, maxDataPoints: 640}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 640}]')"
 	sql_req 5 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds, editorMode: "code", format: "table",
 		hide: true, rawQuery: true, rawSql: "SELECT sum(replicas)::float8 AS replicas\nFROM services",
 		intervalMs: 5000, maxDataPoints: 640},
@@ -514,7 +532,7 @@ capture_sql() {
 		expression: "$A * 2"}]')"
 	sql_req 7 "$(jq -cn --argjson ds "$pg" '[{refId: "A", datasource: $ds,
 		rawSql: "SELECT time, service, rps\nFROM service_load\nWHERE $__timeFilter(time) AND service IN ('"'"'frontend'"'"','"'"'checkout'"'"')\nORDER BY 1",
-		format: "table", intervalMs: 5000, maxDataPoints: 960}]')"
+		format: "table", intervalMs: 60000, maxDataPoints: 960}]')"
 }
 
 # capture_cells: fixtures for dashboard tern-cells (table cell types over TestData CSV), each panel's
@@ -536,6 +554,56 @@ capture_stat_fidelity() {
 		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
 			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
 		[ -z "$body" ] || req "ds_query_stat_fidelity_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_pub_gauges: fixtures for dashboard tern-pub-gauges (synthetic repro of public dashboards'
+# small bar gauges, two-row stats and a 13.0 gauge), each panel's /api/ds/query as the frontend builds it.
+capture_pub_gauges() {
+	dash=$ROOT/dev/grafana/dashboards/tern-pub-gauges.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_pub_gauges_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_pub_ts: fixtures for dashboard tern-pub-ts (synthetic repro of public dashboards' time series
+# and tables), each panel's /api/ds/query as the frontend builds it.
+capture_pub_ts() {
+	dash=$ROOT/dev/grafana/dashboards/tern-pub-ts.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_pub_ts_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_pub_frames: fixtures for dashboard tern-pub-frames (synthetic repro of public dashboards'
+# transformations: calculateField defaults, an empty result, targets without refId), each panel's
+# /api/ds/query as the frontend builds it.
+capture_pub_frames() {
+	dash=$ROOT/dev/grafana/dashboards/tern-pub-frames.json
+	for pid in $(jq -r '.panels[].id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_pub_frames_$pid" POST /api/ds/query "$body"
+	done
+}
+
+# capture_legacy: dashboard tern-legacy (schemaVersion 14, top-level rows), as Grafana itself migrates it
+# (12+: the app platform's v1beta1 API answers it at the latest schema; 11.6 has no such API), and each
+# panel's /api/ds/query as the frontend builds it from that migrated model.
+capture_legacy() {
+	v1path=/apis/dashboard.grafana.app/v1beta1/namespaces/default/dashboards/tern-legacy
+	auth_conf | curl -fsS -K - -o /dev/null --max-time 10 "$BASE$v1path" 2>/dev/null || return 0
+	get dashboard_v1beta1_tern_legacy "$v1path"
+	dash=$TMP/tern-legacy-migrated.json
+	jq '.spec' "$LAST" >"$dash"
+	for pid in $(jq -r '.panels[] | select(.type != "row") | .id' "$dash"); do
+		body=$(jq -c --argjson pid "$pid" --argjson now "$((NOW * 1000))" --arg trace_id "$TRACE_ID" \
+			-f "$ROOT/scripts/fixtures/panel_query.jq" "$dash")
+		[ -z "$body" ] || req "ds_query_tern_legacy_$pid" POST /api/ds/query "$body"
 	done
 }
 
@@ -681,6 +749,10 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_pub_gauges
+capture_pub_ts
+capture_pub_frames
+capture_legacy
 capture_fid2_table
 capture_v08_tsbar
 capture_v08_pietable
@@ -691,6 +763,10 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_pub_gauges
+capture_pub_ts
+capture_pub_frames
+capture_legacy
 capture_fid2_table
 capture_v08_tsbar
 capture_v08_pietable
@@ -701,6 +777,10 @@ capture_all_panels
 capture_sql
 capture_cells
 capture_stat_fidelity
+capture_pub_gauges
+capture_pub_ts
+capture_pub_frames
+capture_legacy
 capture_fid2_table
 capture_v08_tsbar
 capture_v08_pietable
@@ -873,20 +953,31 @@ leaks=$(printf '%s' "$leaks" | tr -s ' \n' '  ' | sed 's/^ *//; s/ *$//')
 
 # Install. A row's primary file (response body or CLI stdout) decides for its companions
 # (<name>.request.json|txt and <name>.stderr), so a request never pairs with another run's response.
+wants() {
+	[ ! -e "$OUT/$1" ] && return 0
+	[ -n "$REFRESH" ] || return 1
+	# shellcheck disable=SC2254 # PATTERN is a glob on purpose
+	case $1 in
+	$REFRESH) return 0 ;;
+	esac
+	return 1
+}
+# Dashboards imported by scripts/public-dashboards.py (folder uid "public") are not ours to commit; they
+# show up in the search and folder answers.
+public=
+while IFS="$(printf '\t')" read -r path _; do
+	wants "$path" || continue
+	case $path in *.json) ;; *) continue ;; esac
+	if grep -qE '"(folderUid|uid)": ?"public"' "$TMP/out/$path"; then
+		public="$public $path"
+	fi
+done <"$ROWS"
+[ -z "$public" ] || die "refusing to install: public dashboards in:$public; run 'python3 scripts/public-dashboards.py remove' and capture again"
 mkdir -p "$OUT"
 WRITTEN=$TMP/written
 : >"$WRITTEN"
 while IFS="$(printf '\t')" read -r path _ _ _ _ _ request; do
-	write=0
-	if [ ! -e "$OUT/$path" ]; then
-		write=1
-	elif [ -n "$REFRESH" ]; then
-		# shellcheck disable=SC2254 # PATTERN is a glob on purpose
-		case $path in
-		$REFRESH) write=1 ;;
-		esac
-	fi
-	[ "$write" = 1 ] || continue
+	wants "$path" || continue
 	mkdir -p "$(dirname "$OUT/$path")"
 	cp "$TMP/out/$path" "$OUT/$path"
 	if [ "$request" != - ]; then

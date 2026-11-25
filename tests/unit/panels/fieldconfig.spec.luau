@@ -23,7 +23,7 @@ local function itemNamed(items: { FieldConfig.Item }, name: string): FieldConfig
 	error("no item " .. name)
 end
 
--- Prometheus returns instant series in no fixed order (13.3.0 differs from
+-- Prometheus returns instant series in no fixed order (13.3.1 differs from
 -- 11/12), so series are picked by their job label.
 local function itemOfJob(items: { FieldConfig.Item }, job: string): FieldConfig.Item
 	for _, item in items do

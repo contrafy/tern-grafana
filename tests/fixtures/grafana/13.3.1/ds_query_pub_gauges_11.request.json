@@ -1,0 +1,1 @@
+{"queries":[{"refId":"A","datasource":{"type":"prometheus","uid":"prom3"},"expr":"vector(48000 + 9000 * (time() % 1200 < bool 300))","editorMode":"code","intervalMs":10000,"maxDataPoints":480}],"from":"1794416283000","to":"1794419883000"}

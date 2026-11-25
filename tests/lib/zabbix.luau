@@ -18,7 +18,7 @@ env.array = json.array
 M.env = env
 local mod: any = Zabbix
 
-local VERSIONS = { "11.6.16", "12.4.12", "13.3.0" }
+local VERSIONS = { "11.6.16", "12.4.12", "13.3.1" }
 local API = ZabbixApi.path("zabbix")
 
 -- JSON with sorted keys: equal requests compare equal whatever the key order.

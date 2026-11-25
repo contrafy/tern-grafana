@@ -18,8 +18,7 @@ local function near(a: any, b: number)
 	end
 end
 
--- prom_range refId A, the `user` CPU series (no gaps; 61 samples over 15m,
--- 29 on the 13.3.0 stack that had run only ~7m), with the expected values
+-- prom_range refId A, the `user` CPU series (no gaps; 61 samples over 15m), with the expected values
 -- computed from the capture by Grafana's definitions.
 local USER = {
 	["11.6.16"] = {
@@ -46,17 +45,17 @@ local USER = {
 		diff = 0.1665602388888877,
 		count = 61,
 	},
-	["13.3.0"] = {
-		first = 0.052253761025129006,
-		lastNotNull = 0.24643450083011625,
-		min = 0.052253761025129006,
-		max = 0.33199336013279734,
-		mean = 0.2293439090674368,
-		sum = 6.650973362955667,
-		range = 0.2797395991076683,
-		delta = 0.320501894414536,
-		diff = 0.19418073980498723,
-		count = 29,
+	["13.3.1"] = {
+		first = 0.2895884164633328,
+		lastNotNull = 1.1714000000000033,
+		min = 0.22486746023806709,
+		max = 1.4353138811671204,
+		mean = 0.4270435350086386,
+		sum = 26.049655635526957,
+		range = 1.2104464209290533,
+		delta = 1.3725823578860146,
+		diff = 0.8818115835366706,
+		count = 61,
 	},
 }
 

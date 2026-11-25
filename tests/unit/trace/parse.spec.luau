@@ -148,11 +148,16 @@ describe("OTLP JSON", function()
 end)
 
 describe("Grafana Trace frame", function()
-	-- Each Grafana proxied the Tempo of its capture run, so it answers that run's trace.
-	local PAIRS = { { "11.6.16", "tempo/2.10.8/" }, { "12.4.12", "tempo/2.10.8/" }, { "13.3.0", "tempo/3.1.1/" } }
+	-- Each Grafana proxied the Tempo of its capture run, so it answers that run's trace:
+	-- Tempo's own answer, recorded directly or (13.3.1's run) through the datasource proxy.
+	local PAIRS = {
+		{ "11.6.16", "tempo/2.10.8/trace.json" },
+		{ "12.4.12", "tempo/2.10.8/trace.json" },
+		{ "13.3.1", "grafana/13.3.1/ds_proxy_tempo_trace.json" },
+	}
 	for _, pair in PAIRS do
 		it("reads the same spans as Tempo's own answer on Grafana " .. pair[1], function()
-			local tempo = byName(Otlp.parse(json.decode(Fixtures.read(pair[2] .. "trace.json")), env) :: { any })
+			local tempo = byName(Otlp.parse(json.decode(Fixtures.read(pair[2])), env) :: { any })
 			local root, second = tempo["lets-go"].span_id, tempo["okey-dokey-1"].span_id
 			local doc = json.decode(Fixtures.read("grafana/" .. pair[1] .. "/ds_query_tempo_trace.json"))
 			local frame = FrameGrafana.frames(doc.results.A.frames, env)[1]

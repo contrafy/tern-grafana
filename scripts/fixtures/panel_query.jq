@@ -8,11 +8,14 @@
 # - range: dashboard `time` (relative "now-<dur>" only), replaced by panel `timeFrom` ("30m" ->
 #   now-30m .. now), then moved back by panel `timeShift`; sent as epoch-ms strings like the frontend.
 # - maxDataPoints: panel `maxDataPoints`, else the panel width in px, taken as gridPos.w * 80 (a 1920 px
-#   wide dashboard).
-# - intervalMs: rangeutil.calculateInterval: roundInterval(range / maxDataPoints), raised to the low
-#   limit, which is panel `interval`, else the datasource's min interval (provisioned timeInterval 10s
-#   for Prometheus).
-# - each target gets its own or the panel's datasource; `${trace_id}` is replaced with $trace_id.
+#   wide dashboard, margins left out).
+# - intervalMs (scenes SceneQueryRunner.prepareRequests): rangeutil.calculateInterval:
+#   roundInterval(range / maxDataPoints), raised to the low limit, which is panel `interval`, else the
+#   interval of the datasource the panel runs on (its own, else its first target's; none: the default,
+#   Prometheus): Prometheus jsonData.timeInterval (provisioned 10s), SQL 1m, -- Mixed -- and others none.
+#   Every target gets the same intervalMs.
+# - each target gets its own or the panel's datasource, and a refId when it has none; `${trace_id}` is
+#   replaced with $trace_id.
 
 def dur_ms:
 	capture("^(?<n>[0-9]+)(?<u>ms|s|m|h|d|w|y)$")
@@ -31,9 +34,23 @@ def round_interval:
 	]
 	| (map(select($i < .[0]))[0][1]) // 31536000000;
 
-def ds_min_interval: {"prometheus": "10s"}[.type // ""];
+def ds_min_interval:
+	if . == null then "10s"
+	elif type == "string" then (if . == "-- Mixed --" then null else "10s" end)
+	elif .uid == "-- Mixed --" then null
+	else {"prometheus": "10s", "grafana-postgresql-datasource": "1m", "postgres": "1m", "mysql": "1m",
+		"mssql": "1m"}[.type // ""]
+	end;
 
 def empty_expr: (.datasource.type == "prometheus" or .datasource.type == "loki") and ((.expr // "") == "");
+
+# PanelModel.ensureQueryIds: a target without a refId gets the first of A..Z no target has.
+def ensure_query_ids:
+	reduce range(0; length) as $i (.;
+		if (.[$i].refId // "") == "" then
+			. as $ts
+			| .[$i].refId = ([("ABCDEFGHIJKLMNOPQRSTUVWXYZ" | split(""))[] | select(. as $l | $ts | map(.refId) | index($l) | not)][0])
+		else . end);
 
 . as $d
 | ($d.panels[] | select(.id == $pid)) as $p
@@ -43,14 +60,14 @@ def empty_expr: (.datasource.type == "prometheus" or .datasource.type == "loki")
 | ($now - $shift) as $to
 | ($to - $range) as $from
 | ($p.maxDataPoints // ($p.gridPos.w * 80)) as $mdp
+| ($p.interval // ($p.datasource // ($p.targets // [])[0].datasource | ds_min_interval)) as $low
+| (($range / $mdp | round_interval) as $calc
+	| if $low then ([$calc, ($low | dur_ms)] | max) else $calc end) as $interval_ms
 | [
-	($p.targets // [])[]
+	($p.targets // [] | ensure_query_ids)[]
 	| . + {datasource: (.datasource // $p.datasource)}
 	| select((.hide // false) | not)
 	| select(empty_expr | not)
-	| (($p.interval // (.datasource | ds_min_interval)) as $low
-		| ($range / $mdp | round_interval) as $calc
-		| (if $low then ([$calc, ($low | dur_ms)] | max) else $calc end)) as $interval_ms
 	| . + {intervalMs: $interval_ms, maxDataPoints: $mdp}
 	| walk(if type == "string" then gsub("\\$\\{trace_id\\}"; $trace_id) else . end)
 ]

@@ -144,9 +144,9 @@ local function proxyDashboard(): S.Harness
 		if string.match(e.tag, "^dash/") then
 			return S.body(200, DASH)
 		elseif string.match(e.tag, "^fs/") then
-			return S.body(200, settingsBody("13.3.0"))
+			return S.body(200, settingsBody("13.3.1"))
 		elseif string.match(e.tag, "^user/") then
-			return S.response(S.grafana("13.3.0", "user.json"))
+			return S.response(S.grafana("13.3.1", "user.json"))
 		end
 		return nil
 	end)
@@ -215,7 +215,7 @@ describe("frontend datasource jobs in the dashboard block", function()
 
 	it("keeps a frontend datasource's panel off the native rung when expressions read it", function()
 		local env = S.env()
-		local catalog = Queries.frontendDatasources(S.body(200, settingsBody("13.3.0")), env)
+		local catalog = Queries.frontendDatasources(S.body(200, settingsBody("13.3.1")), env)
 		local _, err = Queries.resolve({
 			type = "table",
 			datasource = { uid = "-- Mixed --" },
@@ -282,7 +282,7 @@ local function incidentDashboard(version: string): S.Harness
 		elseif string.match(e.tag, "^fs/") then
 			return S.body(200, settings)
 		elseif string.match(e.tag, "^user/") then
-			return S.response(S.grafana("13.3.0", "user.json"))
+			return S.response(S.grafana("13.3.1", "user.json"))
 		elseif string.match(e.tag, "^dsv/") then
 			local qt = json.decode(e.request.body).queries[1].queryType
 			return S.response("incident/var_" .. qt .. ".json")
@@ -306,7 +306,7 @@ end
 
 describe("Grafana Incident dashboards", function()
 	it("lists variable options through /api/ds/query and sends All as $__all", function()
-		local h = incidentDashboard("13.3.0")
+		local h = incidentDashboard("13.3.1")
 		local labels = assert(h.s.vars[2], "the labels variable")
 		expect(labels.name).toBe("labels")
 		expect(labels.status).toBe("ready")
@@ -321,7 +321,7 @@ describe("Grafana Incident dashboards", function()
 	end)
 
 	it("sends label filters for picked labels", function()
-		local h = incidentDashboard("13.3.0")
+		local h = incidentDashboard("13.3.1")
 		pick(h, "labels", { "team:payments", "security" })
 		local _, q = pendingQuery(h)
 		expect(q.queryString).toBe(
@@ -330,7 +330,7 @@ describe("Grafana Incident dashboards", function()
 	end)
 
 	it("fails a picked `severity` on Grafana 13 with Grafana's own error", function()
-		local h = incidentDashboard("13.3.0")
+		local h = incidentDashboard("13.3.1")
 		pick(h, "severity", { "Critical" })
 		local tag, q = pendingQuery(h)
 		expect(q.queryString).toBe("or($__all) or(unsupported query name) or(status:active status:resolved)")

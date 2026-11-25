@@ -136,7 +136,8 @@ local function investigate(s: State, env: Env, effects: { Effect }): boolean
 	local scope = Core.panelScope(s, inst)
 	local fps = s.panels[inst.key]
 	local range = if fps and fps.time then (fps.time :: PanelTime.Override).range else nil
-	local pq = Queries.build(inst.panel.json, Core.queryContext(s, scope, env, range), env)
+	local width = if fps and fps.width_px then fps.width_px else Core.panelWidth(s, inst, env)
+	local pq = Queries.build(inst.panel.json, Core.queryContext(s, scope, env, range, nil, width), env)
 	local queries: { InvestigateSubject.Query } = {}
 	if pq then
 		for _, q in pq.queries do

@@ -11,11 +11,11 @@ bwait query "Write a query and press Enter." || return
 
 type_text 'sum by (job) (up)'
 ctl key enter >/dev/null
-bwait query '{job="down"} 0' || return
+bwait query '{job="down"} Last *: 0' || return
 eq "chart drawn as an image" "$(count "$Q .sf-image svg.tg-chart")" 1
 eq "header badges: context and mode" "$(texts "$Q .sf-badge")" '["lab","graph"]'
 contains "header names range and step" "$(alltext "$Q .sf-row" | head -1)" "Last 1 hourstep 15s"
-contains "legend lists the up series" "$(btext query)" '{job="prometheus"} 1'
+contains "legend lists the up series" "$(btext query)" '{job="prometheus"} Last *: 1'
 shot graph
 
 keys escape t

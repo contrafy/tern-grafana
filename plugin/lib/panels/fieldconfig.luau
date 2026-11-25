@@ -63,8 +63,23 @@ local function parseThresholds(env: Env, raw: any): Thresholds.Thresholds?
 	return { mode = Json.str(env, t.mode) or "absolute", steps = steps }
 end
 
+-- lodash set on `custom`: "hideFrom.viz" (an old table style's hidden
+-- column) sets custom.hideFrom.viz; nested tables are copied first, as
+-- they may be the panel JSON's own.
 local function setCustom(cfg: Config, path: string, value: any)
-	cfg.custom[path] = value
+	if string.find(path, ".", 1, true) == nil then
+		cfg.custom[path] = value
+		return
+	end
+	local parts = string.split(path, ".")
+	local t = cfg.custom
+	for i = 1, #parts - 1 do
+		local inner = t[parts[i]]
+		local c = if type(inner) == "table" then Tbl.copy(inner) else {}
+		t[parts[i]] = c
+		t = c
+	end
+	t[parts[#parts]] = value
 end
 
 -- One fieldConfig property (a defaults key or an override property id).

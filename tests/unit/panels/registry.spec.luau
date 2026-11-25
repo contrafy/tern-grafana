@@ -79,12 +79,15 @@ for _, version in S.VERSIONS do
 				if failed then
 					error("panel " .. id .. ": " .. S.text(failed))
 				end
-				local kind = S.panel(version, id).type
+				local panel = S.panel(version, id)
+				local kind = panel.type
+				-- A stat's sparkline (graphMode area) is an SVG chart.
 				local svg = kind == "timeseries"
 					or kind == "gauge"
 					or kind == "bargauge"
 					or kind == "heatmap"
 					or kind == "state-timeline"
+					or (kind == "stat" and (panel.options.graphMode or "area") ~= "none")
 				expect(assets[key] ~= nil or next(assets) ~= nil).toBe(svg)
 			end
 		end)

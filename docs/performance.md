@@ -1,7 +1,7 @@
 # Performance: Tern's image cache
 
 Charts reach Tern as SVG (or PNG) bytes sent with `cx:blob`; Tern writes every distinct image to
-`~/Library/Caches/Tern/blobs/<sha256>`. Tern 0.9.13 trims that directory to 1 GiB, least recently used first, when
+`~/Library/Caches/Tern/blobs/<sha256>`. Tern 0.9.13 and 0.9.16 trim that directory to 1 GiB, least recently used first, when
 its daemon starts; while the daemon runs it removes nothing, also not when an image is replaced or a block closes
 (measured below; Tern 0.8.3 never removed a file at all). So every redraw that produces new bytes
 costs disk until the next daemon start. This page records how fast the cache grew in a long session, what the plugin
@@ -74,6 +74,26 @@ on a dev stack started about 25 minutes earlier. The per-minute rates were ident
 
 Bytes are not comparable between the runs: the 0.9.13 stack held less than an hour of data, so the 1 h charts were
 sparser (0.18 to 0.27 MB per minute for the main layout, growing as data accumulated, against 0.63 MB on 0.8.3).
+
+## Re-measured on Tern 0.9.16
+
+Tern 0.9.16 (41a10a5), same sandbox setup and layout (Tern Panels and a Query block shown, Tern All Panels in a
+background tab), plugin 0.6.0 from the working tree, without the `cx:blob` log (counts only). Every sample matched
+the one before, so 5 minutes (main layout) and 3 minutes (background) were enough:
+
+| | Tern 0.9.13 | Tern 0.9.16 |
+| --- | --- | --- |
+| Main layout, files per minute | 12.0 | 15.0 (14 to 16 in each of 5 samples; 75 added, 45 to 120) |
+| Main layout, bytes per minute | 0.18 to 0.27 MB | 0.47 MB (0.43 to 0.52) |
+| Every block in a background tab | 0 files in 3 minutes | 0 files in 3 minutes; 8 new blobs within 2 s of the tab being shown |
+| Files removed by Tern in any sample | 0 | 0 |
+
+The rate is per refresh of what changed, so the difference to 0.9.13 follows the panels and data of the day (this
+stack had hours of data; the 0.9.13 run had under one), not Tern. Eviction on 0.9.16, with the same prefilled cache
+as below: daemon start 1114 files (1,153,961,123 bytes) -> 1037 (1,073,220,771, the 77 oldest gone); running at the
+cap, a 100 KB image per second added 91 files in 92 s with none removed, nor after the block closed; the next start
+trimmed 1132 -> 1123 files (1,073,286,143 bytes). Unchanged from 0.9.13. The 0.9.16 Limits page no longer mentions
+the blob cap.
 
 ## Blobs per refresh, by panel type
 

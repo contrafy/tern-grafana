@@ -16,7 +16,7 @@ M.NOW_MS = 1791577898000
 M.WINDOW = "now-15m"
 
 M.PROMETHEUS = { "2.53.5", "3.15.0" }
-M.GRAFANA = { "11.6.16", "12.4.12", "13.3.0" }
+M.GRAFANA = { "11.6.16", "12.4.12", "13.3.1" }
 
 M.CONFIG_TEXT = [[{
 	"version": 1,

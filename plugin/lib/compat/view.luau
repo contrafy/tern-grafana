@@ -149,6 +149,8 @@ local function dashRow(r: Analyze.DashResult): Node
 	end
 	if r.error then
 		table.insert(spans, ui.span("  " .. (r.error :: string), "error"))
+	elseif r.note then
+		table.insert(spans, ui.span("  " .. (r.note :: string), "muted"))
 	else
 		table.insert(spans, ui.span(string.format("  native %d", r.native), "success"))
 		if r.png > 0 then
