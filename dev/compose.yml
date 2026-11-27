@@ -252,7 +252,7 @@ services:
 
   # CLI-only image for fixture capture (`docker compose run --rm logcli ...`); never started by `up`.
   logcli:
-    image: grafana/logcli:3.7.8
+    image: grafana/logcli:3.7.10
     profiles: [tools]
     environment:
       LOKI_ADDR: http://loki:3100
